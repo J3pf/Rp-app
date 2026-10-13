@@ -27,6 +27,9 @@ de tu relay **RP**: chat en vivo, adjuntos y **notificaciones de preguntas/autor
 
 ## Compilar
 
+**Rápido (APK para tu teléfono):** `scripts/build-apk.sh` — instala el SDK si falta, compila y deja el APK en `dist/rp-direct-debug.apk`
+(`--install` lo instala por adb, `--fcm`, `--test`, `--release`). Detalle manual abajo.
+
 Requisitos: JDK 17, Android SDK 36 (`ANDROID_HOME`), acceso a Google Maven y Maven Central.
 
 ```bash
