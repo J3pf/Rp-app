@@ -108,7 +108,7 @@ class ChatRepository @Inject constructor(
         fun start() {
             job = scope.launch {
                 loadPersisted()
-                launch { bus.messages.collect(::onMessage) }
+                launch { bus.messages.collect { onMessage(it) } }
                 launch { prompts.openFor(agentId).collect { list -> list.forEach(::onPromptOpened) } }
                 launch {
                     connection.state.collectLatest { st ->

@@ -1,6 +1,8 @@
 package dev.j3pf.rp.push
 
+import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
+import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.PushCancelBody
 import dev.j3pf.rp.protocol.PushCrypto
 import dev.j3pf.rp.protocol.PushKind
@@ -22,6 +24,7 @@ class PushRouter @Inject constructor(
     private val factory: NotificationFactory,
     private val deduper: NotificationDeduper,
     private val secrets: SecretStore,
+    private val settings: SettingsRepository,
 ) {
     /** FCM data: `{v,k,n,c}`. Falla de descifrado → se ignora (PLAN-APP §5.2.1). */
     suspend fun handleFcm(data: Map<String, String>): Boolean {
@@ -40,6 +43,10 @@ class PushRouter @Inject constructor(
             PushKind.PROMPT -> {
                 val p = decode(PushPromptBody.serializer(), body) ?: return false
                 if (!deduper.firstSeen("prompt:${p.promptId}")) return true
+                // Silencio por agente (local); las autorizaciones críticas pueden saltárselo si el ajuste está activo.
+                val s = settings.current()
+                val critical = s.criticalAlways && p.danger == Danger.HIGH
+                if (p.agentId in s.mutedAgents && !critical) return true
                 factory.showPrompt(p)
                 true
             }
@@ -53,6 +60,7 @@ class PushRouter @Inject constructor(
                 // pushId o agentId+preview: un mismo "terminó" sólo se avisa una vez.
                 val key = "settled:${pushId ?: (s.agentId + ":" + (s.preview ?: "").hashCode())}"
                 if (!deduper.firstSeen(key)) return true
+                if (s.agentId in settings.current().mutedAgents) return true
                 factory.showSettled(s)
                 true
             }
@@ -60,6 +68,7 @@ class PushRouter @Inject constructor(
                 val agentId = body.str("agentId") ?: return false
                 val key = "$k:${pushId ?: (agentId + ":" + (body.str("title") ?: body.str("message") ?: "").hashCode())}"
                 if (!deduper.firstSeen(key)) return true
+                if (agentId in settings.current().mutedAgents) return true
                 factory.showSimple(k, body)
                 true
             }

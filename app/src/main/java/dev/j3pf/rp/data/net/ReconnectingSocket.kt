@@ -42,6 +42,7 @@ class ReconnectingSocket(
     @Volatile private var socket: WebSocket? = null
     @Volatile private var running = false
     private var attempt = 0
+    @Volatile private var generation = 0
     private var job: Job? = null
     private var netCallback: ConnectivityManager.NetworkCallback? = null
     private val lock = Any()
@@ -61,6 +62,7 @@ class ReconnectingSocket(
     fun stop() {
         synchronized(lock) {
             running = false
+            generation++
             job?.cancel()
             job = null
             unregisterNetworkCallback()
@@ -93,7 +95,8 @@ class ReconnectingSocket(
                 return@launch
             }
             _state.value = ConnState.Connecting
-            socket = client.newWebSocket(req, Listener())
+            val gen = synchronized(lock) { ++generation }
+            socket = client.newWebSocket(req, Listener(gen))
         }
     }
 
@@ -111,16 +114,18 @@ class ReconnectingSocket(
         return (base * jitter).toLong()
     }
 
-    private inner class Listener : WebSocketListener() {
+    private inner class Listener(private val gen: Int) : WebSocketListener() {
+        private fun current() = gen == generation
+
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            if (socket !== webSocket) return
+            if (!current()) return
             attempt = 0
             _state.value = ConnState.Connected
             onSocketOpen(webSocket)
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            if (socket === webSocket) onSocketText(text)
+            if (current()) onSocketText(text)
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -128,12 +133,12 @@ class ReconnectingSocket(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            if (socket !== webSocket) return
+            if (!current()) return
             handleEnd(code, reason)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            if (socket !== webSocket) return
+            if (!current()) return
             // 401/403 en el handshake equivale a token inválido.
             val http = response?.code
             if (http == 401 || http == 403) handleEnd(CloseCodes.INVALID_TOKEN, "HTTP $http") else handleEnd(1006, t.message ?: "")

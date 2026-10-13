@@ -16,6 +16,7 @@ import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.ChatRepository
 import dev.j3pf.rp.data.repo.LocalAttachment
 import dev.j3pf.rp.data.repo.PromptsRepository
+import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.data.net.AnswerOutcome
@@ -51,6 +52,8 @@ data class ChatUiState(
     /** Qué hacer si el agente está trabajando: encolar (follow‑up) o interrumpir y dirigir (steer). */
     val workingDelivery: String = Delivery.FOLLOW_UP,
     val sending: Boolean = false,
+    /** Notificaciones de este agente silenciadas (preferencia local). */
+    val muted: Boolean = false,
     /** Última entrega interactiva falló por indisponibilidad → ofrecer "Pasar a Normal". */
     val interactiveUnavailable: Boolean = false,
     val message: String? = null,
@@ -63,7 +66,8 @@ data class ChatUiState(
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chats: ChatRepository,
-    agents: AgentsRepository,
+    private val agentsRepo: AgentsRepository,
+    private val settingsRepo: SettingsRepository,
     private val prompts: PromptsRepository,
     private val attachmentsRepo: AttachmentsRepository,
     connection: RelayConnection,
@@ -76,8 +80,8 @@ class ChatViewModel @Inject constructor(
     private val extra = MutableStateFlow(ChatUiState())
 
     val state: StateFlow<ChatUiState> = combine(
-        session.state, agents.observe(agentId), connection.state, extra,
-    ) { chat, agent, conn, e -> e.copy(chat = chat, agent = agent, conn = conn) }
+        session.state, agentsRepo.observe(agentId), connection.state, extra, settingsRepo.settings,
+    ) { chat, agent, conn, e, st -> e.copy(chat = chat, agent = agent, conn = conn, muted = agentId in st.mutedAgents) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
     fun setChoice(c: DeliveryChoice) = extra.update { it.copy(choice = c) }
@@ -85,6 +89,28 @@ class ChatViewModel @Inject constructor(
     fun consumeMessage() = extra.update { it.copy(message = null) }
 
     fun abort() = session.abort()
+
+    fun toggleMute() { viewModelScope.launch { settingsRepo.setAgentMuted(agentId, !state.value.muted) } }
+
+    /** Olvida un agente desconectado (`agent.forget`). */
+    fun forget(onDone: () -> Unit) {
+        viewModelScope.launch {
+            if (agentsRepo.forget(agentId)) onDone() else extra.update { it.copy(message = "No se pudo olvidar el agente") }
+        }
+    }
+
+    /** Reintenta la subida de un adjunto que falló. */
+    fun retryAttachment(id: String) {
+        val la = local[id] ?: return
+        replace(id) { it.copy(state = UploadState.UPLOADING, progress = 0f, error = null) }
+        viewModelScope.launch {
+            when (val r = attachmentsRepo.upload(la) { p -> replace(id) { it.copy(progress = p) } }) {
+                is ApiResult.Ok -> replace(id) { it.copy(state = UploadState.DONE, progress = 1f, blobId = r.value.blobId) }
+                is ApiResult.Http -> replace(id) { it.copy(state = UploadState.ERROR, error = if (r.code == 413) "Supera 25 MB" else "HTTP ${r.code}") }
+                is ApiResult.Network -> replace(id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
+            }
+        }
+    }
 
     /** ¿Este envío cuenta como "tecleado" y por tanto debe pedir biometría? (válida 5 min) */
     fun needsAuth(): Boolean {

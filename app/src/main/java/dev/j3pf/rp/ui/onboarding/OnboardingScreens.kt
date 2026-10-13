@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
@@ -124,7 +125,7 @@ fun PairScreen(
     onPaired: () -> Unit,
     vm: PairViewModel = hiltViewModel(),
 ) {
-    val st by vm.state.collectAsStateWithLifecycleCompat()
+    val st by vm.state.collectAsStateWithLifecycle()
     var url by rememberSaveable { mutableStateOf(initialUrl.orEmpty()) }
     var code by rememberSaveable { mutableStateOf(initialCode.orEmpty()) }
     LaunchedEffect(initialUrl, initialCode) {
@@ -152,10 +153,6 @@ fun PairScreen(
         }
     }
 }
-
-@Composable
-private fun <T> StateFlow<T>.collectAsStateWithLifecycleCompat() =
-    androidx.lifecycle.compose.collectAsStateWithLifecycle(this)
 
 /** Escáner QR con CameraX + ML Kit (modelo empaquetado, sin Play Services de descarga). */
 @OptIn(ExperimentalGetImage::class)

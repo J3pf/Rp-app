@@ -88,7 +88,7 @@ class NotificationFactory @Inject constructor(
 
         // Acciones
         when {
-            p.kind == PromptKind.QUESTIONNAIRE -> builder.addAction(action(R.string.action_open, open))
+            p.kind == PromptKind.QUESTIONNAIRE -> builder.addAction(openAction(R.string.action_open, open))
             p.kind == PromptKind.CONFIRM && p.options.isEmpty() -> {
                 builder.addAction(answerAction(R.string.action_allow, p, id, PromptActionReceiver.ANSWER_CONFIRM_YES, null, authRequired))
                 builder.addAction(answerAction(R.string.action_deny, p, id, PromptActionReceiver.ANSWER_CONFIRM_NO, null, authRequired))
@@ -98,7 +98,7 @@ class NotificationFactory @Inject constructor(
                     builder.addAction(answerActionRaw(opt.label, p, id, PromptActionReceiver.ANSWER_OPTION, opt.id, authRequired, i))
                 }
             }
-            else -> builder.addAction(action(R.string.action_open, open))
+            else -> builder.addAction(openAction(R.string.action_open, open))
         }
         if ((p.kind == PromptKind.INPUT || p.allowFreeText) && p.kind != PromptKind.QUESTIONNAIRE) {
             builder.addAction(replyAction(p, id, authRequired))
@@ -147,7 +147,7 @@ class NotificationFactory @Inject constructor(
             .build()
     }
 
-    private fun action(label: Int, pi: PendingIntent) = NotificationCompat.Action.Builder(0, context.getString(label), pi).build()
+    private fun openAction(label: Int, pi: PendingIntent) = NotificationCompat.Action.Builder(0, context.getString(label), pi).build()
 
     // ───────────────────────────── Otros tipos ─────────────────────────────
 

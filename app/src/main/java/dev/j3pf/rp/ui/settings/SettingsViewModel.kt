@@ -11,12 +11,14 @@ import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.SessionRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.data.secure.Session
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.DeviceInfo
 import dev.j3pf.rp.protocol.MachinePatch
 import dev.j3pf.rp.protocol.MachinePrefs
@@ -46,6 +48,7 @@ data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
     val machines: List<MachineSummary> = emptyList(),
     val health: HealthState = HealthState(),
+    val agents: List<AgentSummary> = emptyList(),
 )
 
 @HiltViewModel
@@ -54,6 +57,7 @@ class SettingsViewModel @Inject constructor(
     private val secrets: SecretStore,
     private val settingsRepo: SettingsRepository,
     private val machinesRepo: MachinesRepository,
+    private val agentsRepo: AgentsRepository,
     private val sessionRepo: SessionRepository,
     private val api: RelayApi,
     private val channels: NotificationChannels,
@@ -62,8 +66,11 @@ class SettingsViewModel @Inject constructor(
     private val health = MutableStateFlow(HealthState())
 
     val state: StateFlow<SettingsUiState> = combine(
-        secrets.session, connection.state, settingsRepo.settings, machinesRepo.machines, health,
-    ) { s, c, st, ms, h -> SettingsUiState(s, c, st, ms, h) }
+        combine(secrets.session, connection.state, settingsRepo.settings, machinesRepo.machines, health) { s, c, st, ms, h ->
+            SettingsUiState(s, c, st, ms, h)
+        },
+        agentsRepo.agents,
+    ) { ui, ags -> ui.copy(agents = ags) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
     private val _devices = MutableStateFlow<List<DeviceInfo>>(emptyList())
@@ -128,6 +135,8 @@ class SettingsViewModel @Inject constructor(
     fun setCategory(category: String, enabled: Boolean) = updatePrefs { p ->
         p.copy(categories = p.categories + (category to enabled))
     }
+
+    fun unmuteAgent(agentId: String) = viewModelScope.launch { settingsRepo.setAgentMuted(agentId, false) }
 
     fun setCriticalAlways(v: Boolean) = viewModelScope.launch {
         settingsRepo.setCriticalAlways(v)

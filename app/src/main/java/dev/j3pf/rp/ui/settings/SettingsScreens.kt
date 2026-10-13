@@ -62,6 +62,7 @@ import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.SectionTitle
+import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.contextLabel
 import dev.j3pf.rp.util.parseColor
@@ -335,6 +336,19 @@ fun NotificationSettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltV
             SwitchRow(label, null, prefs.categories[key] ?: true) { vm.setCategory(key, it) }
         }
         SwitchRow("Autorizaciones críticas siempre", "Ignoran el silencio y las horas silenciosas", st.settings.criticalAlways) { vm.setCriticalAlways(it) }
+
+        SectionTitle("Por agente")
+        if (st.settings.mutedAgents.isEmpty()) {
+            Text("Ningún agente silenciado. Silencia uno desde el menú de su chat.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+        }
+        st.settings.mutedAgents.forEach { id ->
+            val a = st.agents.firstOrNull { it.agentId == id }
+            ListItem(
+                headlineContent = { Text(a?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: id) },
+                supportingContent = { Text(a?.machineName ?: "agente desconocido") },
+                trailingContent = { TextButton(onClick = { vm.unmuteAgent(id) }) { Text("Reactivar") } },
+            )
+        }
 
         SectionTitle("Por PC")
         if (st.machines.isEmpty()) Text("Sin PCs emparejadas", Modifier.padding(16.dp))

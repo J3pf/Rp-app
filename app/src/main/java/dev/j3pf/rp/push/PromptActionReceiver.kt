@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class PromptActionReceiver : BroadcastReceiver() {
     @Inject lateinit var handler: PromptActionHandler
-    @Inject @AppScope lateinit var scope: CoroutineScope
+    @Inject @field:AppScope lateinit var scope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent) // Hilt inyecta aquí

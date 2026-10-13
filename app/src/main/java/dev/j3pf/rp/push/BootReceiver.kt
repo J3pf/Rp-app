@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var secrets: SecretStore
     @Inject lateinit var settings: SettingsRepository
-    @Inject @AppScope lateinit var scope: CoroutineScope
+    @Inject @field:AppScope lateinit var scope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent) // Hilt inyecta aquí

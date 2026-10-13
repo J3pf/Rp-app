@@ -237,7 +237,7 @@ private fun PromptCardView(card: PromptCard, busy: Boolean, onAnswer: (Prompt, A
                     color = MaterialTheme.colorScheme.outline,
                 )
             } else {
-                PromptContent(card.prompt, busy) { onAnswer(card.prompt, it) }
+                PromptContent(prompt = card.prompt, busy = busy, onAnswer = { onAnswer(card.prompt, it) })
             }
         }
     }

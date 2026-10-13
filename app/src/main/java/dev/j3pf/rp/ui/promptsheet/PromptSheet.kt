@@ -40,7 +40,8 @@ fun PromptSheet(
     onDismiss: () -> Unit,
     vm: PromptSheetViewModel = hiltViewModel(),
 ) {
-    val prompt by vm.open(promptId).collectAsStateWithLifecycle(initialValue = null)
+    val promptFlow = remember(promptId) { vm.open(promptId) }
+    val prompt by promptFlow.collectAsStateWithLifecycle(initialValue = null)
     val status by vm.status.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activity = rememberActivity()

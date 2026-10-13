@@ -63,8 +63,8 @@ class RelayConnection @Inject constructor(
                     .header("Authorization", "Bearer ${s.deviceToken}").build()
             }
         },
-        onSocketOpen = { ws ->
-            val s = secrets.current() ?: return@ReconnectingSocket
+        onSocketOpen = open@{ ws ->
+            val s = secrets.current() ?: return@open
             ws.send(
                 Envelope.of(
                     MsgType.APP_HELLO,

@@ -134,6 +134,13 @@ fun ChatScreen(
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(text = { Text("Información") }, onClick = { menu = false; showInfo = true })
+                        DropdownMenuItem(
+                            text = { Text(if (ui.muted) "Activar notificaciones del agente" else "Silenciar notificaciones del agente") },
+                            onClick = { menu = false; vm.toggleMute() },
+                        )
+                        if (agent != null && !agent.online) {
+                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = { menu = false; vm.forget(onBack) })
+                        }
                     }
                 },
             )
@@ -196,6 +203,7 @@ fun ChatScreen(
                 onWorkingDelivery = vm::setWorkingDelivery,
                 onPicked = vm::addAttachments,
                 onRemoveAttachment = vm::removeAttachment,
+                onRetryAttachment = vm::retryAttachment,
                 newCameraTarget = vm::newCameraTarget,
                 onSend = {
                     scope.launch {
@@ -270,6 +278,7 @@ internal fun Composer(
     onWorkingDelivery: (String) -> Unit,
     onPicked: (List<Uri>) -> Unit,
     onRemoveAttachment: (String) -> Unit,
+    onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri,
     onSend: () -> Unit,
 ) {
@@ -291,7 +300,7 @@ internal fun Composer(
         Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (ui.attachments.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ui.attachments.forEach { AttachmentChip(it) { onRemoveAttachment(it.id) } }
+                    ui.attachments.forEach { a -> AttachmentChip(a, onRemove = { onRemoveAttachment(a.id) }, onRetry = { onRetryAttachment(a.id) }) }
                 }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -341,7 +350,7 @@ internal fun Composer(
 }
 
 @Composable
-private fun AttachmentChip(a: AttachmentUi, onRemove: () -> Unit) {
+private fun AttachmentChip(a: AttachmentUi, onRemove: () -> Unit, onRetry: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -355,7 +364,10 @@ private fun AttachmentChip(a: AttachmentUi, onRemove: () -> Unit) {
             when (a.state) {
                 UploadState.UPLOADING -> LinearProgressIndicator(progress = { a.progress }, modifier = Modifier.fillMaxWidth())
                 UploadState.PREPARING -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                UploadState.ERROR -> Text(a.error ?: "Error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                UploadState.ERROR -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(a.error ?: "Error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    TextButton(onClick = onRetry) { Text("Reintentar") }
+                }
                 else -> Unit
             }
         }

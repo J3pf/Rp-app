@@ -166,13 +166,13 @@ fun RpRoot(mainVm: MainViewModel, gate: BiometricGate, badgeVm: BadgeViewModel =
             }
             composable<ChatRoute> { ChatScreen(onBack = { nav.popBackStack() }) }
             composable<NewAgentRoute> { NewAgentScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack() }) }
-            composable<DevicesRoute> { DevicesScreen { nav.popBackStack() } }
-            composable<MachinesRoute> { MachinesScreen { nav.popBackStack() } }
-            composable<AddMachineRoute> { AddMachineScreen { nav.popBackStack() } }
-            composable<NotificationSettingsRoute> { NotificationSettingsScreen { nav.popBackStack() } }
-            composable<SecuritySettingsRoute> { SecuritySettingsScreen { nav.popBackStack() } }
-            composable<BatteryRoute> { BatteryScreen { nav.popBackStack() } }
-            composable<AboutRoute> { AboutScreen { nav.popBackStack() } }
+            composable<DevicesRoute> { DevicesScreen(onBack = { nav.popBackStack() }) }
+            composable<MachinesRoute> { MachinesScreen(onBack = { nav.popBackStack() }) }
+            composable<AddMachineRoute> { AddMachineScreen(onBack = { nav.popBackStack() }) }
+            composable<NotificationSettingsRoute> { NotificationSettingsScreen(onBack = { nav.popBackStack() }) }
+            composable<SecuritySettingsRoute> { SecuritySettingsScreen(onBack = { nav.popBackStack() }) }
+            composable<BatteryRoute> { BatteryScreen(onBack = { nav.popBackStack() }) }
+            composable<AboutRoute> { AboutScreen(onBack = { nav.popBackStack() }) }
         }
     }
 

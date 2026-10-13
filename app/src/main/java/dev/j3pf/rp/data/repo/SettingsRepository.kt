@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.protocol.NotifyPrefs
@@ -38,6 +39,8 @@ data class AppSettings(
     val onboardingDone: Boolean = false,
     val batteryAsked: Boolean = false,
     val notifyPrefs: NotifyPrefs = NotifyPrefs(),
+    /** Agentes silenciados (preferencia local por agente). */
+    val mutedAgents: Set<String> = emptySet(),
 ) {
     companion object { const val ALL = "all" }
 }
@@ -58,6 +61,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             batteryAsked = p[BATTERY] ?: false,
             notifyPrefs = p[PREFS]?.let { runCatching { RpJson.decodeFromString(NotifyPrefs.serializer(), it) }.getOrNull() }
                 ?: NotifyPrefs(),
+            mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
         )
     }
 
@@ -72,6 +76,11 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setOnboardingDone(v: Boolean) = edit { it[ONBOARDING] = v }
     suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
     suspend fun setNotifyPrefs(v: NotifyPrefs) = edit { it[PREFS] = RpJson.encodeToString(NotifyPrefs.serializer(), v) }
+
+    suspend fun setAgentMuted(agentId: String, muted: Boolean) = edit {
+        val cur = it[MUTED_AGENTS] ?: emptySet()
+        it[MUTED_AGENTS] = if (muted) cur + agentId else cur - agentId
+    }
 
     suspend fun wipe() = edit { it.clear() }
 
@@ -89,5 +98,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         val ONBOARDING = booleanPreferencesKey("onboardingDone")
         val BATTERY = booleanPreferencesKey("batteryAsked")
         val PREFS = stringPreferencesKey("notifyPrefs")
+        val MUTED_AGENTS = stringSetPreferencesKey("mutedAgents")
     }
 }
