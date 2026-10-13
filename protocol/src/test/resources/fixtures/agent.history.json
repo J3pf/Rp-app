@@ -1,0 +1,7 @@
+{"v":1,"t":"agent.history","d":{"agentId":"m:s","epoch":"E1","liveFromSeq":4,
+ "entries":[
+  {"eid":"a1","kind":"user","at":1000,"msg":{"role":"user","content":"hola","timestamp":1000}},
+  {"eid":"a2","kind":"assistant","at":1100,"msg":{"role":"assistant","timestamp":1100,"content":[{"type":"thinking","thinking":"pienso"},{"type":"text","text":"Voy a listar"},{"type":"toolCall","id":"tc1","name":"bash","arguments":{"command":"ls"}}],"stopReason":"toolUse"}},
+  {"eid":"a3","kind":"tool_result","at":1200,"msg":{"role":"toolResult","toolCallId":"tc1","toolName":"bash","content":[{"type":"text","text":"a.txt\nb.txt"}],"isError":false}}],
+ "events":[
+  {"agentId":"m:s","epoch":"E1","seq":4,"e":{"type":"message_end","message":{"role":"assistant","timestamp":1300,"content":[{"type":"text","text":"Hay dos archivos"}]}}}]}}

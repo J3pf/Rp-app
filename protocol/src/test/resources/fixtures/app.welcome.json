@@ -1,0 +1,8 @@
+{"v":1,"t":"app.welcome","ts":1760342400000,"d":{
+ "machines":[
+  {"machineId":"01JAAAAAAAAAAAAAAAAAAAAAAA","name":"Portátil personal","context":"personal","color":"#2E7D32","icon":"home","online":true,"agentCount":2,"openPromptCount":0,"hostOnline":true},
+  {"machineId":"01JBBBBBBBBBBBBBBBBBBBBBBB","name":"PC Empresa","context":"work","color":"#1565C0","icon":"business","online":true,"agentCount":1,"openPromptCount":1,"hostOnline":false}],
+ "agents":[
+  {"agentId":"01JBBBBBBBBBBBBBBBBBBBBBBB:sess1","machineId":"01JBBBBBBBBBBBBBBBBBBBBBBB","machineName":"PC Empresa","machineContext":"work","machineColor":"#1565C0","sessionName":"api-gateway","cwd":"C:\\proy\\api","gitBranch":"main","model":{"provider":"anthropic","id":"claude-sonnet"},"status":"waiting_input","online":true,"lastSeenAt":1760342399000,"openPromptCount":1,"lastMessagePreview":"¿Permitir rm -rf dist?","launcher":"gentle-shell","herdr":{"paneId":"p3","tabId":"t1","workspaceId":"w2"},"gentleMode":"auto","redacted":false,"spawnedByHost":false,"campoNuevo":42}],
+ "openPrompts":[
+  {"promptId":"01JPROMPT0000000000000001","agentId":"01JBBBBBBBBBBBBBBBBBBBBBBB:sess1","kind":"confirm","category":"permission","title":"⚠ Comando peligroso","message":"rm -rf dist","options":[{"id":"0","label":"Permitir"},{"id":"1","label":"Permitir siempre (sesión)"},{"id":"2","label":"Denegar"}],"allowFreeText":false,"placeholder":null,"questions":null,"source":{"extension":"gentle-pi","tool":"bash","subagent":false},"tool":{"name":"bash","args":{"command":"rm -rf dist"}},"danger":"high","expiresAt":null}]}}

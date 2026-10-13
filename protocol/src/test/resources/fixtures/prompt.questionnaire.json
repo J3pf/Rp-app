@@ -1,0 +1,4 @@
+{"v":1,"t":"prompt.opened","d":{"promptId":"01JPROMPT0000000000000002","agentId":"m:s","kind":"questionnaire","category":"question","title":"Preguntas","message":null,"options":[],"allowFreeText":false,"questions":[
+ {"question":"¿Qué base de datos?","header":"DB","multiSelect":false,"allowFreeText":false,"options":[{"id":"0","label":"SQLite","description":"Local","preview":"# SQLite\nsimple"},{"id":"1","label":"Postgres","description":"Servidor"}]},
+ {"question":"¿Extras?","header":"Extras","multiSelect":true,"allowFreeText":true,"options":[{"id":"0","label":"Tests"},{"id":"1","label":"Docs"}]}],
+ "source":{"extension":"gentle-pi","tool":"ask_user_question","subagent":true},"danger":"low","expiresAt":1760349999000}}

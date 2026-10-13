@@ -1,0 +1,11 @@
+[
+ {"agentId":"m:s","epoch":"E1","seq":1,"e":{"type":"agent_start"}},
+ {"agentId":"m:s","epoch":"E1","seq":2,"e":{"type":"message_start","message":{"role":"assistant"}}},
+ {"agentId":"m:s","epoch":"E1","seq":3,"e":{"type":"message_delta","contentIndex":0,"kind":"text","delta":"Hola "}},
+ {"agentId":"m:s","epoch":"E1","seq":4,"e":{"type":"message_delta","contentIndex":0,"kind":"text","delta":"mundo"}},
+ {"agentId":"m:s","epoch":"E1","seq":5,"e":{"type":"message_end","message":{"role":"assistant","timestamp":2000,"content":[{"type":"text","text":"Hola mundo"},{"type":"toolCall","id":"t9","name":"bash","arguments":{"command":"echo hi"}}]}}},
+ {"agentId":"m:s","epoch":"E1","seq":6,"e":{"type":"tool_execution_start","toolCallId":"t9","toolName":"bash","args":{"command":"echo hi"}}},
+ {"agentId":"m:s","epoch":"E1","seq":7,"e":{"type":"tool_execution_update","toolCallId":"t9","toolName":"bash","partialResult":{"content":[{"type":"text","text":"h"}]}}},
+ {"agentId":"m:s","epoch":"E1","seq":8,"e":{"type":"tool_execution_end","toolCallId":"t9","toolName":"bash","result":{"content":[{"type":"text","text":"hi"}],"truncated":false},"isError":false}},
+ {"agentId":"m:s","epoch":"E1","seq":9,"e":{"type":"agent_settled","aborted":false}}
+]
