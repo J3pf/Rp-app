@@ -8,6 +8,7 @@ de tu relay **RP**: chat en vivo, adjuntos y **notificaciones de preguntas/autor
 | Documento | Contenido |
 |---|---|
 | [docs/PLAN-APP.md](docs/PLAN-APP.md) | Plan detallado de la app |
+| [docs/RESILIENCIA.md](docs/RESILIENCIA.md) | Escalabilidad, resiliencia e independencia total (push sin Google, entrega interactiva sin herdr, Linux/Windows) |
 | [docs/COMPATIBILIDAD.md](docs/COMPATIBILIDAD.md) | herdr, gentle-ai, gentle-shell/gentle-pi y separación por PC: hechos verificados y matriz requisito × entorno |
 | [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Visión global (copia; canónica en `rp-relay`) |
 | [`rp-relay/docs/PROTOCOLO.md`](https://github.com/j3pf/rp-relay/blob/main/docs/PROTOCOLO.md) | Contrato de red |

@@ -1,6 +1,6 @@
 # Plan — App Android (`rp-app`)
 
-Contexto: [ARQUITECTURA.md](ARQUITECTURA.md) · [COMPATIBILIDAD.md](COMPATIBILIDAD.md) (herdr, gentle-shell/gentle-pi, separación por PC) · Contrato: `rp-relay/docs/PROTOCOLO.md`.
+Contexto: [ARQUITECTURA.md](ARQUITECTURA.md) · [RESILIENCIA.md](RESILIENCIA.md) · [COMPATIBILIDAD.md](COMPATIBILIDAD.md) (herdr, gentle-shell/gentle-pi, separación por PC) · Contrato: `rp-relay/docs/PROTOCOLO.md`.
 
 ## 1. Objetivos de la app
 
@@ -21,7 +21,8 @@ Contexto: [ARQUITECTURA.md](ARQUITECTURA.md) · [COMPATIBILIDAD.md](COMPATIBILID
 | DI | Hilt |
 | Red | OkHttp 4 (WebSocket + HTTP), kotlinx.serialization (JSON, `ignoreUnknownKeys = true`) |
 | Persistencia | Room (caché de agentes, entradas, prompts), DataStore (preferencias), Keystore + `EncryptedSharedPreferences`/Tink para token y `pushKey` |
-| Push | Firebase Cloud Messaging (`firebase-messaging`, BoM) |
+| Push | **Canal directo propio** (servicio en primer plano `remoteMessaging` + WebSocket al relay, sin Google) + Firebase Cloud Messaging **opcional** (sabor de build `fcm`) |
+| Biometría | `androidx.biometric` (BiometricPrompt) para envíos "como tecleado" y aprobaciones críticas |
 | QR | CameraX + ML Kit Barcode Scanning (modelo empaquetado, sin Play Services de descarga) |
 | Markdown | `com.mikepenz:multiplatform-markdown-renderer-m3` (+ módulo de resaltado de código) |
 | Imágenes | Coil 3 |
@@ -57,11 +58,12 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
   │           bash muestra comando; edit muestra diff), resultado (truncado + "ver más")
   │           tarjetas de prompt en línea (mismo componente que la hoja de respuesta)
   │           banner "Esperando en la terminal (diálogo no remoto)" cuando llega terminal_wait
-  │    banner modo AUTO de gentle-pi (si `gentleMode=auto` y la entrega no es "terminal"):
-  │       "En modo Auto tus mensajes desde el móvil no autorizan acciones. [Pasar a Normal] [Enviar como tecleado (herdr)]"
-  │       — [Pasar a Normal] envía `/gentle:mode normal` con `asCommand:true`; el segundo sólo si el agente está en herdr
-  │    compositor: texto multilínea, 📎 adjuntar (archivo / foto / cámara), selector de entrega:
-  │       [Normal] · [Como tecleado (herdr)] (sólo si el agente corre en herdr) · [Comando /…] (si el texto empieza con /)
+  │    chip de modo AUTO de gentle-pi: "AUTO · tus mensajes se envían como tecleados 🔒" (método `auto` del plugin);
+  │       sólo si el plugin informa que `interactive` y `herdr` no están disponibles se muestra el aviso
+  │       "En Auto este mensaje no autoriza acciones" con [Pasar a Normal] (envía `/gentle:mode normal` con `asCommand`)
+  │    compositor: texto multilínea, 📎 adjuntar (archivo / foto / cámara), método de entrega:
+  │       [Automático] (defecto) · [Como tecleado 🔒] · [Mensaje de extensión] · [Comando /…] (si empieza con /)
+  │       "Como tecleado" pide BiometricPrompt (válido 5 min) porque cuenta como autorización humana en gentle Auto
   │       cuando el agente trabaja: [Encolar (follow‑up)] [Interrumpir y dirigir (steer)]
   │
   ├─ Pendientes: todos los prompts abiertos de todos los agentes, ordenados por peligro y antigüedad;
@@ -86,8 +88,12 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
 ## 4. Capa de datos
 
 ### 4.1 `RelayConnection` (singleton)
-- WebSocket a `/ws/app` **sólo mientras la app está en primer plano** (`ProcessLifecycleOwner`: ON_START conecta,
-  ON_STOP cierra tras 30 s de gracia). En segundo plano todo llega por FCM. Sin servicio foreground.
+- WebSocket completo a `/ws/app?mode=foreground` mientras la app está en primer plano (`ProcessLifecycleOwner`).
+- **`DirectPushService`** (canal directo, por defecto activado; independiente de Google): servicio en primer plano con
+  `foregroundServiceType="remoteMessaging"` (permisos `FOREGROUND_SERVICE` y `FOREGROUND_SERVICE_REMOTE_MESSAGING`),
+  notificación permanente mínima ("RP conectado · 3 PCs"), WebSocket a `/ws/app?mode=direct` con ping cada 4,5 min,
+  reconexión con backoff + `NetworkCallback`; se arranca en `BOOT_COMPLETED` y al abrir la app; recibe `push.notify`
+  y responde `push.ack`. Se puede desactivar en Ajustes si se usa sólo FCM.
 - Reconexión con backoff (1 → 30 s) + `ConnectivityManager.NetworkCallback` para reintentar al recuperar red.
 - Expone `SharedFlow<ServerMessage>` y `StateFlow<ConnState>`.
 - Peticiones con `id` → `CompletableDeferred` por id, timeout 10 s.
@@ -159,7 +165,11 @@ onReceive(intent) { val pending = goAsync()
 Tras pulsar, la notificación se actualiza a "Enviando…" inmediatamente para dar feedback.
 
 ### 5.4 Fiabilidad
+- Dos canales independientes (directo y FCM opcional) que llevan el mismo cuerpo; `NotificationDeduper` (Room, por
+  `promptId`/`pushId`, 24 h) garantiza una sola notificación. Ambos canales llaman al mismo `NotificationFactory`.
 - FCM *data* high priority permite ejecutar `onMessageReceived` aunque la app esté en Doze/cerrada (no force‑stopped).
+- El canal directo requiere excluir la app de la optimización de batería para máxima fiabilidad en algunos fabricantes;
+  el onboarding lo pide explícitamente (en el caso FCM-only es sólo recomendación).
 - Pantalla de ajustes con estado: permiso de notificaciones, canal `approvals` no silenciado, exclusión de
   optimización de batería (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` sólo como guía, no obligatorio), y
   botón "Enviar notificación de prueba" (llama a un endpoint del relay que hace push al propio dispositivo).
@@ -167,7 +177,7 @@ Tras pulsar, la notificación se actualiza a "Enviando…" inmediatamente para d
 ## 6. Emparejamiento
 
 1. En el servidor: `rp-relay pair device` → QR con `rp://pair?u=https://relay…&c=ABCD2345`.
-2. App: escanea (o pega URL+código) → obtiene token FCM → `POST /v1/pair/device {code, name: Build.MODEL, fcmToken}`
+2. App: escanea (o pega URL+código) → (si el build incluye FCM) obtiene token → `POST /v1/pair/device {code, name: Build.MODEL, fcmToken?}` → `PUT /v1/devices/me/push {direct:true}` → arranca `DirectPushService`
    → guarda `deviceToken` y `pushKey` cifrados (Keystore).
 3. Comprueba `/healthz` y abre WS. Deep link `rp://pair` registrado para abrir la app al escanear con la cámara del sistema.
 4. Emparejar una máquina desde la app: Ajustes → "Añadir máquina" → `POST /v1/pair/codes` → muestra
@@ -217,7 +227,7 @@ rp-app/
 
 | # | Tarea | Fase | Est. |
 |---|---|---|---|
-| A0 | **Spike S2**: app mínima + FCM data high‑priority con app cerrada → notificación con acción → POST a un endpoint de prueba | 0 | 1 d |
+| A0 | **Spike S2**: app mínima con (a) servicio `remoteMessaging` + WS y (b) FCM data high‑priority; con app cerrada y pantalla apagada 1 h → notificación con acción → POST; medir batería del canal directo | 0 | 1,5 d |
 | A1 | Proyecto base: Gradle, Hilt, tema, navegación, CI | 1 | 1 d |
 | A2 | Módulo `protocol` + tests de fixtures | 1 | 1 d |
 | A3 | Onboarding + QR + almacenamiento seguro + pairing | 1 | 1,5 d |
@@ -229,5 +239,6 @@ rp-app/
 | A9 | Ajustes (dispositivos, máquinas, prefs de notificación, prueba) | 3 | 1,5 d |
 | A10 | Nuevo agente vía rp-host (PC, carpeta, lanzador gentle-shell/pi, backend herdr/tmux) | 3 | 1,5 d |
 | A12 | Separación por PC: selector, agrupación, edición de PC (nombre/contexto/color), grupos de canales por PC, prefs por PC | 1–2 | 2 d |
-| A13 | Cuestionarios (`questionnaire`), banner modo AUTO, selector de entrega (normal / como tecleado / comando), chips herdr/gentle | 2 | 2 d |
+| A13 | Cuestionarios (`questionnaire`), chip/aviso modo AUTO, método de entrega con biometría, chips herdr/gentle | 2 | 2 d |
+| A14 | `DirectPushService` + deduplicación + arranque al encender + sabores de build `direct`/`fcm` | 2 | 2 d |
 | A11 | Release firmado + docs | 3 | 0,5 d |
