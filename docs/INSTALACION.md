@@ -1,100 +1,155 @@
-# Guía de Instalación y Configuración — RP App (Android)
+# Guía de Instalación, Vinculación y Troubleshooting — RP App (Android)
 
-Esta guía detalla los pasos para compilar, instalar en tu teléfono y conectar la aplicación Android **RP** con tu servidor **RP Relay**.
+Esta guía detalla cómo instalar la aplicación Android **RP**, vincularla con tu servidor **RP Relay** y solucionar problemas comunes de red, permisos y notificaciones.
 
 ---
 
 ## 1. Requisitos del sistema
 
-- **Dispositivo Android:**
-  - Versión mínima: Android 8.0 (API 26).
-  - Versión recomendada: Android 12+ (API 31+) para soporte nativo de acciones autenticadas con biometría en notificaciones.
-- **Entorno de compilación (Linux, macOS o WSL en Windows):**
-  - **JDK 17** o superior (`openjdk-17-jdk` / `openjdk-21-jdk`).
-  - **Android SDK** con plataforma 36 y `build-tools 36.0.0` (el script `build-apk.sh` los descarga automáticamente si faltan).
-  - Acceso a internet hacia repositorios Maven (Google Maven y Maven Central).
+- **Dispositivo móvil:**
+  - Android 8.0 (API 26) o superior.
+  - Android 12+ (API 31+) recomendado para soporte de autenticación biométrica en acciones de notificación.
+- **Conectividad:** Acceso de red hacia el servidor **RP Relay** (misma red local, VPN/Tailscale o dominio público con HTTPS).
+- **Entorno opcional para compilar desde código:**
+  - JDK 17 o superior (`openjdk-17-jdk` / `openjdk-21-jdk`).
+  - Android SDK con plataforma 36 y `build-tools 36.0.0` (gestionados automáticamente por `scripts/build-apk.sh`).
 
 ---
 
-## 2. Compilación del APK
+## 2. Obtención e Instalación del APK
 
-El repositorio incluye el script automatizado `scripts/build-apk.sh`:
+### Opción A: Descarga directa desde la Release oficial (Recomendado)
+
+1. En tu teléfono o PC, ingresa a la release oficial de GitHub:
+   👉 **[RP App v0.1.0 — Descargar APK](https://github.com/J3pf/Rp-app/releases/tag/v0.1.0)**
+2. Descarga el archivo de instalación:
+   - **`rp-direct-debug.apk`**: Sabor independiente de Google (utiliza el canal directo de push por WebSocket `remoteMessaging`).
+
+#### Instalación en el móvil:
+- **Desde el navegador del teléfono:**
+  1. Descarga el APK.
+  2. Al pulsar sobre la descarga finalizada, si el sistema lo solicita, activa **«Permitir desde esta fuente»** (Instalar aplicaciones de origen desconocido) para tu navegador o gestor de archivos.
+  3. Pulsa **Instalar**.
+- **Desde la computadora vía ADB (cable USB o Wi-Fi):**
+  1. Habilita las **Opciones de desarrollador** y activa **Depuración USB** en el teléfono.
+  2. Ejecuta:
+     ```bash
+     adb install -r rp-direct-debug.apk
+     ```
+
+### Opción B: Compilación local desde el código fuente
+
+Si prefieres compilar el APK tú mismo:
 
 ```bash
-# APK debug estándar sabor "direct" (independiente de Google, canal directo por WebSocket)
+# Compilar sabor direct debug
 scripts/build-apk.sh
 
-# Para correr los tests unitarios antes de compilar
-scripts/build-apk.sh --test
-
-# Para compilar e instalar automáticamente por ADB en un teléfono conectado
+# Compilar e instalar de inmediato en un teléfono conectado por ADB
 scripts/build-apk.sh --install
+
+# Ejecutar tests unitarios antes de compilar
+scripts/build-apk.sh --test
 ```
+El archivo generado se ubicará en `dist/rp-direct-debug.apk`.
 
-### Sabores disponibles
-- **`direct` (por defecto):** No requiere servicios de Google Play ni Firebase. Mantiene un servicio en primer plano (`remoteMessaging`) con conexión WebSocket de bajo consumo al Relay para push instantáneo.
-- **`fcm` (`--fcm`):** Soporta Firebase Cloud Messaging. Requiere colocar el archivo `app/google-services.json` configurado con tu proyecto Firebase antes de compilar. Ambos canales conviven y se deduplican automáticamente.
+---
 
-El archivo compilado se genera en:
-```text
-dist/rp-direct-debug.apk
+## 3. Vinculación con el Relay (Emparejamiento)
+
+Para conectar la app con tus agentes:
+
+### Paso 1: Generar la invitación en el Relay
+En el servidor donde corre `rp-relay`, ejecuta:
+```bash
+rp-relay pair device
 ```
+*(O `npx rp-relay pair device` si ejecutas desde el repositorio).*
+
+El comando imprimirá en pantalla:
+- Un **código QR** que contiene la URI `rp://pair?u=<URL>&c=<CODIGO>`.
+- La **URL del relay** (ej. `http://192.168.1.50:8787` o `https://relay.tudominio.com`).
+- Un **código de 8 caracteres** alfanumérico en Base32 (ej. `BTBJ-M9A1`).
+- *Nota:* Este código es de **un solo uso** y tiene una validez de **10 minutos**.
+
+### Paso 2: Vincular en la App
+1. Abre la aplicación **RP** en tu teléfono.
+2. En la pantalla inicial de bienvenida tendrás dos opciones:
+   - **Escanear código QR:** Pulsa el botón, concede permiso de cámara y apunta la cámara a la terminal del servidor. La app detectará la URL y el código automáticamente.
+   - **Ingreso manual:** Si estás en otra red o no tienes cámara disponible, pulsa «Ingresar manualmente», escribe la URL del Relay y el código de 8 caracteres.
+3. Pulsa **Vincular**.
+4. La app se comunicará con `POST /v1/pair/device`, guardará el token de dispositivo cifrado en **Android Keystore** (Tink AES-256-GCM) y abrirá el canal WebSocket seguro.
+5. Inmediatamente verás la lista de tus PCs y agentes activos.
 
 ---
 
-## 3. Instalación en el teléfono
+## 4. Permisos clave y configuración en Android
 
-Tienes dos métodos para instalar el APK en tu dispositivo:
+Para asegurar que las autorizaciones y preguntas de los agentes lleguen sin interrupciones:
 
-### Método A: Mediante cable USB / ADB (Recomendado)
-1. Activa las **Opciones de desarrollador** en tu teléfono (tocando 7 veces el *Número de compilación* en Ajustes -> Información del teléfono).
-2. Habilita la casilla **Depuración USB** (y acepta la clave RSA cuando aparezca el diálogo en pantalla).
-3. Ejecuta desde la terminal:
-   ```bash
-   scripts/build-apk.sh --install
-   ```
-   *(O manualmente: `adb install -r dist/rp-direct-debug.apk`)*
-
-### Método B: Transferencia manual del archivo
-1. Transfiere el archivo `dist/rp-direct-debug.apk` a tu teléfono (por cable USB, Google Drive, Telegram, LocalSend, etc.).
-2. Abre el archivo `.apk` desde el explorador de archivos del teléfono.
-3. Si el sistema te lo solicita, activa el permiso de **«Instalar aplicaciones de origen desconocido»** para esa app.
-4. Pulsa **Instalar**.
+1. **Permiso de Notificaciones (`POST_NOTIFICATIONS` en Android 13+):**
+   - Concede el permiso cuando la app lo solicite en el primer inicio.
+2. **Optimización de Batería (Crítico para push sin Google):**
+   - Ve a *Ajustes de Android → Aplicaciones → RP → Batería* y selecciona **«Sin restricciones»** (o *No optimizar*).
+   - Esto impide que el sistema cierre el servicio WebSocket en segundo plano (`DirectPushService`) al apagar la pantalla.
+3. **Permiso de Cámara:**
+   - Requerido únicamente para escanear el QR de emparejamiento.
 
 ---
 
-## 4. Permisos clave en Android
+## 5. Resolución de problemas (Troubleshooting)
 
-Al abrir la app por primera vez, concédele los siguientes permisos para asegurar su correcto funcionamiento:
+### 5.1 No llegan notificaciones en Android 13+ (API 33+)
+- **Causa:** El permiso de notificaciones fue denegado o los canales están deshabilitados.
+- **Solución:**
+  1. Ve a *Ajustes del sistema → Aplicaciones → RP → Notificaciones*.
+  2. Verifica que el interruptor principal **«Permitir notificaciones»** esté activo.
+  3. Revisa la lista de categorías (canales de notificación por PC) y asegúrate de que canales como *Autorizaciones* (`approvals`) y *Preguntas* (`questions`) tengan activado el comportamiento **Alerta / Aviso en pantalla**.
 
-1. **Notificaciones (`POST_NOTIFICATIONS` en Android 13+):**
-   - Esencial para recibir autorizaciones y preguntas de tus agentes en tiempo real.
-2. **Optimización de batería:**
-   - Ve a *Ajustes del sistema → Aplicaciones → RP → Batería* y selecciona **Sin restricciones** (o desactiva la optimización).
-   - Esto evita que el sistema operativo cierre la conexión del servicio de notificaciones en segundo plano cuando la pantalla esté apagada.
-3. **Cámara:**
-   - Necesario para escanear el código QR de emparejamiento.
+### 5.2 Notificaciones retrasadas o desconexión con pantalla apagada
+- **Causa:** Android Doze Mode o gestores de batería de capas de personalización (Xiaomi MIUI/HyperOS, Samsung OneUI, Huawei, Realme, OnePlus) suspenden los procesos en segundo plano.
+- **Solución:**
+  1. Configura la batería de la app como **Sin restricciones**.
+  2. En dispositivos **Xiaomi / HyperOS / MIUI:**
+     - Ve a *Ajustes → Aplicaciones → Administrar aplicaciones → RP*.
+     - Activa **Inicio automático**.
+     - En *Ahorro de batería*, selecciona **Sin restricciones**.
+     - En la vista de apps recientes, mantén presionada la tarjeta de RP y activa el ícono del **candado** para evitar que se limpie de la memoria.
+  3. En dispositivos **Samsung (OneUI):**
+     - Ve a *Ajustes → Cuidado del dispositivo → Batería → Límites de uso en segundo plano*.
+     - Asegúrate de que RP esté en la lista de **Aplicaciones que nunca se suspenden**.
 
----
+### 5.3 Error de conexión HTTP en red local o certificados TLS
+- **Causa:** Por defecto, Android restringe el tráfico en texto claro (`http://`) y desconfía de certificados TLS autofirmados.
+- **Solución:**
+  - **Tráfico HTTP local:** El APK debug incluye configuración de seguridad que permite conexiones en texto claro a `localhost`, `127.0.0.1` y `10.0.2.2`. Para conectar por IP local en LAN (ej. `http://192.168.1.X:8787`), se recomienda:
+    - Usar un proxy TLS ligero como Caddy (`caddy reverse-proxy --to :8787`).
+    - O utilizar una red privada como **Tailscale** (que provee nombres DNS y certificados TLS válidos con `tailscale cert`).
+  - **Certificados autofirmados:** Si utilizas una CA propia (como `mkcert`), instala el certificado raíz `.crt` en tu teléfono:
+    - Ve a *Ajustes → Seguridad → Cifrado y credenciales → Instalar certificado → Certificado de CA*.
+    - El APK debug tiene habilitado `<debug-overrides>` para confiar en los certificados instalados por el usuario.
+  - **En producción / fuera de casa:** Utiliza siempre un dominio con HTTPS público y certificado válido (Let's Encrypt o Cloudflare).
 
-## 5. Emparejamiento con el Relay
+### 5.4 Código de emparejamiento expirado o inválido
+- **Causa:** El código de 8 caracteres caducó (expira a los 10 minutos) o ya fue utilizado por otro dispositivo (son de un solo uso por seguridad).
+- **Solución:**
+  - En el servidor Relay, ejecuta nuevamente `rp-relay pair device` para obtener un código nuevo y vuelve a escanearlo o ingresarlo.
 
-1. En tu servidor Relay (donde corre `rp-relay`), genera una invitación de emparejamiento ejecutando:
-   ```bash
-   rp-relay pair device
-   ```
-   El terminal mostrará un código QR y un código alfanumérico corto de 8 caracteres (válido por 10 minutos).
-2. Abre la app **RP** en tu teléfono.
-3. En la pantalla de bienvenida, pulsa **Escanear código QR** y apunta al terminal del servidor.
-   *(Alternativamente, puedes ingresar la URL de tu relay y el código de 8 caracteres manualmente).*
-4. Una vez validado, la app guardará de forma segura el token cifrado en Android Keystore y quedará vinculada permanentemente a tu Relay.
+### 5.5 Estado "Desconectado" persistente en la app
+- **Causa:** La app no puede alcanzar la dirección del Relay o el puerto está cerrado por un firewall.
+- **Solución:**
+  1. Comprueba desde el navegador del móvil (o con `curl` desde la misma red Wi-Fi) que el endpoint de salud responda:
+     ```text
+     http://<IP_DEL_RELAY>:8787/healthz
+     ```
+     Debe responder: `{"ok":true,...}`.
+  2. Si no responde, verifica que el proceso de `rp-relay` esté corriendo y que el firewall del servidor permita el tráfico:
+     ```bash
+     sudo ufw allow 8787/tcp
+     ```
+  3. Comprueba que el teléfono y el servidor estén en la misma subred o conectados a la misma VPN.
 
----
-
-## 6. Verificación de funcionamiento
-
-1. **Lista de agentes:** En la pantalla principal verás las PCs registradas y los agentes activos con su estado en vivo (*Trabajando*, *Esperando respuesta*, etc.).
-2. **Chat en vivo:** Pulsa sobre cualquier agente para abrir el chat, ver su razonamiento, herramientas en ejecución y enviarle mensajes.
-3. **Prueba de notificaciones:**
-   - Entra en *Ajustes → Notificaciones*.
-   - Pulsa en **«Enviar notificación de prueba»** para comprobar que el canal de notificaciones y las acciones rápidas responden correctamente en tu sistema.
+### 5.6 Las acciones de notificación (Permitir / Denegar) no responden
+- **Causa:** Al presionar un botón de acción en la notificación heads-up, la app envía una petición HTTPS inmediata a `/v1/prompts/{id}/answer`. Si el teléfono pierde conectividad en ese instante, la petición falla.
+- **Solución:**
+  - La app incluye una cola de reintento automático con `WorkManager`. En cuanto el dispositivo recupera la conexión, la respuesta pendiente se despacha automáticamente y la notificación se descarta.

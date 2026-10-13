@@ -83,7 +83,7 @@ class PromptsRepositoryTest {
     fun tearDown() {
         conn.stop()
         scope.cancel()
-        server.shutdown()
+        runCatching { server.shutdown() }
     }
 
     private suspend fun publishOpened() {
@@ -157,6 +157,14 @@ class PromptsRepositoryTest {
                                     Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = true), re = env.id).encode(),
                                 )
                             }
+                        }
+
+                        override fun onClosing(
+                            webSocket: WebSocket,
+                            code: Int,
+                            reason: String,
+                        ) {
+                            webSocket.close(code, reason)
                         }
                     },
                 ),

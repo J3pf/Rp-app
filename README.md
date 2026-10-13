@@ -26,7 +26,29 @@ de tu relay **RP**: chat en vivo, adjuntos y **notificaciones de preguntas/autor
 - [Moshi](https://getmoshi.app/docs): terminal móvil + hook en el host que genera bandeja de aprobaciones y push.
 - [gentle-shell / gentle-pi](https://github.com/Gentleman-Programming/gentle-shell) 4.1.0, [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai), [herdr](https://github.com/herdrdev/herdr) 0.9.3: entorno del usuario, ver `docs/COMPATIBILIDAD.md`.
 
-## Compilar
+## Descarga e Instalación (Release Oficial)
+
+Puedes instalar la aplicación directamente en tu dispositivo sin necesidad de compilar:
+
+1. **Descargar el APK:**
+   - 📦 **[RP App v0.1.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.1.0)**
+   - Archivo directo: **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.1.0/rp-direct-debug.apk)** (96 MB).
+2. **Instalar en el móvil:**
+   - **En el teléfono:** Abre el archivo descargado y concede permiso de «Instalar aplicaciones desconocidas» para tu navegador o gestor de archivos.
+   - **Vía USB con ADB:** Conecta el teléfono con depuración USB y ejecuta:
+     ```bash
+     adb install -r rp-direct-debug.apk
+     ```
+3. **Vincular con tu Relay:**
+   - En el servidor Relay, ejecuta:
+     ```bash
+     rp-relay pair device
+     ```
+   - Abre la app **RP**, pulsa **Escanear código QR** y apunta al terminal (o escribe la URL y el código de 8 caracteres manualmente).
+4. **Guía completa y Troubleshooting:**
+   - Consulta **[docs/INSTALACION.md](docs/INSTALACION.md)** para la guía paso a paso y la resolución detallada de problemas (permisos en Android 13+, optimización de batería, certificados TLS/HTTP en red local y códigos expirados).
+
+## Compilar desde código fuente
 
 **Rápido (APK para tu teléfono):** `scripts/build-apk.sh` — instala el SDK si falta, compila y deja el APK en `dist/rp-direct-debug.apk`
 (`--install` lo instala por adb, `--fcm`, `--test`, `--release`). Detalle manual abajo.
