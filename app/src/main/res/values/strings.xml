@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RP</string>
+    <string name="channel_service">Conexión con RP</string>
+    <string name="channel_service_desc">Mantiene la conexión con tu relay para recibir preguntas y autorizaciones sin Google.</string>
+    <string name="channel_approvals">Autorizaciones</string>
+    <string name="channel_questions">Preguntas</string>
+    <string name="channel_terminal">Esperando en la terminal</string>
+    <string name="channel_finished">Agente terminó</string>
+    <string name="channel_errors">Errores</string>
+    <string name="service_title">RP conectado</string>
+    <string name="action_allow">Permitir</string>
+    <string name="action_deny">Denegar</string>
+    <string name="action_open">Abrir</string>
+    <string name="action_reply">Responder</string>
+    <string name="notif_sending">Enviando…</string>
+    <string name="notif_retrying">Sin conexión · se reintentará</string>
+    <string name="notif_reply_hint">Escribe tu respuesta</string>
+</resources>
