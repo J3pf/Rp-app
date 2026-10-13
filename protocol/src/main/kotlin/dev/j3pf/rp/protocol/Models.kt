@@ -1,8 +1,19 @@
 package dev.j3pf.rp.protocol
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
 data class MachineSummary(
@@ -25,9 +36,45 @@ data class HerdrInfo(
     val session: String? = null,
 )
 
-@Serializable
+@Serializable(with = ModelInfoSerializer::class)
 data class ModelInfo(val provider: String? = null, val id: String? = null) {
     val label: String get() = id ?: provider ?: ""
+}
+
+object ModelInfoSerializer : KSerializer<ModelInfo> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("ModelInfo", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): ModelInfo {
+        val jsonDecoder = decoder as? JsonDecoder
+            ?: return ModelInfo(id = decoder.decodeString())
+        return when (val el = jsonDecoder.decodeJsonElement()) {
+            is JsonPrimitive -> {
+                val str = el.content
+                if (str.contains('/')) {
+                    val (p, id) = str.split('/', limit = 2)
+                    ModelInfo(provider = p, id = id)
+                } else {
+                    ModelInfo(id = str)
+                }
+            }
+            is JsonObject -> {
+                val p = el["provider"]?.jsonPrimitive?.contentOrNull
+                val id = el["id"]?.jsonPrimitive?.contentOrNull
+                ModelInfo(provider = p, id = id)
+            }
+            else -> ModelInfo()
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: ModelInfo) {
+        val jsonEncoder = encoder as? JsonEncoder
+        val str = if (value.provider != null && value.id != null) "${value.provider}/${value.id}" else value.label
+        if (jsonEncoder != null) {
+            encoder.encodeString(str)
+        } else {
+            encoder.encodeString(str)
+        }
+    }
 }
 
 object AgentStatus {
@@ -188,13 +235,14 @@ object EntryKind {
     const val MODEL_CHANGE = "model_change"
 }
 
-/** Cuerpo de `agent.event` (relay → app). */
+/** Cuerpo de `agent.event` (relay → app) y de los eventos en `AgentHistory`. */
 @Serializable
 data class AgentEvent(
-    val agentId: String,
+    val agentId: String = "",
     val epoch: String? = null,
     val seq: Long = 0,
     val e: JsonObject,
+    val ts: Long? = null,
 )
 
 @Serializable
@@ -204,6 +252,7 @@ data class AgentHistory(
     val entries: List<Entry> = emptyList(),
     val events: List<AgentEvent> = emptyList(),
     val liveFromSeq: Long? = null,
+    val truncated: Boolean = false,
 )
 
 @Serializable

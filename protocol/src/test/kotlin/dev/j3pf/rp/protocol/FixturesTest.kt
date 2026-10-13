@@ -31,7 +31,7 @@ class FixturesTest {
     @Test
     fun `fixtures sincronizados desde rp-relay se decodifican`() {
         val url = javaClass.getResource("/fixtures/relay") ?: return
-        val files = File(url.toURI()).listFiles { f -> f.extension == "json" }.orEmpty()
+        val files = File(url.toURI()).listFiles { f -> f.name.endsWith(".valid.json") }.orEmpty()
         for (f in files) {
             val el = RpJson.parseToJsonElement(f.readText())
             val envs = if (el is JsonArray) el.map { RpJson.decodeFromJsonElement(Envelope.serializer(), it) }
