@@ -7,6 +7,7 @@ de tu relay **RP**: chat en vivo, adjuntos y **notificaciones de preguntas/autor
 
 | Documento | Contenido |
 |---|---|
+| [docs/INSTALACION.md](docs/INSTALACION.md) | Guía de instalación del APK y emparejamiento con el Relay |
 | [docs/PLAN-APP.md](docs/PLAN-APP.md) | Plan detallado de la app |
 | [docs/QA.md](docs/QA.md) | Pruebas manuales E2E (notificaciones con la app cerrada, modo avión, etc.) |
 | [docs/RESILIENCIA.md](docs/RESILIENCIA.md) | Escalabilidad, resiliencia e independencia total (push sin Google, entrega interactiva sin herdr, Linux/Windows) |
