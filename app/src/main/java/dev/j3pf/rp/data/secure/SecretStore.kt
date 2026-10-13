@@ -33,7 +33,7 @@ data class Session(
  * `deviceToken` y `pushKey` sólo existen en disco cifrados y están excluidos de las copias de seguridad.
  */
 @Singleton
-class SecretStore @Inject constructor(@ApplicationContext private val context: Context) {
+open class SecretStore @Inject constructor(@ApplicationContext private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private val aead: Aead by lazy {
@@ -51,7 +51,7 @@ class SecretStore @Inject constructor(@ApplicationContext private val context: C
     val session: StateFlow<Session?> = _session.asStateFlow()
 
     /** Lectura síncrona (receivers y servicios). */
-    fun current(): Session? = _session.value
+    open fun current(): Session? = _session.value
 
     fun save(session: Session) {
         put(K_RELAY_ID, session.relayId)

@@ -261,7 +261,7 @@ private fun MessageList(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Composer(
+internal fun Composer(
     ui: ChatUiState,
     working: Boolean,
     text: String,

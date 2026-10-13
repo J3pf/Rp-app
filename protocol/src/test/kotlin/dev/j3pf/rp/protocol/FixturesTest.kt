@@ -19,9 +19,40 @@ class FixturesTest {
     @Test
     fun `todos los fixtures JSON son JSON valido`() {
         val dir = File(checkNotNull(javaClass.getResource("/fixtures")).toURI())
-        val files = dir.listFiles { f -> f.extension == "json" }.orEmpty()
+        val files = dir.walkTopDown().filter { it.isFile && it.extension == "json" }.toList()
         assertTrue(files.isNotEmpty())
         for (f in files) RpJson.parseToJsonElement(f.readText())
+    }
+
+    /**
+     * Contrato con rp-relay: cada fixture sincronizado (`scripts/sync-fixtures.sh`) con sobre `{v,t,d}` y un tipo
+     * que la app recibe debe decodificarse con los tipos Kotlin. Sin fixtures sincronizados no hace nada.
+     */
+    @Test
+    fun `fixtures sincronizados desde rp-relay se decodifican`() {
+        val url = javaClass.getResource("/fixtures/relay") ?: return
+        val files = File(url.toURI()).listFiles { f -> f.extension == "json" }.orEmpty()
+        for (f in files) {
+            val el = RpJson.parseToJsonElement(f.readText())
+            val envs = if (el is JsonArray) el.map { RpJson.decodeFromJsonElement(Envelope.serializer(), it) }
+            else listOf(RpJson.decodeFromJsonElement(Envelope.serializer(), el))
+            for (env in envs) {
+                when (env.t) {
+                    MsgType.APP_WELCOME -> env.body<AppWelcome>()
+                    MsgType.MACHINES_UPDATE -> env.body<MachinesUpdate>()
+                    MsgType.AGENTS_UPDATE -> env.body<AgentsUpdate>()
+                    MsgType.AGENT_HISTORY -> env.body<AgentHistory>()
+                    MsgType.AGENT_EVENT -> env.body<AgentEvent>()
+                    MsgType.PROMPT_OPENED -> env.body<Prompt>()
+                    MsgType.PROMPT_RESOLVED -> env.body<PromptResolved>()
+                    MsgType.PROMPT_ANSWER_RESULT -> env.body<PromptAnswerResult>()
+                    MsgType.USER_MESSAGE_ACK -> env.body<UserMessageAck>()
+                    MsgType.PUSH_NOTIFY -> env.body<PushNotify>()
+                    MsgType.HOSTS_UPDATE -> env.body<HostsUpdate>()
+                    else -> Unit // mensajes del lado plugin/host que la app no consume
+                }
+            }
+        }
     }
 
     @Test
