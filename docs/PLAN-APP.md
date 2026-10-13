@@ -1,11 +1,11 @@
 # Plan — App Android (`rp-app`)
 
-Contexto: [ARQUITECTURA.md](ARQUITECTURA.md). Contrato: `rp-relay/docs/PROTOCOLO.md`.
+Contexto: [ARQUITECTURA.md](ARQUITECTURA.md) · [COMPATIBILIDAD.md](COMPATIBILIDAD.md) (herdr, gentle-shell/gentle-pi, separación por PC) · Contrato: `rp-relay/docs/PROTOCOLO.md`.
 
 ## 1. Objetivos de la app
 
 1. Emparejarse con mi relay (QR).
-2. Ver **todos** los agentes (online/offline), agrupados por máquina, con estado y preguntas pendientes.
+2. Ver **todos** los agentes (online/offline) **separados por PC** (personal / empresa), con estado y preguntas pendientes.
 3. Chat en vivo con cada agente: streaming de texto, razonamiento, llamadas a herramientas y resultados.
 4. Enviar mensajes (normal / steer / follow‑up), **adjuntar** archivos, fotos o capturas, e interrumpir.
 5. **Notificaciones** de preguntas y autorizaciones con app cerrada, respondibles **desde la notificación**.
@@ -39,11 +39,16 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
                                                                                     │
   ┌──────────── barra inferior: [Agentes] [Pendientes (badge)] [Ajustes] ──────────┘
   │
-  ├─ Agentes:   lista agrupada por máquina
+  │  Selector de PC fijo arriba (persistente, afecta Agentes y Pendientes):
+  │     [ Todas ] [ 🏠 Personal (2) ] [ 🏢 Empresa (1🔔) ]     ← un chip por contexto, con su color y contador
+  │
+  ├─ Agentes:   lista agrupada por PC (cabecera con nombre, color, online/offline, "rp-host ✓")
   │             tarjeta: nombre sesión · carpeta (último segmento) · rama git · modelo
-  │             chip de estado (Trabajando ⏳ / Esperando tu respuesta 🔔 / Inactivo / Desconectado hace 3 h)
-  │             badge de prompts abiertos · vista previa del último mensaje
-  │             FAB "Nuevo agente" (fase 3, si hay rp-host)
+  │             chips: estado (Trabajando ⏳ / Esperando tu respuesta 🔔 / Inactivo / Desconectado hace 3 h),
+  │                    lanzador (gentle-shell / pi), herdr (workspace·pane), modo gentle (NORMAL / AUTO / YOLO)
+  │             badge de prompts abiertos · vista previa del último mensaje ("contenido oculto" si la PC redacta)
+  │             FAB "Nuevo agente" (fase 3, si la PC tiene rp-host): PC → carpeta → lanzador (gentle-shell/pi)
+  │                                                            → backend (herdr/tmux) → prompt inicial opcional
   │
   ├─ Chat del agente:
   │    cabecera: nombre, estado, modelo, botón ⏹ abort (si trabajando), menú (info, olvidar)
@@ -52,8 +57,12 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
   │           bash muestra comando; edit muestra diff), resultado (truncado + "ver más")
   │           tarjetas de prompt en línea (mismo componente que la hoja de respuesta)
   │           banner "Esperando en la terminal (diálogo no remoto)" cuando llega terminal_wait
-  │    compositor: texto multilínea, 📎 adjuntar (archivo / foto / cámara), selector de entrega
-  │                cuando el agente trabaja: [Encolar (follow‑up)] [Interrumpir y dirigir (steer)]
+  │    banner modo AUTO de gentle-pi (si `gentleMode=auto` y la entrega no es "terminal"):
+  │       "En modo Auto tus mensajes desde el móvil no autorizan acciones. [Pasar a Normal] [Enviar como tecleado (herdr)]"
+  │       — [Pasar a Normal] envía `/gentle:mode normal` con `asCommand:true`; el segundo sólo si el agente está en herdr
+  │    compositor: texto multilínea, 📎 adjuntar (archivo / foto / cámara), selector de entrega:
+  │       [Normal] · [Como tecleado (herdr)] (sólo si el agente corre en herdr) · [Comando /…] (si el texto empieza con /)
+  │       cuando el agente trabaja: [Encolar (follow‑up)] [Interrumpir y dirigir (steer)]
   │
   ├─ Pendientes: todos los prompts abiertos de todos los agentes, ordenados por peligro y antigüedad;
   │              tocar → hoja de respuesta
@@ -61,7 +70,10 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
   ├─ Hoja de respuesta (BottomSheet):
   │    permission: herramienta + comando/args completos en monoespaciado, nivel de peligro,
   │                botones grandes [Permitir] [Permitir siempre (sesión)] [Denegar] [Denegar con motivo]
-  │    question:   pregunta, opciones como chips/botones, campo de texto libre si allowFreeText
+  │    question:   pregunta, opciones como chips/botones (con descripción), texto libre si allowFreeText
+  │    questionnaire (ask_user_question de gentle-pi): 1–4 preguntas en páginas con progreso (header),
+  │                opción única / múltiple, "preview" en markdown de la opción enfocada, botón Enviar al final
+  │    subagente:  igual que question con etiqueta "❀ subagente <nombre>"
   │    dialog:     confirm (Sí/No), select (lista), input (texto)
   │    Si al responder llega 409 → "Ya respondido en otro lugar" y se cierra.
   │
@@ -81,7 +93,11 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
 - Peticiones con `id` → `CompletableDeferred` por id, timeout 10 s.
 
 ### 4.2 Repositorios
-- `AgentsRepository`: `agents.update` → Room `agents`; `Flow<List<AgentWithCounts>>`.
+- `MachinesRepository`: `machines.update` → Room `machines` (contexto, color, icono, online, hostOnline);
+  edición vía `PATCH /v1/machines/{id}`; el filtro de PC seleccionado se guarda en DataStore.
+- `AgentsRepository`: `agents.update` → Room `agents`; `Flow<List<AgentWithCounts>>` filtrable por `machineContext`.
+- Todas las entidades Room llevan `relayId` desde v1 (hoy siempre uno) para poder añadir un segundo relay
+  (p. ej. uno de la empresa) en fase 4 sin migración destructiva.
 - `ChatRepository(agentId)`: al abrir el chat → `agent.subscribe{sinceSeq=último seq en Room, epoch}`; aplica
   `agent.history` y eventos; mantiene el **mensaje en streaming en memoria** (deltas) y persiste sólo `message_end`,
   `tool_execution_*` finales. Paginación hacia atrás local.
@@ -99,8 +115,14 @@ exhaustivos alimentados por los fixtures del protocolo.
 
 ## 5. Notificaciones (requisito central)
 
-### 5.1 Canales (creados al iniciar)
-| Canal | Importancia | Uso |
+### 5.1 Canales — **un grupo de canales por PC**
+Por cada PC emparejada se crea un `NotificationChannelGroup` (`rp.machine.<machineId>`, nombre = "🏢 PC Empresa") con
+los cinco canales de abajo (`rp.<machineId>.approvals`, …). Así, desde los ajustes del sistema, puedes silenciar o
+cambiar el sonido de la PC de la empresa sin afectar a la personal. Al revocar/olvidar una PC se borra su grupo.
+Además, en la app: silenciar PC, horas silenciosas por PC y "autorizaciones críticas siempre" (se guardan en el relay
+con `PUT /v1/devices/me/prefs`, que es quien decide si manda el push).
+
+| Canal (por PC) | Importancia | Uso |
 |---|---|---|
 | `approvals` | HIGH (heads‑up, sonido, vibración) | `category=permission` |
 | `questions` | HIGH | `question` y `dialog` |
@@ -112,7 +134,8 @@ Android 13+: pedir `POST_NOTIFICATIONS` en el onboarding (sin él no hay notific
 
 ### 5.2 Recepción (`RpMessagingService : FirebaseMessagingService`)
 1. `onMessageReceived` → descifra `c` con AES‑256‑GCM (`pushKey` del Keystore, AAD `"rp1"`). Falla → ignorar.
-2. `k=prompt`: construye notificación (id = hash de `promptId`) con:
+2. `k=prompt`: elige el canal de la PC (`machineId`; si el grupo aún no existe se crea al vuelo) y construye la
+   notificación (id = hash de `promptId`; título "🏢 PC Empresa · <agente>") con:
    - **confirm** / **permission**: acciones `[Permitir] [Denegar]` (+ "Abrir" al tocar el cuerpo).
    - **select** con ≤3 opciones: una acción por opción. >3: tocar abre la hoja.
    - **input / allowFreeText**: acción "Responder" con `RemoteInput` (texto inline).
@@ -204,5 +227,7 @@ rp-app/
 | A7 | Push: servicio, cripto, canales, acciones, RemoteInput, receiver, cancel | 2 | 2,5 d |
 | A8 | Adjuntos (SAF, Photo Picker, cámara, subida con progreso) | 3 | 1,5 d |
 | A9 | Ajustes (dispositivos, máquinas, prefs de notificación, prueba) | 3 | 1,5 d |
-| A10 | Nuevo agente vía rp-host (selector de carpeta) | 3 | 1,5 d |
+| A10 | Nuevo agente vía rp-host (PC, carpeta, lanzador gentle-shell/pi, backend herdr/tmux) | 3 | 1,5 d |
+| A12 | Separación por PC: selector, agrupación, edición de PC (nombre/contexto/color), grupos de canales por PC, prefs por PC | 1–2 | 2 d |
+| A13 | Cuestionarios (`questionnaire`), banner modo AUTO, selector de entrega (normal / como tecleado / comando), chips herdr/gentle | 2 | 2 d |
 | A11 | Release firmado + docs | 3 | 0,5 d |
