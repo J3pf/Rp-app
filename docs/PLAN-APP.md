@@ -49,7 +49,9 @@ Onboarding ─► Escanear QR / introducir URL+código ─► Permiso de notific
   │                    lanzador (gentle-shell / pi), herdr (workspace·pane), modo gentle (NORMAL / AUTO / YOLO)
   │             badge de prompts abiertos · vista previa del último mensaje ("contenido oculto" si la PC redacta)
   │             FAB "Nuevo agente" (fase 3, si la PC tiene rp-host): PC → carpeta → lanzador (gentle-shell/pi)
-  │                                                            → backend (herdr/tmux) → prompt inicial opcional
+  │                → dónde: con herdr [Nuevo workspace] (defecto) · [Pestaña en workspace…] · [Junto a un agente…]
+  │                  (lista viva de workspaces/pestañas/paneles de herdr de esa PC); sin herdr: tmux (Linux) /
+  │                  Windows Terminal (Windows) → prompt inicial opcional
   │
   ├─ Chat del agente:
   │    cabecera: nombre, estado, modelo, botón ⏹ abort (si trabajando), menú (info, olvidar)
