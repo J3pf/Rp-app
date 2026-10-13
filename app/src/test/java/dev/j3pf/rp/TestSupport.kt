@@ -9,15 +9,25 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 /** [SecretStore] en memoria: Tink/Keystore no existen en las pruebas JVM. */
-class FakeSecretStore(context: Context, initialSession: Session?) : SecretStore(context) {
+class FakeSecretStore(
+    context: Context,
+    initialSession: Session?,
+) : SecretStore(context) {
     init {
         _session.value = initialSession
     }
+
     override fun current(): Session? = _session.value
-    fun set(s: Session?) { _session.value = s }
+
+    fun set(s: Session?) {
+        _session.value = s
+    }
 }
 
-fun testSession(baseUrl: String, relayId: String = "r1") = Session(
+fun testSession(
+    baseUrl: String,
+    relayId: String = "r1",
+) = Session(
     relayId = relayId,
     relayUrl = baseUrl.trimEnd('/'),
     relayName = "test",
@@ -29,7 +39,9 @@ fun testSession(baseUrl: String, relayId: String = "r1") = Session(
 fun inMemoryDb(context: Context): RpDatabase =
     Room.inMemoryDatabaseBuilder(context, RpDatabase::class.java).allowMainThreadQueries().build()
 
-fun testClient(): OkHttpClient = OkHttpClient.Builder()
-    .connectTimeout(3, TimeUnit.SECONDS)
-    .readTimeout(0, TimeUnit.SECONDS)
-    .build()
+fun testClient(): OkHttpClient =
+    OkHttpClient
+        .Builder()
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .build()

@@ -1,9 +1,9 @@
 package dev.j3pf.rp.protocol
 
-import java.io.File
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,8 +13,7 @@ import kotlin.test.assertTrue
 
 /** Contrato: todos los fixtures de `fixtures/` (copiados de rp-relay con scripts/sync-fixtures.sh) deben parsear. */
 class FixturesTest {
-    private fun fixture(name: String): String =
-        checkNotNull(javaClass.getResource("/fixtures/$name")) { "falta fixture $name" }.readText()
+    private fun fixture(name: String): String = checkNotNull(javaClass.getResource("/fixtures/$name")) { "falta fixture $name" }.readText()
 
     @Test
     fun `todos los fixtures JSON son JSON valido`() {
@@ -34,8 +33,12 @@ class FixturesTest {
         val files = File(url.toURI()).listFiles { f -> f.name.endsWith(".valid.json") }.orEmpty()
         for (f in files) {
             val el = RpJson.parseToJsonElement(f.readText())
-            val envs = if (el is JsonArray) el.map { RpJson.decodeFromJsonElement(Envelope.serializer(), it) }
-            else listOf(RpJson.decodeFromJsonElement(Envelope.serializer(), el))
+            val envs =
+                if (el is JsonArray) {
+                    el.map { RpJson.decodeFromJsonElement(Envelope.serializer(), it) }
+                } else {
+                    listOf(RpJson.decodeFromJsonElement(Envelope.serializer(), el))
+                }
             for (env in envs) {
                 when (env.t) {
                     MsgType.APP_WELCOME -> env.body<AppWelcome>()

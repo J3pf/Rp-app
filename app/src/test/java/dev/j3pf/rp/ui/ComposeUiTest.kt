@@ -42,11 +42,22 @@ import kotlin.test.assertEquals
 class ComposeUiTest {
     @get:Rule val rule = createComposeRule()
 
-    private val working = AgentSummary(
-        agentId = "m:a", machineId = "m", machineName = "PC Empresa", machineContext = "work", sessionName = "api-gateway",
-        cwd = "C:\\proy\\api", gitBranch = "main", status = "working", online = true, launcher = "gentle-shell",
-        herdr = HerdrInfo(paneId = "p3", workspaceId = "w2"), gentleMode = "auto", lastMessagePreview = "Compilando…",
-    )
+    private val working =
+        AgentSummary(
+            agentId = "m:a",
+            machineId = "m",
+            machineName = "PC Empresa",
+            machineContext = "work",
+            sessionName = "api-gateway",
+            cwd = "C:\\proy\\api",
+            gitBranch = "main",
+            status = "working",
+            online = true,
+            launcher = "gentle-shell",
+            herdr = HerdrInfo(paneId = "p3", workspaceId = "w2"),
+            gentleMode = "auto",
+            lastMessagePreview = "Compilando…",
+        )
 
     @Test
     fun `tarjetas de agentes muestran estado, lanzador, herdr y modo gentle`() {
@@ -56,12 +67,27 @@ class ComposeUiTest {
                 androidx.compose.foundation.layout.Column {
                     AgentCard(working, onClick = { clicked = working.agentId }, onForget = {})
                     AgentCard(
-                        working.copy(agentId = "m:b", sessionName = "docs", status = "waiting_input", openPromptCount = 2, gentleMode = "normal"),
-                        onClick = {}, onForget = {},
+                        working.copy(
+                            agentId = "m:b",
+                            sessionName = "docs",
+                            status = "waiting_input",
+                            openPromptCount = 2,
+                            gentleMode = "normal",
+                        ),
+                        onClick = {},
+                        onForget = {},
                     )
                     AgentCard(
-                        working.copy(agentId = "m:c", sessionName = "viejo", online = false, lastSeenAt = System.currentTimeMillis() - 3 * 3600_000L, redacted = true),
-                        onClick = {}, onForget = {},
+                        working.copy(
+                            agentId = "m:c",
+                            sessionName = "viejo",
+                            online = false,
+                            lastSeenAt =
+                                System.currentTimeMillis() - 3 * 3600_000L,
+                            redacted = true,
+                        ),
+                        onClick = {},
+                        onForget = {},
                     )
                 }
             }
@@ -78,12 +104,17 @@ class ComposeUiTest {
         assertEquals("m:a", clicked)
     }
 
-    private val permission = Prompt(
-        promptId = "P1", agentId = "m:a", kind = PromptKind.CONFIRM, category = PromptCategory.PERMISSION,
-        title = "⚠ Comando peligroso", danger = Danger.HIGH,
-        options = listOf(PromptOption("0", "Permitir"), PromptOption("1", "Permitir siempre (sesión)"), PromptOption("2", "Denegar")),
-        tool = PromptTool("bash", RpJson.parseToJsonElement("""{"command":"rm -rf dist"}""")),
-    )
+    private val permission =
+        Prompt(
+            promptId = "P1",
+            agentId = "m:a",
+            kind = PromptKind.CONFIRM,
+            category = PromptCategory.PERMISSION,
+            title = "⚠ Comando peligroso",
+            danger = Danger.HIGH,
+            options = listOf(PromptOption("0", "Permitir"), PromptOption("1", "Permitir siempre (sesión)"), PromptOption("2", "Denegar")),
+            tool = PromptTool("bash", RpJson.parseToJsonElement("""{"command":"rm -rf dist"}""")),
+        )
 
     @Test
     fun `hoja de permisos muestra el comando y responde con la opcion`() {
@@ -116,13 +147,28 @@ class ComposeUiTest {
 
     @Test
     fun `cuestionario recorre las paginas y envia al final`() {
-        val prompt = Prompt(
-            promptId = "Q1", agentId = "m:a", kind = PromptKind.QUESTIONNAIRE, category = PromptCategory.QUESTION, title = "Preguntas",
-            questions = listOf(
-                QuestionDef("¿Qué base de datos?", "DB", options = listOf(PromptOption("0", "SQLite"), PromptOption("1", "Postgres"))),
-                QuestionDef("¿Extras?", "Extras", multiSelect = true, options = listOf(PromptOption("0", "Tests"), PromptOption("1", "Docs"))),
-            ),
-        )
+        val prompt =
+            Prompt(
+                promptId = "Q1",
+                agentId = "m:a",
+                kind = PromptKind.QUESTIONNAIRE,
+                category = PromptCategory.QUESTION,
+                title = "Preguntas",
+                questions =
+                    listOf(
+                        QuestionDef(
+                            "¿Qué base de datos?",
+                            "DB",
+                            options = listOf(PromptOption("0", "SQLite"), PromptOption("1", "Postgres")),
+                        ),
+                        QuestionDef(
+                            "¿Extras?",
+                            "Extras",
+                            multiSelect = true,
+                            options = listOf(PromptOption("0", "Tests"), PromptOption("1", "Docs")),
+                        ),
+                    ),
+            )
         var answer: Answer? = null
         rule.setContent { RpTheme { PromptContent(prompt, busy = false, onAnswer = { answer = it }) } }
         rule.onNodeWithText("Pregunta 1 de 2 · DB").assertIsDisplayed()
@@ -143,17 +189,27 @@ class ComposeUiTest {
     fun `compositor con adjuntos muestra progreso y permite quitar`() {
         var removed: String? = null
         var sent = false
-        val ui = ChatUiState(
-            attachments = listOf(
-                AttachmentUi("a1", "foto.jpg", "image/jpeg", 2048, UploadState.UPLOADING, progress = 0.5f),
-                AttachmentUi("a2", "informe.pdf", "application/pdf", 4096, UploadState.DONE, blobId = "B2"),
-            ),
-        )
+        val ui =
+            ChatUiState(
+                attachments =
+                    listOf(
+                        AttachmentUi("a1", "foto.jpg", "image/jpeg", 2048, UploadState.UPLOADING, progress = 0.5f),
+                        AttachmentUi("a2", "informe.pdf", "application/pdf", 4096, UploadState.DONE, blobId = "B2"),
+                    ),
+            )
         rule.setContent {
             RpTheme {
                 Composer(
-                    ui = ui, working = true, text = "hola", onText = {}, onChoice = {}, onWorkingDelivery = {},
-                    onPicked = {}, onRemoveAttachment = { removed = it }, newCameraTarget = { Uri.EMPTY }, onSend = { sent = true },
+                    ui = ui,
+                    working = true,
+                    text = "hola",
+                    onText = {},
+                    onChoice = {},
+                    onWorkingDelivery = {},
+                    onPicked = {},
+                    onRemoveAttachment = { removed = it },
+                    newCameraTarget = { Uri.EMPTY },
+                    onSend = { sent = true },
                 )
             }
         }

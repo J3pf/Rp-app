@@ -7,12 +7,12 @@ import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
+import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AppWelcome
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.PromptAnswerRequest
 import dev.j3pf.rp.protocol.PromptAnswerResult
-import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
@@ -70,11 +70,34 @@ class RelayConnectionTest {
     }
 
     private fun acceptSocket(onText: (WebSocket, String) -> Unit = { _, _ -> }) {
-        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket.add(webSocket) }
-            override fun onMessage(webSocket: WebSocket, text: String) { received.add(text); onText(webSocket, text) }
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { webSocket.close(code, reason) }
-        }))
+        server.enqueue(
+            MockResponse().withWebSocketUpgrade(
+                object : WebSocketListener() {
+                    override fun onOpen(
+                        webSocket: WebSocket,
+                        response: Response,
+                    ) {
+                        serverSocket.add(webSocket)
+                    }
+
+                    override fun onMessage(
+                        webSocket: WebSocket,
+                        text: String,
+                    ) {
+                        received.add(text)
+                        onText(webSocket, text)
+                    }
+
+                    override fun onClosing(
+                        webSocket: WebSocket,
+                        code: Int,
+                        reason: String,
+                    ) {
+                        webSocket.close(code, reason)
+                    }
+                },
+            ),
+        )
     }
 
     @Test
@@ -104,7 +127,14 @@ class RelayConnectionTest {
             acceptSocket { ws, text ->
                 val env = Envelope.parse(text)
                 if (env.t == MsgType.PROMPT_ANSWER) {
-                    ws.send(Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = false, reason = "already_resolved"), re = env.id).encode())
+                    ws.send(
+                        Envelope
+                            .of(
+                                MsgType.PROMPT_ANSWER_RESULT,
+                                PromptAnswerResult(ok = false, reason = "already_resolved"),
+                                re = env.id,
+                            ).encode(),
+                    )
                 }
             }
             conn.start()

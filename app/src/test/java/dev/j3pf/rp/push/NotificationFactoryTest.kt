@@ -46,10 +46,19 @@ class NotificationFactoryTest {
         allowFreeText: Boolean = false,
         danger: String = Danger.HIGH,
     ) = PushPromptBody(
-        promptId = "01PROMPT", agentId = "m:s", agentLabel = "api-gateway", machineId = "01MACH",
-        machineName = "PC Empresa", machineContext = "work", kind = kind, category = category,
-        title = "⚠ Permitir rm -rf dist?", message = "rm -rf dist", options = options,
-        allowFreeText = allowFreeText, danger = danger,
+        promptId = "01PROMPT",
+        agentId = "m:s",
+        agentLabel = "api-gateway",
+        machineId = "01MACH",
+        machineName = "PC Empresa",
+        machineContext = "work",
+        kind = kind,
+        category = category,
+        title = "⚠ Permitir rm -rf dist?",
+        message = "rm -rf dist",
+        options = options,
+        allowFreeText = allowFreeText,
+        danger = danger,
     )
 
     private fun posted(): Notification =
@@ -74,7 +83,10 @@ class NotificationFactoryTest {
     fun `select con tres opciones crea una accion por opcion`() {
         runBlocking {
             factory.showPrompt(
-                body(kind = PromptKind.SELECT, options = listOf(PromptOption("0", "Permitir"), PromptOption("1", "Permitir siempre"), PromptOption("2", "Denegar"))),
+                body(
+                    kind = PromptKind.SELECT,
+                    options = listOf(PromptOption("0", "Permitir"), PromptOption("1", "Permitir siempre"), PromptOption("2", "Denegar")),
+                ),
             )
             assertEquals(listOf("Permitir", "Permitir siempre", "Denegar"), titles(posted()))
         }
@@ -104,7 +116,12 @@ class NotificationFactoryTest {
     fun `select con texto libre añade Responder ademas de las opciones`() {
         runBlocking {
             factory.showPrompt(
-                body(kind = PromptKind.SELECT, category = PromptCategory.QUESTION, options = listOf(PromptOption("0", "Sí"), PromptOption("1", "No")), allowFreeText = true),
+                body(
+                    kind = PromptKind.SELECT,
+                    category = PromptCategory.QUESTION,
+                    options = listOf(PromptOption("0", "Sí"), PromptOption("1", "No")),
+                    allowFreeText = true,
+                ),
             )
             assertEquals(listOf("Sí", "No", "Responder"), titles(posted()))
         }
@@ -144,9 +161,22 @@ class NotificationFactoryTest {
     fun `settled ofrece responder con RemoteInput`() {
         runBlocking {
             factory.showPrompt(body()) // para asegurar canales
-            factory.showSettled(PushSettledBody(agentId = "m:s", agentLabel = "api", preview = "Listo", machineId = "01MACH", machineName = "PC"))
-            val n = shadowOf(nm).getNotification(NotificationFactory.SETTLED_TAG, dev.j3pf.rp.util.stableId("settled:m:s"))!!
-            assertEquals("Responder", n.actions.single().title.toString())
+            factory.showSettled(
+                PushSettledBody(agentId = "m:s", agentLabel = "api", preview = "Listo", machineId = "01MACH", machineName = "PC"),
+            )
+            val n =
+                shadowOf(nm).getNotification(
+                    NotificationFactory.SETTLED_TAG,
+                    dev.j3pf.rp.util
+                        .stableId("settled:m:s"),
+                )!!
+            assertEquals(
+                "Responder",
+                n.actions
+                    .single()
+                    .title
+                    .toString(),
+            )
             assertEquals("rp.01MACH.finished", n.channelId)
         }
     }

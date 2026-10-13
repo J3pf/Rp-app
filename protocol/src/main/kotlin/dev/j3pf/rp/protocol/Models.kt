@@ -37,7 +37,10 @@ data class HerdrInfo(
 )
 
 @Serializable(with = ModelInfoSerializer::class)
-data class ModelInfo(val provider: String? = null, val id: String? = null) {
+data class ModelInfo(
+    val provider: String? = null,
+    val id: String? = null,
+) {
     val label: String get() = id ?: provider ?: ""
 }
 
@@ -45,8 +48,9 @@ object ModelInfoSerializer : KSerializer<ModelInfo> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("ModelInfo", PrimitiveKind.STRING)
 
     override fun deserialize(decoder: Decoder): ModelInfo {
-        val jsonDecoder = decoder as? JsonDecoder
-            ?: return ModelInfo(id = decoder.decodeString())
+        val jsonDecoder =
+            decoder as? JsonDecoder
+                ?: return ModelInfo(id = decoder.decodeString())
         return when (val el = jsonDecoder.decodeJsonElement()) {
             is JsonPrimitive -> {
                 val str = el.content
@@ -57,16 +61,23 @@ object ModelInfoSerializer : KSerializer<ModelInfo> {
                     ModelInfo(id = str)
                 }
             }
+
             is JsonObject -> {
                 val p = el["provider"]?.jsonPrimitive?.contentOrNull
                 val id = el["id"]?.jsonPrimitive?.contentOrNull
                 ModelInfo(provider = p, id = id)
             }
-            else -> ModelInfo()
+
+            else -> {
+                ModelInfo()
+            }
         }
     }
 
-    override fun serialize(encoder: Encoder, value: ModelInfo) {
+    override fun serialize(
+        encoder: Encoder,
+        value: ModelInfo,
+    ) {
         val jsonEncoder = encoder as? JsonEncoder
         val str = if (value.provider != null && value.id != null) "${value.provider}/${value.id}" else value.label
         if (jsonEncoder != null) {
@@ -133,7 +144,10 @@ data class PromptSource(
 )
 
 @Serializable
-data class PromptTool(val name: String, val args: JsonElement? = null)
+data class PromptTool(
+    val name: String,
+    val args: JsonElement? = null,
+)
 
 object PromptKind {
     const val CONFIRM = "confirm"
@@ -153,7 +167,12 @@ object Danger {
     const val MEDIUM = "medium"
     const val HIGH = "high"
 
-    fun rank(d: String?): Int = when (d) { HIGH -> 2; MEDIUM -> 1; else -> 0 }
+    fun rank(d: String?): Int =
+        when (d) {
+            HIGH -> 2
+            MEDIUM -> 1
+            else -> 0
+        }
 }
 
 /** Cuerpo de `prompt.open` / `prompt.opened` y elementos de `openPrompts`. */
@@ -194,9 +213,13 @@ data class Answer(
 ) {
     companion object {
         fun option(id: String) = Answer(optionIds = listOf(id))
+
         fun confirm(yes: Boolean) = Answer(confirmed = yes)
+
         fun text(t: String) = Answer(text = t)
+
         val Cancelled = Answer(cancelled = true)
+
         fun questionnaire(items: List<QuestionAnswer>) = Answer(answers = items)
     }
 }
@@ -263,7 +286,9 @@ data class AppHello(
 )
 
 @Serializable
-data class AppInfo(val version: String)
+data class AppInfo(
+    val version: String,
+)
 
 @Serializable
 data class AppWelcome(
@@ -285,10 +310,16 @@ data class AgentsUpdate(
 )
 
 @Serializable
-data class AgentSubscribe(val agentId: String, val sinceSeq: Long? = null, val epoch: String? = null)
+data class AgentSubscribe(
+    val agentId: String,
+    val sinceSeq: Long? = null,
+    val epoch: String? = null,
+)
 
 @Serializable
-data class AgentRef(val agentId: String)
+data class AgentRef(
+    val agentId: String,
+)
 
 object Delivery {
     const val AUTO = "auto"
@@ -334,10 +365,16 @@ data class UserMessageAck(
 }
 
 @Serializable
-data class PromptAnswerRequest(val promptId: String, val answer: Answer)
+data class PromptAnswerRequest(
+    val promptId: String,
+    val answer: Answer,
+)
 
 @Serializable
-data class PromptAnswerResult(val ok: Boolean, val reason: String? = null) {
+data class PromptAnswerResult(
+    val ok: Boolean,
+    val reason: String? = null,
+) {
     val alreadyResolved: Boolean get() = reason == "already_resolved"
 }
 
@@ -358,7 +395,9 @@ data class PushNotify(
 )
 
 @Serializable
-data class PushAck(val pushId: String)
+data class PushAck(
+    val pushId: String,
+)
 
 object PushKind {
     const val PROMPT = "prompt"
@@ -388,7 +427,9 @@ data class PushPromptBody(
 )
 
 @Serializable
-data class PushCancelBody(val promptId: String)
+data class PushCancelBody(
+    val promptId: String,
+)
 
 @Serializable
 data class PushSettledBody(

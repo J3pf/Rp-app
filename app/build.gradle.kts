@@ -13,16 +13,23 @@ plugins {
 val hasGoogleServices = file("google-services.json").exists()
 if (hasGoogleServices) apply(plugin = "com.google.gms.google-services")
 
-val keystoreProps = Properties().apply {
-    val f = rootProject.file("keystore.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
+val keystoreProps =
+    Properties().apply {
+        val f = rootProject.file("keystore.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
 
 // versionCode = nº de commits; versionName = semver (PLAN-APP §10)
-fun gitCommitCount(): Int = runCatching {
-    val p = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).redirectErrorStream(true).start()
-    p.inputStream.bufferedReader().readText().trim().toInt().also { p.waitFor() }
-}.getOrDefault(1)
+fun gitCommitCount(): Int =
+    runCatching {
+        val p = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).redirectErrorStream(true).start()
+        p.inputStream
+            .bufferedReader()
+            .readText()
+            .trim()
+            .toInt()
+            .also { p.waitFor() }
+    }.getOrDefault(1)
 
 android {
     namespace = "dev.j3pf.rp"

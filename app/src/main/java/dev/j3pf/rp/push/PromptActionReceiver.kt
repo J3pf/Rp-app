@@ -20,9 +20,9 @@ import dev.j3pf.rp.protocol.ResolvedBy
 import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.Ulid
 import dev.j3pf.rp.protocol.UserMessage
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * Acciones de las notificaciones (PLAN-APP §5.3): `onReceive → goAsync → api.answer (HTTPS directo, 8 s)`.
@@ -31,9 +31,14 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class PromptActionReceiver : BroadcastReceiver() {
     @Inject lateinit var handler: PromptActionHandler
-    @Inject @field:AppScope lateinit var scope: CoroutineScope
 
-    override fun onReceive(context: Context, intent: Intent) {
+    @Inject @field:AppScope
+    lateinit var scope: CoroutineScope
+
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
         val pending = goAsync()
         val app = context.applicationContext
         scope.launch {
@@ -70,71 +75,124 @@ class PromptActionReceiver : BroadcastReceiver() {
  * ```
  * Tras pulsar, la notificación pasa a "Enviando…" de inmediato.
  */
-class PromptActionHandler @Inject constructor(
-    private val api: RelayApi,
-    private val factory: NotificationFactory,
-    private val promptDao: PromptDao,
-    private val outboxDao: OutboxDao,
-    private val secrets: SecretStore,
-) {
-    suspend fun handle(context: Context, intent: Intent) {
-        when (intent.action) {
-            PromptActionReceiver.ACTION_ANSWER -> handleAnswer(context, intent)
-            PromptActionReceiver.ACTION_REPLY_AGENT -> handleReply(context, intent)
+class PromptActionHandler
+    @Inject
+    constructor(
+        private val api: RelayApi,
+        private val factory: NotificationFactory,
+        private val promptDao: PromptDao,
+        private val outboxDao: OutboxDao,
+        private val secrets: SecretStore,
+    ) {
+        suspend fun handle(
+            context: Context,
+            intent: Intent,
+        ) {
+            when (intent.action) {
+                PromptActionReceiver.ACTION_ANSWER -> handleAnswer(context, intent)
+                PromptActionReceiver.ACTION_REPLY_AGENT -> handleReply(context, intent)
+            }
         }
-    }
 
-    private suspend fun handleAnswer(context: Context, intent: Intent) {
-        val promptId = intent.getStringExtra(PromptActionReceiver.EXTRA_PROMPT_ID) ?: return
-        val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, NotificationFactory.notificationId(promptId))
-        val label = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_LABEL).orEmpty()
-        val answer = when (intent.getStringExtra(PromptActionReceiver.EXTRA_ANSWER_KIND)) {
-            PromptActionReceiver.ANSWER_CONFIRM_YES -> Answer.confirm(true)
-            PromptActionReceiver.ANSWER_CONFIRM_NO -> Answer.confirm(false)
-            PromptActionReceiver.ANSWER_OPTION -> Answer.option(intent.getStringExtra(PromptActionReceiver.EXTRA_OPTION_ID) ?: return)
-            PromptActionReceiver.ANSWER_TEXT -> {
-                val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(PromptActionReceiver.KEY_TEXT)?.toString()?.trim()
-                if (text.isNullOrEmpty()) return
-                Answer.text(text)
-            }
-            else -> return
-        }
-        factory.showSending(notifId, label)
-        when (val outcome = api.answerPrompt(promptId, answer)) {
-            AnswerOutcome.Sent, AnswerOutcome.AlreadyResolved -> {
-                // 409 = ya respondido en otro lugar → también se quita.
-                secrets.current()?.let { promptDao.markResolved(it.relayId, promptId, ResolvedBy.REMOTE, System.currentTimeMillis()) }
-                factory.cancelNotification(NotificationFactory.PROMPT_TAG, notifId)
-            }
-            AnswerOutcome.Queued -> {
-                factory.showRetrying(notifId, label)
-                PromptsRepository.enqueueAnswer(context, promptId, answer)
-            }
-            is AnswerOutcome.Failed -> factory.showRetrying(notifId, label)
-        }
-    }
+        private suspend fun handleAnswer(
+            context: Context,
+            intent: Intent,
+        ) {
+            val promptId = intent.getStringExtra(PromptActionReceiver.EXTRA_PROMPT_ID) ?: return
+            val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, NotificationFactory.notificationId(promptId))
+            val label = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_LABEL).orEmpty()
+            val answer =
+                when (intent.getStringExtra(PromptActionReceiver.EXTRA_ANSWER_KIND)) {
+                    PromptActionReceiver.ANSWER_CONFIRM_YES -> {
+                        Answer.confirm(true)
+                    }
 
-    /** "Responder" en la notificación de agente terminado → `POST /v1/agents/{id}/messages`. */
-    private suspend fun handleReply(context: Context, intent: Intent) {
-        val agentId = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_ID) ?: return
-        val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, 0)
-        val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(PromptActionReceiver.KEY_TEXT)?.toString()?.trim()
-        if (text.isNullOrEmpty()) return
-        val s = secrets.current() ?: return
-        val msg = UserMessage(agentId = agentId, clientMsgId = Ulid.new(), text = text, deviceId = s.deviceId)
-        outboxDao.put(
-            OutboxEntity(msg.clientMsgId, s.relayId, agentId, RpJson.encodeToString(UserMessage.serializer(), msg), 0, System.currentTimeMillis()),
-        )
-        when (val r = api.sendMessage(msg)) {
-            is ApiResult.Ok -> {
-                outboxDao.delete(msg.clientMsgId)
-                factory.cancelNotification(NotificationFactory.SETTLED_TAG, notifId)
+                    PromptActionReceiver.ANSWER_CONFIRM_NO -> {
+                        Answer.confirm(false)
+                    }
+
+                    PromptActionReceiver.ANSWER_OPTION -> {
+                        Answer.option(intent.getStringExtra(PromptActionReceiver.EXTRA_OPTION_ID) ?: return)
+                    }
+
+                    PromptActionReceiver.ANSWER_TEXT -> {
+                        val text =
+                            RemoteInput
+                                .getResultsFromIntent(intent)
+                                ?.getCharSequence(PromptActionReceiver.KEY_TEXT)
+                                ?.toString()
+                                ?.trim()
+                        if (text.isNullOrEmpty()) return
+                        Answer.text(text)
+                    }
+
+                    else -> {
+                        return
+                    }
+                }
+            factory.showSending(notifId, label)
+            when (val outcome = api.answerPrompt(promptId, answer)) {
+                AnswerOutcome.Sent, AnswerOutcome.AlreadyResolved -> {
+                    // 409 = ya respondido en otro lugar → también se quita.
+                    secrets.current()?.let { promptDao.markResolved(it.relayId, promptId, ResolvedBy.REMOTE, System.currentTimeMillis()) }
+                    factory.cancelNotification(NotificationFactory.PROMPT_TAG, notifId)
+                }
+
+                AnswerOutcome.Queued -> {
+                    factory.showRetrying(notifId, label)
+                    PromptsRepository.enqueueAnswer(context, promptId, answer)
+                }
+
+                is AnswerOutcome.Failed -> {
+                    factory.showRetrying(notifId, label)
+                }
             }
-            is ApiResult.Http -> if (r.code in 400..499 && r.code != 429) {
-                outboxDao.delete(msg.clientMsgId)
-                factory.cancelNotification(NotificationFactory.SETTLED_TAG, notifId)
-            } else ChatRepository.enqueueSend(context)
-            is ApiResult.Network -> ChatRepository.enqueueSend(context)
+        }
+
+        /** "Responder" en la notificación de agente terminado → `POST /v1/agents/{id}/messages`. */
+        private suspend fun handleReply(
+            context: Context,
+            intent: Intent,
+        ) {
+            val agentId = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_ID) ?: return
+            val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, 0)
+            val text =
+                RemoteInput
+                    .getResultsFromIntent(intent)
+                    ?.getCharSequence(PromptActionReceiver.KEY_TEXT)
+                    ?.toString()
+                    ?.trim()
+            if (text.isNullOrEmpty()) return
+            val s = secrets.current() ?: return
+            val msg = UserMessage(agentId = agentId, clientMsgId = Ulid.new(), text = text, deviceId = s.deviceId)
+            outboxDao.put(
+                OutboxEntity(
+                    msg.clientMsgId,
+                    s.relayId,
+                    agentId,
+                    RpJson.encodeToString(UserMessage.serializer(), msg),
+                    0,
+                    System.currentTimeMillis(),
+                ),
+            )
+            when (val r = api.sendMessage(msg)) {
+                is ApiResult.Ok -> {
+                    outboxDao.delete(msg.clientMsgId)
+                    factory.cancelNotification(NotificationFactory.SETTLED_TAG, notifId)
+                }
+
+                is ApiResult.Http -> {
+                    if (r.code in 400..499 && r.code != 429) {
+                        outboxDao.delete(msg.clientMsgId)
+                        factory.cancelNotification(NotificationFactory.SETTLED_TAG, notifId)
+                    } else {
+                        ChatRepository.enqueueSend(context)
+                    }
+                }
+
+                is ApiResult.Network -> {
+                    ChatRepository.enqueueSend(context)
+                }
+            }
         }
     }
-}

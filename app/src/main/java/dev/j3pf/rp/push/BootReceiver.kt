@@ -7,18 +7,24 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /** Arranca el canal directo al encender el teléfono o actualizar la app. */
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var secrets: SecretStore
-    @Inject lateinit var settings: SettingsRepository
-    @Inject @field:AppScope lateinit var scope: CoroutineScope
 
-    override fun onReceive(context: Context, intent: Intent) {
+    @Inject lateinit var settings: SettingsRepository
+
+    @Inject @field:AppScope
+    lateinit var scope: CoroutineScope
+
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         val pending = goAsync()
         val app = context.applicationContext

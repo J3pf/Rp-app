@@ -54,10 +54,14 @@ class PromptsRepositoryTest {
     private lateinit var bus: MessageBus
     private lateinit var conn: RelayConnection
     private lateinit var repo: PromptsRepository
-    private val prompt = Prompt(
-        promptId = "01PROMPT", agentId = "m:s", kind = PromptKind.SELECT, title = "¿Permitir?",
-        options = listOf(PromptOption("0", "Permitir"), PromptOption("2", "Denegar")),
-    )
+    private val prompt =
+        Prompt(
+            promptId = "01PROMPT",
+            agentId = "m:s",
+            kind = PromptKind.SELECT,
+            title = "¿Permitir?",
+            options = listOf(PromptOption("0", "Permitir"), PromptOption("2", "Denegar")),
+        )
 
     @Before
     fun setUp() {
@@ -91,8 +95,20 @@ class PromptsRepositoryTest {
     fun `prompt abierto llega al bandeja y se cierra con prompt resolved`() {
         runBlocking {
             publishOpened()
-            assertEquals("01PROMPT", repo.open.first().single().promptId)
-            bus.publish(Envelope.of(MsgType.PROMPT_RESOLVED, dev.j3pf.rp.protocol.PromptResolved("01PROMPT", "local")))
+            assertEquals(
+                "01PROMPT",
+                repo.open
+                    .first()
+                    .single()
+                    .promptId,
+            )
+            bus.publish(
+                Envelope.of(
+                    MsgType.PROMPT_RESOLVED,
+                    dev.j3pf.rp.protocol
+                        .PromptResolved("01PROMPT", "local"),
+                ),
+            )
             withTimeout(5000) { while (repo.open.first().isNotEmpty()) delay(20) }
         }
     }
@@ -115,8 +131,11 @@ class PromptsRepositoryTest {
             publishOpened()
             server.shutdown()
             assertEquals(AnswerOutcome.Queued, repo.answer("01PROMPT", Answer.option("0")))
-            val infos = androidx.work.WorkManager.getInstance(ApplicationProvider.getApplicationContext<Application>())
-                .getWorkInfosForUniqueWork("answer-01PROMPT").get()
+            val infos =
+                androidx.work.WorkManager
+                    .getInstance(ApplicationProvider.getApplicationContext<Application>())
+                    .getWorkInfosForUniqueWork("answer-01PROMPT")
+                    .get()
             assertEquals(1, infos.size)
             assertEquals(androidx.work.WorkInfo.State.ENQUEUED, infos.single().state)
         }
@@ -125,14 +144,23 @@ class PromptsRepositoryTest {
     @Test
     fun `con websocket responde por WS`() {
         runBlocking {
-            server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-                override fun onMessage(webSocket: WebSocket, text: String) {
-                    val env = Envelope.parse(text)
-                    if (env.t == MsgType.PROMPT_ANSWER) {
-                        webSocket.send(Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = true), re = env.id).encode())
-                    }
-                }
-            }))
+            server.enqueue(
+                MockResponse().withWebSocketUpgrade(
+                    object : WebSocketListener() {
+                        override fun onMessage(
+                            webSocket: WebSocket,
+                            text: String,
+                        ) {
+                            val env = Envelope.parse(text)
+                            if (env.t == MsgType.PROMPT_ANSWER) {
+                                webSocket.send(
+                                    Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = true), re = env.id).encode(),
+                                )
+                            }
+                        }
+                    },
+                ),
+            )
             conn.start()
             withTimeout(5000) { while (!conn.isConnected) delay(20) }
             publishOpened()
