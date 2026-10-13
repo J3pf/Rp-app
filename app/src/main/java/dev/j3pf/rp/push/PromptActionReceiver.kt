@@ -34,7 +34,6 @@ class PromptActionReceiver : BroadcastReceiver() {
     @Inject @field:AppScope lateinit var scope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent) // Hilt inyecta aquí
         val pending = goAsync()
         val app = context.applicationContext
         scope.launch {

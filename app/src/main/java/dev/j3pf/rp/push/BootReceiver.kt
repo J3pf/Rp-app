@@ -19,7 +19,6 @@ class BootReceiver : BroadcastReceiver() {
     @Inject @field:AppScope lateinit var scope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent) // Hilt inyecta aquí
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         val pending = goAsync()
         val app = context.applicationContext

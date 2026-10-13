@@ -42,28 +42,39 @@ class PromptActionHandlerTest {
     private val notifId = NotificationFactory.notificationId("01PROMPT")
 
     @Before
-    fun setUp() = runBlocking {
-        ctx = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(ctx, Configuration.Builder().build())
-        shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        server = MockWebServer().also { it.start() }
-        nm = ctx.getSystemService(NotificationManager::class.java)
-        factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx))
-        val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
-        val db = inMemoryDb(ctx)
-        handler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
-        factory.showPrompt(
-            PushPromptBody(
-                promptId = "01PROMPT", agentId = "m:s", agentLabel = "api", machineId = "M1", machineName = "PC",
-                kind = PromptKind.CONFIRM, title = "¿Permitir?", options = listOf(PromptOption("0", "Permitir"), PromptOption("2", "Denegar")),
-            ),
-        )
+    fun setUp() {
+        runBlocking {
+            ctx = ApplicationProvider.getApplicationContext()
+            WorkManagerTestInitHelper.initializeTestWorkManager(ctx, Configuration.Builder().build())
+            shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+            server = MockWebServer().also { it.start() }
+            nm = ctx.getSystemService(NotificationManager::class.java)
+            factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx))
+            val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
+            val db = inMemoryDb(ctx)
+            handler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
+            factory.showPrompt(
+                PushPromptBody(
+                    promptId = "01PROMPT",
+                    agentId = "m:s",
+                    agentLabel = "api",
+                    machineId = "M1",
+                    machineName = "PC",
+                    kind = PromptKind.CONFIRM,
+                    title = "¿Permitir?",
+                    options = listOf(PromptOption("0", "Permitir"), PromptOption("2", "Denegar")),
+                ),
+            )
+        }
     }
 
     @After
     fun tearDown() = server.shutdown()
 
-    private fun intent(kind: String, option: String? = null) = Intent(PromptActionReceiver.ACTION_ANSWER).apply {
+    private fun intent(
+        kind: String,
+        option: String? = null,
+    ) = Intent(PromptActionReceiver.ACTION_ANSWER).apply {
         putExtra(PromptActionReceiver.EXTRA_PROMPT_ID, "01PROMPT")
         putExtra(PromptActionReceiver.EXTRA_NOTIF_ID, notifId)
         putExtra(PromptActionReceiver.EXTRA_AGENT_LABEL, "api")
@@ -74,38 +85,50 @@ class PromptActionHandlerTest {
     private fun current() = shadowOf(nm).getNotification(NotificationFactory.PROMPT_TAG, notifId)
 
     @Test
-    fun `permitir envia la respuesta y retira la notificacion`() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
-        assertNotNull(current())
-        handler.handle(ctx, intent(PromptActionReceiver.ANSWER_OPTION, "0"))
-        val req = server.takeRequest()
-        assertEquals("/v1/prompts/01PROMPT/answer", req.path)
-        assertEquals("""{"answer":{"optionIds":["0"]}}""", req.body.readUtf8())
-        assertNull(current())
+    fun `permitir envia la respuesta y retira la notificacion`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            assertNotNull(current())
+            handler.handle(ctx, intent(PromptActionReceiver.ANSWER_OPTION, "0"))
+            val req = server.takeRequest()
+            assertEquals("/v1/prompts/01PROMPT/answer", req.path)
+            assertEquals("""{"answer":{"optionIds":["0"]}}""", req.body.readUtf8())
+            assertNull(current())
+        }
     }
 
     @Test
-    fun `confirm yes envia confirmed true`() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
-        handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_YES))
-        assertEquals("""{"answer":{"confirmed":true}}""", server.takeRequest().body.readUtf8())
+    fun `confirm yes envia confirmed true`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_YES))
+            assertEquals("""{"answer":{"confirmed":true}}""", server.takeRequest().body.readUtf8())
+        }
     }
 
     @Test
-    fun `409 tambien retira la notificacion`() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(409))
-        handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_NO))
-        assertNull(current())
+    fun `409 tambien retira la notificacion`() {
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(409))
+            handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_NO))
+            assertNull(current())
+        }
     }
 
     @Test
-    fun `sin red muestra reintento y encola WorkManager`() = runBlocking {
-        server.shutdown()
-        handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_YES))
-        val n = current()
-        assertNotNull(n) // la notificación se queda, ahora como "se reintentará"
-        assertEquals(ctx.getString(dev.j3pf.rp.R.string.notif_retrying), n.extras.getString(android.app.Notification.EXTRA_TEXT))
-        val infos = androidx.work.WorkManager.getInstance(ctx).getWorkInfosForUniqueWork("answer-01PROMPT").get()
-        assertEquals(1, infos.size)
+    fun `sin red muestra reintento y encola WorkManager`() {
+        runBlocking {
+            server.shutdown()
+            handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_YES))
+            val n = current()
+            assertNotNull(n) // la notificación se queda, ahora como "se reintentará"
+            assertEquals(ctx.getString(dev.j3pf.rp.R.string.notif_retrying), n.extras.getString(android.app.Notification.EXTRA_TEXT))
+            val infos =
+                androidx.work.WorkManager
+                    .getInstance(ctx)
+                    .getWorkInfosForUniqueWork("answer-01PROMPT")
+                    .get()
+            assertEquals(1, infos.size)
+        }
     }
 }

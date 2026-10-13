@@ -326,7 +326,7 @@ class ChatRepository @Inject constructor(
             val req = OneTimeWorkRequestBuilder<SendMessageWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_IF_QUOTA_EXCEEDED)
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork("send-outbox", ExistingWorkPolicy.REPLACE, req)
         }

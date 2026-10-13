@@ -43,27 +43,31 @@ SDK="${SDK:-$HOME/.android-sdk}"
 export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
 SDKM="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-if [[ ! -x "$SDKM" ]]; then
-  say "Instalando las herramientas de línea de comandos del SDK en $SDK"
-  case "$(uname -s)" in
-    Linux)  OS=linux ;;
-    Darwin) OS=mac ;;
-    *) die "Sistema no soportado por este script (usa WSL en Windows)." ;;
-  esac
-  command -v curl >/dev/null && command -v unzip >/dev/null || die "Hacen falta curl y unzip."
-  TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-  curl -fL --retry 3 -o "$TMP/cmd.zip" "https://dl.google.com/android/repository/commandlinetools-${OS}-11076708_latest.zip" \
-    || die "No se pudo descargar el SDK desde dl.google.com (¿red o proxy?)."
-  unzip -q "$TMP/cmd.zip" -d "$TMP/x"
-  mkdir -p "$SDK/cmdline-tools"
-  rm -rf "$SDK/cmdline-tools/latest"
-  mv "$TMP/x/cmdline-tools" "$SDK/cmdline-tools/latest"
-fi
+if [[ ! -d "$SDK/platforms/android-36" || ! -d "$SDK/build-tools/36.0.0" ]]; then
+  if [[ ! -x "$SDKM" ]]; then
+    say "Instalando las herramientas de línea de comandos del SDK en $SDK"
+    case "$(uname -s)" in
+      Linux)  OS=linux ;;
+      Darwin) OS=mac ;;
+      *) die "Sistema no soportado por este script (usa WSL en Windows)." ;;
+    esac
+    command -v curl >/dev/null && command -v unzip >/dev/null || die "Hacen falta curl y unzip."
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+    curl -fL --retry 3 -o "$TMP/cmd.zip" "https://dl.google.com/android/repository/commandlinetools-${OS}-11076708_latest.zip" \
+      || die "No se pudo descargar el SDK desde dl.google.com (¿red o proxy?)."
+    unzip -q "$TMP/cmd.zip" -d "$TMP/x"
+    mkdir -p "$SDK/cmdline-tools"
+    rm -rf "$SDK/cmdline-tools/latest"
+    mv "$TMP/x/cmdline-tools" "$SDK/cmdline-tools/latest"
+  fi
 
-say "Aceptando licencias e instalando plataforma 36 / build-tools / platform-tools"
-yes 2>/dev/null | "$SDKM" --licenses >/dev/null || true
-"$SDKM" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" >/dev/null \
-  || die "sdkmanager no pudo instalar los paquetes."
+  say "Aceptando licencias e instalando plataforma 36 / build-tools / platform-tools"
+  yes 2>/dev/null | "$SDKM" --licenses >/dev/null || true
+  "$SDKM" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" >/dev/null \
+    || die "sdkmanager no pudo instalar los paquetes."
+elif [[ -x "$SDKM" ]]; then
+  yes 2>/dev/null | "$SDKM" --licenses >/dev/null || true
+fi
 echo "sdk.dir=$SDK" > local.properties
 
 # ── 3) google-services.json (sólo sabor fcm) ──────────────────────────────

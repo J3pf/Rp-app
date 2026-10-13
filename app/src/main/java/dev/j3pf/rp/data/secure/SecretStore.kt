@@ -47,7 +47,7 @@ open class SecretStore @Inject constructor(@ApplicationContext private val conte
             .getPrimitive(RegistryConfiguration.get(), Aead::class.java)
     }
 
-    private val _session = MutableStateFlow(load())
+    protected val _session: MutableStateFlow<Session?> = MutableStateFlow(load())
     val session: StateFlow<Session?> = _session.asStateFlow()
 
     /** Lectura síncrona (receivers y servicios). */

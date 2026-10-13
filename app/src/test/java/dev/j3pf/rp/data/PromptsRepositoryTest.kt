@@ -88,49 +88,57 @@ class PromptsRepositoryTest {
     }
 
     @Test
-    fun `prompt abierto llega al bandeja y se cierra con prompt resolved`() = runBlocking {
-        publishOpened()
-        assertEquals("01PROMPT", repo.open.first().single().promptId)
-        bus.publish(Envelope.of(MsgType.PROMPT_RESOLVED, dev.j3pf.rp.protocol.PromptResolved("01PROMPT", "local")))
-        withTimeout(5000) { while (repo.open.first().isNotEmpty()) delay(20) }
+    fun `prompt abierto llega al bandeja y se cierra con prompt resolved`() {
+        runBlocking {
+            publishOpened()
+            assertEquals("01PROMPT", repo.open.first().single().promptId)
+            bus.publish(Envelope.of(MsgType.PROMPT_RESOLVED, dev.j3pf.rp.protocol.PromptResolved("01PROMPT", "local")))
+            withTimeout(5000) { while (repo.open.first().isNotEmpty()) delay(20) }
+        }
     }
 
     @Test
-    fun `sin websocket responde por HTTP y 409 se trata como ya respondido`() = runBlocking {
-        publishOpened()
-        server.enqueue(MockResponse().setResponseCode(409))
-        val r = repo.answer("01PROMPT", Answer.option("0"))
-        assertEquals(AnswerOutcome.AlreadyResolved, r)
-        assertEquals("/v1/prompts/01PROMPT/answer", server.takeRequest().path)
-        assertTrue(repo.open.first().isEmpty()) // se retira de la bandeja
+    fun `sin websocket responde por HTTP y 409 se trata como ya respondido`() {
+        runBlocking {
+            publishOpened()
+            server.enqueue(MockResponse().setResponseCode(409))
+            val r = repo.answer("01PROMPT", Answer.option("0"))
+            assertEquals(AnswerOutcome.AlreadyResolved, r)
+            assertEquals("/v1/prompts/01PROMPT/answer", server.takeRequest().path)
+            assertTrue(repo.open.first().isEmpty()) // se retira de la bandeja
+        }
     }
 
     @Test
-    fun `sin red se encola el reintento`() = runBlocking {
-        publishOpened()
-        server.shutdown()
-        assertEquals(AnswerOutcome.Queued, repo.answer("01PROMPT", Answer.option("0")))
-        val infos = androidx.work.WorkManager.getInstance(ApplicationProvider.getApplicationContext<Application>())
-            .getWorkInfosForUniqueWork("answer-01PROMPT").get()
-        assertEquals(1, infos.size)
-        assertEquals(androidx.work.WorkInfo.State.ENQUEUED, infos.single().state)
+    fun `sin red se encola el reintento`() {
+        runBlocking {
+            publishOpened()
+            server.shutdown()
+            assertEquals(AnswerOutcome.Queued, repo.answer("01PROMPT", Answer.option("0")))
+            val infos = androidx.work.WorkManager.getInstance(ApplicationProvider.getApplicationContext<Application>())
+                .getWorkInfosForUniqueWork("answer-01PROMPT").get()
+            assertEquals(1, infos.size)
+            assertEquals(androidx.work.WorkInfo.State.ENQUEUED, infos.single().state)
+        }
     }
 
     @Test
-    fun `con websocket responde por WS`() = runBlocking {
-        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                val env = Envelope.parse(text)
-                if (env.t == MsgType.PROMPT_ANSWER) {
-                    webSocket.send(Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = true), re = env.id).encode())
+    fun `con websocket responde por WS`() {
+        runBlocking {
+            server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    val env = Envelope.parse(text)
+                    if (env.t == MsgType.PROMPT_ANSWER) {
+                        webSocket.send(Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = true), re = env.id).encode())
+                    }
                 }
-            }
-        }))
-        conn.start()
-        withTimeout(5000) { while (!conn.isConnected) delay(20) }
-        publishOpened()
-        assertEquals(AnswerOutcome.Sent, repo.answer("01PROMPT", Answer.option("0")))
-        assertEquals(1, server.requestCount) // sólo el upgrade, ninguna petición HTTP
-        assertNotNull(repo.get("01PROMPT"))
+            }))
+            conn.start()
+            withTimeout(5000) { while (!conn.isConnected) delay(20) }
+            publishOpened()
+            assertEquals(AnswerOutcome.Sent, repo.answer("01PROMPT", Answer.option("0")))
+            assertEquals(1, server.requestCount) // sólo el upgrade, ninguna petición HTTP
+            assertNotNull(repo.get("01PROMPT"))
+        }
     }
 }

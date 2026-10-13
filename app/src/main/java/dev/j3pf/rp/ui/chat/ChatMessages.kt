@@ -108,7 +108,7 @@ private fun AssistantBubble(m: AssistantMsg, chat: ChatState) {
         if (m.streaming && m.blocks.isEmpty()) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
         }
-        if (m.error != null) Text(m.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        m.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         if (m.stopReason == "aborted") Text("⏹ Interrumpido", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
     }
 }

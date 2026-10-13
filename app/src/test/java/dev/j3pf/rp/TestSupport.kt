@@ -9,9 +9,12 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 /** [SecretStore] en memoria: Tink/Keystore no existen en las pruebas JVM. */
-class FakeSecretStore(context: Context, private var session: Session?) : SecretStore(context) {
-    override fun current(): Session? = session
-    fun set(s: Session?) { session = s }
+class FakeSecretStore(context: Context, initialSession: Session?) : SecretStore(context) {
+    init {
+        _session.value = initialSession
+    }
+    override fun current(): Session? = _session.value
+    fun set(s: Session?) { _session.value = s }
 }
 
 fun testSession(baseUrl: String, relayId: String = "r1") = Session(

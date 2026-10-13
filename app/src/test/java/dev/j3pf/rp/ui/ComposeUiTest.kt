@@ -1,10 +1,12 @@
 package dev.j3pf.rp.ui
 
 import android.net.Uri
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -68,9 +70,9 @@ class ComposeUiTest {
         rule.onNodeWithText("Trabajando ⏳").assertIsDisplayed()
         rule.onNodeWithText("Esperando tu respuesta 🔔").assertIsDisplayed()
         rule.onNodeWithText("Desconectado hace 3 h").assertIsDisplayed()
-        rule.onNodeWithText("gentle-shell", substring = true).assertExists()
-        rule.onNodeWithText("herdr ws w2·pane p3").assertExists()
-        rule.onNodeWithText("AUTO").assertExists()
+        rule.onAllNodesWithText("gentle-shell", substring = true).assertCountEquals(3)
+        rule.onAllNodesWithText("herdr ws w2·pane p3").assertCountEquals(3)
+        rule.onAllNodesWithText("AUTO").assertCountEquals(2)
         rule.onNodeWithText("contenido oculto").assertExists()
         rule.onNodeWithText("api-gateway").performClick()
         assertEquals("m:a", clicked)

@@ -39,59 +39,73 @@ class RelayApiTest {
     fun tearDown() = server.shutdown()
 
     @Test
-    fun `responder prompt envia token y cuerpo y devuelve Sent`() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
-        assertEquals(AnswerOutcome.Sent, api.answerPrompt("P1", Answer.option("1")))
-        val req = server.takeRequest()
-        assertEquals("POST", req.method)
-        assertEquals("/v1/prompts/P1/answer", req.path)
-        assertEquals("Bearer tok-123", req.getHeader("Authorization"))
-        assertEquals("""{"answer":{"optionIds":["1"]}}""", req.body.readUtf8())
+    fun `responder prompt envia token y cuerpo y devuelve Sent`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            assertEquals(AnswerOutcome.Sent, api.answerPrompt("P1", Answer.option("1")))
+            val req = server.takeRequest()
+            assertEquals("POST", req.method)
+            assertEquals("/v1/prompts/P1/answer", req.path)
+            assertEquals("Bearer tok-123", req.getHeader("Authorization"))
+            assertEquals("""{"answer":{"optionIds":["1"]}}""", req.body.readUtf8())
+        }
     }
 
     @Test
-    fun `409 ya respondido cuenta como resuelto`() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(409).setBody("""{"error":"already_resolved"}"""))
-        assertEquals(AnswerOutcome.AlreadyResolved, api.answerPrompt("P1", Answer.confirm(true)))
+    fun `409 ya respondido cuenta como resuelto`() {
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(409).setBody("""{"error":"already_resolved"}"""))
+            assertEquals(AnswerOutcome.AlreadyResolved, api.answerPrompt("P1", Answer.confirm(true)))
+        }
     }
 
     @Test
-    fun `5xx y corte de red se reintentan`() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(503))
-        assertEquals(AnswerOutcome.Queued, api.answerPrompt("P1", Answer.confirm(true)))
-        server.shutdown()
-        assertEquals(AnswerOutcome.Queued, api.answerPrompt("P1", Answer.confirm(true)))
+    fun `5xx y corte de red se reintentan`() {
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(503))
+            assertEquals(AnswerOutcome.Queued, api.answerPrompt("P1", Answer.confirm(true)))
+            server.shutdown()
+            assertEquals(AnswerOutcome.Queued, api.answerPrompt("P1", Answer.confirm(true)))
+        }
     }
 
     @Test
-    fun `400 es un fallo definitivo`() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(400))
-        assertIs<AnswerOutcome.Failed>(api.answerPrompt("P1", Answer.confirm(true)))
+    fun `400 es un fallo definitivo`() {
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(400))
+            assertIs<AnswerOutcome.Failed>(api.answerPrompt("P1", Answer.confirm(true)))
+        }
     }
 
     @Test
-    fun `enviar mensaje usa clientMsgId como idempotencia`() = runBlocking {
-        server.enqueue(MockResponse().setBody("{}"))
-        val msg = UserMessage(agentId = "m:s", clientMsgId = "01CLIENT", text = "hola")
-        assertTrue(api.sendMessage(msg) is ApiResult.Ok)
-        val req = server.takeRequest()
-        assertEquals("/v1/agents/m:s/messages", req.path)
-        assertTrue(""""clientMsgId":"01CLIENT"""" in req.body.readUtf8())
+    fun `enviar mensaje usa clientMsgId como idempotencia`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("{}"))
+            val msg = UserMessage(agentId = "m:s", clientMsgId = "01CLIENT", text = "hola")
+            assertTrue(api.sendMessage(msg) is ApiResult.Ok)
+            val req = server.takeRequest()
+            assertEquals("/v1/agents/m:s/messages", req.path)
+            assertTrue(""""clientMsgId":"01CLIENT"""" in req.body.readUtf8())
+        }
     }
 
     @Test
-    fun `emparejar dispositivo`() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"deviceId":"D","deviceToken":"T","pushKey":"K","relayName":"Mi relay"}"""))
-        val r = api.pairDevice(server.url("/").toString().trimEnd('/'), "ABCD2345", "Pixel", null)
-        assertIs<ApiResult.Ok<*>>(r)
-        assertEquals("T", (r as ApiResult.Ok).value.deviceToken)
-        assertEquals("/v1/pair/device", server.takeRequest().path)
+    fun `emparejar dispositivo`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("""{"deviceId":"D","deviceToken":"T","pushKey":"K","relayName":"Mi relay"}"""))
+            val r = api.pairDevice(server.url("/").toString().trimEnd('/'), "ABCD2345", "Pixel", null)
+            assertIs<ApiResult.Ok<*>>(r)
+            assertEquals("T", (r as ApiResult.Ok).value.deviceToken)
+            assertEquals("/v1/pair/device", server.takeRequest().path)
+        }
     }
 
     @Test
-    fun `healthz`() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"ok":true,"version":"0.1.0","uptime":12.5}"""))
-        val r = api.healthz(server.url("/").toString().trimEnd('/'))
-        assertTrue((r as ApiResult.Ok).value.ok)
+    fun `healthz`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("""{"ok":true,"version":"0.1.0","uptime":12.5}"""))
+            val r = api.healthz(server.url("/").toString().trimEnd('/'))
+            assertTrue((r as ApiResult.Ok).value.ok)
+        }
     }
 }

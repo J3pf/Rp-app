@@ -61,6 +61,10 @@ class RelayConnectionTest {
     @After
     fun tearDown() {
         conn.stop()
+        while (true) {
+            val ws = serverSocket.poll() ?: break
+            runCatching { ws.close(1000, "bye") }
+        }
         scope.cancel()
         server.shutdown()
     }
@@ -69,82 +73,95 @@ class RelayConnectionTest {
         server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket.add(webSocket) }
             override fun onMessage(webSocket: WebSocket, text: String) { received.add(text); onText(webSocket, text) }
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { webSocket.close(code, reason) }
         }))
     }
 
     @Test
-    fun `conecta con token, envia app hello y publica los mensajes en el bus`() = runBlocking {
-        acceptSocket()
-        conn.start()
-        val req = server.takeRequest(5, TimeUnit.SECONDS)
-        assertNotNull(req)
-        assertEquals("/ws/app?mode=foreground", req.path)
-        assertEquals("Bearer tok-123", req.getHeader("Authorization"))
-        val hello = Envelope.parse(received.poll(5, TimeUnit.SECONDS)!!)
-        assertEquals(MsgType.APP_HELLO, hello.t)
+    fun `conecta con token, envia app hello y publica los mensajes en el bus`() {
+        runBlocking {
+            acceptSocket()
+            conn.start()
+            val req = server.takeRequest(5, TimeUnit.SECONDS)
+            assertNotNull(req)
+            assertEquals("/ws/app?mode=foreground", req.path)
+            assertEquals("Bearer tok-123", req.getHeader("Authorization"))
+            val hello = Envelope.parse(received.poll(5, TimeUnit.SECONDS)!!)
+            assertEquals(MsgType.APP_HELLO, hello.t)
 
-        bus.messages.test(timeout = kotlin.time.Duration.parse("5s")) {
-            serverSocket.poll(5, TimeUnit.SECONDS)!!.send(Envelope.of(MsgType.APP_WELCOME, AppWelcome()).encode())
-            val env = awaitItem()
-            assertEquals(MsgType.APP_WELCOME, env.t)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `una peticion se resuelve con la respuesta cuyo re coincide con el id`() = runBlocking {
-        acceptSocket { ws, text ->
-            val env = Envelope.parse(text)
-            if (env.t == MsgType.PROMPT_ANSWER) {
-                ws.send(Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = false, reason = "already_resolved"), re = env.id).encode())
+            bus.messages.test(timeout = kotlin.time.Duration.parse("5s")) {
+                serverSocket.poll(5, TimeUnit.SECONDS)!!.send(Envelope.of(MsgType.APP_WELCOME, AppWelcome()).encode())
+                val env = awaitItem()
+                assertEquals(MsgType.APP_WELCOME, env.t)
+                cancelAndIgnoreRemainingEvents()
             }
         }
-        conn.start()
-        withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
-        val reply = conn.request(Envelope.of(MsgType.PROMPT_ANSWER, PromptAnswerRequest("P1", Answer.confirm(true)), id = "01REQ"))
-        assertIs<WsReply.Ok>(reply)
-        assertTrue(reply.envelope.body<PromptAnswerResult>().alreadyResolved)
     }
 
     @Test
-    fun `error del relay se traduce a WsReply Error`() = runBlocking {
-        acceptSocket { ws, text ->
-            val env = Envelope.parse(text)
-            if (env.t == MsgType.USER_MESSAGE) {
-                ws.send("""{"v":1,"t":"error","re":"${env.id}","d":{"code":"agent_offline","message":"offline"}}""")
+    fun `una peticion se resuelve con la respuesta cuyo re coincide con el id`() {
+        runBlocking {
+            acceptSocket { ws, text ->
+                val env = Envelope.parse(text)
+                if (env.t == MsgType.PROMPT_ANSWER) {
+                    ws.send(Envelope.of(MsgType.PROMPT_ANSWER_RESULT, PromptAnswerResult(ok = false, reason = "already_resolved"), re = env.id).encode())
+                }
             }
+            conn.start()
+            withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
+            val reply = conn.request(Envelope.of(MsgType.PROMPT_ANSWER, PromptAnswerRequest("P1", Answer.confirm(true)), id = "01REQ"))
+            assertIs<WsReply.Ok>(reply)
+            assertTrue(reply.envelope.body<PromptAnswerResult>().alreadyResolved)
         }
-        conn.start()
-        withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
-        val reply = conn.request(Envelope(t = MsgType.USER_MESSAGE, id = "01X"))
-        assertIs<WsReply.Error>(reply)
-        assertEquals("agent_offline", reply.code)
     }
 
     @Test
-    fun `sin conexion la peticion falla rapido`() = runBlocking {
-        assertEquals(WsReply.NotConnected, conn.request(Envelope(t = MsgType.AGENT_ABORT, id = "01Y")))
+    fun `error del relay se traduce a WsReply Error`() {
+        runBlocking {
+            acceptSocket { ws, text ->
+                val env = Envelope.parse(text)
+                if (env.t == MsgType.USER_MESSAGE) {
+                    ws.send("""{"v":1,"t":"error","re":"${env.id}","d":{"code":"agent_offline","message":"offline"}}""")
+                }
+            }
+            conn.start()
+            withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
+            val reply = conn.request(Envelope(t = MsgType.USER_MESSAGE, id = "01X"))
+            assertIs<WsReply.Error>(reply)
+            assertEquals("agent_offline", reply.code)
+        }
     }
 
     @Test
-    fun `cierre 4001 es fatal y no se reintenta`() = runBlocking {
-        acceptSocket()
-        conn.start()
-        withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
-        serverSocket.poll(5, TimeUnit.SECONDS)!!.close(4001, "revoked")
-        withTimeout(5000) { while (conn.state.value !is ConnState.Fatal) kotlinx.coroutines.delay(20) }
-        assertEquals(4001, (conn.state.value as ConnState.Fatal).code)
-        assertEquals(1, server.requestCount)
+    fun `sin conexion la peticion falla rapido`() {
+        runBlocking {
+            assertEquals(WsReply.NotConnected, conn.request(Envelope(t = MsgType.AGENT_ABORT, id = "01Y")))
+        }
     }
 
     @Test
-    fun `reconecta tras un cierre normal del servidor`() = runBlocking {
-        acceptSocket()
-        acceptSocket()
-        conn.start()
-        withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
-        serverSocket.poll(5, TimeUnit.SECONDS)!!.close(1012, "restart") // reinicio del relay: reconexión inmediata
-        withTimeout(8000) { while (server.requestCount < 2) kotlinx.coroutines.delay(20) }
-        assertEquals(2, server.requestCount)
+    fun `cierre 4001 es fatal y no se reintenta`() {
+        runBlocking {
+            acceptSocket()
+            conn.start()
+            withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
+            serverSocket.poll(5, TimeUnit.SECONDS)!!.close(4001, "revoked")
+            withTimeout(5000) { while (conn.state.value !is ConnState.Fatal) kotlinx.coroutines.delay(20) }
+            assertEquals(4001, (conn.state.value as ConnState.Fatal).code)
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
+    fun `reconecta tras un cierre normal del servidor`() {
+        runBlocking {
+            acceptSocket()
+            acceptSocket()
+            conn.start()
+            withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
+            serverSocket.poll(5, TimeUnit.SECONDS)!!.close(1012, "restart") // reinicio del relay: reconexión inmediata
+            withTimeout(8000) { while (server.requestCount < 2) kotlinx.coroutines.delay(20) }
+            assertEquals(2, server.requestCount)
+        }
     }
 }
