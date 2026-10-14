@@ -55,12 +55,11 @@ class AgentsRepository @Inject constructor(
             val relayId = secrets.current()?.relayId ?: return@onEach
             when (env.t) {
                 MsgType.APP_WELCOME -> {
-                    val w = env.body<AppWelcome>()
-                    dao.upsert(w.agents.map { it.toEntity(relayId) })
-                    dao.deleteNotIn(relayId, w.agents.map { it.agentId }.ifEmpty { listOf("") })
+                    val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                    dao.syncWelcome(relayId, w.agents.map { it.toEntity(relayId) }, w.agents.map { it.agentId }.ifEmpty { listOf("") })
                 }
                 MsgType.AGENTS_UPDATE -> {
-                    val u = env.body<AgentsUpdate>()
+                    val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@onEach
                     if (u.upsert.isNotEmpty()) dao.upsert(u.upsert.map { it.toEntity(relayId) })
                     if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
                 }

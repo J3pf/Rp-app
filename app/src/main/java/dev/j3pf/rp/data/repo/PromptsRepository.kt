@@ -79,6 +79,10 @@ class PromptsRepository
 
         suspend fun get(promptId: String): Prompt? = secrets.current()?.let { dao.get(it.relayId, promptId)?.toModel() }
 
+        suspend fun clear() {
+            secrets.current()?.let { dao.clear(it.relayId) }
+        }
+
         fun start() {
             bus.messages
                 .onEach { env ->
@@ -86,17 +90,17 @@ class PromptsRepository
                     val now = System.currentTimeMillis()
                     when (env.t) {
                         MsgType.APP_WELCOME -> {
-                            val w = env.body<AppWelcome>()
-                            dao.upsert(w.openPrompts.map { it.toEntity(relayId, now) })
-                            dao.resolveMissing(relayId, w.openPrompts.map { it.promptId }.ifEmpty { listOf("") }, now)
+                            val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                            dao.syncWelcome(relayId, w.openPrompts.map { it.toEntity(relayId, now) }, w.openPrompts.map { it.promptId }.ifEmpty { listOf("") }, now)
                         }
 
                         MsgType.PROMPT_OPENED -> {
-                            dao.upsert(listOf(env.body<Prompt>().toEntity(relayId, now)))
+                            val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return@onEach
+                            dao.upsert(listOf(p.toEntity(relayId, now)))
                         }
 
                         MsgType.PROMPT_RESOLVED -> {
-                            val r = env.body<PromptResolved>()
+                            val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return@onEach
                             dao.markResolved(relayId, r.promptId, r.by, now)
                             notifications.cancelPrompt(r.promptId)
                         }
@@ -111,8 +115,7 @@ class PromptsRepository
             val res = api.openPrompts()
             if (res is ApiResult.Ok) {
                 val now = System.currentTimeMillis()
-                dao.upsert(res.value.map { it.toEntity(relayId, now) })
-                dao.resolveMissing(relayId, res.value.map { it.promptId }.ifEmpty { listOf("") }, now)
+                dao.syncWelcome(relayId, res.value.map { it.toEntity(relayId, now) }, res.value.map { it.promptId }.ifEmpty { listOf("") }, now)
             }
         }
 

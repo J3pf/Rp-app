@@ -51,13 +51,12 @@ class MachinesRepository @Inject constructor(
             val relayId = secrets.current()?.relayId ?: return@onEach
             when (env.t) {
                 MsgType.APP_WELCOME -> {
-                    val w = env.body<AppWelcome>()
-                    dao.upsert(w.machines.map { it.toEntity(relayId) })
-                    dao.deleteNotIn(relayId, w.machines.map { it.machineId }.ifEmpty { listOf("") })
+                    val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                    dao.syncWelcome(relayId, w.machines.map { it.toEntity(relayId) }, w.machines.map { it.machineId }.ifEmpty { listOf("") })
                     channels.sync(w.machines)
                 }
                 MsgType.MACHINES_UPDATE -> {
-                    val u = env.body<MachinesUpdate>()
+                    val u = runCatching { env.body<MachinesUpdate>() }.getOrNull() ?: return@onEach
                     if (u.upsert.isNotEmpty()) dao.upsert(u.upsert.map { it.toEntity(relayId) })
                     if (u.remove.isNotEmpty()) {
                         dao.delete(relayId, u.remove)

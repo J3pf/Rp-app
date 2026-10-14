@@ -164,14 +164,14 @@ class ChatRepository @Inject constructor(
         private suspend fun onMessage(env: Envelope) {
             when (env.t) {
                 MsgType.AGENT_HISTORY -> {
-                    val h = env.body<AgentHistory>()
+                    val h = runCatching { env.body<AgentHistory>() }.getOrNull() ?: return
                     if (h.agentId != agentId) return
                     val epochChanged = h.epoch != null && h.epoch != _state.value.epoch
                     _state.update { ChatReducer.applyHistory(it, h, System.currentTimeMillis()) }
                     persistHistory(h, epochChanged)
                 }
                 MsgType.AGENT_EVENT -> {
-                    val ev = env.body<AgentEvent>()
+                    val ev = runCatching { env.body<AgentEvent>() }.getOrNull() ?: return
                     if (ev.agentId != agentId) return
                     val before = _state.value
                     val after = ChatReducer.reduce(before, ev, System.currentTimeMillis())
@@ -180,15 +180,15 @@ class ChatRepository @Inject constructor(
                     if (after.needsResync && !before.needsResync) scope.launch { subscribe() }
                 }
                 MsgType.PROMPT_OPENED -> {
-                    val p = env.body<Prompt>()
+                    val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return
                     if (p.agentId == agentId) onPromptOpened(p)
                 }
                 MsgType.PROMPT_RESOLVED -> {
-                    val r = env.body<PromptResolved>()
+                    val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return
                     _state.update { ChatReducer.applyPromptResolved(it, r) }
                 }
                 MsgType.TERMINAL_WAIT -> {
-                    val w = env.body<TerminalWait>()
+                    val w = runCatching { env.body<TerminalWait>() }.getOrNull() ?: return
                     if (w.agentId == agentId) {
                         _state.update { it.copy(terminalWait = if (w.active) TerminalWaitInfo(w.kind, w.title) else null) }
                     }
@@ -285,7 +285,7 @@ class ChatRepository @Inject constructor(
             // Fallback HTTP (también cubre WS caído).
             return when (val r = api.sendMessage(msg)) {
                 is ApiResult.Ok -> { outboxDao.delete(msg.clientMsgId); SendResult.Delivered(null) }
-                is ApiResult.Http -> if (r.code in 400..499 && r.code != 429) {
+                is ApiResult.Http -> if (r.code in 400..499 && r.code != 429 && r.code != 401 && r.code != 403) {
                     outboxDao.delete(msg.clientMsgId)
                     SendResult.Failed(if (r.code == 404) "El agente ya no existe" else "HTTP ${r.code}")
                 } else { enqueueSend(context); SendResult.Queued }
@@ -309,7 +309,7 @@ class ChatRepository @Inject constructor(
             if (msg == null) { outboxDao.delete(o.clientMsgId); continue }
             when (val r = api.sendMessage(msg)) {
                 is ApiResult.Ok -> outboxDao.delete(o.clientMsgId)
-                is ApiResult.Http -> if (r.code in 400..499 && r.code != 429) outboxDao.delete(o.clientMsgId) else allDone = false
+                is ApiResult.Http -> if (r.code in 400..499 && r.code != 429 && r.code != 401 && r.code != 403) outboxDao.delete(o.clientMsgId) else allDone = false
                 is ApiResult.Network -> allDone = false
             }
         }

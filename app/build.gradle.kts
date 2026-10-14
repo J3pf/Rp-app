@@ -86,6 +86,9 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.jvmArgs("-Xmx2g")
+        }
     }
 
     packaging {
@@ -94,6 +97,12 @@ android {
 
     lint {
         abortOnError = false
+    }
+}
+
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) {
+        it.enableUnitTest = false
     }
 }
 
@@ -168,6 +177,8 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

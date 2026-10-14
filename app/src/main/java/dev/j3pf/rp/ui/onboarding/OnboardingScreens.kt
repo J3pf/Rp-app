@@ -129,7 +129,8 @@ fun PairScreen(
     var url by rememberSaveable { mutableStateOf(initialUrl.orEmpty()) }
     var code by rememberSaveable { mutableStateOf(initialCode.orEmpty()) }
     LaunchedEffect(initialUrl, initialCode) {
-        if (!initialUrl.isNullOrBlank() && !initialCode.isNullOrBlank()) vm.pair(initialUrl, initialCode)
+        if (!initialUrl.isNullOrBlank()) url = initialUrl
+        if (!initialCode.isNullOrBlank()) code = initialCode
     }
     LaunchedEffect(st.done) { if (st.done) onPaired() }
 

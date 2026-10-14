@@ -73,11 +73,15 @@ class ReconnectingSocket(
     }
 
     /** Fuerza una reconexión inmediata (p. ej. al volver la red o al abrir la app). */
-    fun retryNow() {
+    fun retryNow(force: Boolean = false) {
         synchronized(lock) {
             if (!running) return
-            if (_state.value == ConnState.Connected || _state.value == ConnState.Connecting) return
+            if (!force && (_state.value == ConnState.Connected || _state.value == ConnState.Connecting)) return
             attempt = 0
+            if (force) {
+                socket?.cancel()
+                socket = null
+            }
             connectLoop(immediate = true)
         }
     }
@@ -118,7 +122,10 @@ class ReconnectingSocket(
         private fun current() = gen == generation
 
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            if (!current()) return
+            if (!current()) {
+                webSocket.close(1000, "Stale generation")
+                return
+            }
             attempt = 0
             _state.value = ConnState.Connected
             onSocketOpen(webSocket)
@@ -167,7 +174,14 @@ class ReconnectingSocket(
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) = retryNow()
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) retryNow()
+                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) retryNow(force = true)
+            }
+            override fun onLost(network: Network) {
+                synchronized(lock) {
+                    if (_state.value == ConnState.Connected || _state.value == ConnState.Connecting) {
+                        _state.value = ConnState.Disconnected
+                    }
+                }
             }
         }
         runCatching {

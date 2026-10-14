@@ -31,6 +31,7 @@ class SessionRepository @Inject constructor(
     private val machines: MachinesRepository,
     private val agents: AgentsRepository,
     private val chat: ChatRepository,
+    private val prompts: PromptsRepository,
     private val tokens: PushTokenProvider,
     private val channels: NotificationChannels,
 ) {
@@ -103,7 +104,7 @@ class SessionRepository @Inject constructor(
         DirectPushService.stop(context)
         connection.stop()
         WorkManager.getInstance(context).cancelAllWork()
-        machines.clear(); agents.clear(); chat.clear()
+        machines.clear(); agents.clear(); chat.clear(); prompts.clear()
         channels.removeAll()
         secrets.clear()
         settings.wipe()

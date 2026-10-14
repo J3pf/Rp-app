@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -11,8 +12,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.protocol.NotifyPrefs
 import dev.j3pf.rp.protocol.RpJson
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,7 +35,7 @@ data class AppSettings(
     /** `"all"` o el `context` de la PC seleccionada en el selector superior. */
     val selectedContext: String = ALL,
     val directPush: Boolean = true,
-    val requireUnlockToApprove: Boolean = false,
+    val requireUnlockToApprove: Boolean = true,
     val criticalAlways: Boolean = true,
     val appLock: Boolean = false,
     val flagSecure: Boolean = false,
@@ -57,11 +60,15 @@ class SettingsRepository
         private val store get() = context.rpDataStore
 
         val settings: Flow<AppSettings> =
-            store.data.map { p ->
-                AppSettings(
-                    selectedContext = p[SELECTED] ?: AppSettings.ALL,
-                    directPush = p[DIRECT] ?: true,
-                    requireUnlockToApprove = p[REQUIRE_UNLOCK] ?: false,
+            store.data
+                .catch { e ->
+                    if (e is IOException) emit(emptyPreferences()) else throw e
+                }
+                .map { p ->
+                    AppSettings(
+                        selectedContext = p[SELECTED] ?: AppSettings.ALL,
+                        directPush = p[DIRECT] ?: true,
+                        requireUnlockToApprove = p[REQUIRE_UNLOCK] ?: true,
                     criticalAlways = p[CRITICAL] ?: true,
                     appLock = p[APP_LOCK] ?: false,
                     flagSecure = p[FLAG_SECURE] ?: false,

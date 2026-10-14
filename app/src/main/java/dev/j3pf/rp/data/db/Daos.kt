@@ -24,6 +24,12 @@ interface MachineDao {
     @Query("DELETE FROM machines WHERE relayId = :relayId AND machineId NOT IN (:keep)")
     suspend fun deleteNotIn(relayId: String, keep: List<String>)
 
+    @Transaction
+    suspend fun syncWelcome(relayId: String, items: List<MachineEntity>, keep: List<String>) {
+        upsert(items)
+        deleteNotIn(relayId, keep)
+    }
+
     @Query("DELETE FROM machines WHERE relayId = :relayId")
     suspend fun clear(relayId: String)
 }
@@ -55,6 +61,12 @@ interface AgentDao {
     @Query("DELETE FROM agents WHERE relayId = :relayId AND agentId NOT IN (:keep)")
     suspend fun deleteNotIn(relayId: String, keep: List<String>)
 
+    @Transaction
+    suspend fun syncWelcome(relayId: String, items: List<AgentEntity>, keep: List<String>) {
+        upsert(items)
+        deleteNotIn(relayId, keep)
+    }
+
     @Query("DELETE FROM agents WHERE relayId = :relayId")
     suspend fun clear(relayId: String)
 }
@@ -82,6 +94,12 @@ interface PromptDao {
     /** Tras `app.welcome`: lo que el relay ya no considera abierto se cierra localmente. */
     @Query("UPDATE prompts SET state = 'resolved', resolvedBy = 'cancelled', resolvedAt = :at WHERE relayId = :relayId AND state = 'open' AND promptId NOT IN (:openIds)")
     suspend fun resolveMissing(relayId: String, openIds: List<String>, at: Long)
+
+    @Transaction
+    suspend fun syncWelcome(relayId: String, items: List<PromptEntity>, openIds: List<String>, now: Long) {
+        upsert(items)
+        resolveMissing(relayId, openIds, now)
+    }
 
     @Query("DELETE FROM prompts WHERE state = 'resolved' AND resolvedAt < :before")
     suspend fun purgeResolved(before: Long)

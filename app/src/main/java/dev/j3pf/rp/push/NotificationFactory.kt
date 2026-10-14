@@ -84,7 +84,12 @@ class NotificationFactory @Inject constructor(
             val remaining = exp - System.currentTimeMillis()
             if (remaining > 0) builder.setTimeoutAfter(remaining)
         }
-        if (p.danger == Danger.HIGH) builder.setColor(0xFFB3261E.toInt())
+        if (p.danger == Danger.HIGH) {
+            builder.setColor(0xFFB3261E.toInt())
+            builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+        } else if (isPermission) {
+            builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+        }
 
         // Acciones
         when {

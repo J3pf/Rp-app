@@ -81,7 +81,7 @@ class ChatViewModel
         val agentId: String = savedStateHandle.toRoute<ChatRoute>().agentId
         private val session = chats.open(agentId)
 
-        private val local = HashMap<String, LocalAttachment>()
+        private val local = java.util.concurrent.ConcurrentHashMap<String, LocalAttachment>()
         private val extra = MutableStateFlow(ChatUiState())
 
         val state: StateFlow<ChatUiState> =
