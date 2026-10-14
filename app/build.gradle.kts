@@ -40,14 +40,15 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = gitCommitCount()
-        versionName = "0.1.2"
+        versionName = "0.1.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        if (keystoreProps.isNotEmpty()) {
+        val storePath = keystoreProps.getProperty("storeFile")
+        if (storePath != null && rootProject.file(storePath).exists() && rootProject.file(storePath).length() > 0) {
             create("release") {
-                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storeFile = rootProject.file(storePath)
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
@@ -60,7 +61,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
         debug {
         }
