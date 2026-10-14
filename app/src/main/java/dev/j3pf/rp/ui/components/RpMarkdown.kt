@@ -7,15 +7,17 @@ import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.highlightedCodeFence
 import com.mikepenz.markdown.m3.Markdown
 
+private val RpMarkdownComponents = markdownComponents(
+    codeBlock = highlightedCodeBlock,
+    codeFence = highlightedCodeFence,
+)
+
 /** Markdown con bloques de código resaltados (módulo `multiplatform-markdown-renderer-code`). */
 @Composable
 fun RpMarkdown(text: String, modifier: Modifier = Modifier) {
     Markdown(
         content = text,
         modifier = modifier,
-        components = markdownComponents(
-            codeBlock = highlightedCodeBlock,
-            codeFence = highlightedCodeFence,
-        ),
+        components = RpMarkdownComponents,
     )
 }

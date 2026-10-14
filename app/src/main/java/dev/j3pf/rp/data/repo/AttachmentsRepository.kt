@@ -20,6 +20,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -61,6 +63,7 @@ class AttachmentsRepository @Inject constructor(
 ) {
     private val dir get() = File(context.cacheDir, "attachments").apply { mkdirs() }
     private val cameraDir get() = File(context.cacheDir, "camera").apply { mkdirs() }
+    private val compressSemaphore = Semaphore(2)
 
     /** Uri de `FileProvider` para que la cámara escriba la foto (`TakePicture`). */
     fun newCameraTarget(): Uri {
@@ -97,7 +100,7 @@ class AttachmentsRepository @Inject constructor(
                     }
                 }
                 if (compressImages && mime in COMPRESSIBLE) {
-                    compress(out)?.let { jpg ->
+                    compressSemaphore.withPermit { compress(out) }?.let { jpg ->
                         out.delete()
                         file = jpg
                         mime = "image/jpeg"
@@ -142,14 +145,14 @@ class AttachmentsRepository @Inject constructor(
         return (name ?: ("archivo$fallbackExt")) to mime
     }
 
-    private fun sanitize(name: String) = name.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").take(120).ifEmpty { "archivo" }
+    private fun sanitize(name: String) = name.replace(UNSAFE_FILENAME_REGEX, "_").take(120).ifEmpty { "archivo" }
 
     private fun compress(src: File): File? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(src.path, bounds)
         if (bounds.outWidth <= 0) return null
         var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_DIM) sample *= 2
+        while (max(bounds.outWidth, bounds.outHeight) / sample > MAX_DIM) sample *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val raw = BitmapFactory.decodeFile(src.path, opts) ?: return null
         val longest = max(raw.width, raw.height)
@@ -181,5 +184,6 @@ class AttachmentsRepository @Inject constructor(
     private companion object {
         const val MAX_DIM = 2048
         val COMPRESSIBLE = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
+        val UNSAFE_FILENAME_REGEX = Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
     }
 }

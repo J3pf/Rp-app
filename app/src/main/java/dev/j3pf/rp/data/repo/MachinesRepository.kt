@@ -21,6 +21,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
@@ -40,7 +41,7 @@ class MachinesRepository @Inject constructor(
 ) {
     val machines: Flow<List<MachineSummary>> = secrets.session.flatMapLatest { s ->
         if (s == null) emptyFlow() else dao.observe(s.relayId).map { list -> list.map { it.toModel() } }
-    }
+    }.distinctUntilChanged()
 
     val machinesState: StateFlow<List<MachineSummary>> =
         machines.stateIn(scope, SharingStarted.Eagerly, emptyList())

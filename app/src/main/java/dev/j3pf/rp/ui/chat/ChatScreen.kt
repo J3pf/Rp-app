@@ -50,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -338,13 +339,23 @@ private fun MessageList(
         }
     }
     var first by remember { mutableStateOf(true) }
+    var prevItemsSize by remember { mutableIntStateOf(0) }
     LaunchedEffect(items.size, streamLen, ui.chat.tools.size) {
-        if (items.isEmpty()) return@LaunchedEffect
+        if (items.isEmpty()) {
+            prevItemsSize = 0
+            return@LaunchedEffect
+        }
+        val sizeChanged = items.size != prevItemsSize
+        prevItemsSize = items.size
         if (first) {
             listState.scrollToItem(items.lastIndex)
             first = false
         } else if (nearBottom) {
-            listState.animateScrollToItem(items.lastIndex)
+            if (sizeChanged) {
+                listState.animateScrollToItem(items.lastIndex)
+            } else {
+                listState.scrollToItem(items.lastIndex)
+            }
         }
     }
     if (items.isEmpty()) {
@@ -366,7 +377,9 @@ private fun MessageList(
                 .PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(items, key = { it.key }) { item -> ChatItemView(item, ui.chat, busyPromptId, onAnswerPrompt) }
+        items(items, key = { it.key }, contentType = { it::class.simpleName }) { item ->
+            ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
+        }
     }
 }
 

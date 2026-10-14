@@ -181,15 +181,15 @@ class ChatRepository @Inject constructor(
         private suspend fun onMessage(env: Envelope) {
             when (env.t) {
                 MsgType.AGENT_HISTORY -> {
+                    if (env.d.obj()?.str("agentId") != agentId) return
                     val h = runCatching { env.body<AgentHistory>() }.getOrNull() ?: return
-                    if (h.agentId != agentId) return
                     val epochChanged = h.epoch != null && h.epoch != _state.value.epoch
                     _state.update { ChatReducer.applyHistory(it, h, System.currentTimeMillis()) }
                     persistHistory(h, epochChanged)
                 }
                 MsgType.AGENT_EVENT -> {
+                    if (env.d.obj()?.str("agentId") != agentId) return
                     val ev = runCatching { env.body<AgentEvent>() }.getOrNull() ?: return
-                    if (ev.agentId != agentId) return
                     val before = _state.value
                     val after = ChatReducer.reduce(before, ev, System.currentTimeMillis())
                     _state.value = after
@@ -197,18 +197,18 @@ class ChatRepository @Inject constructor(
                     if (after.needsResync && !before.needsResync) scope.launch { subscribe() }
                 }
                 MsgType.PROMPT_OPENED -> {
+                    if (env.d.obj()?.str("agentId") != agentId) return
                     val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return
-                    if (p.agentId == agentId) onPromptOpened(p)
+                    onPromptOpened(p)
                 }
                 MsgType.PROMPT_RESOLVED -> {
                     val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return
                     _state.update { ChatReducer.applyPromptResolved(it, r) }
                 }
                 MsgType.TERMINAL_WAIT -> {
+                    if (env.d.obj()?.str("agentId") != agentId) return
                     val w = runCatching { env.body<TerminalWait>() }.getOrNull() ?: return
-                    if (w.agentId == agentId) {
-                        _state.update { it.copy(terminalWait = if (w.active) TerminalWaitInfo(w.kind, w.title) else null) }
-                    }
+                    _state.update { it.copy(terminalWait = if (w.active) TerminalWaitInfo(w.kind, w.title) else null) }
                 }
             }
         }
@@ -231,7 +231,19 @@ class ChatRepository @Inject constructor(
                 // Los eventos anteriores al snapshot ya están reflejados en las entradas.
                 chatDao.deleteEventsBefore(relayId, agentId, h.epoch, h.liveFromSeq ?: Long.MAX_VALUE)
             }
-            h.events.filter { it.e.str("type") in PERSISTED_EVENTS }.forEach { persistEvent(it.copy(epoch = it.epoch ?: h.epoch)) }
+            val eventRows = h.events
+                .filter { it.e.str("type") in PERSISTED_EVENTS }
+                .map { ev ->
+                    val normalized = ev.copy(epoch = ev.epoch ?: h.epoch)
+                    ChatRecordEntity(
+                        relayId = relayId, agentId = agentId, kind = RecordKind.EVENT, epoch = normalized.epoch, seq = normalized.seq,
+                        json = RpJson.encodeToString(AgentEvent.serializer(), normalized),
+                    )
+                }
+            if (eventRows.isNotEmpty()) {
+                chatDao.insert(eventRows)
+                chatDao.trim(relayId, agentId, 5000)
+            }
         }
 
         private suspend fun persistEvent(ev: AgentEvent) {

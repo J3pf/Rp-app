@@ -10,6 +10,7 @@ import dev.j3pf.rp.R
 import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.util.contextEmoji
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +22,7 @@ import javax.inject.Singleton
 @Singleton
 class NotificationChannels @Inject constructor(@ApplicationContext private val context: Context) {
     private val nm: NotificationManager get() = context.getSystemService(NotificationManager::class.java)
+    private val ensuredMachines = ConcurrentHashMap<String, String>()
 
     fun groupId(machineId: String) = "rp.machine.$machineId"
     fun channelId(machineId: String, category: String) = "rp.$machineId.$category"
@@ -37,6 +39,8 @@ class NotificationChannels @Inject constructor(@ApplicationContext private val c
 
     /** Crea (idempotente) el grupo y los canales de una PC; renombra el grupo si cambió el nombre. */
     fun ensureMachine(machineId: String, name: String, contextKind: String = "personal") {
+        val fingerprint = "$name|$contextKind"
+        if (ensuredMachines[machineId] == fingerprint) return
         val title = "${contextEmoji(contextKind)} $name"
         nm.createNotificationChannelGroup(NotificationChannelGroup(groupId(machineId), title))
         for (cat in NotifyCategory.all) {
@@ -53,10 +57,13 @@ class NotificationChannels @Inject constructor(@ApplicationContext private val c
             }
             nm.createNotificationChannel(ch)
         }
+        ensuredMachines[machineId] = fingerprint
     }
 
     fun sync(machines: List<MachineSummary>) {
         machines.forEach { ensureMachine(it.machineId, it.name, it.context) }
+        val keepIds = machines.map { it.machineId }.toSet()
+        ensuredMachines.keys.retainAll(keepIds)
         val keep = machines.map { groupId(it.machineId) }.toSet()
         nm.notificationChannelGroups.filter { it.id.startsWith("rp.machine.") && it.id !in keep }
             .forEach { nm.deleteNotificationChannelGroup(it.id) }
@@ -64,10 +71,12 @@ class NotificationChannels @Inject constructor(@ApplicationContext private val c
 
     /** Al revocar/olvidar una PC se borra su grupo (y con él sus canales). */
     fun removeMachine(machineId: String) {
+        ensuredMachines.remove(machineId)
         nm.deleteNotificationChannelGroup(groupId(machineId))
     }
 
     fun removeAll() {
+        ensuredMachines.clear()
         nm.notificationChannelGroups.filter { it.id.startsWith("rp.machine.") }.forEach { nm.deleteNotificationChannelGroup(it.id) }
         NotificationManagerCompat.from(context).cancelAll()
     }

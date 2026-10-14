@@ -335,6 +335,8 @@ object ChatReducer {
     }
 
     private fun upsert(items: List<ChatItem>, item: ChatItem): List<ChatItem> {
+        if (items.isEmpty()) return listOf(item)
+        if (items.last().key == item.key) return items.toMutableList().also { it[items.lastIndex] = item }
         val i = items.indexOfFirst { it.key == item.key }
         return if (i >= 0) items.toMutableList().also { it[i] = item } else items + item
     }
@@ -369,28 +371,34 @@ object ChatReducer {
 
     /** Intenta parsear JSON de argumentos que puede estar incompleto; devuelve `null` si no es válido todavía. */
     private fun parsePartial(raw: String): JsonElement? {
-        if (raw.isBlank()) return null
-        return runCatching { lenient.parseToJsonElement(raw) }.getOrNull()
-            ?: runCatching { lenient.parseToJsonElement(closeJson(raw)) }.getOrNull()
+        if (raw.isBlank() || raw.length > 32_768) return null
+        val trimmed = raw.trimEnd()
+        val last = trimmed.lastOrNull()
+        if (last == '}' || last == ']') {
+            runCatching { lenient.parseToJsonElement(trimmed) }.getOrNull()?.let { return it }
+        }
+        return runCatching { lenient.parseToJsonElement(closeJson(raw)) }.getOrNull()
     }
 
     private fun closeJson(raw: String): String {
-        val stack = ArrayDeque<Char>()
+        val stack = CharArray(raw.length)
+        var top = 0
         var inStr = false
         var esc = false
-        for (c in raw) {
+        for (i in 0 until raw.length) {
+            val c = raw[i]
             if (inStr) {
                 if (esc) esc = false else if (c == '\\') esc = true else if (c == '"') inStr = false
             } else when (c) {
                 '"' -> inStr = true
-                '{' -> stack.addLast('}')
-                '[' -> stack.addLast(']')
-                '}', ']' -> if (stack.isNotEmpty()) stack.removeLast()
+                '{' -> stack[top++] = '}'
+                '[' -> stack[top++] = ']'
+                '}', ']' -> if (top > 0) top--
             }
         }
-        val sb = StringBuilder(raw)
+        val sb = StringBuilder(raw.length + top + 1).append(raw)
         if (inStr) sb.append('"')
-        while (stack.isNotEmpty()) sb.append(stack.removeLast())
+        while (top > 0) sb.append(stack[--top])
         return sb.toString()
     }
 }

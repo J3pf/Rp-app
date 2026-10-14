@@ -82,6 +82,11 @@ class RelayApi @Inject constructor(
         client.newBuilder().callTimeout(8, TimeUnit.SECONDS).build()
     }
 
+    /** Cliente sin callTimeout global para subidas de blobs grandes. */
+    private val uploadClient: OkHttpClient by lazy {
+        client.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
+    }
+
     // ───────────────────────────── Emparejamiento ─────────────────────────────
 
     suspend fun healthz(baseUrl: String): ApiResult<HealthResponse> =
@@ -169,7 +174,7 @@ class RelayApi @Inject constructor(
     ): ApiResult<BlobInfo> {
         val part = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", name, ProgressBody(body, onProgress)).build()
-        return authed("POST", "/v1/blobs", part, BlobInfo.serializer(), client.newBuilder().callTimeout(0, TimeUnit.SECONDS).build())
+        return authed("POST", "/v1/blobs", part, BlobInfo.serializer(), uploadClient)
     }
 
     // ───────────────────────────── Interno ─────────────────────────────
@@ -237,12 +242,17 @@ class ProgressBody(
 
     override fun writeTo(sink: BufferedSink) {
         val total = contentLength()
+        val step = if (total > 0) (total / 100).coerceAtLeast(8192L) else 8192L
         val counting = object : ForwardingSink(sink) {
             var written = 0L
+            var lastReported = 0L
             override fun write(source: Buffer, byteCount: Long) {
                 super.write(source, byteCount)
                 written += byteCount
-                onProgress(written, total)
+                if (written == total || written - lastReported >= step) {
+                    lastReported = written
+                    onProgress(written, total)
+                }
             }
         }.buffer()
         delegate.writeTo(counting)

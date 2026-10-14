@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +57,7 @@ fun MachineFilterBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val contexts = machines.map { it.context }.distinct()
+    val contexts = remember(machines) { machines.map { it.context }.distinct() }
     LazyRow(
         modifier = modifier.fillMaxWidth(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
@@ -71,14 +72,16 @@ fun MachineFilterBar(
                 label = { Text("Todas ($total${if (prompts > 0) " · $prompts🔔" else ""})") },
             )
         }
-        items(contexts) { ctx ->
+        items(contexts, key = { it }) { ctx ->
             val ms = machines.filter { it.context == ctx }
             val count = agents.count { it.machineContext == ctx }
             val prompts = agents.filter { it.machineContext == ctx }.sumOf { it.openPromptCount }
+            val rawColor = ms.firstOrNull()?.color
+            val dotColor = remember(rawColor) { parseColor(rawColor) }
             FilterChip(
                 selected = selected == ctx,
                 onClick = { onSelect(ctx) },
-                leadingIcon = { ColorDot(parseColor(ms.firstOrNull()?.color)) },
+                leadingIcon = { ColorDot(dotColor) },
                 label = { Text("${contextEmoji(ctx)} ${contextLabel(ctx)} ($count${if (prompts > 0) " · $prompts🔔" else ""})") },
             )
         }

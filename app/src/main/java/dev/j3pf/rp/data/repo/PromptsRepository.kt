@@ -38,6 +38,7 @@ import dev.j3pf.rp.push.NotificationFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
@@ -63,19 +64,22 @@ class PromptsRepository
     ) {
         /** Todos los prompts abiertos, ordenados por peligro y antigüedad. */
         val open: Flow<List<Prompt>> =
-            secrets.session.flatMapLatest { s ->
-                if (s == null) emptyFlow() else dao.observeOpen(s.relayId).map { l -> l.map { it.toModel() } }
-            }
+            secrets.session
+                .flatMapLatest { s ->
+                    if (s == null) emptyFlow() else dao.observeOpen(s.relayId).map { l -> l.map { it.toModel() } }
+                }.distinctUntilChanged()
 
         fun openFor(agentId: String): Flow<List<Prompt>> =
-            secrets.session.flatMapLatest { s ->
-                if (s == null) emptyFlow() else dao.observeOpenFor(s.relayId, agentId).map { l -> l.map { it.toModel() } }
-            }
+            secrets.session
+                .flatMapLatest { s ->
+                    if (s == null) emptyFlow() else dao.observeOpenFor(s.relayId, agentId).map { l -> l.map { it.toModel() } }
+                }.distinctUntilChanged()
 
         fun observe(promptId: String): Flow<Prompt?> =
-            secrets.session.flatMapLatest { s ->
-                if (s == null) emptyFlow() else dao.observeOne(s.relayId, promptId).map { it?.toModel() }
-            }
+            secrets.session
+                .flatMapLatest { s ->
+                    if (s == null) emptyFlow() else dao.observeOne(s.relayId, promptId).map { it?.toModel() }
+                }.distinctUntilChanged()
 
         suspend fun get(promptId: String): Prompt? = secrets.current()?.let { dao.get(it.relayId, promptId)?.toModel() }
 

@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatItem
-import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.DiffKind
 import dev.j3pf.rp.chat.NoteKind
 import dev.j3pf.rp.chat.PromptCard
@@ -57,13 +57,13 @@ import dev.j3pf.rp.ui.theme.RpColors
 @Composable
 fun ChatItemView(
     item: ChatItem,
-    chat: ChatState,
+    tools: Map<String, ToolRun>,
     busyPromptId: String?,
     onAnswerPrompt: (Prompt, Answer) -> Unit,
 ) {
     when (item) {
         is UserMsg -> UserBubble(item)
-        is AssistantMsg -> AssistantBubble(item, chat)
+        is AssistantMsg -> AssistantBubble(item, tools)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item)
         else -> Unit
@@ -90,7 +90,7 @@ private fun UserBubble(m: UserMsg) {
 @Composable
 private fun AssistantBubble(
     m: AssistantMsg,
-    chat: ChatState,
+    tools: Map<String, ToolRun>,
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         m.blocks.forEachIndexed { i, b ->
@@ -109,7 +109,7 @@ private fun AssistantBubble(
 
                 is Block.ToolCall -> {
                     val run =
-                        b.toolCallId?.let { chat.tools[it] }
+                        b.toolCallId?.let { tools[it] }
                             ?: ToolRun(
                                 b.toolCallId ?: "${m.key}-$i",
                                 b.name ?: "…",
@@ -168,6 +168,7 @@ private fun ThinkingBlock(
 fun ToolCard(run: ToolRun) {
     var open by rememberSaveable(run.toolCallId) { mutableStateOf(false) }
     var more by rememberSaveable(run.toolCallId + "m") { mutableStateOf(false) }
+    val summary = remember(run.name, run.args) { run.summary() }
     Card(
         onClick = { open = !open },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -181,7 +182,7 @@ fun ToolCard(run: ToolRun) {
                 }
                 Text(run.name, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Text(
-                    run.summary(),
+                    summary,
                     Modifier.weight(1f),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
@@ -198,11 +199,11 @@ fun ToolCard(run: ToolRun) {
             }
             AnimatedVisibility(open) {
                 Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val diff = run.editDiff()
+                    val diff = remember(run.name, run.args) { run.editDiff() }
                     if (diff != null) {
                         DiffView(diff.first, diff.second)
                     } else {
-                        val args = prettyArgs(run.args)
+                        val args = remember(run.name, run.args) { prettyArgs(run.args) }
                         if (args.isNotBlank()) Mono(args, maxHeight = 160)
                     }
                     val out = run.result ?: run.partial
@@ -258,9 +259,10 @@ private fun DiffView(
     old: String,
     new: String,
 ) {
+    val lines = remember(old, new) { simpleDiff(old, new) }
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
         Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-            simpleDiff(old, new).forEach { l ->
+            lines.forEach { l ->
                 val (bg, mark) =
                     when (l.kind) {
                         DiffKind.ADDED -> Color(0x3300C853) to "+ "

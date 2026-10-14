@@ -18,7 +18,11 @@ data class MachineEntity(
     val hostOnline: Boolean,
 )
 
-@Entity(tableName = "agents", primaryKeys = ["relayId", "agentId"], indices = [Index("relayId", "machineId")])
+@Entity(
+    tableName = "agents",
+    primaryKeys = ["relayId", "agentId"],
+    indices = [Index("relayId", "machineId"), Index("relayId", "online", "lastSeenAt")],
+)
 data class AgentEntity(
     val relayId: String,
     val agentId: String,
@@ -57,7 +61,12 @@ object PromptState {
 @Entity(
     tableName = "prompts",
     primaryKeys = ["relayId", "promptId"],
-    indices = [Index("relayId", "agentId"), Index("relayId", "state")],
+    indices = [
+        Index("relayId", "agentId"),
+        Index("relayId", "state"),
+        Index("relayId", "agentId", "state"),
+        Index("state", "resolvedAt"),
+    ],
 )
 data class PromptEntity(
     val relayId: String,
@@ -91,7 +100,7 @@ data class ChatRecordEntity(
 )
 
 /** Mensajes pendientes de enviar (offline); `clientMsgId` es la clave de idempotencia. */
-@Entity(tableName = "outbox")
+@Entity(tableName = "outbox", indices = [Index("relayId", "createdAt")])
 data class OutboxEntity(
     @PrimaryKey val clientMsgId: String,
     val relayId: String,
@@ -102,7 +111,7 @@ data class OutboxEntity(
 )
 
 /** Deduplicación de notificaciones por `promptId`/`pushId` durante 24 h. */
-@Entity(tableName = "notification_dedup")
+@Entity(tableName = "notification_dedup", indices = [Index("seenAt")])
 data class DedupEntity(
     @PrimaryKey val key: String,
     val seenAt: Long,

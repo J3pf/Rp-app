@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
@@ -39,16 +40,16 @@ class AgentsRepository @Inject constructor(
     /** Todos los agentes con su contador de prompts abiertos. */
     val agents: Flow<List<AgentSummary>> = secrets.session.flatMapLatest { s ->
         if (s == null) emptyFlow() else dao.observe(s.relayId).map { list -> list.map { it.agent.toModel(it.openPrompts) } }
-    }
+    }.distinctUntilChanged()
 
     /** Agentes filtrados por el selector de PC (`"all"` o un `context`). */
-    val filtered: Flow<List<AgentSummary>> = combine(agents, settings.settings.map { it.selectedContext }) { list, ctx ->
+    val filtered: Flow<List<AgentSummary>> = combine(agents, settings.settings.map { it.selectedContext }.distinctUntilChanged()) { list, ctx ->
         if (ctx == AppSettings.ALL) list else list.filter { it.machineContext == ctx }
-    }
+    }.distinctUntilChanged()
 
     fun observe(agentId: String): Flow<AgentSummary?> = secrets.session.flatMapLatest { s ->
         if (s == null) emptyFlow() else dao.observeOne(s.relayId, agentId).map { it?.agent?.toModel(it.openPrompts) }
-    }
+    }.distinctUntilChanged()
 
     fun start() {
         bus.messages.onEach { env ->

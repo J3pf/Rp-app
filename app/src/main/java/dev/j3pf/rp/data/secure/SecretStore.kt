@@ -54,6 +54,8 @@ open class SecretStore
                 .getPrimitive(RegistryConfiguration.get(), Aead::class.java)
         }
 
+        private val rng = SecureRandom()
+
         protected val _session: MutableStateFlow<Session?> = MutableStateFlow(load())
         val session: StateFlow<Session?> = _session.asStateFlow()
 
@@ -61,12 +63,15 @@ open class SecretStore
         open fun current(): Session? = _session.value
 
         fun save(session: Session) {
-            put(K_RELAY_ID, session.relayId)
-            put(K_URL, session.relayUrl)
-            put(K_NAME, session.relayName)
-            put(K_DEVICE_ID, session.deviceId)
-            put(K_TOKEN, session.deviceToken)
-            put(K_PUSH_KEY, session.pushKey)
+            prefs
+                .edit()
+                .putString(K_RELAY_ID, encryptField(K_RELAY_ID, session.relayId))
+                .putString(K_URL, encryptField(K_URL, session.relayUrl))
+                .putString(K_NAME, encryptField(K_NAME, session.relayName))
+                .putString(K_DEVICE_ID, encryptField(K_DEVICE_ID, session.deviceId))
+                .putString(K_TOKEN, encryptField(K_TOKEN, session.deviceToken))
+                .putString(K_PUSH_KEY, encryptField(K_PUSH_KEY, session.pushKey))
+                .apply()
             _session.value = session
         }
 
@@ -77,7 +82,7 @@ open class SecretStore
 
         fun newRelayId(): String =
             ByteArray(8)
-                .also { SecureRandom().nextBytes(it) }
+                .also { rng.nextBytes(it) }
                 .joinToString("") { "%02x".format(it) }
 
         private fun load(): Session? =
@@ -92,12 +97,12 @@ open class SecretStore
                 )
             }.getOrNull()
 
-        private fun put(
+        private fun encryptField(
             key: String,
             value: String,
-        ) {
+        ): String {
             val ct = aead.encrypt(value.toByteArray(Charsets.UTF_8), key.toByteArray(Charsets.UTF_8))
-            prefs.edit().putString(key, Base64.encodeToString(ct, Base64.NO_WRAP)).apply()
+            return Base64.encodeToString(ct, Base64.NO_WRAP)
         }
 
         private fun get(key: String): String? {

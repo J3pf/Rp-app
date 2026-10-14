@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "2826afac04da7c3a19dbc49792516ca3",
+    "identityHash": "d394aa051026df461ea5c6d46a537818",
     "entities": [
       {
         "tableName": "machines",
@@ -213,6 +213,17 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_agents_relayId_machineId` ON `${TABLE_NAME}` (`relayId`, `machineId`)"
+          },
+          {
+            "name": "index_agents_relayId_online_lastSeenAt",
+            "unique": false,
+            "columnNames": [
+              "relayId",
+              "online",
+              "lastSeenAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_agents_relayId_online_lastSeenAt` ON `${TABLE_NAME}` (`relayId`, `online`, `lastSeenAt`)"
           }
         ]
       },
@@ -300,6 +311,27 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_prompts_relayId_state` ON `${TABLE_NAME}` (`relayId`, `state`)"
+          },
+          {
+            "name": "index_prompts_relayId_agentId_state",
+            "unique": false,
+            "columnNames": [
+              "relayId",
+              "agentId",
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_prompts_relayId_agentId_state` ON `${TABLE_NAME}` (`relayId`, `agentId`, `state`)"
+          },
+          {
+            "name": "index_prompts_state_resolvedAt",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "resolvedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_prompts_state_resolvedAt` ON `${TABLE_NAME}` (`state`, `resolvedAt`)"
           }
         ]
       },
@@ -416,7 +448,19 @@
           "columnNames": [
             "clientMsgId"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_outbox_relayId_createdAt",
+            "unique": false,
+            "columnNames": [
+              "relayId",
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_relayId_createdAt` ON `${TABLE_NAME}` (`relayId`, `createdAt`)"
+          }
+        ]
       },
       {
         "tableName": "notification_dedup",
@@ -440,12 +484,23 @@
           "columnNames": [
             "key"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_notification_dedup_seenAt",
+            "unique": false,
+            "columnNames": [
+              "seenAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notification_dedup_seenAt` ON `${TABLE_NAME}` (`seenAt`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2826afac04da7c3a19dbc49792516ca3')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd394aa051026df461ea5c6d46a537818')"
     ]
   }
 }
