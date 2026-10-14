@@ -149,6 +149,7 @@ object ChatReducer {
 
     private fun messageDelta(s: ChatState, e: JsonObject): ChatState {
         val idx = e.int("contentIndex") ?: 0
+        if (idx < 0 || idx > 64) return s
         val kind = e.str("kind") ?: "text"
         val delta = e.str("delta") ?: return s
         val base = s.streaming ?: AssistantMsg(key = "stream", streaming = true)

@@ -228,7 +228,11 @@ fun ChatScreen(
                     busyPromptId = busyPrompt,
                     onAnswerPrompt = { p, answer ->
                         scope.launch {
-                            if (promptVm.requiresAuth(p) && activity != null) {
+                            if (promptVm.requiresAuth(p)) {
+                                if (activity == null) {
+                                    snackbar.showSnackbar("No se pudo verificar tu identidad")
+                                    return@launch
+                                }
                                 val r = promptVm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))
                                 if (r != AuthResult.OK) {
                                     snackbar.showSnackbar(

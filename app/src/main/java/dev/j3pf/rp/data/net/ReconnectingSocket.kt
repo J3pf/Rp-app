@@ -45,6 +45,7 @@ class ReconnectingSocket(
     @Volatile private var generation = 0
     private var job: Job? = null
     private var netCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastValidatedNetwork: Network? = null
     private val lock = Any()
 
     val isConnected: Boolean get() = _state.value == ConnState.Connected
@@ -66,8 +67,13 @@ class ReconnectingSocket(
             job?.cancel()
             job = null
             unregisterNetworkCallback()
-            socket?.close(1000, "bye")
+            lastValidatedNetwork = null
+            val ws = socket
             socket = null
+            if (ws != null) {
+                ws.close(1000, "bye")
+                onSocketClosed(1000)
+            }
             _state.value = ConnState.Disconnected
         }
     }
@@ -79,8 +85,13 @@ class ReconnectingSocket(
             if (!force && (_state.value == ConnState.Connected || _state.value == ConnState.Connecting)) return
             attempt = 0
             if (force) {
-                socket?.cancel()
+                generation++
+                val ws = socket
                 socket = null
+                if (ws != null) {
+                    ws.cancel()
+                    onSocketClosed(1006)
+                }
             }
             connectLoop(immediate = true)
         }
@@ -95,12 +106,17 @@ class ReconnectingSocket(
             if (!running) return@launch
             val req = requestProvider()
             if (req == null) {
-                _state.value = ConnState.Disconnected
+                synchronized(lock) {
+                    if (running) _state.value = ConnState.Disconnected
+                }
                 return@launch
             }
-            _state.value = ConnState.Connecting
-            val gen = synchronized(lock) { ++generation }
-            socket = client.newWebSocket(req, Listener(gen))
+            synchronized(lock) {
+                if (!running) return@launch
+                _state.value = ConnState.Connecting
+                val gen = ++generation
+                socket = client.newWebSocket(req, Listener(gen))
+            }
         }
     }
 
@@ -152,7 +168,10 @@ class ReconnectingSocket(
         }
 
         private fun handleEnd(code: Int, reason: String) {
-            socket = null
+            synchronized(lock) {
+                if (!current()) return
+                socket = null
+            }
             onSocketClosed(code)
             if (CloseCodes.isFatal(code)) {
                 synchronized(lock) { running = false }
@@ -172,12 +191,34 @@ class ReconnectingSocket(
     private fun registerNetworkCallback() {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return
         val cb = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = retryNow()
-            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) retryNow(force = true)
+            override fun onAvailable(network: Network) {
+                synchronized(lock) {
+                    if (lastValidatedNetwork == null) lastValidatedNetwork = network
+                }
+                retryNow(force = false)
             }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return
+                val changed = synchronized(lock) {
+                    val prev = lastValidatedNetwork
+                    lastValidatedNetwork = network
+                    prev != null && prev != network
+                }
+                retryNow(force = changed)
+            }
+
             override fun onLost(network: Network) {
                 synchronized(lock) {
+                    if (network != lastValidatedNetwork && cm.activeNetwork != null) return
+                    if (network == lastValidatedNetwork) lastValidatedNetwork = null
+                    generation++
+                    val ws = socket
+                    socket = null
+                    if (ws != null) {
+                        ws.cancel()
+                        onSocketClosed(1006)
+                    }
                     if (_state.value == ConnState.Connected || _state.value == ConnState.Connecting) {
                         _state.value = ConnState.Disconnected
                     }

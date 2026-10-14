@@ -79,18 +79,38 @@ class AttachmentsRepository @Inject constructor(
             var name = sanitize(rawName)
             var mime = rawMime
             val out = File(dir, "$id-$name")
-            context.contentResolver.openInputStream(uri)!!.use { input -> out.outputStream().use { input.copyTo(it) } }
             var file = out
-            if (compressImages && mime in COMPRESSIBLE) {
-                compress(out)?.let { jpg ->
-                    out.delete()
-                    file = jpg
-                    mime = "image/jpeg"
-                    name = name.substringBeforeLast('.') + ".jpg"
+            try {
+                val streamLimit = if (compressImages && mime in COMPRESSIBLE) MAX_ATTACHMENT_BYTES * 2 else MAX_ATTACHMENT_BYTES
+                val inputStream = checkNotNull(context.contentResolver.openInputStream(uri)) { "No se pudo abrir el archivo" }
+                inputStream.use { input ->
+                    out.outputStream().use { output ->
+                        val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(buf)
+                            if (read < 0) break
+                            total += read
+                            require(total <= streamLimit) { "El archivo supera 25 MB" }
+                            output.write(buf, 0, read)
+                        }
+                    }
                 }
+                if (compressImages && mime in COMPRESSIBLE) {
+                    compress(out)?.let { jpg ->
+                        out.delete()
+                        file = jpg
+                        mime = "image/jpeg"
+                        name = name.substringBeforeLast('.') + ".jpg"
+                    }
+                }
+                require(file.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
+                LocalAttachment(id, name, mime, file.length(), file, uri)
+            } catch (t: Throwable) {
+                out.delete()
+                if (file != out) file.delete()
+                throw t
             }
-            require(file.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
-            LocalAttachment(id, name, mime, file.length(), file, uri)
         }
     }
 
@@ -131,8 +151,8 @@ class AttachmentsRepository @Inject constructor(
         var sample = 1
         while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_DIM) sample *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        var bmp = BitmapFactory.decodeFile(src.path, opts) ?: return null
-        val longest = max(bmp.width, bmp.height)
+        val raw = BitmapFactory.decodeFile(src.path, opts) ?: return null
+        val longest = max(raw.width, raw.height)
         val rotation = when (ExifInterface(src.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)) {
             ExifInterface.ORIENTATION_ROTATE_90 -> 90f
             ExifInterface.ORIENTATION_ROTATE_180 -> 180f
@@ -142,10 +162,19 @@ class AttachmentsRepository @Inject constructor(
         val m = Matrix()
         if (longest > MAX_DIM) { val sc = MAX_DIM.toFloat() / longest; m.postScale(sc, sc) }
         if (rotation != 0f) m.postRotate(rotation)
-        if (!m.isIdentity) bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        val rotated = if (!m.isIdentity) {
+            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true).also {
+                if (it !== raw) raw.recycle()
+            }
+        } else {
+            raw
+        }
         val out = File(src.parentFile, src.nameWithoutExtension + ".jpg").let { if (it == src) File(src.parentFile, "c-${it.name}") else it }
-        out.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-        bmp.recycle()
+        try {
+            out.outputStream().use { rotated.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        } finally {
+            rotated.recycle()
+        }
         out
     }.getOrNull()
 

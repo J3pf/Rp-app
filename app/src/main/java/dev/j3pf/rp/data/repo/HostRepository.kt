@@ -45,10 +45,14 @@ class HostRepository @Inject constructor(
     fun start() {
         bus.messages.onEach { env ->
             if (env.t == MsgType.HOSTS_UPDATE) {
-                val u = env.body<HostsUpdate>()
+                val u = runCatching { env.body<HostsUpdate>() }.getOrNull() ?: return@onEach
                 _hosts.update { cur -> cur - u.remove.toSet() + u.upsert.associateBy { it.machineId } }
             }
         }.launchIn(scope)
+    }
+
+    fun clear() {
+        _hosts.value = emptyMap()
     }
 
     suspend fun listDirs(machineId: String, path: String): HostResult<HostDirs> =

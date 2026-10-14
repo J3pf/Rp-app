@@ -47,7 +47,6 @@ import dev.j3pf.rp.protocol.obj
 import dev.j3pf.rp.protocol.str
 import dev.j3pf.rp.chat.TerminalWaitInfo
 import dev.j3pf.rp.push.SendMessageWorker
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -90,13 +89,31 @@ class ChatRepository @Inject constructor(
     private val api: RelayApi,
     @AppScope private val scope: CoroutineScope,
 ) {
-    private val sessions = ConcurrentHashMap<String, ChatSession>()
+    private class SessionEntry(val session: ChatSession, var refs: Int = 0)
+
+    private val sessions = HashMap<String, SessionEntry>()
 
     /** Sesión de chat de un agente; la primera llamada la crea y la arranca. */
-    fun open(agentId: String): ChatSession = sessions.getOrPut(agentId) { ChatSession(agentId).also { it.start() } }
+    fun open(agentId: String): ChatSession = synchronized(sessions) {
+        val entry = sessions.getOrPut(agentId) {
+            SessionEntry(ChatSession(agentId).also { it.start() }, 0)
+        }
+        entry.refs++
+        entry.session
+    }
 
     fun release(agentId: String) {
-        sessions.remove(agentId)?.stop()
+        val toStop = synchronized(sessions) {
+            val entry = sessions[agentId] ?: return
+            entry.refs--
+            if (entry.refs <= 0) {
+                sessions.remove(agentId)
+                entry.session
+            } else {
+                null
+            }
+        }
+        toStop?.stop()
     }
 
     inner class ChatSession(val agentId: String) {
@@ -317,6 +334,10 @@ class ChatRepository @Inject constructor(
     }
 
     suspend fun clear() {
+        val all = synchronized(sessions) {
+            sessions.values.map { it.session }.also { sessions.clear() }
+        }
+        all.forEach { it.stop() }
         secrets.current()?.relayId?.let { chatDao.clear(it) }
         outboxDao.clear()
     }

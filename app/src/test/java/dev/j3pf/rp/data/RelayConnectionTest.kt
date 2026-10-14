@@ -18,6 +18,7 @@ import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -192,6 +193,75 @@ class RelayConnectionTest {
             serverSocket.poll(5, TimeUnit.SECONDS)!!.close(1012, "restart") // reinicio del relay: reconexión inmediata
             withTimeout(8000) { while (server.requestCount < 2) kotlinx.coroutines.delay(20) }
             assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test
+    fun `stop cancela peticiones pendientes de inmediato sin esperar timeout`() {
+        runBlocking {
+            acceptSocket()
+            conn.start()
+            withTimeout(5000) { while (!conn.isConnected) kotlinx.coroutines.delay(20) }
+            val reqJob =
+                async {
+                    conn.request(Envelope(t = MsgType.USER_MESSAGE, id = "01STOP"), timeoutMs = 10_000)
+                }
+            kotlinx.coroutines.delay(100)
+            conn.stop()
+            val reply = withTimeout(1000) { reqJob.await() }
+            assertEquals(WsReply.NotConnected, reply)
+        }
+    }
+
+    @Test
+    fun `HostRepository ignora hosts update malformado y limpia con clear`() {
+        runBlocking {
+            val hostRepo = dev.j3pf.rp.data.repo.HostRepository(conn, bus, scope)
+            hostRepo.start()
+            kotlinx.coroutines.delay(50)
+            bus.publish(Envelope(t = MsgType.HOSTS_UPDATE, d = kotlinx.serialization.json.JsonPrimitive("malformed")))
+            bus.publish(
+                Envelope.of(
+                    MsgType.HOSTS_UPDATE,
+                    dev.j3pf.rp.protocol.HostsUpdate(
+                        upsert = listOf(dev.j3pf.rp.protocol.HostInfo(machineId = "M1", roots = listOf("/home"))),
+                    ),
+                ),
+            )
+            withTimeout(2000) { while (hostRepo.hosts.value.isEmpty()) kotlinx.coroutines.delay(20) }
+            assertEquals(listOf("/home"), hostRepo.hosts.value["M1"]?.roots)
+            hostRepo.clear()
+            assertTrue(hostRepo.hosts.value.isEmpty())
+        }
+    }
+
+    @Test
+    fun `ChatRepository cuenta referencias de sesion por agentId`() {
+        runBlocking {
+            val ctx = ApplicationProvider.getApplicationContext<android.app.Application>()
+            val db = dev.j3pf.rp.inMemoryDb(ctx)
+            val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
+            val api = dev.j3pf.rp.data.net.RelayApi(testClient(), secrets)
+            val notifFactory =
+                dev.j3pf.rp.push.NotificationFactory(
+                    ctx,
+                    dev.j3pf.rp.push.NotificationChannels(ctx),
+                    dev.j3pf.rp.data.repo.SettingsRepository(ctx),
+                )
+            val promptsRepo = dev.j3pf.rp.data.repo.PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, notifFactory, scope)
+            val chatRepo = dev.j3pf.rp.data.repo.ChatRepository(ctx, db.chat(), db.outbox(), conn, bus, secrets, promptsRepo, api, scope)
+
+            val s1 = chatRepo.open("m:a")
+            val s2 = chatRepo.open("m:a")
+            assertTrue(s1 === s2)
+            chatRepo.release("m:a")
+            val s3 = chatRepo.open("m:a")
+            assertTrue(s1 === s3)
+            chatRepo.release("m:a")
+            chatRepo.release("m:a")
+            val s4 = chatRepo.open("m:a")
+            assertTrue(s1 !== s4)
+            chatRepo.clear()
         }
     }
 }

@@ -131,4 +131,30 @@ class PromptActionHandlerTest {
             assertEquals(1, infos.size)
         }
     }
+
+    @Test
+    fun `responder agente con 401 conserva el mensaje en outbox y encola reintento`() {
+        runBlocking {
+            val db = inMemoryDb(ctx)
+            val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
+            val localHandler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
+            server.enqueue(MockResponse().setResponseCode(401))
+
+            val replyIntent =
+                Intent(PromptActionReceiver.ACTION_REPLY_AGENT).apply {
+                    putExtra(PromptActionReceiver.EXTRA_AGENT_ID, "m:s")
+                    putExtra(PromptActionReceiver.EXTRA_NOTIF_ID, 42)
+                }
+            val results = android.os.Bundle().apply { putCharSequence(PromptActionReceiver.KEY_TEXT, "hola desde notif") }
+            androidx.core.app.RemoteInput.addResultsToIntent(
+                arrayOf(androidx.core.app.RemoteInput.Builder(PromptActionReceiver.KEY_TEXT).build()),
+                replyIntent,
+                results,
+            )
+
+            localHandler.handle(ctx, replyIntent)
+            val pending = db.outbox().all("r1")
+            assertEquals(1, pending.size)
+        }
+    }
 }

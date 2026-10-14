@@ -72,13 +72,19 @@ fun PromptSheet(
                         busy = status == AnswerUi.Busy,
                         onAnswer = { answer: Answer ->
                             scope.launch {
-                                if (vm.requiresAuth(p) && activity != null) {
+                                if (vm.requiresAuth(p)) {
+                                    if (activity == null) {
+                                        authMessage = "No se pudo verificar tu identidad"
+                                        return@launch
+                                    }
                                     when (vm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))) {
                                         AuthResult.OK -> vm.answer(p.promptId, answer)
                                         AuthResult.FAILED -> authMessage = "Desbloqueo cancelado"
                                         AuthResult.UNAVAILABLE -> authMessage = "Configura un bloqueo de pantalla para aprobar"
                                     }
-                                } else vm.answer(p.promptId, answer)
+                                } else {
+                                    vm.answer(p.promptId, answer)
+                                }
                             }
                         },
                     )

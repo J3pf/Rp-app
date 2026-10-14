@@ -68,7 +68,7 @@ fun PromptContent(
         PromptHeader(prompt)
         when {
             prompt.kind == PromptKind.QUESTIONNAIRE && !prompt.questions.isNullOrEmpty() ->
-                QuestionnaireBody(prompt.questions!!, busy, onAnswer)
+                QuestionnaireBody(prompt.promptId, prompt.questions!!, busy, onAnswer)
             prompt.category == PromptCategory.PERMISSION -> PermissionBody(prompt, busy, onAnswer)
             prompt.kind == PromptKind.CONFIRM && prompt.options.isEmpty() -> ConfirmBody(busy, onAnswer)
             prompt.kind == PromptKind.INPUT -> InputBody(prompt.placeholder, busy, onAnswer)
@@ -126,9 +126,9 @@ private fun PermissionBody(p: Prompt, busy: Boolean, onAnswer: (Answer) -> Unit)
     val always = opts.firstOrNull { isAlways(it) }
     val deny = opts.lastOrNull { isDeny(it) } ?: opts.takeIf { it.size > 1 }?.last()
 
-    fun allowAnswer() = if (opts.isEmpty()) Answer.confirm(true) else Answer.option(allow!!.id)
+    fun allowAnswer() = if (allow == null) Answer.confirm(true) else Answer.option(allow.id)
     fun denyAnswer(text: String? = null) =
-        if (opts.isEmpty()) Answer(confirmed = false, text = text) else Answer(optionIds = listOf(deny!!.id), text = text)
+        if (deny == null) Answer(confirmed = false, text = text) else Answer(optionIds = listOf(deny.id), text = text)
 
     if (reasonMode) {
         OutlinedTextField(
@@ -220,19 +220,26 @@ private fun SelectBody(p: Prompt, busy: Boolean, onAnswer: (Answer) -> Unit) {
 // ───────────────────────────── Cuestionario (ask_user_question) ─────────────────────────────
 
 @Composable
-private fun QuestionnaireBody(questions: List<QuestionDef>, busy: Boolean, onAnswer: (Answer) -> Unit) {
-    var page by rememberSaveable { mutableStateOf(0) }
-    val selected = remember { mutableStateMapOf<Int, List<String>>() }
-    val texts = remember { mutableStateMapOf<Int, String>() }
-    var focused by remember { mutableStateOf<PromptOption?>(null) }
+private fun QuestionnaireBody(
+    promptId: String,
+    questions: List<QuestionDef>,
+    busy: Boolean,
+    onAnswer: (Answer) -> Unit,
+) {
+    if (questions.isEmpty()) return
+    var page by rememberSaveable(promptId, questions.size) { mutableStateOf(0) }
+    val selected = remember(promptId, questions) { mutableStateMapOf<Int, List<String>>() }
+    val texts = remember(promptId, questions) { mutableStateMapOf<Int, String>() }
+    var focused by remember(promptId, questions) { mutableStateOf<PromptOption?>(null) }
 
-    val q = questions[page]
-    val sel = selected[page].orEmpty()
-    val answered = sel.isNotEmpty() || !texts[page].isNullOrBlank()
+    val safePage = page.coerceIn(0, questions.lastIndex)
+    val q = questions[safePage]
+    val sel = selected[safePage].orEmpty()
+    val answered = sel.isNotEmpty() || !texts[safePage].isNullOrBlank()
 
-    LinearProgressIndicator(progress = { (page + 1f) / questions.size }, modifier = Modifier.fillMaxWidth())
+    LinearProgressIndicator(progress = { (safePage + 1f) / questions.size }, modifier = Modifier.fillMaxWidth())
     Text(
-        "Pregunta ${page + 1} de ${questions.size}" + (q.header?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+        "Pregunta ${safePage + 1} de ${questions.size}" + (q.header?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.primary,
     )
@@ -243,7 +250,7 @@ private fun QuestionnaireBody(questions: List<QuestionDef>, busy: Boolean, onAns
         Card(
             onClick = {
                 focused = o
-                selected[page] = when {
+                selected[safePage] = when {
                     q.multiSelect -> if (checked) sel - o.id else sel + o.id
                     else -> listOf(o.id)
                 }
@@ -273,18 +280,18 @@ private fun QuestionnaireBody(questions: List<QuestionDef>, busy: Boolean, onAns
     }
     if (q.allowFreeText) {
         OutlinedTextField(
-            texts[page].orEmpty(), { texts[page] = it }, Modifier.fillMaxWidth(),
+            texts[safePage].orEmpty(), { texts[safePage] = it }, Modifier.fillMaxWidth(),
             label = { Text("Otra respuesta") }, enabled = !busy,
         )
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         OutlinedButton(
-            onClick = { if (page > 0) { page--; focused = null } else onAnswer(Answer.Cancelled) },
+            onClick = { if (safePage > 0) { page = safePage - 1; focused = null } else onAnswer(Answer.Cancelled) },
             enabled = !busy,
-        ) { Text(if (page > 0) "Atrás" else "Omitir") }
-        if (page < questions.size - 1) {
-            Button(onClick = { page++; focused = null }, enabled = !busy && answered) { Text("Siguiente") }
+        ) { Text(if (safePage > 0) "Atrás" else "Omitir") }
+        if (safePage < questions.size - 1) {
+            Button(onClick = { page = safePage + 1; focused = null }, enabled = !busy && answered) { Text("Siguiente") }
         } else {
             Button(
                 onClick = {

@@ -85,13 +85,19 @@ class RelayApi @Inject constructor(
     // ───────────────────────────── Emparejamiento ─────────────────────────────
 
     suspend fun healthz(baseUrl: String): ApiResult<HealthResponse> =
-        call(Request.Builder().url(url(baseUrl, "/healthz")).get().build(), HealthResponse.serializer())
+        runCatching { Request.Builder().url(url(baseUrl, "/healthz")).get().build() }
+            .fold(
+                onSuccess = { call(it, HealthResponse.serializer()) },
+                onFailure = { ApiResult.Network(it) },
+            )
 
     suspend fun pairDevice(baseUrl: String, code: String, name: String, fcmToken: String?): ApiResult<PairDeviceResponse> =
-        call(
+        runCatching {
             Request.Builder().url(url(baseUrl, "/v1/pair/device"))
-                .post(encode(PairDeviceRequest.serializer(), PairDeviceRequest(code, name, fcmToken))).build(),
-            PairDeviceResponse.serializer(),
+                .post(encode(PairDeviceRequest.serializer(), PairDeviceRequest(code, name, fcmToken))).build()
+        }.fold(
+            onSuccess = { call(it, PairDeviceResponse.serializer()) },
+            onFailure = { ApiResult.Network(it) },
         )
 
     // ───────────────────────────── Dispositivo / push ─────────────────────────────
@@ -176,10 +182,12 @@ class RelayApi @Inject constructor(
         http: OkHttpClient = client,
     ): ApiResult<T> {
         val s = secrets.current() ?: return ApiResult.Http(401, "sin sesión")
-        val req = Request.Builder().url(url(s.relayUrl, path))
-            .header("Authorization", "Bearer ${s.deviceToken}")
-            .method(method, body ?: if (method == "GET" || method == "DELETE") null else emptyBody())
-            .build()
+        val req = runCatching {
+            Request.Builder().url(url(s.relayUrl, path))
+                .header("Authorization", "Bearer ${s.deviceToken}")
+                .method(method, body ?: if (method == "GET" || method == "DELETE") null else emptyBody())
+                .build()
+        }.getOrElse { return ApiResult.Network(it) }
         return call(req, serializer, http)
     }
 

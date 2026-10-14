@@ -182,7 +182,7 @@ class PromptActionHandler
                 }
 
                 is ApiResult.Http -> {
-                    if (r.code in 400..499 && r.code != 429) {
+                    if (r.code in 400..499 && r.code != 429 && r.code != 401 && r.code != 403) {
                         outboxDao.delete(msg.clientMsgId)
                         factory.cancelNotification(NotificationFactory.SETTLED_TAG, notifId)
                     } else {

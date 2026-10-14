@@ -26,7 +26,12 @@ class SessionRepositoryTest {
         assertEquals("https://relay.example.com", SessionRepository.normalizeUrl(" relay.example.com/ "))
         assertEquals("https://relay.example.com:8443", SessionRepository.normalizeUrl("https://relay.example.com:8443/"))
         assertEquals("http://10.0.2.2:8080", SessionRepository.normalizeUrl("http://10.0.2.2:8080"))
+        assertEquals("http://127.0.0.1:8080", SessionRepository.normalizeUrl("http://127.0.0.1:8080/"))
         assertNull(SessionRepository.normalizeUrl("http://evil.example.com"))
+        assertNull(SessionRepository.normalizeUrl("http://localhost.evil.example.com"))
+        assertNull(SessionRepository.normalizeUrl("http://10.0.2.2.evil.example.com"))
+        assertNull(SessionRepository.normalizeUrl("https://user:pass@relay.example.com"))
+        assertNull(SessionRepository.normalizeUrl("https://..."))
         assertNull(SessionRepository.normalizeUrl(""))
     }
 }

@@ -171,6 +171,9 @@ abstract class DedupDao {
     @Query("DELETE FROM notification_dedup WHERE `key` = :key")
     abstract suspend fun remove(key: String)
 
+    @Query("DELETE FROM notification_dedup")
+    abstract suspend fun clear()
+
     @Transaction
     open suspend fun firstSeen(key: String, now: Long): Boolean {
         purge(now - 24 * 3600 * 1000L)

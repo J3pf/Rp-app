@@ -90,6 +90,17 @@ class ChatReducerTest {
     }
 
     @Test
+    fun `contentIndex negativo o excesivo en message_delta se ignora`() {
+        var s = ChatReducer.reduce(ChatState(), ev(1, """{"type":"message_delta","contentIndex":-1,"kind":"text","delta":"mal"}"""))
+        assertNull(s.streaming)
+        s = ChatReducer.reduce(s, ev(2, """{"type":"message_delta","contentIndex":100000,"kind":"text","delta":"mal"}"""))
+        assertNull(s.streaming)
+        s = ChatReducer.reduce(s, ev(3, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"ok"}"""))
+        assertEquals(1, s.streaming!!.blocks.size)
+        assertEquals(Block.Text("ok"), s.streaming!!.blocks[0])
+    }
+
+    @Test
     fun `toolcall parcial se completa`() {
         var s =
             ChatReducer.reduce(

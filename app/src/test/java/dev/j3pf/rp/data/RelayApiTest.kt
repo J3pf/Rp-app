@@ -108,4 +108,12 @@ class RelayApiTest {
             assertTrue((r as ApiResult.Ok).value.ok)
         }
     }
+
+    @Test
+    fun `url mal formada devuelve ApiResult Network en lugar de lanzar excepcion`() {
+        runBlocking {
+            assertIs<ApiResult.Network>(api.healthz("not a valid url"))
+            assertIs<ApiResult.Network>(api.pairDevice("http://[::1]:bad", "ABCD2345", "Pixel", null))
+        }
+    }
 }

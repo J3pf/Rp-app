@@ -146,6 +146,15 @@ class ComposeUiTest {
     }
 
     @Test
+    fun `permiso con una sola opcion no falla al pulsar Denegar`() {
+        val singleOptPermission = permission.copy(options = listOf(PromptOption("0", "Permitir")))
+        val answers = mutableListOf<Answer>()
+        rule.setContent { RpTheme { PromptContent(singleOptPermission, busy = false, onAnswer = { answers += it }) } }
+        rule.onNodeWithText("Denegar").performClick()
+        assertEquals(listOf(Answer(confirmed = false, text = null)), answers)
+    }
+
+    @Test
     fun `cuestionario recorre las paginas y envia al final`() {
         val prompt =
             Prompt(

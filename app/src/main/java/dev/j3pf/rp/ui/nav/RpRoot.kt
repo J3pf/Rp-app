@@ -107,9 +107,12 @@ fun RpRoot(mainVm: MainViewModel, gate: BiometricGate, badgeVm: BadgeViewModel =
         val t = target ?: return@LaunchedEffect
         when (t) {
             is NavTarget.Pair -> { nav.navigate(PairRoute(t.url, t.code)); mainVm.consumeTarget() }
-            is NavTarget.Agent -> if (session != null) { nav.navigate(ChatRoute(t.agentId)); mainVm.consumeTarget() }
+            is NavTarget.Agent -> if (session != null) {
+                nav.navigate(ChatRoute(t.agentId)) { launchSingleTop = true }
+                mainVm.consumeTarget()
+            }
             is NavTarget.Prompt -> if (session != null) {
-                t.agentId?.let { nav.navigate(ChatRoute(it)) }
+                t.agentId?.let { nav.navigate(ChatRoute(it)) { launchSingleTop = true } }
                 mainVm.openPrompt(t.promptId)
                 mainVm.consumeTarget()
             }

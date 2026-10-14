@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.j3pf.rp.data.db.DedupDao
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
@@ -14,6 +15,7 @@ import dev.j3pf.rp.push.NotificationChannels
 import dev.j3pf.rp.push.PushTokenProvider
 import javax.inject.Inject
 import javax.inject.Singleton
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 sealed interface PairResult {
     data object Success : PairResult
@@ -32,6 +34,8 @@ class SessionRepository @Inject constructor(
     private val agents: AgentsRepository,
     private val chat: ChatRepository,
     private val prompts: PromptsRepository,
+    private val hosts: HostRepository,
+    private val dedup: DedupDao,
     private val tokens: PushTokenProvider,
     private val channels: NotificationChannels,
 ) {
@@ -62,6 +66,13 @@ class SessionRepository @Inject constructor(
                 },
             )
             is ApiResult.Network -> return PairResult.Failure("Error de red: ${res.error.message}")
+        }
+
+        if (secrets.current() != null) {
+            connection.stop()
+            WorkManager.getInstance(context).cancelAllWork()
+            clearLocalSessionData()
+            channels.removeAll()
         }
 
         secrets.save(
@@ -104,10 +115,19 @@ class SessionRepository @Inject constructor(
         DirectPushService.stop(context)
         connection.stop()
         WorkManager.getInstance(context).cancelAllWork()
-        machines.clear(); agents.clear(); chat.clear(); prompts.clear()
+        clearLocalSessionData()
         channels.removeAll()
         secrets.clear()
         settings.wipe()
+    }
+
+    private suspend fun clearLocalSessionData() {
+        machines.clear()
+        agents.clear()
+        chat.clear()
+        prompts.clear()
+        hosts.clear()
+        dedup.clear()
     }
 
     companion object {
@@ -116,8 +136,18 @@ class SessionRepository @Inject constructor(
             var u = raw.trim().trimEnd('/')
             if (u.isEmpty()) return null
             if (!u.contains("://")) u = "https://$u"
-            val ok = u.startsWith("https://") || u.startsWith("http://10.0.2.2") || u.startsWith("http://localhost")
-            return if (ok && u.length > 10) u else null
+            val parsed = u.toHttpUrlOrNull() ?: return null
+            if (parsed.username.isNotEmpty() || parsed.password.isNotEmpty() || parsed.query != null || parsed.fragment != null) {
+                return null
+            }
+            val host = parsed.host.lowercase()
+            if (host.isBlank() || host.startsWith(".") || host.endsWith(".")) return null
+            val ok = when (parsed.scheme.lowercase()) {
+                "https" -> true
+                "http" -> host == "localhost" || host == "10.0.2.2" || host == "127.0.0.1"
+                else -> false
+            }
+            return if (ok) parsed.toString().trimEnd('/') else null
         }
 
         /** Extrae (url, code) de un `rp://pair?u=…&c=…`. */
