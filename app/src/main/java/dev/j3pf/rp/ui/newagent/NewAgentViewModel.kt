@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -78,15 +79,39 @@ class NewAgentViewModel @Inject constructor(
         NewAgentUi(ms.filter { it.hostOnline }, f.machineId?.let(hs::get), f)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NewAgentUi())
 
+    init {
+        combine(machines.machines, hosts.hosts) { ms, hs ->
+            val online = ms.filter { it.hostOnline }
+            val curId = form.value.machineId
+            if (curId == null && online.isNotEmpty()) {
+                pickMachine(online.first().machineId)
+            } else if (curId != null && form.value.path.isEmpty()) {
+                val h = hs[curId]
+                if (h != null && h.roots.isNotEmpty()) {
+                    val root = h.roots.first()
+                    form.update {
+                        it.copy(
+                            path = root,
+                            launcher = it.launcher ?: h.defaultLauncher ?: h.launchers.firstOrNull(),
+                            backend = it.backend ?: h.defaultBackend,
+                        )
+                    }
+                    loadDirs(root)
+                }
+            }
+        }.launchIn(viewModelScope)
+    }
+
     fun pickMachine(id: String) {
         val host = hosts.hosts.value[id]
+        val initialPath = host?.roots?.firstOrNull().orEmpty()
         form.value = NewAgentForm(
             machineId = id,
-            path = host?.roots?.firstOrNull().orEmpty(),
+            path = initialPath,
             launcher = host?.defaultLauncher ?: host?.launchers?.firstOrNull(),
             backend = host?.defaultBackend,
         )
-        if (!form.value.path.isEmpty()) loadDirs(form.value.path)
+        loadDirs(initialPath)
         if (host?.backends?.herdr != null) loadLayout()
     }
 
@@ -99,18 +124,20 @@ class NewAgentViewModel @Inject constructor(
     }
 
     fun up() {
-        val host = state.value.host ?: return
         val cur = form.value.path
-        if (host.roots.any { it.trimEnd('/', '\\') == cur.trimEnd('/', '\\') }) return
+        val host = state.value.host
+        if (host != null && host.roots.any { it.trimEnd('/', '\\') == cur.trimEnd('/', '\\') }) {
+            openDir("")
+            return
+        }
         val idx = maxOf(cur.trimEnd('/', '\\').lastIndexOf('/'), cur.trimEnd('/', '\\').lastIndexOf('\\'))
-        if (idx > 0) openDir(cur.substring(0, idx))
+        if (idx > 0) openDir(cur.substring(0, idx)) else openDir("")
     }
 
     val canGoUp: Boolean
         get() {
-            val host = state.value.host ?: return false
             val cur = form.value.path.trimEnd('/', '\\')
-            return cur.isNotEmpty() && host.roots.none { it.trimEnd('/', '\\') == cur }
+            return cur.isNotEmpty()
         }
 
     private fun loadDirs(path: String) {
