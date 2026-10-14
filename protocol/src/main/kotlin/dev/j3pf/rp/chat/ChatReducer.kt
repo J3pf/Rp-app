@@ -59,8 +59,8 @@ object ChatReducer {
             s = applyEntries(s, h.entries, h.epoch)
             s = s.copy(lastSeq = if (epochChanged) 0 else s.lastSeq)
         }
-        h.liveFromSeq?.let { live -> if (live - 1 > s.lastSeq) s = s.copy(lastSeq = live - 1) }
         for (ev in h.events.sortedBy { it.seq }) s = reduce(s, ev.copy(epoch = ev.epoch ?: h.epoch), now)
+        h.liveFromSeq?.let { live -> if (live - 1 > s.lastSeq) s = s.copy(lastSeq = live - 1) }
         return s.copy(needsResync = false)
     }
 

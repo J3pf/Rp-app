@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,8 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -44,6 +45,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -92,14 +94,33 @@ fun ChatScreen(
     var busyPrompt by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(ui.message) {
-        ui.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
+        ui.message?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeMessage()
+        }
     }
     LaunchedEffect(promptStatus) {
         when (promptStatus) {
-            AnswerUi.AlreadyResolved -> { snackbar.showSnackbar("Ya respondido en otro lugar"); promptVm.reset(); busyPrompt = null }
-            AnswerUi.Done, is AnswerUi.Queued -> { promptVm.reset(); busyPrompt = null }
-            is AnswerUi.Error -> { snackbar.showSnackbar((promptStatus as AnswerUi.Error).message); promptVm.reset(); busyPrompt = null }
-            else -> Unit
+            AnswerUi.AlreadyResolved -> {
+                snackbar.showSnackbar("Ya respondido en otro lugar")
+                promptVm.reset()
+                busyPrompt = null
+            }
+
+            AnswerUi.Done, is AnswerUi.Queued -> {
+                promptVm.reset()
+                busyPrompt = null
+            }
+
+            is AnswerUi.Error -> {
+                snackbar.showSnackbar((promptStatus as AnswerUi.Error).message)
+                promptVm.reset()
+                busyPrompt = null
+            }
+
+            else -> {
+                Unit
+            }
         }
     }
 
@@ -113,7 +134,9 @@ fun ChatScreen(
                     Column {
                         Text(
                             agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: ui.chat.sessionName ?: "Agente",
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium,
                         )
                         if (agent != null) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -133,13 +156,22 @@ fun ChatScreen(
                     var menu by remember { mutableStateOf(false) }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
                     DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(text = { Text("Información") }, onClick = { menu = false; showInfo = true })
+                        DropdownMenuItem(text = { Text("Información") }, onClick = {
+                            menu = false
+                            showInfo = true
+                        })
                         DropdownMenuItem(
                             text = { Text(if (ui.muted) "Activar notificaciones del agente" else "Silenciar notificaciones del agente") },
-                            onClick = { menu = false; vm.toggleMute() },
+                            onClick = {
+                                menu = false
+                                vm.toggleMute()
+                            },
                         )
                         if (agent != null && !agent.online) {
-                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = { menu = false; vm.forget(onBack) })
+                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
+                                menu = false
+                                vm.forget(onBack)
+                            })
                         }
                     }
                 },
@@ -175,24 +207,38 @@ fun ChatScreen(
                 }
             }
 
-            MessageList(
-                ui = ui,
+            PullToRefreshBox(
+                isRefreshing = ui.refreshing,
+                onRefresh = vm::refresh,
                 modifier = Modifier.weight(1f),
-                busyPromptId = busyPrompt,
-                onAnswerPrompt = { p, answer ->
-                    scope.launch {
-                        if (promptVm.requiresAuth(p) && activity != null) {
-                            val r = promptVm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))
-                            if (r != AuthResult.OK) {
-                                snackbar.showSnackbar(if (r == AuthResult.UNAVAILABLE) "Configura un bloqueo de pantalla para aprobar" else "Desbloqueo cancelado")
-                                return@launch
+            ) {
+                MessageList(
+                    ui = ui,
+                    modifier = Modifier.fillMaxSize(),
+                    busyPromptId = busyPrompt,
+                    onAnswerPrompt = { p, answer ->
+                        scope.launch {
+                            if (promptVm.requiresAuth(p) && activity != null) {
+                                val r = promptVm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))
+                                if (r != AuthResult.OK) {
+                                    snackbar.showSnackbar(
+                                        if (r ==
+                                            AuthResult.UNAVAILABLE
+                                        ) {
+                                            "Configura un bloqueo de pantalla para aprobar"
+                                        } else {
+                                            "Desbloqueo cancelado"
+                                        },
+                                    )
+                                    return@launch
+                                }
                             }
+                            busyPrompt = p.promptId
+                            promptVm.answer(p.promptId, answer)
                         }
-                        busyPrompt = p.promptId
-                        promptVm.answer(p.promptId, answer)
-                    }
-                },
-            )
+                    },
+                )
+            }
 
             Composer(
                 ui = ui,
@@ -210,9 +256,19 @@ fun ChatScreen(
                         if (vm.needsAuth()) {
                             if (activity == null) return@launch
                             when (vm.gate.authenticate(activity, "Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
-                                AuthResult.OK -> Unit
-                                AuthResult.UNAVAILABLE -> { snackbar.showSnackbar("Configura un bloqueo de pantalla para enviar como tecleado"); return@launch }
-                                AuthResult.FAILED -> { snackbar.showSnackbar("Desbloqueo cancelado"); return@launch }
+                                AuthResult.OK -> {
+                                    Unit
+                                }
+
+                                AuthResult.UNAVAILABLE -> {
+                                    snackbar.showSnackbar("Configura un bloqueo de pantalla para enviar como tecleado")
+                                    return@launch
+                                }
+
+                                AuthResult.FAILED -> {
+                                    snackbar.showSnackbar("Desbloqueo cancelado")
+                                    return@launch
+                                }
                             }
                         }
                         vm.send(text) { text = "" }
@@ -234,9 +290,14 @@ private fun MessageList(
 ) {
     val listState = rememberLazyListState()
     val items = ui.chat.display
-    val streamLen = ui.chat.streaming?.blocks?.sumOf { b ->
-        when (b) { is Block.Text -> b.text.length; is Block.Thinking -> b.text.length; is Block.ToolCall -> b.rawArgs.length }
-    } ?: 0
+    val streamLen =
+        ui.chat.streaming?.blocks?.sumOf { b ->
+            when (b) {
+                is Block.Text -> b.text.length
+                is Block.Thinking -> b.text.length
+                is Block.ToolCall -> b.rawArgs.length
+            }
+        } ?: 0
     val nearBottom by remember {
         derivedStateOf {
             val info = listState.layoutInfo
@@ -247,11 +308,19 @@ private fun MessageList(
     var first by remember { mutableStateOf(true) }
     LaunchedEffect(items.size, streamLen, ui.chat.tools.size) {
         if (items.isEmpty()) return@LaunchedEffect
-        if (first) { listState.scrollToItem(items.lastIndex); first = false }
-        else if (nearBottom) listState.animateScrollToItem(items.lastIndex)
+        if (first) {
+            listState.scrollToItem(items.lastIndex)
+            first = false
+        } else if (nearBottom) {
+            listState.animateScrollToItem(items.lastIndex)
+        }
     }
     if (items.isEmpty()) {
-        Column(modifier.fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Text("Sin mensajes todavía", style = MaterialTheme.typography.titleMedium)
             Text("Escribe abajo para hablar con este agente.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -260,7 +329,9 @@ private fun MessageList(
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        contentPadding =
+            androidx.compose.foundation.layout
+                .PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(items, key = { it.key }) { item -> ChatItemView(item, ui.chat, busyPromptId, onAnswerPrompt) }
@@ -288,49 +359,75 @@ internal fun Composer(
 
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { onPicked(it) }
     val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { onPicked(it) }
-    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        if (ok) cameraTarget?.let { onPicked(listOf(it)) }
-    }
+    val takePicture =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+            if (ok) cameraTarget?.let { onPicked(listOf(it)) }
+        }
     // La app declara CAMERA (escáner QR): sin el permiso concedido, ACTION_IMAGE_CAPTURE lanza SecurityException.
-    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) newCameraTarget().also { cameraTarget = it }.let { takePicture.launch(it) }
-    }
+    val cameraPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) newCameraTarget().also { cameraTarget = it }.let { takePicture.launch(it) }
+        }
 
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (ui.attachments.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ui.attachments.forEach { a -> AttachmentChip(a, onRemove = { onRemoveAttachment(a.id) }, onRetry = { onRetryAttachment(a.id) }) }
+                    ui.attachments.forEach { a ->
+                        AttachmentChip(a, onRemove = { onRemoveAttachment(a.id) }, onRetry = { onRetryAttachment(a.id) })
+                    }
                 }
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column {
                     AssistChip(onClick = { choiceMenu = true }, label = { Text("Entrega: ${ui.choice.label}") })
                     DropdownMenu(choiceMenu, { choiceMenu = false }) {
                         DeliveryChoice.entries.forEach { c ->
                             val enabled = c != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
                             DropdownMenuItem(
-                                text = { Text(c.label) }, enabled = enabled,
-                                onClick = { choiceMenu = false; onChoice(c) },
+                                text = { Text(c.label) },
+                                enabled = enabled,
+                                onClick = {
+                                    choiceMenu = false
+                                    onChoice(c)
+                                },
                             )
                         }
                     }
                 }
                 if (working) {
-                    FilterChip(ui.workingDelivery == Delivery.FOLLOW_UP, { onWorkingDelivery(Delivery.FOLLOW_UP) }, label = { Text("Encolar (follow‑up)") })
-                    FilterChip(ui.workingDelivery == Delivery.STEER, { onWorkingDelivery(Delivery.STEER) }, label = { Text("Interrumpir y dirigir (steer)") })
+                    FilterChip(
+                        ui.workingDelivery == Delivery.FOLLOW_UP,
+                        { onWorkingDelivery(Delivery.FOLLOW_UP) },
+                        label = { Text("Encolar (follow‑up)") },
+                    )
+                    FilterChip(
+                        ui.workingDelivery == Delivery.STEER,
+                        { onWorkingDelivery(Delivery.STEER) },
+                        label = { Text("Interrumpir y dirigir (steer)") },
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.Bottom) {
                 Column {
                     IconButton(onClick = { attachMenu = true }) { Icon(Icons.Filled.AttachFile, "Adjuntar") }
                     DropdownMenu(attachMenu, { attachMenu = false }) {
-                        DropdownMenuItem(text = { Text("Archivo") }, onClick = { attachMenu = false; files.launch(arrayOf("*/*")) })
+                        DropdownMenuItem(text = { Text("Archivo") }, onClick = {
+                            attachMenu = false
+                            files.launch(arrayOf("*/*"))
+                        })
                         DropdownMenuItem(text = { Text("Foto de la galería") }, onClick = {
                             attachMenu = false
                             photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         })
-                        DropdownMenuItem(text = { Text("Cámara") }, onClick = { attachMenu = false; cameraPermission.launch(Manifest.permission.CAMERA) })
+                        DropdownMenuItem(text = { Text("Cámara") }, onClick = {
+                            attachMenu = false
+                            cameraPermission.launch(Manifest.permission.CAMERA)
+                        })
                     }
                 }
                 OutlinedTextField(
@@ -350,32 +447,52 @@ internal fun Composer(
 }
 
 @Composable
-private fun AttachmentChip(a: AttachmentUi, onRemove: () -> Unit, onRetry: () -> Unit) {
+private fun AttachmentChip(
+    a: AttachmentUi,
+    onRemove: () -> Unit,
+    onRetry: () -> Unit,
+) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     (if (a.isImage) "🖼 " else "📄 ") + a.name + if (a.size > 0) " · ${humanSize(a.size)}" else "",
-                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(end = 4.dp),
                 )
                 IconButton(onClick = onRemove, modifier = Modifier.size(20.dp)) { Icon(Icons.Filled.Close, "Quitar", Modifier.size(14.dp)) }
             }
             when (a.state) {
-                UploadState.UPLOADING -> LinearProgressIndicator(progress = { a.progress }, modifier = Modifier.fillMaxWidth())
-                UploadState.PREPARING -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                UploadState.ERROR -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(a.error ?: "Error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                    TextButton(onClick = onRetry) { Text("Reintentar") }
+                UploadState.UPLOADING -> {
+                    LinearProgressIndicator(progress = { a.progress }, modifier = Modifier.fillMaxWidth())
                 }
-                else -> Unit
+
+                UploadState.PREPARING -> {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+
+                UploadState.ERROR -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(a.error ?: "Error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                        TextButton(onClick = onRetry) { Text("Reintentar") }
+                    }
+                }
+
+                else -> {
+                    Unit
+                }
             }
         }
     }
 }
 
 @Composable
-private fun InfoDialog(a: AgentSummary, onDismiss: () -> Unit) {
+private fun InfoDialog(
+    a: AgentSummary,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },

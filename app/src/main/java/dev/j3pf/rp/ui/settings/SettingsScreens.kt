@@ -62,6 +62,7 @@ import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.SectionTitle
+import dev.j3pf.rp.ui.theme.RpThemeChoice
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.contextLabel
@@ -77,6 +78,7 @@ fun SettingsScreen(
 ) {
     val st by vm.state.collectAsStateWithLifecycle()
     var confirmLogout by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
     LifecycleRefresh { vm.refreshHealth() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -102,9 +104,12 @@ fun SettingsScreen(
         NavRow("PCs / máquinas", "Nombre, contexto, color; revocar") { nav(SettingsDest.Machines) }
         NavRow("Añadir máquina", "Genera un código para `/rp pair`") { nav(SettingsDest.AddMachine) }
         SectionTitle("Preferencias")
+        NavRow("Tema de la app", themeLabel(st.settings.appTheme)) { showThemeDialog = true }
         NavRow("Notificaciones", healthSummary(st.health)) { nav(SettingsDest.Notifications) }
         NavRow("Seguridad", "Desbloqueo para aprobar, bloqueo de la app") { nav(SettingsDest.Security) }
-        NavRow("Optimización de batería", if (st.health.batteryExcluded) "RP está excluida ✓" else "Recomendado excluir RP") { nav(SettingsDest.Battery) }
+        NavRow("Optimización de batería", if (st.health.batteryExcluded) "RP está excluida ✓" else "Recomendado excluir RP") {
+            nav(SettingsDest.Battery)
+        }
         SectionTitle("Acerca de")
         NavRow("Versión ${BuildConfig.VERSION_NAME}", "Licencias de código abierto") { nav(SettingsDest.About) }
         HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -117,22 +122,60 @@ fun SettingsScreen(
             onDismissRequest = { confirmLogout = false },
             title = { Text("Cerrar sesión") },
             text = { Text("Se revocará este dispositivo y se borrarán las credenciales y el historial local.") },
-            confirmButton = { TextButton(onClick = { confirmLogout = false; vm.logout(onLoggedOut) }) { Text("Cerrar sesión") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLogout = false
+                    vm.logout(onLoggedOut)
+                }) { Text("Cerrar sesión") }
+            },
             dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Cancelar") } },
+        )
+    }
+    if (showThemeDialog) {
+        AlertDialog(
+            onDismissRequest = { showThemeDialog = false },
+            title = { Text("Tema de la app") },
+            text = {
+                Column {
+                    RpThemeChoice.entries.forEach { choice ->
+                        ListItem(
+                            headlineContent = { Text(choice.label) },
+                            trailingContent = {
+                                if (st.settings.appTheme == choice.id) Text("✓", color = MaterialTheme.colorScheme.primary)
+                            },
+                            modifier =
+                                Modifier.clickable {
+                                    vm.setAppTheme(choice.id)
+                                    showThemeDialog = false
+                                },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemeDialog = false }) { Text("Cerrar") }
+            },
         )
     }
 }
 
+private fun themeLabel(id: String): String = RpThemeChoice.entries.find { it.id == id }?.label ?: "Sincronizado con Pi (automático)"
+
 enum class SettingsDest { Devices, Machines, AddMachine, Notifications, Security, Battery, About }
 
-private fun healthSummary(h: HealthState): String = when {
-    !h.notificationsEnabled -> "⚠ Notificaciones desactivadas"
-    h.approvalsMuted -> "⚠ Canal de autorizaciones silenciado"
-    else -> "Categorías, PCs, horas silenciosas, prueba"
-}
+private fun healthSummary(h: HealthState): String =
+    when {
+        !h.notificationsEnabled -> "⚠ Notificaciones desactivadas"
+        h.approvalsMuted -> "⚠ Canal de autorizaciones silenciado"
+        else -> "Categorías, PCs, horas silenciosas, prueba"
+    }
 
 @Composable
-private fun NavRow(title: String, subtitle: String, onClick: () -> Unit) {
+private fun NavRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle) },
@@ -153,10 +196,20 @@ private fun LifecycleRefresh(onResume: () -> Unit) {
 /** Plantilla de subpantalla con barra superior y snackbar de mensajes del ViewModel. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SubScreen(title: String, onBack: () -> Unit, vm: SettingsViewModel, content: @Composable () -> Unit) {
+private fun SubScreen(
+    title: String,
+    onBack: () -> Unit,
+    vm: SettingsViewModel,
+    content: @Composable () -> Unit,
+) {
     val snackbar = remember { SnackbarHostState() }
     val msg by vm.message.collectAsStateWithLifecycle()
-    LaunchedEffect(msg) { msg?.let { snackbar.showSnackbar(it); vm.consumeMessage() } }
+    LaunchedEffect(msg) {
+        msg?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeMessage()
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -173,7 +226,10 @@ private fun SubScreen(title: String, onBack: () -> Unit, vm: SettingsViewModel, 
 // ───────────────────────────── Dispositivos ─────────────────────────────
 
 @Composable
-fun DevicesScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun DevicesScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val devices by vm.devices.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.loadDevices() }
     var toRevoke by remember { mutableStateOf<String?>(null) }
@@ -192,7 +248,12 @@ fun DevicesScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
             onDismissRequest = { toRevoke = null },
             title = { Text("Revocar dispositivo") },
             text = { Text("Dejará de recibir notificaciones y de poder conectarse.") },
-            confirmButton = { TextButton(onClick = { vm.revokeDevice(id); toRevoke = null }) { Text("Revocar") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.revokeDevice(id)
+                    toRevoke = null
+                }) { Text("Revocar") }
+            },
             dismissButton = { TextButton(onClick = { toRevoke = null }) { Text("Cancelar") } },
         )
     }
@@ -203,7 +264,10 @@ fun DevicesScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
 private val PALETTE = listOf("#2E7D32", "#1565C0", "#6A1B9A", "#C62828", "#EF6C00", "#00838F", "#4E342E", "#455A64")
 
 @Composable
-fun MachinesScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun MachinesScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val st by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.refreshMachines() }
     var edit by remember { mutableStateOf<MachineSummary?>(null) }
@@ -214,7 +278,11 @@ fun MachinesScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
             ListItem(
                 leadingContent = { ColorDot(parseColor(m.color), 14) },
                 headlineContent = { Text("${contextEmoji(m.context)} ${m.name}") },
-                supportingContent = { Text("${contextLabel(m.context)} · ${if (m.online) "en línea" else "sin conexión"} · ${m.agentCount} agentes") },
+                supportingContent = {
+                    Text(
+                        "${contextLabel(m.context)} · ${if (m.online) "en línea" else "sin conexión"} · ${m.agentCount} agentes",
+                    )
+                },
                 trailingContent = {
                     Row {
                         TextButton(onClick = { edit = m }) { Text("Editar") }
@@ -224,20 +292,34 @@ fun MachinesScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
             )
         }
     }
-    edit?.let { m -> EditMachineDialog(m, onDismiss = { edit = null }) { n, c, col -> vm.editMachine(m.machineId, n, c, col); edit = null } }
+    edit?.let { m ->
+        EditMachineDialog(m, onDismiss = { edit = null }) { n, c, col ->
+            vm.editMachine(m.machineId, n, c, col)
+            edit = null
+        }
+    }
     revoke?.let { m ->
         AlertDialog(
             onDismissRequest = { revoke = null },
             title = { Text("Revocar ${m.name}") },
             text = { Text("La PC se desconecta al instante y sus agentes desaparecen de la lista.") },
-            confirmButton = { TextButton(onClick = { vm.revokeMachine(m.machineId); revoke = null }) { Text("Revocar") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.revokeMachine(m.machineId)
+                    revoke = null
+                }) { Text("Revocar") }
+            },
             dismissButton = { TextButton(onClick = { revoke = null }) { Text("Cancelar") } },
         )
     }
 }
 
 @Composable
-private fun EditMachineDialog(m: MachineSummary, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+private fun EditMachineDialog(
+    m: MachineSummary,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+) {
     var name by remember { mutableStateOf(m.name) }
     var ctx by remember { mutableStateOf(m.context) }
     var color by remember { mutableStateOf(m.color) }
@@ -267,14 +349,25 @@ private fun EditMachineDialog(m: MachineSummary, onDismiss: () -> Unit, onSave: 
 }
 
 @Composable
-private fun Box2(color: Color, selected: Boolean, onClick: () -> Unit) {
+private fun Box2(
+    color: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     androidx.compose.foundation.layout.Box(
-        Modifier.size(if (selected) 32.dp else 26.dp).clip(CircleShape).background(color).clickable(onClick = onClick),
+        Modifier
+            .size(if (selected) 32.dp else 26.dp)
+            .clip(CircleShape)
+            .background(color)
+            .clickable(onClick = onClick),
     )
 }
 
 @Composable
-fun AddMachineScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun AddMachineScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val st by vm.state.collectAsStateWithLifecycle()
     val code by vm.pairCode.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -287,7 +380,10 @@ fun AddMachineScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()
             Card(Modifier.fillMaxWidth()) {
                 Text(cmd, Modifier.padding(16.dp), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
             }
-            Text("Puedes añadir `--name \"PC Empresa\" --context work`. El código caduca en 10 minutos y es de un solo uso.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Puedes añadir `--name \"PC Empresa\" --context work`. El código caduca en 10 minutos y es de un solo uso.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { copy(context, cmd) }, enabled = code != null) { Text("Copiar") }
                 OutlinedButton(onClick = vm::createMachineCode) { Text("Nuevo código") }
@@ -296,14 +392,20 @@ fun AddMachineScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()
     }
 }
 
-private fun copy(context: Context, text: String) {
+private fun copy(
+    context: Context,
+    text: String,
+) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("rp", text))
 }
 
 // ───────────────────────────── Notificaciones ─────────────────────────────
 
 @Composable
-fun NotificationSettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun NotificationSettingsScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val st by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LifecycleRefresh { vm.refreshHealth() }
@@ -323,7 +425,11 @@ fun NotificationSettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltV
         }
 
         SectionTitle("Canal de entrega")
-        SwitchRow("Canal directo (sin Google)", "Servicio en primer plano con conexión al relay", st.settings.directPush) { vm.setDirectPush(it) }
+        SwitchRow(
+            "Canal directo (sin Google)",
+            "Servicio en primer plano con conexión al relay",
+            st.settings.directPush,
+        ) { vm.setDirectPush(it) }
 
         SectionTitle("Categorías")
         listOf(
@@ -335,11 +441,17 @@ fun NotificationSettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltV
         ).forEach { (key, label) ->
             SwitchRow(label, null, prefs.categories[key] ?: true) { vm.setCategory(key, it) }
         }
-        SwitchRow("Autorizaciones críticas siempre", "Ignoran el silencio y las horas silenciosas", st.settings.criticalAlways) { vm.setCriticalAlways(it) }
+        SwitchRow("Autorizaciones críticas siempre", "Ignoran el silencio y las horas silenciosas", st.settings.criticalAlways) {
+            vm.setCriticalAlways(it)
+        }
 
         SectionTitle("Por agente")
         if (st.settings.mutedAgents.isEmpty()) {
-            Text("Ningún agente silenciado. Silencia uno desde el menú de su chat.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Ningún agente silenciado. Silencia uno desde el menú de su chat.",
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
         st.settings.mutedAgents.forEach { id ->
             val a = st.agents.firstOrNull { it.agentId == id }
@@ -357,15 +469,28 @@ fun NotificationSettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltV
 }
 
 @Composable
-private fun StatusLine(label: String, ok: Boolean) {
+private fun StatusLine(
+    label: String,
+    ok: Boolean,
+) {
     ListItem(
         headlineContent = { Text(label) },
-        trailingContent = { Text(if (ok) "✓" else "✕", color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) },
+        trailingContent = {
+            Text(
+                if (ok) "✓" else "✕",
+                color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+        },
     )
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
@@ -374,10 +499,17 @@ private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChan
 }
 
 @Composable
-private fun MachinePrefsCard(m: MachineSummary, p: dev.j3pf.rp.protocol.MachinePrefs?, vm: SettingsViewModel) {
+private fun MachinePrefsCard(
+    m: MachineSummary,
+    p: dev.j3pf.rp.protocol.MachinePrefs?,
+    vm: SettingsViewModel,
+) {
     var from by remember(p) { mutableStateOf(p?.quietHours?.from.orEmpty()) }
     var to by remember(p) { mutableStateOf(p?.quietHours?.to.orEmpty()) }
-    val tz = p?.quietHours?.tz ?: java.util.TimeZone.getDefault().id
+    val tz =
+        p?.quietHours?.tz ?: java.util.TimeZone
+            .getDefault()
+            .id
     val valid = (from.isBlank() && to.isBlank()) || (TIME.matches(from) && TIME.matches(to))
     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -389,8 +521,22 @@ private fun MachinePrefsCard(m: MachineSummary, p: dev.j3pf.rp.protocol.MachineP
             }
             Text("Horas silenciosas ($tz)", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(from, { from = it }, Modifier.weight(1f), label = { Text("Desde HH:mm") }, singleLine = true, isError = !valid)
-                OutlinedTextField(to, { to = it }, Modifier.weight(1f), label = { Text("Hasta HH:mm") }, singleLine = true, isError = !valid)
+                OutlinedTextField(
+                    from,
+                    { from = it },
+                    Modifier.weight(1f),
+                    label = { Text("Desde HH:mm") },
+                    singleLine = true,
+                    isError = !valid,
+                )
+                OutlinedTextField(
+                    to,
+                    { to = it },
+                    Modifier.weight(1f),
+                    label = { Text("Hasta HH:mm") },
+                    singleLine = true,
+                    isError = !valid,
+                )
                 TextButton(onClick = { vm.setQuietHours(m.machineId, from.trim(), to.trim(), tz) }, enabled = valid) { Text("Guardar") }
             }
             NotifyCategory.all.forEach { c ->
@@ -405,18 +551,22 @@ private fun MachinePrefsCard(m: MachineSummary, p: dev.j3pf.rp.protocol.MachineP
 
 private val TIME = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
 
-private fun categoryLabel(c: String) = when (c) {
-    NotifyCategory.APPROVALS -> "Autorizaciones"
-    NotifyCategory.QUESTIONS -> "Preguntas"
-    NotifyCategory.TERMINAL -> "Terminal"
-    NotifyCategory.FINISHED -> "Terminó"
-    else -> "Errores"
-}
+private fun categoryLabel(c: String) =
+    when (c) {
+        NotifyCategory.APPROVALS -> "Autorizaciones"
+        NotifyCategory.QUESTIONS -> "Preguntas"
+        NotifyCategory.TERMINAL -> "Terminal"
+        NotifyCategory.FINISHED -> "Terminó"
+        else -> "Errores"
+    }
 
 // ───────────────────────────── Seguridad ─────────────────────────────
 
 @Composable
-fun SecuritySettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun SecuritySettingsScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val st by vm.state.collectAsStateWithLifecycle()
     SubScreen("Seguridad", onBack, vm) {
         SwitchRow(
@@ -424,11 +574,20 @@ fun SecuritySettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewM
             "Las acciones de Permitir/Denegar de las notificaciones y de la hoja piden desbloqueo (Android 12+ en notificaciones)",
             st.settings.requireUnlockToApprove,
         ) { vm.setRequireUnlock(it) }
-        SwitchRow("Bloquear la app al abrirla", "Pide biometría o PIN al abrir y tras 30 s en segundo plano", st.settings.appLock) { vm.setAppLock(it) }
-        SwitchRow("Ocultar contenido en capturas", "Activa FLAG_SECURE: sin capturas ni vista previa en recientes", st.settings.flagSecure) { vm.setFlagSecure(it) }
+        SwitchRow("Bloquear la app al abrirla", "Pide biometría o PIN al abrir y tras 30 s en segundo plano", st.settings.appLock) {
+            vm.setAppLock(it)
+        }
+        SwitchRow(
+            "Ocultar contenido en capturas",
+            "Activa FLAG_SECURE: sin capturas ni vista previa en recientes",
+            st.settings.flagSecure,
+        ) {
+            vm.setFlagSecure(it)
+        }
         Text(
             "El envío \"como tecleado\" siempre pide desbloqueo (válido 5 min) porque cuenta como autorización humana en el modo Auto de gentle-pi.",
-            Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall,
+            Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
@@ -436,13 +595,18 @@ fun SecuritySettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewM
 // ───────────────────────────── Batería ─────────────────────────────
 
 @Composable
-fun BatteryScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun BatteryScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val st by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LifecycleRefresh { vm.refreshHealth() }
     SubScreen("Optimización de batería", onBack, vm) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (st.health.batteryExcluded) "RP está excluida de la optimización de batería ✓" else "RP está sujeta a la optimización de batería")
+            Text(
+                if (st.health.batteryExcluded) "RP está excluida de la optimización de batería ✓" else "RP está sujeta a la optimización de batería",
+            )
             Text(
                 "El canal directo mantiene una conexión permanente con tu relay. Algunos fabricantes (Xiaomi, Huawei, Oppo, Samsung…) " +
                     "cierran los servicios en segundo plano; excluir RP evita que lo hagan. Con FCM es solo una recomendación.",
@@ -466,20 +630,24 @@ fun BatteryScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
 
 // ───────────────────────────── Acerca de ─────────────────────────────
 
-private val LICENSES = listOf(
-    "AndroidX (Compose, Room, Navigation, WorkManager, DataStore, Biometric, CameraX, Lifecycle)" to "Apache 2.0",
-    "Kotlin, kotlinx.coroutines, kotlinx.serialization" to "Apache 2.0",
-    "OkHttp / Okio" to "Apache 2.0",
-    "Dagger / Hilt" to "Apache 2.0",
-    "Google Tink" to "Apache 2.0",
-    "ML Kit Barcode Scanning" to "Términos de ML Kit (modelo empaquetado)",
-    "Coil" to "Apache 2.0",
-    "multiplatform-markdown-renderer (Mike Penz)" to "Apache 2.0",
-    "Firebase Cloud Messaging (sólo sabor fcm)" to "Apache 2.0 / Términos de Firebase",
-)
+private val LICENSES =
+    listOf(
+        "AndroidX (Compose, Room, Navigation, WorkManager, DataStore, Biometric, CameraX, Lifecycle)" to "Apache 2.0",
+        "Kotlin, kotlinx.coroutines, kotlinx.serialization" to "Apache 2.0",
+        "OkHttp / Okio" to "Apache 2.0",
+        "Dagger / Hilt" to "Apache 2.0",
+        "Google Tink" to "Apache 2.0",
+        "ML Kit Barcode Scanning" to "Términos de ML Kit (modelo empaquetado)",
+        "Coil" to "Apache 2.0",
+        "multiplatform-markdown-renderer (Mike Penz)" to "Apache 2.0",
+        "Firebase Cloud Messaging (sólo sabor fcm)" to "Apache 2.0 / Términos de Firebase",
+    )
 
 @Composable
-fun AboutScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     SubScreen("Acerca de", onBack, vm) {
         LabeledText("Versión", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         LabeledText("Sabor de push", BuildConfig.FLAVOR)
@@ -489,6 +657,9 @@ fun AboutScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun LabeledText(label: String, value: String) {
+private fun LabeledText(
+    label: String,
+    value: String,
+) {
     ListItem(headlineContent = { Text(label) }, trailingContent = { Text(value) })
 }

@@ -27,18 +27,23 @@ import dev.j3pf.rp.ui.NavTarget
 import dev.j3pf.rp.ui.nav.LockScreen
 import dev.j3pf.rp.ui.nav.RpRoot
 import dev.j3pf.rp.ui.theme.RpTheme
+import dev.j3pf.rp.ui.theme.resolveThemeChoice
 import dev.j3pf.rp.util.AuthResult
 import dev.j3pf.rp.util.BiometricGate
-import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private val vm: MainViewModel by viewModels()
+
     @Inject lateinit var gate: BiometricGate
+
     @Inject lateinit var secrets: SecretStore
+
     @Inject lateinit var settings: SettingsRepository
+
     @Inject lateinit var connection: RelayConnection
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,15 +55,22 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
                 settings.settings.collectLatest { s ->
-                    if (s.flagSecure) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-                    else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    if (s.flagSecure) {
+                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
                 }
             }
         }
 
         setContent {
-            RpTheme {
-                val s by vm.settings.collectAsStateWithLifecycle()
+            val s by vm.settings.collectAsStateWithLifecycle()
+            val machines by vm.machines.collectAsStateWithLifecycle()
+            val agents by vm.agents.collectAsStateWithLifecycle()
+            val activeTheme = resolveThemeChoice(s?.appTheme ?: "auto", machines, agents)
+
+            RpTheme(themeChoice = activeTheme) {
                 val locked by vm.locked.collectAsStateWithLifecycle()
                 val scope = rememberCoroutineScope()
                 var lockMessage by remember { mutableStateOf<String?>(null) }
@@ -67,16 +79,28 @@ class MainActivity : FragmentActivity() {
                 fun unlock() {
                     scope.launch {
                         when (gate.authenticate(this@MainActivity, "Desbloquear RP", force = true)) {
-                            AuthResult.OK -> { lockMessage = null; vm.unlock() }
-                            AuthResult.FAILED -> lockMessage = "Desbloqueo cancelado"
-                            AuthResult.UNAVAILABLE -> lockMessage = "Configura un bloqueo de pantalla para usar el bloqueo de la app"
+                            AuthResult.OK -> {
+                                lockMessage = null
+                                vm.unlock()
+                            }
+
+                            AuthResult.FAILED -> {
+                                lockMessage = "Desbloqueo cancelado"
+                            }
+
+                            AuthResult.UNAVAILABLE -> {
+                                lockMessage = "Configura un bloqueo de pantalla para usar el bloqueo de la app"
+                            }
                         }
                     }
                 }
                 LaunchedEffect(mustLock) { if (mustLock) unlock() }
 
-                if (mustLock) LockScreen(onUnlock = ::unlock, message = lockMessage)
-                else RpRoot(vm, gate)
+                if (mustLock) {
+                    LockScreen(onUnlock = ::unlock, message = lockMessage)
+                } else {
+                    RpRoot(vm, gate)
+                }
             }
         }
     }
@@ -113,6 +137,7 @@ class MainActivity : FragmentActivity() {
                     agentId != null -> vm.post(NavTarget.Agent(agentId))
                 }
             }
+
             intent.action == Intent.ACTION_VIEW && intent.data?.scheme == "rp" -> {
                 val u = intent.data?.getQueryParameter("u")
                 val c = intent.data?.getQueryParameter("c")

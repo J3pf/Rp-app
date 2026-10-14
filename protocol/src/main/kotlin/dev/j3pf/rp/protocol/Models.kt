@@ -115,6 +115,7 @@ data class AgentSummary(
     val launcher: String? = null,
     val herdr: HerdrInfo? = null,
     val gentleMode: String? = null,
+    val theme: String? = null,
     val redacted: Boolean = false,
     val spawnedByHost: Boolean = false,
 )

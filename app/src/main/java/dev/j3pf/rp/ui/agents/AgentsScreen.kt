@@ -2,10 +2,12 @@ package dev.j3pf.rp.ui.agents
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -13,7 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -22,12 +24,14 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,18 +46,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.ui.MainViewModel
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.EmptyState
 import dev.j3pf.rp.ui.components.MachineFilterBar
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.TagChip
-import dev.j3pf.rp.ui.MainViewModel
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.lastSegment
 import dev.j3pf.rp.util.parseColor
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AgentsScreen(
     onOpenChat: (String) -> Unit,
@@ -66,13 +70,11 @@ fun AgentsScreen(
 
     Scaffold(
         floatingActionButton = {
-            if (state.canSpawn) {
-                ExtendedFloatingActionButton(
-                    onClick = onNewAgent,
-                    icon = { Icon(Icons.Filled.Add, null) },
-                    text = { Text("Nuevo agente") },
-                )
-            }
+            ExtendedFloatingActionButton(
+                onClick = onNewAgent,
+                icon = { Icon(Icons.Filled.Add, null) },
+                text = { Text("Nuevo agente") },
+            )
         },
     ) { padding ->
         Column(Modifier.padding(padding)) {
@@ -84,18 +86,29 @@ fun AgentsScreen(
                 onSelect = vm::select,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
-            if (state.groups.isEmpty()) {
-                EmptyState(
-                    "Aún no hay agentes",
-                    if (state.machines.isEmpty()) "Empareja una PC con `/rp pair` y abre Pi en ella."
-                    else "Abre Pi con el plugin rp en tus PCs y aparecerán aquí.",
-                )
-            } else {
-                LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
-                    state.groups.forEach { g ->
-                        stickyHeader(key = "h-${g.machine.machineId}") { MachineHeader(g.machine) }
-                        items(g.agents, key = { it.agentId }) { a ->
-                            AgentCard(a, onClick = { onOpenChat(a.agentId) }, onForget = { vm.forget(a.agentId) })
+            PullToRefreshBox(
+                isRefreshing = state.refreshing,
+                onRefresh = vm::refresh,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) {
+                if (state.groups.isEmpty()) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        EmptyState(
+                            "Aún no hay agentes",
+                            if (state.machines.isEmpty()) {
+                                "Empareja una PC con `/rp pair` y abre Pi en ella."
+                            } else {
+                                "Abre Pi con el plugin rp en tus PCs y aparecerán aquí."
+                            },
+                        )
+                    }
+                } else {
+                    LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
+                        state.groups.forEach { g ->
+                            stickyHeader(key = "h-${g.machine.machineId}") { MachineHeader(g.machine) }
+                            items(g.agents, key = { it.agentId }) { a ->
+                                AgentCard(a, onClick = { onOpenChat(a.agentId) }, onForget = { vm.forget(a.agentId) })
+                            }
                         }
                     }
                 }
@@ -124,7 +137,12 @@ private fun MachineHeader(m: MachineSummary) {
 
 /** Tarjeta de agente: nombre · carpeta · rama · modelo, chips de estado/lanzador/herdr/modo gentle y vista previa. */
 @Composable
-fun AgentCard(a: AgentSummary, onClick: () -> Unit, onForget: () -> Unit, modifier: Modifier = Modifier) {
+fun AgentCard(
+    a: AgentSummary,
+    onClick: () -> Unit,
+    onForget: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var menu by remember { mutableStateOf(false) }
     Card(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clickable(onClick = onClick),
@@ -146,18 +164,28 @@ fun AgentCard(a: AgentSummary, onClick: () -> Unit, onForget: () -> Unit, modifi
                     Column {
                         Icon(Icons.Filled.Delete, "Olvidar", Modifier.size(20.dp).clickable { menu = true })
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = { menu = false; onForget() })
+                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
+                                menu = false
+                                onForget()
+                            })
                         }
                     }
                 }
             }
-            val meta = listOfNotNull(
-                lastSegment(a.cwd).takeIf { it.isNotEmpty() }?.let { "📁 $it" },
-                a.gitBranch?.let { "⎇ $it" },
-                a.model?.label?.takeIf { it.isNotEmpty() },
-            ).joinToString("  ·  ")
+            val meta =
+                listOfNotNull(
+                    lastSegment(a.cwd).takeIf { it.isNotEmpty() }?.let { "📁 $it" },
+                    a.gitBranch?.let { "⎇ $it" },
+                    a.model?.label?.takeIf { it.isNotEmpty() },
+                ).joinToString("  ·  ")
             if (meta.isNotEmpty()) {
-                Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatusChip(a)
@@ -166,7 +194,18 @@ fun AgentCard(a: AgentSummary, onClick: () -> Unit, onForget: () -> Unit, modifi
                     val loc = listOfNotNull(h.workspaceId?.let { w -> "ws $w" }, h.paneId?.let { p -> "pane $p" }).joinToString("·")
                     if (loc.isNotEmpty()) TagChip("herdr $loc")
                 }
-                a.gentleMode?.takeIf { it != "unknown" }?.let { TagChip(it.uppercase(), if (it == "auto" || it == "yolo") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary) }
+                a.gentleMode?.takeIf { it != "unknown" }?.let {
+                    TagChip(
+                        it.uppercase(),
+                        if (it == "auto" ||
+                            it == "yolo"
+                        ) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.secondary
+                        },
+                    )
+                }
             }
             val preview = if (a.redacted) "contenido oculto" else a.lastMessagePreview
             if (!preview.isNullOrBlank()) {

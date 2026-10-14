@@ -8,8 +8,8 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptResolved
 import dev.j3pf.rp.protocol.RpJson
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -18,13 +18,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ChatReducerTest {
-    private fun events(): List<AgentEvent> = RpJson.decodeFromString(
-        ListSerializer(AgentEvent.serializer()),
-        checkNotNull(javaClass.getResource("/fixtures/events.stream.json")).readText(),
-    )
+    private fun events(): List<AgentEvent> =
+        RpJson.decodeFromString(
+            ListSerializer(AgentEvent.serializer()),
+            checkNotNull(javaClass.getResource("/fixtures/events.stream.json")).readText(),
+        )
 
-    private fun ev(seq: Long, json: String, epoch: String = "E1") =
-        AgentEvent("a", epoch, seq, RpJson.parseToJsonElement(json) as JsonObject)
+    private fun ev(
+        seq: Long,
+        json: String,
+        epoch: String = "E1",
+    ) = AgentEvent("a", epoch, seq, RpJson.parseToJsonElement(json) as JsonObject)
 
     @Test
     fun `reproduce un turno completo con streaming y herramienta`() {
@@ -87,7 +91,11 @@ class ChatReducerTest {
 
     @Test
     fun `toolcall parcial se completa`() {
-        var s = ChatReducer.reduce(ChatState(), ev(1, """{"type":"message_delta","contentIndex":0,"kind":"toolcall","delta":"{\"command\":\"ls -"}"""))
+        var s =
+            ChatReducer.reduce(
+                ChatState(),
+                ev(1, """{"type":"message_delta","contentIndex":0,"kind":"toolcall","delta":"{\"command\":\"ls -"}"""),
+            )
         val c1 = s.streaming!!.blocks[0] as Block.ToolCall
         assertNotNull(c1.args)
         s = ChatReducer.reduce(s, ev(2, """{"type":"message_delta","contentIndex":0,"kind":"toolcall","delta":"la\"}"}"""))
@@ -98,7 +106,11 @@ class ChatReducerTest {
     @Test
     fun `aborto cierra streaming y marca herramientas`() {
         var s = ChatReducer.reduce(ChatState(), ev(1, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"par"}"""))
-        s = ChatReducer.reduce(s, ev(2, """{"type":"tool_execution_start","toolCallId":"x","toolName":"bash","args":{"command":"sleep 9"}}"""))
+        s =
+            ChatReducer.reduce(
+                s,
+                ev(2, """{"type":"tool_execution_start","toolCallId":"x","toolName":"bash","args":{"command":"sleep 9"}}"""),
+            )
         s = ChatReducer.reduce(s, ev(3, """{"type":"agent_settled","aborted":true}"""))
         assertNull(s.streaming)
         assertEquals("aborted", (s.items.single() as AssistantMsg).stopReason)
@@ -143,12 +155,56 @@ class ChatReducerTest {
     }
 
     @Test
+    fun `eventos en history con seq menor a liveFromSeq no se descartan`() {
+        // Reproduce el bug donde liveFromSeq inflaba lastSeq antes de procesar h.events
+        val h =
+            AgentHistory(
+                agentId = "a",
+                epoch = "E1",
+                liveFromSeq = 10L,
+                entries = emptyList(),
+                events =
+                    listOf(
+                        AgentEvent("a", "E1", 8L, RpJson.parseToJsonElement("""{"type":"agent_start"}""") as JsonObject),
+                        AgentEvent(
+                            "a",
+                            "E1",
+                            9L,
+                            RpJson.parseToJsonElement(
+                                """{"type":"message_end","message":{"role":"assistant","timestamp":2000,"content":[{"type":"text","text":"Respuesta lista"}]}}""",
+                            ) as JsonObject,
+                        ),
+                        AgentEvent("a", "E1", 10L, RpJson.parseToJsonElement("""{"type":"agent_settled","aborted":false}""") as JsonObject),
+                    ),
+            )
+        val s = ChatReducer.applyHistory(ChatState(), h)
+        assertEquals(1, s.items.size)
+        val msg = s.items.single() as AssistantMsg
+        assertEquals("Respuesta lista", msg.plainText)
+        assertEquals(10L, s.lastSeq)
+        assertFalse(s.working)
+    }
+
+    @Test
     fun `historial y evento solapados se desduplican por clave`() {
-        val e = Entry("a2", "assistant", 1300, RpJson.parseToJsonElement(
-            """{"role":"assistant","timestamp":1300,"content":[{"type":"text","text":"Hay dos archivos"}]}""",
-        ) as JsonObject)
+        val e =
+            Entry(
+                "a2",
+                "assistant",
+                1300,
+                RpJson.parseToJsonElement(
+                    """{"role":"assistant","timestamp":1300,"content":[{"type":"text","text":"Hay dos archivos"}]}""",
+                ) as JsonObject,
+            )
         var s = ChatReducer.applyEntries(ChatState(), listOf(e), "E1")
-        s = ChatReducer.reduce(s, ev(1, """{"type":"message_end","message":{"role":"assistant","timestamp":1300,"content":[{"type":"text","text":"Hay dos archivos"}]}}"""))
+        s =
+            ChatReducer.reduce(
+                s,
+                ev(
+                    1,
+                    """{"type":"message_end","message":{"role":"assistant","timestamp":1300,"content":[{"type":"text","text":"Hay dos archivos"}]}}""",
+                ),
+            )
         assertEquals(1, s.items.size)
     }
 
@@ -159,13 +215,24 @@ class ChatReducerTest {
         val u = s.items.single() as UserMsg
         assertTrue(u.fromMobile)
         assertTrue(s.localSent.isEmpty())
-        val other = ChatReducer.reduce(ChatState(), ev(1, """{"type":"message_end","message":{"role":"user","timestamp":6,"content":"terminal"}}"""))
+        val other =
+            ChatReducer.reduce(
+                ChatState(),
+                ev(1, """{"type":"message_end","message":{"role":"user","timestamp":6,"content":"terminal"}}"""),
+            )
         assertFalse((other.items.single() as UserMsg).fromMobile)
     }
 
     @Test
     fun `imagenes del usuario se cuentan`() {
-        val s = ChatReducer.reduce(ChatState(), ev(1, """{"type":"message_end","message":{"role":"user","timestamp":5,"content":[{"type":"text","text":"mira"},{"type":"image_ref","mimeType":"image/png","bytes":10}]}}"""))
+        val s =
+            ChatReducer.reduce(
+                ChatState(),
+                ev(
+                    1,
+                    """{"type":"message_end","message":{"role":"user","timestamp":5,"content":[{"type":"text","text":"mira"},{"type":"image_ref","mimeType":"image/png","bytes":10}]}}""",
+                ),
+            )
         val u = s.items.single() as UserMsg
         assertEquals("mira", u.text)
         assertEquals(1, u.imageCount)
