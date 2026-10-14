@@ -37,11 +37,7 @@ fun contextLabel(context: String): String = when (context) {
     else -> context.replaceFirstChar { it.uppercase() }
 }
 
-fun contextEmoji(context: String): String = when (context) {
-    "personal" -> "🏠"
-    "work" -> "🏢"
-    else -> "💻"
-}
+fun contextEmoji(context: String): String = ""
 
 /** "api-gateway" etc. — nombre visible del agente. */
 fun agentTitle(sessionName: String?, cwd: String?, agentId: String): String =

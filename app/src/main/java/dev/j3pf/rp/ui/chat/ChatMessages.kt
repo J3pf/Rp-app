@@ -81,9 +81,9 @@ private fun UserBubble(m: UserMsg) {
             shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                if (m.fromMobile) Text("📱", style = MaterialTheme.typography.labelSmall)
+                if (m.fromMobile) Text("móvil", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
                 if (m.text.isNotBlank()) Text(m.text)
-                if (m.imageCount > 0) Text("🖼 ${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
+                if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -148,8 +148,9 @@ private fun ThinkingBlock(
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(
-                if (open) "💭 Razonamiento ▾" else "💭 Razonamiento ▸",
+                if (open) "Razonamiento ▾" else "Razonamiento ▸",
                 style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.outline,
             )
             AnimatedVisibility(open) {
@@ -325,17 +326,8 @@ private fun PromptCardView(
 private fun SystemNoteView(n: SystemNote) {
     var open by rememberSaveable(n.key) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        val icon =
-            when (n.kind) {
-                NoteKind.COMPACTION -> "🗜"
-                NoteKind.MODEL_CHANGE -> "🤖"
-                NoteKind.SESSION_RENAMED -> "✏️"
-                NoteKind.THINKING_LEVEL -> "💭"
-                NoteKind.BASH -> "⌨️"
-                else -> "•"
-            }
         TextButton(onClick = { if (n.detail != null) open = !open }, enabled = n.detail != null) {
-            Text("$icon ${n.text}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+            Text("• ${n.text}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
         }
         AnimatedVisibility(open && n.detail != null) {
             Mono(n.detail.orEmpty(), maxHeight = 240)

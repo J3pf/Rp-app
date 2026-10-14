@@ -93,8 +93,8 @@ class ComposeUiTest {
             }
         }
         rule.onNodeWithText("api-gateway").assertIsDisplayed()
-        rule.onNodeWithText("Trabajando ⏳").assertIsDisplayed()
-        rule.onNodeWithText("Esperando tu respuesta 🔔").assertIsDisplayed()
+        rule.onNodeWithText("Trabajando").assertIsDisplayed()
+        rule.onNodeWithText("Esperando respuesta").assertIsDisplayed()
         rule.onNodeWithText("Desconectado hace 3 h").assertIsDisplayed()
         rule.onAllNodesWithText("gentle-shell", substring = true).assertCountEquals(3)
         rule.onAllNodesWithText("herdr ws w2·pane p3").assertCountEquals(3)

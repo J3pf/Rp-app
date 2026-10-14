@@ -185,11 +185,7 @@ fun MachineHeroDropdown(
                 val count = agents.count { it.machineId == m.machineId }
                 Triple(
                     m.name,
-                    "${contextEmoji(
-                        m.context,
-                    )} ${contextLabel(
-                        m.context,
-                    )} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}",
+                    "${contextLabel(m.context)} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}",
                     parseColor(m.color),
                 )
             }
@@ -197,7 +193,7 @@ fun MachineHeroDropdown(
             else -> {
                 val count = agents.count { it.machineContext == selected }
                 Triple(
-                    "${contextEmoji(selected)} ${contextLabel(selected)}",
+                    contextLabel(selected),
                     "$count ${if (count == 1) "agente" else "agentes"} en este contexto",
                     parseColor(machines.firstOrNull { it.context == selected }?.color),
                 )
@@ -296,7 +292,7 @@ fun MachineHeroDropdown(
                                     fontWeight = if (selected == AppSettings.ALL) FontWeight.Bold else FontWeight.Normal,
                                 )
                                 Text(
-                                    "$totalAgents agentes${if (totalPrompts > 0) " · $totalPrompts pendientes 🔔" else ""}",
+                                    "$totalAgents agentes${if (totalPrompts > 0) " · $totalPrompts pendientes" else ""}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -337,11 +333,11 @@ fun MachineHeroDropdown(
                                     ColorDot(parseColor(ms.firstOrNull()?.color), size = 10)
                                     Column {
                                         Text(
-                                            "${contextEmoji(ctx)} ${contextLabel(ctx)}",
+                                            contextLabel(ctx),
                                             fontWeight = if (selected == ctx) FontWeight.Bold else FontWeight.Normal,
                                         )
                                         Text(
-                                            "$count agentes${if (prompts > 0) " · $prompts 🔔" else ""}",
+                                            "$count agentes${if (prompts > 0) " · $prompts pendientes" else ""}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -399,9 +395,7 @@ fun MachineHeroDropdown(
                                             )
                                         }
                                         Text(
-                                            "${contextEmoji(
-                                                m.context,
-                                            )} ${contextLabel(m.context)} · $count agentes${if (m.hostOnline) " · rp-host ✓" else ""}",
+                                            "${contextLabel(m.context)} · $count agentes${if (m.hostOnline) " · rp-host ✓" else ""}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -451,8 +445,8 @@ fun MachineFilterBar(
             FilterChip(
                 selected = selected == AppSettings.ALL,
                 onClick = { onSelect(AppSettings.ALL) },
-                shape = RoundedCornerShape(14.dp),
-                label = { Text("Todas ($total${if (prompts > 0) " · $prompts🔔" else ""})") },
+                shape = RoundedCornerShape(10.dp),
+                label = { Text("Todas ($total${if (prompts > 0) " · $prompts" else ""})") },
             )
         }
         items(contexts, key = { it }) { ctx ->
@@ -464,15 +458,15 @@ fun MachineFilterBar(
             FilterChip(
                 selected = selected == ctx,
                 onClick = { onSelect(ctx) },
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(10.dp),
                 leadingIcon = { ColorDot(dotColor) },
-                label = { Text("${contextEmoji(ctx)} ${contextLabel(ctx)} ($count${if (prompts > 0) " · $prompts🔔" else ""})") },
+                label = { Text("${contextLabel(ctx)} ($count${if (prompts > 0) " · $prompts" else ""})") },
             )
         }
     }
 }
 
-/** Chip de estado del agente: Trabajando ⏳ / Esperando tu respuesta 🔔 / Inactivo / Desconectado hace 3 h. */
+/** Chip de estado del agente: Trabajando / Esperando respuesta / Inactivo / Desconectado hace 3 h. */
 @Composable
 fun StatusChip(
     agent: AgentSummary,
@@ -481,13 +475,33 @@ fun StatusChip(
     val (text, color) =
         when {
             !agent.online -> "Desconectado ${relativeTime(agent.lastSeenAt)}".trim() to MaterialTheme.colorScheme.outline
-            agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando tu respuesta 🔔" to RpColors.warning
-            agent.status == AgentStatus.WORKING -> "Trabajando ⏳" to MaterialTheme.colorScheme.primary
+            agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to RpColors.warning
+            agent.status == AgentStatus.WORKING -> "Trabajando" to MaterialTheme.colorScheme.primary
             agent.status == AgentStatus.COMPACTING -> "Compactando" to MaterialTheme.colorScheme.primary
             agent.status == AgentStatus.ERROR -> "Error" to RpColors.danger
             else -> "Inactivo" to RpColors.success
         }
-    TagChip(text, color, modifier)
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+        contentColor = color,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            ColorDot(color, size = 6)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
+    }
 }
 
 @Composable
@@ -498,14 +512,15 @@ fun TagChip(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(8.dp),
+        color = color.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.20f)),
         contentColor = color,
     ) {
         Text(
             text,
-            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium,
+            Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
         )

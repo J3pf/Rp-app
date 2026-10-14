@@ -20,9 +20,9 @@ enum class RpThemeChoice(
     val label: String,
 ) {
     AUTO("auto", "Sincronizado con Pi (automático)"),
-    GENTLE_CUTE("gentle-cute", "Gentle-Cute 🌸"),
-    GENTLE_SEXY("gentle-sexy", "Gentle-Sexy 💋"),
-    OMARCHY("omarchy-system", "Omarchy / Gentle Shell 🌙"),
+    GENTLE_CUTE("gentle-cute", "Gentle-Cute"),
+    GENTLE_SEXY("gentle-sexy", "Gentle-Sexy"),
+    OMARCHY("omarchy-system", "Omarchy / Gentle Shell"),
     SYSTEM("system", "Material You / Sistema"),
 }
 

@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -134,7 +135,7 @@ fun NewAgentScreen(
                             selected = f.machineId == m.machineId,
                             onClick = { vm.pickMachine(m.machineId) },
                             leadingIcon = { ColorDot(parseColor(m.color)) },
-                            label = { Text("${contextEmoji(m.context)} ${m.name}") },
+                            label = { Text(m.name) },
                         )
                     }
                 }
@@ -161,10 +162,16 @@ fun NewAgentScreen(
                         HorizontalDivider()
                         Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                             if (vm.canGoUp) {
-                                ListItem(headlineContent = { Text("⬆ ..") }, modifier = Modifier.clickable { vm.up() })
+                                ListItem(
+                                    headlineContent = { Text("..", fontFamily = FontFamily.Monospace) },
+                                    modifier = Modifier.clickable { vm.up() },
+                                )
                             }
                             f.dirs.forEach { d ->
-                                ListItem(headlineContent = { Text("📁 $d") }, modifier = Modifier.clickable { vm.enter(d) })
+                                ListItem(
+                                    headlineContent = { Text(d, fontFamily = FontFamily.Monospace) },
+                                    modifier = Modifier.clickable { vm.enter(d) },
+                                )
                             }
                             if (f.dirs.isEmpty() && !f.loadingDirs) {
                                 Text("Sin subcarpetas", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)

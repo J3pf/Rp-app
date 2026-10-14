@@ -198,7 +198,7 @@ fun ChatScreen(
             ui.chat.terminalWait?.let { w ->
                 Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "⌨️ Esperando en la terminal (diálogo no remoto)" + (w.title?.let { ": $it" } ?: ""),
+                        "Esperando en la terminal (diálogo no remoto)" + (w.title?.let { ": $it" } ?: ""),
                         Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -207,7 +207,7 @@ fun ChatScreen(
             if (ui.isAuto) {
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("AUTO · tus mensajes se envían como tecleados 🔒", style = MaterialTheme.typography.labelMedium)
+                        Text("AUTO · tus mensajes se envían como tecleados", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -517,7 +517,7 @@ private fun AttachmentChip(
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    (if (a.isImage) "🖼 " else "📄 ") + a.name + if (a.size > 0) " · ${humanSize(a.size)}" else "",
+                    a.name + if (a.size > 0) " · ${humanSize(a.size)}" else "",
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
