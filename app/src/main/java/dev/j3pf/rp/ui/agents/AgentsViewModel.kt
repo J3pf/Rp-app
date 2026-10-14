@@ -6,6 +6,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.repo.HostRepository
+import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.protocol.AgentSummary
@@ -42,6 +44,7 @@ class AgentsViewModel
         agents: AgentsRepository,
         private val settings: SettingsRepository,
         private val connection: RelayConnection,
+        private val hostRepo: HostRepository,
     ) : ViewModel() {
         private val isRefreshing = MutableStateFlow(false)
 
@@ -88,5 +91,17 @@ class AgentsViewModel
 
         fun forget(agentId: String) {
             viewModelScope.launch { agentsRepo.forget(agentId) }
+        }
+
+        fun resumeAgent(
+            agent: AgentSummary,
+            onMessage: (String) -> Unit,
+        ) {
+            viewModelScope.launch {
+                when (val r = hostRepo.resumeAgent(agent)) {
+                    is HostResult.Ok -> onMessage("Agente reanudado en la PC")
+                    is HostResult.Failed -> onMessage("No se pudo reanudar: ${r.message}")
+                }
+            }
         }
     }

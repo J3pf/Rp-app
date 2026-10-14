@@ -91,6 +91,7 @@ fun ChatScreen(
     val activity = rememberActivity()
     var text by rememberSaveable { mutableStateOf("") }
     var showInfo by remember { mutableStateOf(false) }
+    var showQuitDialog by remember { mutableStateOf(false) }
     var busyPrompt by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(ui.message) {
@@ -167,6 +168,15 @@ fun ChatScreen(
                                 vm.toggleMute()
                             },
                         )
+                        if (agent != null && agent.online) {
+                            DropdownMenuItem(
+                                text = { Text("Cerrar agente (/quit)", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menu = false
+                                    showQuitDialog = true
+                                },
+                            )
+                        }
                         if (agent != null && !agent.online) {
                             DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
                                 menu = false
@@ -279,6 +289,24 @@ fun ChatScreen(
     }
 
     if (showInfo && agent != null) InfoDialog(agent) { showInfo = false }
+    if (showQuitDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuitDialog = false },
+            title = { Text("Cerrar sesión de Pi") },
+            text = { Text("¿Deseas enviar /quit al agente para cerrar su proceso en la terminal de la PC?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showQuitDialog = false
+                    vm.quit(onBack)
+                }) {
+                    Text("Cerrar agente", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQuitDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
 }
 
 @Composable

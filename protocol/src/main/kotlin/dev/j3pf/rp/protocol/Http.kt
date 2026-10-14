@@ -135,6 +135,7 @@ data class HostSpawn(
     val backend: String? = null,
     val herdrTarget: HerdrTarget? = null,
     val initialPrompt: String? = null,
+    val sessionId: String? = null,
 )
 
 @Serializable

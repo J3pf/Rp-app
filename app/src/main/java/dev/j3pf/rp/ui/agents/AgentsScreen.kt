@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -27,8 +30,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -36,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +63,7 @@ import dev.j3pf.rp.ui.components.TagChip
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.lastSegment
 import dev.j3pf.rp.util.parseColor
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -67,6 +75,8 @@ fun AgentsScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val conn by mainVm.connState.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         floatingActionButton = {
@@ -76,6 +86,7 @@ fun AgentsScreen(
                 text = { Text("Nuevo agente") },
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.padding(padding)) {
             ConnectionBanner(conn)
@@ -107,7 +118,23 @@ fun AgentsScreen(
                         state.groups.forEach { g ->
                             stickyHeader(key = "h-${g.machine.machineId}") { MachineHeader(g.machine) }
                             items(g.agents, key = { it.agentId }) { a ->
-                                AgentCard(a, onClick = { onOpenChat(a.agentId) }, onForget = { vm.forget(a.agentId) })
+                                AgentCard(
+                                    a = a,
+                                    canResume = g.machine.hostOnline,
+                                    onClick = { onOpenChat(a.agentId) },
+                                    onResume = {
+                                        if (g.machine.hostOnline) {
+                                            vm.resumeAgent(a) { msg ->
+                                                scope.launch { snackbar.showSnackbar(msg) }
+                                            }
+                                        } else {
+                                            scope.launch {
+                                                snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en ${g.machine.name}")
+                                            }
+                                        }
+                                    },
+                                    onForget = { vm.forget(a.agentId) },
+                                )
                             }
                         }
                     }
@@ -142,6 +169,8 @@ fun AgentCard(
     onClick: () -> Unit,
     onForget: () -> Unit,
     modifier: Modifier = Modifier,
+    canResume: Boolean = false,
+    onResume: () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     Card(
@@ -161,13 +190,39 @@ fun AgentCard(
                     BadgedBox(badge = { Badge { Text("${a.openPromptCount}") } }) { Text("🔔") }
                 }
                 if (!a.online) {
-                    Column {
-                        Icon(Icons.Filled.Delete, "Olvidar", Modifier.size(20.dp).clickable { menu = true })
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
-                                menu = false
-                                onForget()
-                            })
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (canResume) {
+                            IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
+                                Icon(
+                                    Icons.Filled.PlayArrow,
+                                    contentDescription = "Reanudar agente",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { menu = true }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Filled.MoreVert, "Opciones", modifier = Modifier.size(20.dp))
+                            }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                if (canResume) {
+                                    DropdownMenuItem(
+                                        text = { Text("Reanudar agente (/resume)") },
+                                        onClick = {
+                                            menu = false
+                                            onResume()
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Olvidar agente", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        menu = false
+                                        onForget()
+                                    },
+                                )
+                            }
                         }
                     }
                 }

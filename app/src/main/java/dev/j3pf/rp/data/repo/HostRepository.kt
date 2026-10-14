@@ -4,8 +4,10 @@ import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.di.AppScope
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.HerdrLayout
+import dev.j3pf.rp.protocol.HerdrTarget
 import dev.j3pf.rp.protocol.HostDirs
 import dev.j3pf.rp.protocol.HostInfo
 import dev.j3pf.rp.protocol.HostListDirs
@@ -57,6 +59,24 @@ class HostRepository @Inject constructor(
 
     suspend fun spawn(req: HostSpawn): HostResult<HostSpawned> =
         ask(MsgType.HOST_SPAWN, req, timeoutMs = 30_000) { it.body<HostSpawned>() }
+
+    suspend fun resumeAgent(agent: AgentSummary): HostResult<HostSpawned> {
+        val sessionId = agent.agentId.substringAfter(':')
+        val host = _hosts.value[agent.machineId]
+        val effectiveBackend = host?.defaultBackend ?: if (host?.backends?.herdr != null) "herdr" else null
+        val target = if (effectiveBackend == "herdr") HerdrTarget(type = "workspace") else null
+        return spawn(
+            HostSpawn(
+                machineId = agent.machineId,
+                cwd = agent.cwd.orEmpty(),
+                name = agent.sessionName,
+                launcher = agent.launcher ?: host?.defaultLauncher,
+                backend = effectiveBackend,
+                herdrTarget = target,
+                sessionId = sessionId,
+            ),
+        )
+    }
 
     private suspend inline fun <reified B, T> ask(
         type: String,

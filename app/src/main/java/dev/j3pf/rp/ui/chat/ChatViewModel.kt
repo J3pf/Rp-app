@@ -122,6 +122,14 @@ class ChatViewModel
             }
         }
 
+        /** Cierra limpiamente el agente activo enviando `/quit`. */
+        fun quit(onDone: () -> Unit = {}) {
+            viewModelScope.launch {
+                session.send("/quit", emptyList(), Delivery.AUTO, DeliveryMethod.AUTO, asCommand = true)
+                onDone()
+            }
+        }
+
         /** Reintenta la subida de un adjunto que falló. */
         fun retryAttachment(id: String) {
             val la = local[id] ?: return
