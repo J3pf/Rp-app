@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +52,7 @@ import dev.j3pf.rp.chat.summary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.ui.components.RpMarkdown
+import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.promptsheet.PromptContent
 import dev.j3pf.rp.ui.theme.RpColors
 
@@ -166,14 +168,16 @@ private fun ThinkingBlock(
 /** Llamada a herramienta plegable: bash muestra el comando, edit muestra el diff, resultado truncado con "ver más". */
 @Composable
 fun ToolCard(run: ToolRun) {
-    var open by rememberSaveable(run.toolCallId) { mutableStateOf(false) }
-    var more by rememberSaveable(run.toolCallId + "m") { mutableStateOf(false) }
+    val (open, setOpen) = rememberSaveable(run.toolCallId) { mutableStateOf(false) }
+    val (more, setMore) = rememberSaveable(run.toolCallId + "m") { mutableStateOf(false) }
     val summary = remember(run.name, run.args) { run.summary() }
-    Card(
-        onClick = { open = !open },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    SurfaceCard(
+        onClick = { setOpen(!open) },
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 0.dp,
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (run.status) {
                     ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -215,7 +219,7 @@ fun ToolCard(run: ToolRun) {
                             maxHeight = if (more) 400 else 200,
                         )
                         if (out.length > LIMIT) {
-                            TextButton(onClick = { more = !more }) { Text(if (more) "ver menos" else "ver más") }
+                            TextButton(onClick = { setMore(!more) }) { Text(if (more) "ver menos" else "ver más") }
                         }
                         if (run.truncated) {
                             Text(
@@ -286,10 +290,18 @@ private fun PromptCardView(
     busy: Boolean,
     onAnswer: (Prompt, Answer) -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
+    SurfaceCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
+    ) {
+        Column(Modifier.padding(16.dp)) {
             if (card.resolved) {
-                Text(card.prompt.title.ifBlank { "Pregunta" }, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    card.prompt.title.ifBlank { "Pregunta" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
                 Text(
                     "Respondida" +
                         when (card.resolvedBy) {

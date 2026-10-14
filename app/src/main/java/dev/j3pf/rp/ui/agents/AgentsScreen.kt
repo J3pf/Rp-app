@@ -8,23 +8,25 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,20 +48,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.MainViewModel
+import dev.j3pf.rp.ui.components.AgentSkeletonList
+import dev.j3pf.rp.ui.components.AppHeader
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.EmptyState
 import dev.j3pf.rp.ui.components.MachineFilterBar
+import dev.j3pf.rp.ui.components.MachineHeroDropdown
 import dev.j3pf.rp.ui.components.StatusChip
+import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.TagChip
+import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.lastSegment
 import dev.j3pf.rp.util.parseColor
@@ -82,59 +89,122 @@ fun AgentsScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNewAgent,
-                icon = { Icon(Icons.Filled.Add, null) },
-                text = { Text("Nuevo agente") },
+                shape = RoundedCornerShape(999.dp),
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("Nuevo agente", fontWeight = FontWeight.Bold) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.padding(padding)) {
+        Column(
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+        ) {
             ConnectionBanner(conn)
-            MachineFilterBar(
+
+            AppHeader(
+                greeting = "¿Qué está ejecutando Pi?",
+                title = "Tus Agentes",
+            )
+
+            // Switcher de máquinas tipo Dropdown con Hero Card (design.md §1 y §6)
+            MachineHeroDropdown(
                 machines = state.machines,
                 agents = state.allAgents,
                 selected = state.selected,
                 onSelect = vm::select,
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier.padding(bottom = 6.dp),
             )
+
+            // Filtros rápidos si hay más de 1 contexto
+            if (state.machines
+                    .map { it.context }
+                    .distinct()
+                    .size > 1
+            ) {
+                MachineFilterBar(
+                    machines = state.machines,
+                    agents = state.allAgents,
+                    selected = state.selected,
+                    onSelect = vm::select,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+
             PullToRefreshBox(
                 isRefreshing = state.refreshing,
                 onRefresh = vm::refresh,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
-                if (state.groups.isEmpty()) {
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        EmptyState(
-                            "Aún no hay agentes",
-                            if (state.machines.isEmpty()) {
-                                "Empareja una PC con `/rp pair` y abre Pi en ella."
-                            } else {
-                                "Abre Pi con el plugin rp en tus PCs y aparecerán aquí."
-                            },
+                when {
+                    state.refreshing && state.groups.isEmpty() -> {
+                        AgentSkeletonList(
+                            count = 3,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
-                } else {
-                    LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
-                        state.groups.forEach { g ->
-                            stickyHeader(key = "h-${g.machine.machineId}") { MachineHeader(g.machine) }
-                            items(g.agents, key = { it.agentId }) { a ->
-                                AgentCard(
-                                    a = a,
-                                    canResume = g.machine.hostOnline,
-                                    onClick = { onOpenChat(a.agentId) },
-                                    onResume = {
-                                        if (g.machine.hostOnline) {
-                                            vm.resumeAgent(a) { msg ->
-                                                scope.launch { snackbar.showSnackbar(msg) }
-                                            }
-                                        } else {
-                                            scope.launch {
-                                                snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en ${g.machine.name}")
-                                            }
-                                        }
+
+                    state.groups.isEmpty() -> {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                        ) {
+                            EmptyState(
+                                title = "Aún no hay agentes",
+                                subtitle =
+                                    if (state.machines.isEmpty()) {
+                                        "Empareja una PC con `/rp pair` y abre Pi en ella para comenzar."
+                                    } else {
+                                        "Abre Pi con el plugin rp en tus PCs y tus sesiones aparecerán aquí."
                                     },
-                                    onForget = { vm.forget(a.agentId) },
-                                )
+                                actionLabel = if (state.canSpawn) "Nuevo agente" else null,
+                                onAction = if (state.canSpawn) onNewAgent else null,
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.SmartToy,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(32.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    else -> {
+                        LazyColumn(
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            state.groups.forEach { g ->
+                                stickyHeader(key = "h-${g.machine.machineId}") {
+                                    MachineHeader(g.machine)
+                                }
+                                items(g.agents, key = { it.agentId }) { a ->
+                                    AgentCard(
+                                        a = a,
+                                        canResume = g.machine.hostOnline,
+                                        onClick = { onOpenChat(a.agentId) },
+                                        onResume = {
+                                            if (g.machine.hostOnline) {
+                                                vm.resumeAgent(a) { msg ->
+                                                    scope.launch { snackbar.showSnackbar(msg) }
+                                                }
+                                            } else {
+                                                scope.launch {
+                                                    snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en ${g.machine.name}")
+                                                }
+                                            }
+                                        },
+                                        onForget = { vm.forget(a.agentId) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -146,17 +216,39 @@ fun AgentsScreen(
 
 @Composable
 private fun MachineHeader(m: MachineSummary) {
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             ColorDot(parseColor(m.color), 12)
-            Text(m.name, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleSmall)
             Text(
-                if (m.online) "  ● en línea" else "  ○ sin conexión",
+                text = m.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (m.online) "● en línea" else "○ sin conexión",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (m.online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                color = if (m.online) RpColors.success else MaterialTheme.colorScheme.outline,
             )
             if (m.hostOnline) {
-                Text("  rp-host ✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                ) {
+                    Text(
+                        text = "rp-host ✓",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
             }
         }
     }
@@ -172,27 +264,61 @@ fun AgentCard(
     canResume: Boolean = false,
     onResume: () -> Unit = {},
 ) {
-    var menu by remember { mutableStateOf(false) }
-    Card(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clickable(onClick = onClick),
+    val (menu, setMenu) = remember { mutableStateOf(false) }
+
+    SurfaceCard(
+        onClick = onClick,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ColorDot(parseColor(a.machineColor), 8)
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Fila superior: punto de color de máquina, título de sesión, campana y menú
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = parseColor(a.machineColor).copy(alpha = 0.16f),
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        ColorDot(parseColor(a.machineColor), 8)
+                    }
+                }
+
                 Text(
-                    agentTitle(a.sessionName, a.cwd, a.agentId),
-                    Modifier.padding(start = 8.dp).weight(1f),
+                    text = agentTitle(a.sessionName, a.cwd, a.agentId),
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+
                 if (a.openPromptCount > 0) {
-                    BadgedBox(badge = { Badge { Text("${a.openPromptCount}") } }) { Text("🔔") }
+                    BadgedBox(
+                        badge = {
+                            Badge(containerColor = RpColors.warning) {
+                                Text("${a.openPromptCount}", color = MaterialTheme.colorScheme.onPrimary)
+                            }
+                        },
+                    ) {
+                        Text("🔔")
+                    }
                 }
+
                 if (!a.online) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (canResume) {
-                            IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
+                            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
                                 Icon(
                                     Icons.Filled.PlayArrow,
                                     contentDescription = "Reanudar agente",
@@ -202,15 +328,19 @@ fun AgentCard(
                             }
                         }
                         Box {
-                            IconButton(onClick = { menu = true }, modifier = Modifier.size(28.dp)) {
-                                Icon(Icons.Filled.MoreVert, "Opciones", modifier = Modifier.size(20.dp))
+                            IconButton(onClick = { setMenu(true) }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = "Opciones",
+                                    modifier = Modifier.size(20.dp),
+                                )
                             }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenu(expanded = menu, onDismissRequest = { setMenu(false) }) {
                                 if (canResume) {
                                     DropdownMenuItem(
                                         text = { Text("Reanudar agente (/resume)") },
                                         onClick = {
-                                            menu = false
+                                            setMenu(false)
                                             onResume()
                                         },
                                     )
@@ -218,7 +348,7 @@ fun AgentCard(
                                 DropdownMenuItem(
                                     text = { Text("Olvidar agente", color = MaterialTheme.colorScheme.error) },
                                     onClick = {
-                                        menu = false
+                                        setMenu(false)
                                         onForget()
                                     },
                                 )
@@ -227,50 +357,70 @@ fun AgentCard(
                     }
                 }
             }
+
+            // Metadatos (carpeta, rama, modelo)
             val meta =
                 listOfNotNull(
                     lastSegment(a.cwd).takeIf { it.isNotEmpty() }?.let { "📁 $it" },
                     a.gitBranch?.let { "⎇ $it" },
                     a.model?.label?.takeIf { it.isNotEmpty() },
                 ).joinToString("  ·  ")
+
             if (meta.isNotEmpty()) {
                 Text(
-                    meta,
+                    text = meta,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+
+            // Rail horizontal de chips de estado
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 StatusChip(a)
                 a.launcher?.let { TagChip(it) }
                 a.herdr?.let { h ->
-                    val loc = listOfNotNull(h.workspaceId?.let { w -> "ws $w" }, h.paneId?.let { p -> "pane $p" }).joinToString("·")
+                    val loc =
+                        listOfNotNull(
+                            h.workspaceId?.let { w -> "ws $w" },
+                            h.paneId?.let { p -> "pane $p" },
+                        ).joinToString("·")
                     if (loc.isNotEmpty()) TagChip("herdr $loc")
                 }
                 a.gentleMode?.takeIf { it != "unknown" }?.let {
                     TagChip(
-                        it.uppercase(),
-                        if (it == "auto" ||
-                            it == "yolo"
-                        ) {
-                            MaterialTheme.colorScheme.tertiary
-                        } else {
-                            MaterialTheme.colorScheme.secondary
-                        },
+                        text = it.uppercase(),
+                        color =
+                            if (it == "auto" || it == "yolo") {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.secondary
+                            },
                     )
                 }
             }
+
+            // Vista previa del último mensaje
             val preview = if (a.redacted) "contenido oculto" else a.lastMessagePreview
             if (!preview.isNullOrBlank()) {
-                Text(
-                    preview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = if (a.redacted) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = preview,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (a.redacted) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }

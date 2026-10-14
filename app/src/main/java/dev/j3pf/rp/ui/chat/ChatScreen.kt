@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -411,11 +413,18 @@ internal fun Composer(
     // La app declara CAMERA (escáner QR): sin el permiso concedido, ACTION_IMAGE_CAPTURE lanza SecurityException.
     val cameraPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) newCameraTarget().also { cameraTarget = it }.let { takePicture.launch(it) }
+            if (granted) {
+                val target = newCameraTarget().also { cameraTarget = it }
+                takePicture.launch(target)
+            }
         }
 
-    Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Surface(
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (ui.attachments.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ui.attachments.forEach { a ->
@@ -429,7 +438,11 @@ internal fun Composer(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
-                    AssistChip(onClick = { choiceMenu = true }, label = { Text("Entrega: ${ui.choice.label}") })
+                    AssistChip(
+                        onClick = { choiceMenu = true },
+                        shape = RoundedCornerShape(12.dp),
+                        label = { Text("Entrega: ${ui.choice.label}") },
+                    )
                     DropdownMenu(choiceMenu, { choiceMenu = false }) {
                         DeliveryChoice.entries.forEach { c ->
                             val enabled = c != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
@@ -446,18 +459,20 @@ internal fun Composer(
                 }
                 if (working) {
                     FilterChip(
-                        ui.workingDelivery == Delivery.FOLLOW_UP,
-                        { onWorkingDelivery(Delivery.FOLLOW_UP) },
+                        selected = ui.workingDelivery == Delivery.FOLLOW_UP,
+                        onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
+                        shape = RoundedCornerShape(12.dp),
                         label = { Text("Encolar (follow‑up)") },
                     )
                     FilterChip(
-                        ui.workingDelivery == Delivery.STEER,
-                        { onWorkingDelivery(Delivery.STEER) },
+                        selected = ui.workingDelivery == Delivery.STEER,
+                        onClick = { onWorkingDelivery(Delivery.STEER) },
+                        shape = RoundedCornerShape(12.dp),
                         label = { Text("Interrumpir y dirigir (steer)") },
                     )
                 }
             }
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Column {
                     IconButton(onClick = { attachMenu = true }) { Icon(Icons.Filled.AttachFile, "Adjuntar") }
                     DropdownMenu(attachMenu, { attachMenu = false }) {
@@ -479,6 +494,7 @@ internal fun Composer(
                     value = text,
                     onValueChange = onText,
                     modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(20.dp),
                     placeholder = { Text("Escribe a tu agente…") },
                     maxLines = 6,
                 )

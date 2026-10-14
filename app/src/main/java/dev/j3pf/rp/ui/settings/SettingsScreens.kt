@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,6 +30,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -50,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -60,8 +63,11 @@ import dev.j3pf.rp.BuildConfig
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.ui.components.AppHeader
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.SectionTitle
+import dev.j3pf.rp.ui.components.SurfaceCard
+import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpThemeChoice
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.contextEmoji
@@ -81,40 +87,129 @@ fun SettingsScreen(
     var showThemeDialog by remember { mutableStateOf(false) }
     LifecycleRefresh { vm.refreshHealth() }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SectionTitle("Relay")
-        ListItem(
-            headlineContent = { Text(st.session?.relayName?.ifBlank { null } ?: "Relay") },
-            supportingContent = { Text(st.session?.relayUrl.orEmpty()) },
-            trailingContent = {
-                Text(
-                    when (st.conn) {
-                        ConnState.Connected -> "● conectado"
-                        ConnState.Connecting -> "conectando…"
-                        is ConnState.Fatal -> "✕ cerrado"
-                        else -> "○ sin conexión"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            },
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 96.dp),
+    ) {
+        AppHeader(
+            greeting = "Configuración y estado",
+            title = "Ajustes",
         )
-        HorizontalDivider()
-        SectionTitle("Equipos")
-        NavRow("Dispositivos emparejados", "Revocar teléfonos") { nav(SettingsDest.Devices) }
-        NavRow("PCs / máquinas", "Nombre, contexto, color; revocar") { nav(SettingsDest.Machines) }
-        NavRow("Añadir máquina", "Genera un código para `/rp pair`") { nav(SettingsDest.AddMachine) }
-        SectionTitle("Preferencias")
-        NavRow("Tema de la app", themeLabel(st.settings.appTheme)) { showThemeDialog = true }
-        NavRow("Notificaciones", healthSummary(st.health)) { nav(SettingsDest.Notifications) }
-        NavRow("Seguridad", "Desbloqueo para aprobar, bloqueo de la app") { nav(SettingsDest.Security) }
-        NavRow("Optimización de batería", if (st.health.batteryExcluded) "RP está excluida ✓" else "Recomendado excluir RP") {
-            nav(SettingsDest.Battery)
+
+        SectionTitle("Relay")
+        SurfaceCard(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 1.dp,
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        st.session?.relayName?.ifBlank { null } ?: "Relay",
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                supportingContent = { Text(st.session?.relayUrl.orEmpty(), style = MaterialTheme.typography.bodySmall) },
+                trailingContent = {
+                    val (statusText, statusColor) =
+                        when (st.conn) {
+                            ConnState.Connected -> "● conectado" to RpColors.success
+                            ConnState.Connecting -> "conectando…" to MaterialTheme.colorScheme.primary
+                            is ConnState.Fatal -> "✕ cerrado" to MaterialTheme.colorScheme.error
+                            else -> "○ sin conexión" to MaterialTheme.colorScheme.outline
+                        }
+                    Text(
+                        statusText,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = statusColor,
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
         }
+
+        SectionTitle("Equipos")
+        SurfaceCard(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 1.dp,
+        ) {
+            NavRow("Dispositivos emparejados", "Revocar teléfonos") { nav(SettingsDest.Devices) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow("PCs / máquinas", "Nombre, contexto, color; revocar") { nav(SettingsDest.Machines) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow("Añadir máquina", "Genera un código para `/rp pair`") { nav(SettingsDest.AddMachine) }
+        }
+
+        SectionTitle("Preferencias")
+        SurfaceCard(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 1.dp,
+        ) {
+            NavRow("Tema de la app", themeLabel(st.settings.appTheme)) { showThemeDialog = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow("Notificaciones", healthSummary(st.health)) { nav(SettingsDest.Notifications) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow("Seguridad", "Desbloqueo para aprobar, bloqueo de la app") { nav(SettingsDest.Security) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow("Optimización de batería", if (st.health.batteryExcluded) "RP está excluida ✓" else "Recomendado excluir RP") {
+                nav(SettingsDest.Battery)
+            }
+        }
+
         SectionTitle("Acerca de")
-        NavRow("Versión ${BuildConfig.VERSION_NAME}", "Licencias de código abierto") { nav(SettingsDest.About) }
-        HorizontalDivider(Modifier.padding(top = 8.dp))
-        TextButton(onClick = { confirmLogout = true }, modifier = Modifier.padding(8.dp)) {
-            Text("Cerrar sesión", color = MaterialTheme.colorScheme.error)
+        SurfaceCard(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 1.dp,
+        ) {
+            NavRow("Versión ${BuildConfig.VERSION_NAME}", "Licencias de código abierto") { nav(SettingsDest.About) }
+        }
+
+        SurfaceCard(
+            onClick = { confirmLogout = true },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f),
+            tonalElevation = 0.dp,
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        "Cerrar sesión",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        "Borrar credenciales e historial de este dispositivo",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
         }
     }
     if (confirmLogout) {
@@ -177,9 +272,16 @@ private fun NavRow(
     onClick: () -> Unit,
 ) {
     ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
+        supportingContent = {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
         modifier = Modifier.clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
 

@@ -56,8 +56,8 @@ class AgentsViewModel
                 isRefreshing,
             ) { ms, all, st, refreshing ->
                 val sel = st.selectedContext
-                val visibleMachines = if (sel == AppSettings.ALL) ms else ms.filter { it.context == sel }
-                val visibleAgents = if (sel == AppSettings.ALL) all else all.filter { it.machineContext == sel }
+                val visibleMachines = if (sel == AppSettings.ALL) ms else ms.filter { it.context == sel || it.machineId == sel }
+                val visibleAgents = if (sel == AppSettings.ALL) all else all.filter { it.machineContext == sel || it.machineId == sel }
                 val byMachine = visibleAgents.groupBy { it.machineId }
                 // Agrupado por PC (cabecera de color); las PC sin agentes también se muestran si están online.
                 val groups =
