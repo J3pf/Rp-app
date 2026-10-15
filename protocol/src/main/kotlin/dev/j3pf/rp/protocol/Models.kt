@@ -16,6 +16,30 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
+data class QuotaWindow(
+    val id: String,
+    val label: String? = null,
+    val usedPercent: Double = 0.0,
+    val remainingPercent: Double = 100.0,
+    val resetsAt: String? = null,
+    val resetsInSec: Long? = null,
+    val note: String? = null,
+)
+
+@Serializable
+data class MachineQuota(
+    val family: String,
+    val label: String,
+    val plan: String? = null,
+    val ok: Boolean = true,
+    val notConfigured: Boolean = false,
+    val error: String? = null,
+    val primaryWindowId: String? = null,
+    val windows: List<QuotaWindow> = emptyList(),
+    val updatedAt: String? = null,
+)
+
+@Serializable
 data class MachineSummary(
     val machineId: String,
     val name: String,
@@ -26,6 +50,7 @@ data class MachineSummary(
     val agentCount: Int = 0,
     val openPromptCount: Int = 0,
     val hostOnline: Boolean = false,
+    val quotas: List<MachineQuota>? = null,
 )
 
 @Serializable
