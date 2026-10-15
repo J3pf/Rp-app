@@ -16,6 +16,7 @@ data class MachineEntity(
     val agentCount: Int,
     val openPromptCount: Int,
     val hostOnline: Boolean,
+    val quotasJson: String? = null,
 )
 
 @Entity(

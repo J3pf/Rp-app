@@ -37,7 +37,10 @@ object AppModule {
     @Provides
     @Singleton
     fun database(@ApplicationContext ctx: Context): RpDatabase =
-        Room.databaseBuilder(ctx, RpDatabase::class.java, "rp.db").build()
+        Room.databaseBuilder(ctx, RpDatabase::class.java, "rp.db")
+            .addMigrations(RpDatabase.MIGRATION_1_2)
+            .fallbackToDestructiveMigration()
+            .build()
 
     @Provides fun machineDao(db: RpDatabase) = db.machines()
     @Provides fun agentDao(db: RpDatabase) = db.agents()
