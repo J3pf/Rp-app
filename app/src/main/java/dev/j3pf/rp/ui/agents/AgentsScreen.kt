@@ -403,6 +403,13 @@ fun AgentCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 StatusChip(a)
+                if (a.todoTotal > 0) {
+                    val percent = a.todoCompleted * 100 / a.todoTotal
+                    TagChip(
+                        text = "Tareas: ${a.todoCompleted}/${a.todoTotal} ($percent%)",
+                        color = if (a.todoCompleted == a.todoTotal) RpColors.success else MaterialTheme.colorScheme.primary,
+                    )
+                }
                 a.launcher?.let { TagChip(it) }
                 a.herdr?.let { h ->
                     val loc =
@@ -421,6 +428,29 @@ fun AgentCard(
                             } else {
                                 MaterialTheme.colorScheme.secondary
                             },
+                    )
+                }
+            }
+
+            // Tarea activa en curso si existe
+            val active = a.activeTask
+            if (!active.isNullOrBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "▶",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        active,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

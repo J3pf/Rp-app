@@ -289,4 +289,90 @@ class ChatReducerTest {
         val bash = ToolRun("2", "bash", RpJson.parseToJsonElement("""{"command":"npm test\nfoo"}"""))
         assertEquals("npm test foo", bash.summary())
     }
+
+    @Test
+    fun `todo_update actualiza la lista de tareas en ChatState`() {
+        val json =
+            """
+            {
+                "type": "todo_update",
+                "tasks": [
+                    { "id": 1, "title": "Diseñar contrato", "status": "done", "note": "aprobado" },
+                    { "id": 2, "title": "Implementar UI", "status": "in_progress", "note": "en curso" },
+                    { "id": 3, "title": "Escribir tests", "status": "pending" }
+                ]
+            }
+            """.trimIndent()
+        val s = ChatReducer.reduce(ChatState(), ev(1, json))
+        assertEquals(3, s.todos.size)
+        assertEquals(1, s.todos[0].id)
+        assertEquals("done", s.todos[0].status)
+        assertEquals("Implementar UI", s.todos[1].title)
+        assertEquals("in_progress", s.todos[1].status)
+        assertEquals("Escribir tests", s.todos[2].title)
+        assertEquals("pending", s.todos[2].status)
+    }
+
+    @Test
+    fun `subagent_update registra subagente en subagents e items y enriquece tools`() {
+        var s = ChatState()
+        s = s.copy(tools = mapOf("task-123" to ToolRun(toolCallId = "task-123", name = "subagent_run")))
+
+        val json =
+            """
+            {
+                "type": "subagent_update",
+                "taskId": "task-123",
+                "agent": "sdd-explore",
+                "label": "Mapear dependencias",
+                "status": "running",
+                "model": "claude-3-5-sonnet",
+                "thinking": "Explorando módulos del sistema...",
+                "startedAt": 1000,
+                "turns": 2,
+                "toolCalls": 5,
+                "tokens": {
+                    "input": 1500,
+                    "output": 350,
+                    "cacheRead": 200,
+                    "cacheWrite": 0,
+                    "total": 2050,
+                    "cost": 0.012
+                },
+                "tools": ["read", "grep"]
+            }
+            """.trimIndent()
+
+        s = ChatReducer.reduce(s, ev(1, json), now = 1500)
+
+        val sub = s.subagents["task-123"]
+        assertNotNull(sub)
+        assertEquals("sdd-explore", sub.agent)
+        assertEquals("Mapear dependencias", sub.label)
+        assertEquals("claude-3-5-sonnet", sub.model)
+        assertEquals("Explorando módulos del sistema...", sub.thinking)
+        assertEquals(2050L, sub.tokens?.total)
+        assertEquals(listOf("read", "grep"), sub.tools)
+
+        assertEquals(sub, s.tools["task-123"]?.subagent)
+
+        val item = s.items.firstOrNull { it.key == "subagent:task-123" } as? SubagentCardItem
+        assertNotNull(item)
+        assertEquals(sub, item.info)
+    }
+
+    @Test
+    fun `settle marca subagentes activos como completados o abortados`() {
+        var s = ChatState()
+        val json = """{"type":"subagent_update","taskId":"task-1","agent":"worker","status":"running"}"""
+        s = ChatReducer.reduce(s, ev(1, json))
+        assertEquals("running", s.subagents["task-1"]?.status)
+
+        s = ChatReducer.reduce(s, ev(2, """{"type":"agent_settled","aborted":false}"""))
+        assertEquals("done", s.subagents["task-1"]?.status)
+
+        s = ChatReducer.reduce(s, ev(3, json))
+        s = ChatReducer.reduce(s, ev(4, """{"type":"agent_settled","aborted":true}"""))
+        assertEquals("aborted", s.subagents["task-1"]?.status)
+    }
 }

@@ -1,7 +1,9 @@
 package dev.j3pf.rp.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,9 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +46,7 @@ import dev.j3pf.rp.chat.ChatItem
 import dev.j3pf.rp.chat.DiffKind
 import dev.j3pf.rp.chat.NoteKind
 import dev.j3pf.rp.chat.PromptCard
+import dev.j3pf.rp.chat.SubagentCardItem
 import dev.j3pf.rp.chat.SystemNote
 import dev.j3pf.rp.chat.ToolRun
 import dev.j3pf.rp.chat.ToolStatus
@@ -51,6 +57,7 @@ import dev.j3pf.rp.chat.simpleDiff
 import dev.j3pf.rp.chat.summary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.protocol.SubagentInfo
 import dev.j3pf.rp.ui.components.RpMarkdown
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.promptsheet.PromptContent
@@ -68,7 +75,7 @@ fun ChatItemView(
         is AssistantMsg -> AssistantBubble(item, tools)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item)
-        else -> Unit
+        is SubagentCardItem -> SubagentCard(item.info)
     }
 }
 
@@ -124,7 +131,12 @@ private fun AssistantBubble(
                                 b.args,
                                 if (m.streaming) ToolStatus.RUNNING else ToolStatus.OK,
                             )
-                    ToolCard(run)
+                    val sub = run.subagent
+                    if (sub != null) {
+                        SubagentCard(sub)
+                    } else {
+                        ToolCard(run)
+                    }
                 }
             }
         }
@@ -337,6 +349,223 @@ private fun SystemNoteView(n: SystemNote) {
         }
         AnimatedVisibility(open && n.detail != null) {
             Mono(n.detail.orEmpty(), maxHeight = 240)
+        }
+    }
+}
+
+/** Tarjeta de subagente enriquecida estilo Gentle Shell (modelo, tiempo, thinking, tokens, status, steps). */
+@Composable
+fun SubagentCard(info: SubagentInfo) {
+    val (openThinking, setOpenThinking) = rememberSaveable(info.taskId + "-think") { mutableStateOf(false) }
+    val (openResult, setOpenResult) = rememberSaveable(info.taskId + "-res") { mutableStateOf(false) }
+
+    SurfaceCard(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Header: Icon + Agent Name + Task Label + Model + Status + Time
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    Icons.Filled.SmartToy,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            info.agent,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        info.model?.let { modelName ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = RoundedCornerShape(6.dp),
+                            ) {
+                                Text(
+                                    modelName,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    info.label?.takeIf { it.isNotBlank() }?.let { label ->
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                // Estado e indicador de duración
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    when (info.status) {
+                        "running" -> {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Text(
+                                "en ejecución",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
+                        "done", "ok", "completed" -> {
+                            Text("✓", color = RpColors.success, fontWeight = FontWeight.Bold)
+                            Text(
+                                "completado",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = RpColors.success,
+                            )
+                        }
+
+                        "error" -> {
+                            Text("✕", color = RpColors.danger, fontWeight = FontWeight.Bold)
+                            Text(
+                                "error",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = RpColors.danger,
+                            )
+                        }
+
+                        else -> {
+                            Text(
+                                info.status,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                        }
+                    }
+                    info.durationMs?.let { ms ->
+                        Text(
+                            "${ms / 100 / 10.0}s",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
+                }
+            }
+
+            // Métricas (turns, tool calls, tokens, cost)
+            val metricsList = mutableListOf<String>()
+            if (info.turns > 0) metricsList.add("${info.turns} turnos")
+            if (info.toolCalls > 0) metricsList.add("${info.toolCalls} herramientas")
+            info.tokens?.let { tok ->
+                if (tok.total > 0) metricsList.add("${tok.total} tokens")
+            }
+            info.cost?.let { c ->
+                metricsList.add("$${String.format(java.util.Locale.US, "%.3f", c)}")
+            }
+
+            if (metricsList.isNotEmpty()) {
+                Text(
+                    metricsList.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
+
+            // Herramientas internas (steps)
+            if (info.tools.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    info.tools.forEach { t ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(4.dp),
+                        ) {
+                            Text(
+                                t,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Thinking colapsable
+            info.thinking?.takeIf { it.isNotBlank() }?.let { think ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(10.dp),
+                    tonalElevation = 1.dp,
+                    onClick = { setOpenThinking(!openThinking) },
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            if (openThinking) "Razonamiento del subagente ▾" else "Razonamiento del subagente ▸",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                        AnimatedVisibility(openThinking) {
+                            Text(
+                                think,
+                                modifier = Modifier.padding(top = 4.dp),
+                                fontStyle = FontStyle.Italic,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Error si existe
+            info.error?.takeIf { it.isNotBlank() }?.let { err ->
+                Text(
+                    err,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            // Resultado final si existe
+            info.result?.takeIf { it.isNotBlank() }?.let { res ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { setOpenResult(!openResult) }) {
+                        Text(if (openResult) "Ocultar resultado" else "Ver resultado del subagente")
+                    }
+                    AnimatedVisibility(openResult) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) {
+                            Box(Modifier.padding(10.dp)) {
+                                RpMarkdown(res)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

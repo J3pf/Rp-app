@@ -6,16 +6,21 @@ import dev.j3pf.rp.protocol.Entry
 import dev.j3pf.rp.protocol.EntryKind
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptResolved
+import dev.j3pf.rp.protocol.SubagentInfo
+import dev.j3pf.rp.protocol.TodoItem
+import dev.j3pf.rp.protocol.TokenUsage
 import dev.j3pf.rp.protocol.arr
 import dev.j3pf.rp.protocol.bool
+import dev.j3pf.rp.protocol.double
 import dev.j3pf.rp.protocol.int
 import dev.j3pf.rp.protocol.long
 import dev.j3pf.rp.protocol.obj
 import dev.j3pf.rp.protocol.str
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.Json
 
 /**
  * Reductor puro `reduce(state, event) → state` del chat (PLAN-APP §4.3).
@@ -28,12 +33,20 @@ import kotlinx.serialization.json.Json
  *  - Los items se desduplican por clave (`rol:timestamp`), así el historial y los eventos pueden solaparse.
  */
 object ChatReducer {
-    private val lenient = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val lenient =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     // ───────────────────────────── Entradas ─────────────────────────────
 
     /** Aplica un evento en vivo (o reproducido desde el historial). [now] se inyecta para mantener la pureza. */
-    fun reduce(state: ChatState, event: AgentEvent, now: Long = 0L): ChatState {
+    fun reduce(
+        state: ChatState,
+        event: AgentEvent,
+        now: Long = 0L,
+    ): ChatState {
         var s = state
         if (event.epoch != null && event.epoch != s.epoch) {
             s = s.copy(epoch = event.epoch, lastSeq = 0, streaming = null, working = false, needsResync = false)
@@ -45,14 +58,22 @@ object ChatReducer {
     }
 
     /** Sustituye los items por el historial normalizado (`agent.snapshot` / `agent.history.entries`). */
-    fun applyEntries(state: ChatState, entries: List<Entry>, epoch: String? = state.epoch): ChatState {
+    fun applyEntries(
+        state: ChatState,
+        entries: List<Entry>,
+        epoch: String? = state.epoch,
+    ): ChatState {
         var s = state.copy(items = emptyList(), tools = emptyMap(), streaming = null, epoch = epoch ?: state.epoch)
         for (e in entries) s = applyEntry(s, e)
         return s.copy(needsResync = false)
     }
 
     /** `agent.history`: entradas + eventos posteriores. Los eventos con `seq` ≤ lastSeq se descartan. */
-    fun applyHistory(state: ChatState, h: AgentHistory, now: Long = 0L): ChatState {
+    fun applyHistory(
+        state: ChatState,
+        h: AgentHistory,
+        now: Long = 0L,
+    ): ChatState {
         var s = state
         val epochChanged = h.epoch != null && h.epoch != s.epoch
         if (h.entries.isNotEmpty() || epochChanged) {
@@ -64,90 +85,194 @@ object ChatReducer {
         return s.copy(needsResync = false)
     }
 
-    fun applyPromptOpened(state: ChatState, prompt: Prompt): ChatState {
+    fun applyPromptOpened(
+        state: ChatState,
+        prompt: Prompt,
+    ): ChatState {
         val key = "prompt:${prompt.promptId}"
         if (state.items.any { it.key == key }) return state
         return state.copy(items = state.items + PromptCard(key, prompt))
     }
 
-    fun applyPromptResolved(state: ChatState, r: PromptResolved): ChatState {
+    fun applyPromptResolved(
+        state: ChatState,
+        r: PromptResolved,
+    ): ChatState {
         val key = "prompt:${r.promptId}"
-        return state.copy(items = state.items.map {
-            if (it.key == key && it is PromptCard) it.copy(resolved = true, resolvedBy = r.by, answer = r.answer) else it
-        })
+        return state.copy(
+            items =
+                state.items.map {
+                    if (it.key == key && it is PromptCard) it.copy(resolved = true, resolvedBy = r.by, answer = r.answer) else it
+                },
+        )
     }
 
     /** Registra un texto enviado desde el móvil para marcar luego el mensaje con 📱. */
-    fun markLocalSent(state: ChatState, text: String): ChatState = state.copy(localSent = state.localSent + text.trim())
+    fun markLocalSent(
+        state: ChatState,
+        text: String,
+    ): ChatState = state.copy(localSent = state.localSent + text.trim())
 
     // ───────────────────────────── Eventos ─────────────────────────────
 
-    private fun applyEvent(s: ChatState, e: JsonObject, seq: Long, now: Long): ChatState =
+    private fun applyEvent(
+        s: ChatState,
+        e: JsonObject,
+        seq: Long,
+        now: Long,
+    ): ChatState =
         when (e.str("type")) {
-            "agent_start" -> s.copy(working = true)
-            "agent_settled" -> settle(s, aborted = e.bool("aborted") == true)
-            "message_start" -> messageStart(s, e)
-            "message_delta" -> messageDelta(s, e)
-            "message_end" -> messageEnd(s, e.obj("message"), seq, now)
-            "tool_execution_start" -> toolStart(s, e, now)
-            "tool_execution_update" -> toolUpdate(s, e, now)
-            "tool_execution_end" -> toolEnd(s, e, now)
+            "agent_start" -> {
+                s.copy(working = true)
+            }
+
+            "agent_settled" -> {
+                settle(s, aborted = e.bool("aborted") == true)
+            }
+
+            "message_start" -> {
+                messageStart(s, e)
+            }
+
+            "message_delta" -> {
+                messageDelta(s, e)
+            }
+
+            "message_end" -> {
+                messageEnd(s, e.obj("message"), seq, now)
+            }
+
+            "tool_execution_start" -> {
+                toolStart(s, e, now)
+            }
+
+            "tool_execution_update" -> {
+                toolUpdate(s, e, now)
+            }
+
+            "tool_execution_end" -> {
+                toolEnd(s, e, now)
+            }
+
             "session_info_changed" -> {
                 val name = e.str("name") ?: e.obj("session")?.str("name")
-                if (name == null) s else s.copy(
-                    sessionName = name,
-                    items = s.items + SystemNote("note:$seq:rename", NoteKind.SESSION_RENAMED, "Sesión renombrada: $name"),
-                )
+                if (name == null) {
+                    s
+                } else {
+                    s.copy(
+                        sessionName = name,
+                        items = s.items + SystemNote("note:$seq:rename", NoteKind.SESSION_RENAMED, "Sesión renombrada: $name"),
+                    )
+                }
             }
+
             "model_select" -> {
                 val label = modelLabel(e.obj("model")) ?: e.str("model")
-                if (label == null) s else s.copy(
-                    model = label,
-                    items = s.items + SystemNote("note:$seq:model", NoteKind.MODEL_CHANGE, "Modelo: $label"),
-                )
+                if (label == null) {
+                    s
+                } else {
+                    s.copy(
+                        model = label,
+                        items = s.items + SystemNote("note:$seq:model", NoteKind.MODEL_CHANGE, "Modelo: $label"),
+                    )
+                }
             }
+
             "thinking_level_select" -> {
                 val level = e.str("level") ?: e.str("thinking")
-                if (level == null) s else s.copy(
-                    thinkingLevel = level,
-                    items = s.items + SystemNote("note:$seq:thinking", NoteKind.THINKING_LEVEL, "Razonamiento: $level"),
+                if (level == null) {
+                    s
+                } else {
+                    s.copy(
+                        thinkingLevel = level,
+                        items = s.items + SystemNote("note:$seq:thinking", NoteKind.THINKING_LEVEL, "Razonamiento: $level"),
+                    )
+                }
+            }
+
+            "session_compact" -> {
+                s.copy(
+                    items =
+                        s.items +
+                            SystemNote(
+                                "note:$seq:compact",
+                                NoteKind.COMPACTION,
+                                "Contexto compactado",
+                                detail = e.str("summary") ?: e.obj("entry")?.str("summary"),
+                            ),
                 )
             }
-            "session_compact" -> s.copy(
-                items = s.items + SystemNote(
-                    "note:$seq:compact", NoteKind.COMPACTION, "Contexto compactado",
-                    detail = e.str("summary") ?: e.obj("entry")?.str("summary"),
-                ),
-            )
+
             "terminal_wait" -> {
                 val active = e.bool("active") ?: true
                 s.copy(terminalWait = if (active) TerminalWaitInfo(e.str("kind"), e.str("title")) else null)
             }
-            else -> s // turn_start/turn_end y desconocidos: sin efecto
+
+            "todo_update" -> {
+                todoUpdate(s, e)
+            }
+
+            "subagent_update" -> {
+                subagentUpdate(s, e, now)
+            }
+
+            else -> {
+                s
+            } // turn_start/turn_end y desconocidos: sin efecto
         }
 
-    private fun settle(s: ChatState, aborted: Boolean): ChatState {
+    private fun settle(
+        s: ChatState,
+        aborted: Boolean,
+    ): ChatState {
         val st = s.streaming
-        val items = if (st != null && st.blocks.isNotEmpty()) {
-            s.items + st.copy(streaming = false, stopReason = if (aborted) "aborted" else st.stopReason)
-        } else s.items
-        val tools = s.tools.mapValues { (_, t) ->
-            if (t.status == ToolStatus.RUNNING) t.copy(status = ToolStatus.ERROR, isError = true, result = t.result ?: "Interrumpido") else t
-        }
-        return s.copy(working = false, streaming = null, items = items, tools = tools, terminalWait = null)
+        val items =
+            if (st != null && st.blocks.isNotEmpty()) {
+                s.items + st.copy(streaming = false, stopReason = if (aborted) "aborted" else st.stopReason)
+            } else {
+                s.items
+            }
+        val tools =
+            s.tools.mapValues { (_, t) ->
+                if (t.status ==
+                    ToolStatus.RUNNING
+                ) {
+                    t.copy(status = ToolStatus.ERROR, isError = true, result = t.result ?: "Interrumpido")
+                } else {
+                    t
+                }
+            }
+        val subagents =
+            s.subagents.mapValues { (_, sub) ->
+                if (sub.status == "running") sub.copy(status = if (aborted) "aborted" else "done") else sub
+            }
+        return s.copy(working = false, streaming = null, items = items, tools = tools, subagents = subagents, terminalWait = null)
     }
 
-    private fun messageStart(s: ChatState, e: JsonObject): ChatState {
+    private fun messageStart(
+        s: ChatState,
+        e: JsonObject,
+    ): ChatState {
         val msg = e.obj("message")
         return when (msg?.str("role")) {
-            "assistant", null -> if (s.streaming == null) {
-                s.copy(streaming = AssistantMsg(key = "stream", streaming = true, model = msg?.str("model")))
-            } else s
-            else -> s // los mensajes de usuario / toolResult se materializan en message_end
+            "assistant", null -> {
+                if (s.streaming == null) {
+                    s.copy(streaming = AssistantMsg(key = "stream", streaming = true, model = msg?.str("model")))
+                } else {
+                    s
+                }
+            }
+
+            else -> {
+                s
+            } // los mensajes de usuario / toolResult se materializan en message_end
         }
     }
 
-    private fun messageDelta(s: ChatState, e: JsonObject): ChatState {
+    private fun messageDelta(
+        s: ChatState,
+        e: JsonObject,
+    ): ChatState {
         val idx = e.int("contentIndex") ?: 0
         if (idx < 0 || idx > 64) return s
         val kind = e.str("kind") ?: "text"
@@ -155,122 +280,291 @@ object ChatReducer {
         val base = s.streaming ?: AssistantMsg(key = "stream", streaming = true)
         val blocks = base.blocks.toMutableList()
         while (blocks.size <= idx) blocks.add(Block.Text(""))
-        blocks[idx] = when (kind) {
-            "thinking" -> Block.Thinking(((blocks[idx] as? Block.Thinking)?.text ?: "") + delta)
-            "toolcall" -> {
-                val prev = blocks[idx] as? Block.ToolCall ?: Block.ToolCall(null, null)
-                val raw = prev.rawArgs + delta
-                prev.copy(
-                    toolCallId = e.str("toolCallId") ?: prev.toolCallId,
-                    name = e.str("name") ?: e.str("toolName") ?: prev.name,
-                    rawArgs = raw,
-                    args = parsePartial(raw) ?: prev.args,
-                )
+        blocks[idx] =
+            when (kind) {
+                "thinking" -> {
+                    Block.Thinking(((blocks[idx] as? Block.Thinking)?.text ?: "") + delta)
+                }
+
+                "toolcall" -> {
+                    val prev = blocks[idx] as? Block.ToolCall ?: Block.ToolCall(null, null)
+                    val raw = prev.rawArgs + delta
+                    prev.copy(
+                        toolCallId = e.str("toolCallId") ?: prev.toolCallId,
+                        name = e.str("name") ?: e.str("toolName") ?: prev.name,
+                        rawArgs = raw,
+                        args = parsePartial(raw) ?: prev.args,
+                    )
+                }
+
+                else -> {
+                    Block.Text(((blocks[idx] as? Block.Text)?.text ?: "") + delta)
+                }
             }
-            else -> Block.Text(((blocks[idx] as? Block.Text)?.text ?: "") + delta)
-        }
         return s.copy(streaming = base.copy(blocks = blocks))
     }
 
-    private fun messageEnd(s: ChatState, msg: JsonObject?, seq: Long, now: Long): ChatState {
+    private fun messageEnd(
+        s: ChatState,
+        msg: JsonObject?,
+        seq: Long,
+        now: Long,
+    ): ChatState {
         if (msg == null) return s
         return when (msg.str("role")) {
             "assistant" -> {
                 val item = assistantFrom(msg, keyOf(msg, "assistant", "seq$seq"))
                 s.copy(streaming = null, items = upsert(s.items, item), tools = withCalls(s.tools, item, now))
             }
-            "user" -> userMessage(s, msg, "seq$seq")
-            "toolResult" -> toolResultMessage(s, msg)
-            else -> s
+
+            "user" -> {
+                userMessage(s, msg, "seq$seq")
+            }
+
+            "toolResult" -> {
+                toolResultMessage(s, msg)
+            }
+
+            else -> {
+                s
+            }
         }
     }
 
     // ─────────────────────── Herramientas ───────────────────────
 
-    private fun toolStart(s: ChatState, e: JsonObject, now: Long): ChatState {
+    private fun toolStart(
+        s: ChatState,
+        e: JsonObject,
+        now: Long,
+    ): ChatState {
         val id = e.str("toolCallId") ?: return s
         val prev = s.tools[id]
-        val run = (prev ?: ToolRun(id, e.str("toolName") ?: e.str("name") ?: "?", startedAt = now)).copy(
-            name = e.str("toolName") ?: e.str("name") ?: prev?.name ?: "?",
-            args = e["args"] ?: prev?.args,
-            status = ToolStatus.RUNNING,
-            startedAt = now,
-        )
+        val run =
+            (prev ?: ToolRun(id, e.str("toolName") ?: e.str("name") ?: "?", startedAt = now)).copy(
+                name = e.str("toolName") ?: e.str("name") ?: prev?.name ?: "?",
+                args = e["args"] ?: prev?.args,
+                status = ToolStatus.RUNNING,
+                startedAt = now,
+            )
         return s.copy(tools = s.tools + (id to run))
     }
 
-    private fun toolUpdate(s: ChatState, e: JsonObject, now: Long): ChatState {
+    private fun toolUpdate(
+        s: ChatState,
+        e: JsonObject,
+        now: Long,
+    ): ChatState {
         val id = e.str("toolCallId") ?: return s
         val prev = s.tools[id] ?: ToolRun(id, e.str("toolName") ?: "?", startedAt = now)
         val text = extractText(e["partialResult"]) ?: prev.partial
         return s.copy(tools = s.tools + (id to prev.copy(partial = text, args = e["args"] ?: prev.args)))
     }
 
-    private fun toolEnd(s: ChatState, e: JsonObject, now: Long): ChatState {
+    private fun toolEnd(
+        s: ChatState,
+        e: JsonObject,
+        now: Long,
+    ): ChatState {
         val id = e.str("toolCallId") ?: return s
         val prev = s.tools[id] ?: ToolRun(id, e.str("toolName") ?: "?", startedAt = now)
         val result = e["result"]
         val isError = e.bool("isError") ?: result.obj()?.bool("isError") ?: false
-        val run = prev.copy(
-            name = e.str("toolName") ?: prev.name,
-            status = if (isError) ToolStatus.ERROR else ToolStatus.OK,
-            isError = isError,
-            result = extractText(result) ?: prev.result,
-            truncated = result.obj()?.bool("truncated") ?: e.bool("truncated") ?: false,
-            partial = null,
-            durationMs = if (prev.startedAt > 0 && now >= prev.startedAt) now - prev.startedAt else prev.durationMs,
-        )
+        val run =
+            prev.copy(
+                name = e.str("toolName") ?: prev.name,
+                status = if (isError) ToolStatus.ERROR else ToolStatus.OK,
+                isError = isError,
+                result = extractText(result) ?: prev.result,
+                truncated = result.obj()?.bool("truncated") ?: e.bool("truncated") ?: false,
+                partial = null,
+                durationMs = if (prev.startedAt > 0 && now >= prev.startedAt) now - prev.startedAt else prev.durationMs,
+            )
         return s.copy(tools = s.tools + (id to run))
     }
 
-    private fun toolResultMessage(s: ChatState, msg: JsonObject): ChatState {
+    private fun toolResultMessage(
+        s: ChatState,
+        msg: JsonObject,
+    ): ChatState {
         val id = msg.str("toolCallId") ?: return s
         val prev = s.tools[id]
         if (prev != null && prev.status != ToolStatus.RUNNING) return s
         val isError = msg.bool("isError") ?: false
-        val run = (prev ?: ToolRun(id, msg.str("toolName") ?: "?")).copy(
-            status = if (isError) ToolStatus.ERROR else ToolStatus.OK,
-            isError = isError,
-            result = extractText(msg["content"]),
-            partial = null,
-        )
+        val run =
+            (prev ?: ToolRun(id, msg.str("toolName") ?: "?")).copy(
+                status = if (isError) ToolStatus.ERROR else ToolStatus.OK,
+                isError = isError,
+                result = extractText(msg["content"]),
+                partial = null,
+            )
         return s.copy(tools = s.tools + (id to run))
     }
 
-    private fun withCalls(tools: Map<String, ToolRun>, item: AssistantMsg, now: Long): Map<String, ToolRun> {
+    private fun withCalls(
+        tools: Map<String, ToolRun>,
+        item: AssistantMsg,
+        now: Long,
+    ): Map<String, ToolRun> {
         var t = tools
         for (b in item.blocks) {
             if (b is Block.ToolCall && b.toolCallId != null) {
                 val prev = t[b.toolCallId]
-                t = t + (b.toolCallId to (prev?.copy(args = b.args ?: prev.args, name = b.name ?: prev.name)
-                    ?: ToolRun(b.toolCallId, b.name ?: "?", b.args, startedAt = now)))
+                t = t + (
+                    b.toolCallId to (
+                        prev?.copy(args = b.args ?: prev.args, name = b.name ?: prev.name)
+                            ?: ToolRun(b.toolCallId, b.name ?: "?", b.args, startedAt = now)
+                    )
+                )
             }
         }
         return t
     }
 
+    // ─────────────────────── TODOs y Subagentes ───────────────────────
+
+    private fun todoUpdate(
+        s: ChatState,
+        e: JsonObject,
+    ): ChatState {
+        val tasksElem = e.arr("tasks") ?: (e["tasks"] as? JsonArray)
+        val tasks =
+            tasksElem?.mapNotNull { el ->
+                val o = el.obj() ?: return@mapNotNull null
+                TodoItem(
+                    id = o.int("id") ?: 0,
+                    title = o.str("title") ?: "",
+                    status = o.str("status") ?: "pending",
+                    note = o.str("note"),
+                )
+            } ?: emptyList()
+        return s.copy(todos = tasks)
+    }
+
+    private fun subagentUpdate(
+        s: ChatState,
+        e: JsonObject,
+        now: Long,
+    ): ChatState {
+        val taskId = e.str("taskId") ?: e.str("id") ?: "subagent-${e.str("agent") ?: "unknown"}"
+        val prev = s.subagents[taskId]
+        val tokensObj = e.obj("tokens")
+        val tokenUsage =
+            if (tokensObj != null) {
+                TokenUsage(
+                    input = tokensObj.long("input") ?: 0L,
+                    output = tokensObj.long("output") ?: 0L,
+                    cacheRead = tokensObj.long("cacheRead") ?: 0L,
+                    cacheWrite = tokensObj.long("cacheWrite") ?: 0L,
+                    total = tokensObj.long("total") ?: 0L,
+                    cost = tokensObj.double("cost"),
+                )
+            } else {
+                prev?.tokens
+            }
+
+        val toolsList = (e.arr("tools") ?: (e["tools"] as? JsonArray))?.mapNotNull { it.str() } ?: emptyList()
+
+        val info =
+            SubagentInfo(
+                taskId = taskId,
+                agent = e.str("agent") ?: prev?.agent ?: "subagent",
+                label = e.str("label") ?: prev?.label,
+                status = e.str("status") ?: prev?.status ?: "running",
+                model = e.str("model") ?: prev?.model,
+                thinking = e.str("thinking") ?: prev?.thinking,
+                startedAt = e.long("startedAt") ?: prev?.startedAt ?: now,
+                endedAt = e.long("endedAt") ?: prev?.endedAt,
+                durationMs =
+                    e.long("durationMs") ?: prev?.durationMs
+                        ?: (if (prev?.startedAt != null && now >= prev.startedAt) now - prev.startedAt else null),
+                turns = e.int("turns") ?: prev?.turns ?: 0,
+                toolCalls = e.int("toolCalls") ?: prev?.toolCalls ?: 0,
+                tokens = tokenUsage,
+                cost = e.double("cost") ?: prev?.cost,
+                error = e.str("error") ?: prev?.error,
+                result = e.str("result") ?: prev?.result,
+                tools = if (toolsList.isNotEmpty()) toolsList else (prev?.tools ?: emptyList()),
+            )
+
+        val prevTool = s.tools[taskId]
+        val tools =
+            if (prevTool != null) {
+                s.tools + (taskId to prevTool.copy(subagent = info))
+            } else {
+                s.tools
+            }
+
+        val itemKey = "subagent:$taskId"
+        val idx = s.items.indexOfFirst { it.key == itemKey }
+        val card = SubagentCardItem(itemKey, info)
+        val items =
+            if (idx >= 0) {
+                s.items.mapIndexed { i, itm -> if (i == idx) card else itm }
+            } else {
+                s.items + card
+            }
+
+        return s.copy(
+            subagents = s.subagents + (taskId to info),
+            tools = tools,
+            items = items,
+        )
+    }
+
     // ─────────────────────── Historial ───────────────────────
 
-    private fun applyEntry(s: ChatState, entry: Entry): ChatState {
+    private fun applyEntry(
+        s: ChatState,
+        entry: Entry,
+    ): ChatState {
         val msg = entry.msg ?: JsonObject(emptyMap())
         return when (entry.kind) {
-            EntryKind.USER -> userMessage(s, msg, "eid${entry.eid}", entry.at)
+            EntryKind.USER -> {
+                userMessage(s, msg, "eid${entry.eid}", entry.at)
+            }
+
             EntryKind.ASSISTANT -> {
                 val item = assistantFrom(msg, keyOf(msg, "assistant", "eid${entry.eid}"), entry.at)
                 s.copy(items = upsert(s.items, item), tools = withCalls(s.tools, item, 0))
             }
-            EntryKind.TOOL_RESULT -> toolResultMessage(s, msg)
+
+            EntryKind.TOOL_RESULT -> {
+                toolResultMessage(s, msg)
+            }
+
             EntryKind.BASH -> {
                 val cmd = msg.str("command") ?: ""
                 val out = msg.str("output") ?: extractText(msg["content"]) ?: ""
                 s.copy(items = s.items + SystemNote("eid${entry.eid}", NoteKind.BASH, "\$ $cmd", detail = out.ifEmpty { null }))
             }
-            EntryKind.COMPACTION -> s.copy(
-                items = s.items + SystemNote("eid${entry.eid}", NoteKind.COMPACTION, "Contexto compactado", detail = msg.str("summary")),
-            )
-            EntryKind.BRANCH_SUMMARY -> s.copy(
-                items = s.items + SystemNote("eid${entry.eid}", NoteKind.BRANCH_SUMMARY, "Resumen de rama", detail = msg.str("summary")),
-            )
+
+            EntryKind.COMPACTION -> {
+                s.copy(
+                    items =
+                        s.items +
+                            SystemNote(
+                                "eid${entry.eid}",
+                                NoteKind.COMPACTION,
+                                "Contexto compactado",
+                                detail = msg.str("summary"),
+                            ),
+                )
+            }
+
+            EntryKind.BRANCH_SUMMARY -> {
+                s.copy(
+                    items =
+                        s.items +
+                            SystemNote(
+                                "eid${entry.eid}",
+                                NoteKind.BRANCH_SUMMARY,
+                                "Resumen de rama",
+                                detail = msg.str("summary"),
+                            ),
+                )
+            }
+
             EntryKind.MODEL_CHANGE -> {
                 val label = modelLabel(msg.obj("model")) ?: msg.str("modelId") ?: msg.str("model")
                 s.copy(
@@ -278,6 +572,7 @@ object ChatReducer {
                     items = s.items + SystemNote("eid${entry.eid}", NoteKind.MODEL_CHANGE, "Modelo: ${label ?: "?"}"),
                 )
             }
+
             else -> {
                 val text = msg.str("text") ?: extractText(msg["content"])
                 if (text.isNullOrBlank()) s else s.copy(items = s.items + SystemNote("eid${entry.eid}", NoteKind.CUSTOM, text))
@@ -285,22 +580,33 @@ object ChatReducer {
         }
     }
 
-    private fun userMessage(s: ChatState, msg: JsonObject, fallback: String, at: Long = 0): ChatState {
+    private fun userMessage(
+        s: ChatState,
+        msg: JsonObject,
+        fallback: String,
+        at: Long = 0,
+    ): ChatState {
         val (text, images) = userContent(msg["content"])
-        val mobile = msg.bool("rp") == true || msg.str("origin") in setOf("rp", "mobile") ||
-            s.localSent.contains(text.trim())
-        val item = UserMsg(
-            key = keyOf(msg, "user", fallback),
-            text = text,
-            at = msg.long("timestamp") ?: at,
-            fromMobile = mobile,
-            imageCount = images,
-        )
+        val mobile =
+            msg.bool("rp") == true || msg.str("origin") in setOf("rp", "mobile") ||
+                s.localSent.contains(text.trim())
+        val item =
+            UserMsg(
+                key = keyOf(msg, "user", fallback),
+                text = text,
+                at = msg.long("timestamp") ?: at,
+                fromMobile = mobile,
+                imageCount = images,
+            )
         if (s.items.any { it.key == item.key }) return s
         return s.copy(items = s.items + item, localSent = s.localSent - text.trim())
     }
 
-    private fun assistantFrom(msg: JsonObject, key: String, at: Long = 0): AssistantMsg {
+    private fun assistantFrom(
+        msg: JsonObject,
+        key: String,
+        at: Long = 0,
+    ): AssistantMsg {
         val blocks = mutableListOf<Block>()
         val content = msg["content"]
         if (content is JsonPrimitive) {
@@ -309,11 +615,19 @@ object ChatReducer {
             for (b in content.arr().orEmpty()) {
                 val o = b.obj() ?: continue
                 when (o.str("type")) {
-                    "text" -> blocks.add(Block.Text(o.str("text") ?: ""))
-                    "thinking" -> blocks.add(Block.Thinking(o.str("thinking") ?: o.str("text") ?: ""))
-                    "toolCall" -> blocks.add(
-                        Block.ToolCall(o.str("id"), o.str("name"), o["arguments"] ?: o["args"]),
-                    )
+                    "text" -> {
+                        blocks.add(Block.Text(o.str("text") ?: ""))
+                    }
+
+                    "thinking" -> {
+                        blocks.add(Block.Thinking(o.str("thinking") ?: o.str("text") ?: ""))
+                    }
+
+                    "toolCall" -> {
+                        blocks.add(
+                            Block.ToolCall(o.str("id"), o.str("name"), o["arguments"] ?: o["args"]),
+                        )
+                    }
                 }
             }
         }
@@ -329,12 +643,19 @@ object ChatReducer {
 
     // ─────────────────────── Utilidades ───────────────────────
 
-    private fun keyOf(msg: JsonObject, role: String, fallback: String): String {
+    private fun keyOf(
+        msg: JsonObject,
+        role: String,
+        fallback: String,
+    ): String {
         val ts = msg.long("timestamp")
         return if (ts != null) "$role:$ts" else "$role:$fallback"
     }
 
-    private fun upsert(items: List<ChatItem>, item: ChatItem): List<ChatItem> {
+    private fun upsert(
+        items: List<ChatItem>,
+        item: ChatItem,
+    ): List<ChatItem> {
         if (items.isEmpty()) return listOf(item)
         if (items.last().key == item.key) return items.toMutableList().also { it[items.lastIndex] = item }
         val i = items.indexOfFirst { it.key == item.key }
@@ -347,27 +668,54 @@ object ChatReducer {
     fun userContent(content: JsonElement?): Pair<String, Int> {
         if (content is JsonPrimitive) return (content.str() ?: "") to 0
         var images = 0
-        val text = content.arr().orEmpty().mapNotNull {
-            val o = it.obj() ?: return@mapNotNull null
-            when (o.str("type")) {
-                "text" -> o.str("text")
-                "image", "image_ref" -> { images++; null }
-                else -> null
-            }
-        }.joinToString("\n")
+        val text =
+            content
+                .arr()
+                .orEmpty()
+                .mapNotNull {
+                    val o = it.obj() ?: return@mapNotNull null
+                    when (o.str("type")) {
+                        "text" -> {
+                            o.str("text")
+                        }
+
+                        "image", "image_ref" -> {
+                            images++
+                            null
+                        }
+
+                        else -> {
+                            null
+                        }
+                    }
+                }.joinToString("\n")
         return text to images
     }
 
     /** Extrae texto de un resultado de herramienta: cadena, bloques `[{type:text,text}]` u objeto con `content`/`output`. */
-    fun extractText(el: JsonElement?): String? = when (el) {
-        null -> null
-        is JsonPrimitive -> el.str()
-        is kotlinx.serialization.json.JsonArray -> el.mapNotNull { b ->
-            val o = b.obj()
-            if (o != null) o.str("text") else b.str()
-        }.joinToString("\n").ifEmpty { null }
-        is JsonObject -> extractText(el["content"]) ?: el.str("text") ?: el.str("output") ?: el.str("stdout")
-    }
+    fun extractText(el: JsonElement?): String? =
+        when (el) {
+            null -> {
+                null
+            }
+
+            is JsonPrimitive -> {
+                el.str()
+            }
+
+            is kotlinx.serialization.json.JsonArray -> {
+                el
+                    .mapNotNull { b ->
+                        val o = b.obj()
+                        if (o != null) o.str("text") else b.str()
+                    }.joinToString("\n")
+                    .ifEmpty { null }
+            }
+
+            is JsonObject -> {
+                extractText(el["content"]) ?: el.str("text") ?: el.str("output") ?: el.str("stdout")
+            }
+        }
 
     /** Intenta parsear JSON de argumentos que puede estar incompleto; devuelve `null` si no es válido todavía. */
     private fun parsePartial(raw: String): JsonElement? {
@@ -388,12 +736,20 @@ object ChatReducer {
         for (i in 0 until raw.length) {
             val c = raw[i]
             if (inStr) {
-                if (esc) esc = false else if (c == '\\') esc = true else if (c == '"') inStr = false
-            } else when (c) {
-                '"' -> inStr = true
-                '{' -> stack[top++] = '}'
-                '[' -> stack[top++] = ']'
-                '}', ']' -> if (top > 0) top--
+                if (esc) {
+                    esc = false
+                } else if (c == '\\') {
+                    esc = true
+                } else if (c == '"') {
+                    inStr = false
+                }
+            } else {
+                when (c) {
+                    '"' -> inStr = true
+                    '{' -> stack[top++] = '}'
+                    '[' -> stack[top++] = ']'
+                    '}', ']' -> if (top > 0) top--
+                }
             }
         }
         val sb = StringBuilder(raw.length + top + 1).append(raw)

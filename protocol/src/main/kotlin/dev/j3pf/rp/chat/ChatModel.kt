@@ -2,6 +2,8 @@ package dev.j3pf.rp.chat
 
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.protocol.SubagentInfo
+import dev.j3pf.rp.protocol.TodoItem
 import kotlinx.serialization.json.JsonElement
 
 /** Elementos de la conversación tal y como los pinta la UI. */
@@ -19,8 +21,13 @@ data class UserMsg(
 ) : ChatItem
 
 sealed interface Block {
-    data class Text(val text: String) : Block
-    data class Thinking(val text: String) : Block
+    data class Text(
+        val text: String,
+    ) : Block
+
+    data class Thinking(
+        val text: String,
+    ) : Block
 
     /**
      * Llamada a herramienta; el estado/resultado vive en [ChatState.tools] bajo [toolCallId].
@@ -61,7 +68,15 @@ data class ToolRun(
     val durationMs: Long? = null,
     /** Herramientas anidadas (p. ej. subagentes) si el protocolo las informa. */
     val children: List<ToolRun> = emptyList(),
+    /** Telemetría enriquecida de subagente estilo gentle shell si aplica. */
+    val subagent: SubagentInfo? = null,
 )
+
+/** Tarjeta de subagente incrustada en el chat estilo gentle shell. */
+data class SubagentCardItem(
+    override val key: String,
+    val info: SubagentInfo,
+) : ChatItem
 
 /** Tarjeta de prompt incrustada en el chat (mismo contenido que la hoja de respuesta). */
 data class PromptCard(
@@ -81,7 +96,10 @@ data class SystemNote(
     val detail: String? = null,
 ) : ChatItem
 
-data class TerminalWaitInfo(val kind: String?, val title: String?)
+data class TerminalWaitInfo(
+    val kind: String?,
+    val title: String?,
+)
 
 data class ChatState(
     val items: List<ChatItem> = emptyList(),
@@ -99,6 +117,10 @@ data class ChatState(
     val thinkingLevel: String? = null,
     /** Textos enviados desde el móvil aún no vistos en el historial (para marcar 📱). */
     val localSent: Set<String> = emptySet(),
+    /** Tareas y TODOs actuales del agente. */
+    val todos: List<TodoItem> = emptyList(),
+    /** Telemetría de subagentes indexados por taskId. */
+    val subagents: Map<String, SubagentInfo> = emptyMap(),
 ) {
     /** Items + mensaje en streaming, listos para pintar. */
     val display: List<ChatItem> get() = if (streaming != null) items + streaming else items

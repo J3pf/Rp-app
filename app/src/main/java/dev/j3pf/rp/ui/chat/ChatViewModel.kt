@@ -272,7 +272,8 @@ class ChatViewModel
                     DeliveryChoice.EXTENSION -> DeliveryMethod.API
                     else -> DeliveryMethod.AUTO
                 }
-            val asCommand = s.choice == DeliveryChoice.COMMAND && body.startsWith("/")
+            val isSlash = body.startsWith("/")
+            val asCommand = isSlash && (s.choice == DeliveryChoice.COMMAND || s.choice == DeliveryChoice.AUTO)
             extra.update { it.copy(sending = true, interactiveUnavailable = false) }
             viewModelScope.launch {
                 val res = session.send(body, refs, delivery, method, asCommand)

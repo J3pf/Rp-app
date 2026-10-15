@@ -5,11 +5,14 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -31,6 +34,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +48,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,6 +66,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -69,12 +78,14 @@ import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.TodoItem
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.TagChip
 import dev.j3pf.rp.ui.components.rememberActivity
 import dev.j3pf.rp.ui.promptsheet.AnswerUi
 import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
+import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.util.AuthResult
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.humanSize
@@ -218,6 +229,9 @@ fun ChatScreen(
                         TextButton(onClick = vm::switchToNormal) { Text("Pasar a Normal") }
                     }
                 }
+            }
+            if (ui.chat.todos.isNotEmpty()) {
+                TodoBanner(todos = ui.chat.todos)
             }
 
             PullToRefreshBox(
@@ -432,6 +446,29 @@ internal fun Composer(
                     }
                 }
             }
+            val isSlashText = text.trimStart().startsWith("/")
+            val slashCommands = remember { listOf("/clear", "/compact", "/model", "/quit", "/undo", "/sdd-status", "/help") }
+            val suggestions =
+                if (isSlashText && !text.trim().contains(" ")) {
+                    slashCommands.filter { it.startsWith(text.trim()) && it != text.trim() }
+                } else {
+                    emptyList()
+                }
+
+            if (suggestions.isNotEmpty()) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    suggestions.forEach { cmd ->
+                        SuggestionChip(
+                            onClick = { onText("$cmd ") },
+                            label = { Text(cmd) },
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                    }
+                }
+            }
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -441,7 +478,16 @@ internal fun Composer(
                     AssistChip(
                         onClick = { choiceMenu = true },
                         shape = RoundedCornerShape(12.dp),
-                        label = { Text("Entrega: ${ui.choice.label}") },
+                        colors =
+                            if (isSlashText) {
+                                AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
+                            } else {
+                                AssistChipDefaults.assistChipColors()
+                            },
+                        label = { Text(if (isSlashText) "⚡ Comando Pi (/)" else "Entrega: ${ui.choice.label}") },
                     )
                     DropdownMenu(choiceMenu, { choiceMenu = false }) {
                         DeliveryChoice.entries.forEach { c ->
@@ -574,4 +620,102 @@ private fun InfoDialog(
             }
         },
     )
+}
+
+@Composable
+private fun TodoBanner(todos: List<TodoItem>) {
+    val (expanded, setExpanded) = rememberSaveable { mutableStateOf(false) }
+    val total = todos.size
+    val done = todos.count { it.status == "done" }
+    val inProgress = todos.firstOrNull { it.status == "in_progress" }
+    val percent = if (total > 0) (done * 100 / total) else 0
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                CircularProgressIndicator(
+                    progress = { if (total > 0) done.toFloat() / total else 0f },
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.5.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    "Tareas: $done/$total ($percent%)",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                inProgress?.let { curr ->
+                    Text(
+                        "· ${curr.title}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } ?: Spacer(Modifier.weight(1f))
+                TextButton(
+                    onClick = { setExpanded(!expanded) },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
+                    Text(if (expanded) "Ocultar" else "Ver lista")
+                }
+            }
+            AnimatedVisibility(expanded) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                ) {
+                    todos.forEach { task ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            when (task.status) {
+                                "done" -> Text("✓", color = RpColors.success, fontWeight = FontWeight.Bold)
+                                "in_progress" -> Text("▶", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                "blocked" -> Text("⏸", color = RpColors.warning)
+                                "dropped" -> Text("✕", color = MaterialTheme.colorScheme.outline)
+                                else -> Text("○", color = MaterialTheme.colorScheme.outline)
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    task.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (task.status == "in_progress") FontWeight.Bold else FontWeight.Normal,
+                                    textDecoration = if (task.status == "dropped") TextDecoration.LineThrough else null,
+                                    color =
+                                        if (task.status ==
+                                            "dropped"
+                                        ) {
+                                            MaterialTheme.colorScheme.outline
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                )
+                                task.note?.takeIf { it.isNotBlank() }?.let { note ->
+                                    Text(
+                                        note,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontStyle = FontStyle.Italic,
+                                        color = MaterialTheme.colorScheme.outline,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

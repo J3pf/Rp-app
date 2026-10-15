@@ -143,6 +143,9 @@ data class AgentSummary(
     val theme: String? = null,
     val redacted: Boolean = false,
     val spawnedByHost: Boolean = false,
+    val todoCompleted: Int = 0,
+    val todoTotal: Int = 0,
+    val activeTask: String? = null,
 )
 
 @Serializable
@@ -466,4 +469,53 @@ data class PushSettledBody(
     val machineName: String = "",
     val machineContext: String = "personal",
     val message: String? = null,
+)
+
+// ───────────────────────────── TODOs y Subagentes ─────────────────────────────
+
+@Serializable
+data class TodoItem(
+    val id: Int,
+    val title: String,
+    val status: String = "pending", // pending, in_progress, blocked, done, dropped
+    val note: String? = null,
+)
+
+@Serializable
+data class TodoState(
+    val tasks: List<TodoItem> = emptyList(),
+) {
+    val total: Int get() = tasks.size
+    val completed: Int get() = tasks.count { it.status == "done" }
+    val inProgress: TodoItem? get() = tasks.firstOrNull { it.status == "in_progress" }
+}
+
+@Serializable
+data class TokenUsage(
+    val input: Long = 0,
+    val output: Long = 0,
+    val cacheRead: Long = 0,
+    val cacheWrite: Long = 0,
+    val total: Long = 0,
+    val cost: Double? = null,
+)
+
+@Serializable
+data class SubagentInfo(
+    val taskId: String,
+    val agent: String,
+    val label: String? = null,
+    val status: String = "running", // running, done, error, interrupted
+    val model: String? = null,
+    val thinking: String? = null,
+    val startedAt: Long = 0,
+    val endedAt: Long? = null,
+    val durationMs: Long? = null,
+    val turns: Int = 0,
+    val toolCalls: Int = 0,
+    val tokens: TokenUsage? = null,
+    val cost: Double? = null,
+    val error: String? = null,
+    val result: String? = null,
+    val tools: List<String> = emptyList(),
 )
