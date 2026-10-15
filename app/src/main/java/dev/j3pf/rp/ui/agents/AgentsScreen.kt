@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.MainViewModel
@@ -66,6 +67,7 @@ import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.EmptyState
 import dev.j3pf.rp.ui.components.MachineFilterBar
 import dev.j3pf.rp.ui.components.MachineHeroDropdown
+import dev.j3pf.rp.ui.components.QuotaDynamicIsland
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.TagChip
@@ -97,6 +99,13 @@ fun AgentsScreen(
                 text = { Text("Nuevo agente", fontWeight = FontWeight.Bold) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
+            )
+        },
+        bottomBar = {
+            QuotaDynamicIsland(
+                machines = state.machines,
+                selectedMachineId = if (state.selected == AppSettings.ALL) null else state.selected,
+                modifier = Modifier.padding(bottom = 6.dp),
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
