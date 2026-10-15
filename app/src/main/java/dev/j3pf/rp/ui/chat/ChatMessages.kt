@@ -81,7 +81,13 @@ private fun UserBubble(m: UserMsg) {
             shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                if (m.fromMobile) Text("móvil", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                if (m.fromMobile) {
+                    Text(
+                        "móvil",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                    )
+                }
                 if (m.text.isNotBlank()) Text(m.text)
                 if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
             }

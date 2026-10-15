@@ -185,7 +185,9 @@ fun MachineHeroDropdown(
                 val count = agents.count { it.machineId == m.machineId }
                 Triple(
                     m.name,
-                    "${contextLabel(m.context)} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}",
+                    "${contextLabel(
+                        m.context,
+                    )} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}",
                     parseColor(m.color),
                 )
             }

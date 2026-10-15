@@ -9,7 +9,10 @@ fun lastSegment(path: String?): String {
 }
 
 /** "hace 3 h", "hace 5 min", "ahora". */
-fun relativeTime(thenMs: Long?, nowMs: Long = System.currentTimeMillis()): String {
+fun relativeTime(
+    thenMs: Long?,
+    nowMs: Long = System.currentTimeMillis(),
+): String {
     if (thenMs == null || thenMs <= 0) return ""
     val s = ((nowMs - thenMs) / 1000).coerceAtLeast(0)
     return when {
@@ -20,30 +23,42 @@ fun relativeTime(thenMs: Long?, nowMs: Long = System.currentTimeMillis()): Strin
     }
 }
 
-fun humanSize(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-    else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-}
+fun humanSize(bytes: Long): String =
+    when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
+        else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+    }
 
 /** `#RRGGBB` → [Color]; color por defecto si el valor es inválido. */
-fun parseColor(hex: String?, fallback: Color = Color(0xFF6750A4)): Color = runCatching {
-    Color(android.graphics.Color.parseColor("#" + (hex ?: return fallback).trim().removePrefix("#")))
-}.getOrDefault(fallback)
+fun parseColor(
+    hex: String?,
+    fallback: Color = Color(0xFF6750A4),
+): Color =
+    runCatching {
+        Color(android.graphics.Color.parseColor("#" + (hex ?: return fallback).trim().removePrefix("#")))
+    }.getOrDefault(fallback)
 
-fun contextLabel(context: String): String = when (context) {
-    "personal" -> "Personal"
-    "work" -> "Empresa"
-    else -> context.replaceFirstChar { it.uppercase() }
-}
+fun contextLabel(context: String): String =
+    when (context) {
+        "personal" -> "Personal"
+        "work" -> "Empresa"
+        else -> context.replaceFirstChar { it.uppercase() }
+    }
 
 fun contextEmoji(context: String): String = ""
 
 /** "api-gateway" etc. — nombre visible del agente. */
-fun agentTitle(sessionName: String?, cwd: String?, agentId: String): String =
-    sessionName?.takeIf { it.isNotBlank() } ?: lastSegment(cwd).ifEmpty { agentId.substringAfter(':').take(8) }
+fun agentTitle(
+    sessionName: String?,
+    cwd: String?,
+    agentId: String,
+): String = sessionName?.takeIf { it.isNotBlank() } ?: lastSegment(cwd).ifEmpty { agentId.substringAfter(':').take(8) }
 
 /** Hash estable y positivo para ids de notificación. */
 fun stableId(s: String): Int = s.hashCode() and 0x7fffffff
 
-fun truncate(s: String, max: Int): String = if (s.length <= max) s else s.take(max - 1) + "…"
+fun truncate(
+    s: String,
+    max: Int,
+): String = if (s.length <= max) s else s.take(max - 1) + "…"
