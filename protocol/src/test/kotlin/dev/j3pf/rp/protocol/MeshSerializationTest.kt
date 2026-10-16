@@ -81,7 +81,7 @@ class MeshSerializationTest {
 
     @Test
     fun `comm and HTTP response models encode and decode`() {
-        val comm = MeshComm("comm-1", "agent-1", "agent-2", "One", "Two", "ask", "Can you help?", true, 123, "group-1")
+        val comm = MeshComm("comm-1", "agent-1", "agent-2", "One", "Two", CommAction.ASK, "Can you help?", true, 123, "group-1")
         val event = MeshCommEvent(comm)
         val encodedEvent = RpJson.encodeToString(MeshCommEvent.serializer(), event)
         assertEquals(event, RpJson.decodeFromString(MeshCommEvent.serializer(), encodedEvent))
@@ -93,6 +93,15 @@ class MeshSerializationTest {
         val agentComms = MeshAgentCommsResponse(listOf(comm))
         val encodedAgentComms = RpJson.encodeToString(MeshAgentCommsResponse.serializer(), agentComms)
         assertEquals(agentComms, RpJson.decodeFromString(MeshAgentCommsResponse.serializer(), encodedAgentComms))
+
+        // Redacted text falls back to "Content hidden"
+        val redacted = MeshComm("comm-2", "agent-1", "agent-2", "One", "Two", CommAction.SEND, text = null, truncated = false, at = 124)
+        assertEquals("Content hidden", redacted.displayText)
+
+        // Unknown action gracefully falls back to UNKNOWN
+        val unknownActionJson = """{"commKey":"c3","fromName":"A","toName":"B","action":"teleport","at":125}"""
+        val decodedUnknown = RpJson.decodeFromString(MeshComm.serializer(), unknownActionJson)
+        assertEquals(CommAction.UNKNOWN, decodedUnknown.action)
     }
 
     @Test
@@ -260,7 +269,7 @@ class MeshSerializationTest {
         assertEquals(MsgType.MESH_SNAPSHOT, parsedSnapshot.t)
         assertEquals(snapshot, parsedSnapshot.body<MeshSnapshot>())
 
-        val event = MeshCommEvent(MeshComm("c", "a", "b", "A", "B", "reply"))
+        val event = MeshCommEvent(MeshComm("c", "a", "b", "A", "B", CommAction.REPLY))
         val commEnvelope = Envelope.of(MsgType.MESH_COMM, event, ts = 13)
         val parsedComm = Envelope.parse(commEnvelope.encode())
         assertEquals(MsgType.MESH_COMM, parsedComm.t)

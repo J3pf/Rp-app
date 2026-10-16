@@ -1,6 +1,38 @@
 package dev.j3pf.rp.protocol
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+
+@Serializable(with = CommActionSerializer::class)
+enum class CommAction(val raw: String) {
+    SEND("send"),
+    ASK("ask"),
+    REPLY("reply"),
+    HANDOVER("handover"),
+    MESSAGE("message"),
+    UNKNOWN("unknown");
+
+    companion object {
+        fun fromRaw(value: String?): CommAction =
+            entries.firstOrNull { it.raw.equals(value, ignoreCase = true) } ?: UNKNOWN
+    }
+}
+
+object CommActionSerializer : KSerializer<CommAction> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("CommAction", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): CommAction =
+        runCatching { CommAction.fromRaw(decoder.decodeString()) }.getOrDefault(CommAction.UNKNOWN)
+
+    override fun serialize(encoder: Encoder, value: CommAction) {
+        encoder.encodeString(value.raw)
+    }
+}
 
 @Serializable
 data class MeshSubscribe(
@@ -108,16 +140,19 @@ data class MeshSnapshot(
 @Serializable
 data class MeshComm(
     val commKey: String,
-    val fromAgentId: String,
-    val toAgentId: String,
+    val fromAgentId: String? = null,
+    val toAgentId: String? = null,
     val fromName: String,
     val toName: String,
-    val action: String,
+    val action: CommAction = CommAction.UNKNOWN,
     val text: String? = null,
     val truncated: Boolean = false,
     val at: Long = 0L,
     val groupId: String? = null,
-)
+) {
+    /** Helper for UI display when text is null (redacted / hidden) */
+    val displayText: String get() = text ?: "Content hidden"
+}
 
 @Serializable
 data class MeshCommEvent(
