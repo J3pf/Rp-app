@@ -23,11 +23,28 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 - roborazzi: none -> 1.76.0 (io.github.takahirom.roborazzi plugin + roborazzi, roborazzi-compose, roborazzi-junit-rule)
 - versionName: 0.2.0 -> 0.3.0
 - versionCode: gitCommitCount() (monotonic commit counter)
-- AGP: 8.13.0 (preserved, no bump)
-- Kotlin: 2.2.20 (preserved, no bump)
+- AGP: 8.13.0 -> 9.4.1 (migrated per authorized toolchain update)
+- Kotlin: 2.2.20 -> 2.4.21 (migrated per authorized toolchain update)
+- KSP: 2.2.20-2.0.4 -> 2.3.12
+- Hilt: 2.57.1 -> 2.60.1
+- Google Services: 4.4.3 -> 4.5.0
+- Gradle: 8.13 -> 9.8.1
+- compileSdk: 36 -> 37
+- targetSdk: 36 (preserved)
+- minSdk: 29 (preserved)
+- composeBom: 2025.09.00 -> 2026.09.00
+- navigation: 2.9.5 -> 2.10.2
+- coil: 3.3.0 -> 3.6.3
+- activityCompose: 1.11.0 -> 1.13.0
+- lifecycle: 2.9.4 -> 2.11.0
+- hiltAndroidx: 1.3.0 -> 1.4.0
+- coreKtx: 1.17.0 -> 1.19.1
+- serialization: 1.9.0 -> 1.11.0
+- coroutines: 1.10.2 -> 1.11.0
+- roborazzi: none -> 1.76.0
 
 ## Tasks
-- T1 (S9, S11): Dependency upgrades & Roborazzi setup in libs.versions.toml and build files (composeBom 2026.09.00, navigation 2.10.2, coil 3.6.3, roborazzi 1.76.0) + baseline green build [PENDING]
+- T0 (S9): Toolchain migration: install Android platform 37, bump AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, Compose BOM 2026.09.00, navigation 2.10.2, coil 3.6.3, activity-compose 1.13.0, lifecycle 2.11.0, hilt-nav/work 1.4.0, core-ktx 1.19.1, serialization 1.11.0, coroutines 1.11.0, roborazzi 1.76.0; compileSdk 37; verify all tests pass + assembleDebug + assembleRelease [IN PROGRESS]
 - T2 (S1): Unit tests pinning resolveThemeChoice and palette colors (Cute/Sexy/Omarchy/Default primary/background/surface) + central design tokens (Glows, Gradients, Spacing, Shapes, Motion) in ui/theme/ [PENDING]
 - T3 (S4, S5): Motion framework, reduced-motion helper (honoring animator_duration_scale 0), screen-to-screen navigation transitions in RpRoot.kt [PENDING]
 - T4 (S2): ChatScreen bottom-anchored message list (bottom of newest message visible on open, receive, streaming) + animated jump-to-latest button + Robolectric tests [PENDING]
@@ -39,3 +56,4 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 
 ## Log
 L1: "Necesito que RESPETANDO LOS VALORES Y FUNCIONALIDAD DEL THEME, hagas un refactor para hacer de esta app una app mucho mas llamativa, elegante, full UX/UI, que sea agradable de usar, que no le toque al usuario estar deslizando para ver lo mas reciente de cada agente, literal que sea una app llamativa, moderna, con animaciones, placentera de usar"
+L2: [UI REFRESH — TOOLCHAIN GO-AHEAD] User authorized full toolchain migration (AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, compileSdk 37, platform 37, all deps latest stable). T0 created as isolated commit.

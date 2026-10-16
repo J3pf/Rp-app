@@ -2,11 +2,11 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.roborazzi)
 }
 
 // google-services.json NO se versiona (PLAN-APP §10): sin él, el sabor `fcm` compila pero FCM queda inerte.
@@ -33,7 +33,7 @@ fun gitCommitCount(): Int =
 
 android {
     namespace = "dev.j3pf.rp"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "dev.j3pf.rp"
@@ -101,8 +101,11 @@ android {
 }
 
 androidComponents {
-    beforeVariants(selector().withBuildType("release")) {
-        it.enableUnitTest = false
+    beforeVariants(selector().withBuildType("release")) { variantBuilder ->
+        (variantBuilder as? com.android.build.api.variant.HasHostTestsBuilder)
+            ?.hostTests
+            ?.get(com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE)
+            ?.enable = false
     }
 }
 
@@ -167,7 +170,7 @@ dependencies {
     "fcmImplementation"(libs.firebase.messaging)
 
     testImplementation(libs.junit)
-    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.okhttp.mockwebserver)
@@ -178,6 +181,9 @@ dependencies {
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     androidTestImplementation(composeBom)
