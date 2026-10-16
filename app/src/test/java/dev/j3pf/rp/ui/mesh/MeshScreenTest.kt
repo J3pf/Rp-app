@@ -102,7 +102,7 @@ class MeshScreenTest {
 
     @Test
     fun `toggle to list view displays nodes accessibly`() {
-        val nodes = listOf(node("orchestrator", "Orchestrator", "orchestrator"), node("worker", "Worker", "subordinate"))
+        val nodes = listOf(node("orchestrator", "Orquestador Principal", "orchestrator"), node("worker", "Worker Protocol", "subordinate"))
         val snapshot = MeshSnapshot(nodes = nodes)
         val layout = MeshLayoutEngine().computeLayout(nodes, emptyList())
         val state = MeshUiState(isLoading = false, snapshot = snapshot, layoutResult = layout)
@@ -118,11 +118,15 @@ class MeshScreenTest {
             }
         }
 
+        // In diagram view, full node label texts are displayed in accessibility targets
+        rule.onNodeWithContentDescription("Orquestador Orquestador Principal, Inactivo").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Subordinado Worker Protocol, Inactivo").assertIsDisplayed()
+
         rule.onNodeWithText("Vista de lista").performClick()
         rule.onNodeWithText("Vista de diagrama").assertIsDisplayed()
-        rule.onNodeWithText("Orchestrator").assertIsDisplayed()
-        rule.onNodeWithText("Worker").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Orquestador Orchestrator, Inactivo").assertIsDisplayed()
+        rule.onNodeWithText("Orquestador Principal").assertIsDisplayed()
+        rule.onNodeWithText("Worker Protocol").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Orquestador Orquestador Principal, Inactivo").assertIsDisplayed()
     }
 
     @Test

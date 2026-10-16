@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.ui.theme.RpTheme
 import org.junit.Assert.assertEquals
@@ -215,7 +216,8 @@ class AgentsSortingAndCardTest {
     }
 
     @Test
-    fun `extended floating action button collapses when scrolled`() {
+    fun `extended floating action button expands at top and collapses to clickable icon when scrolled`() {
+        var clicked = false
         val testMachine =
             dev.j3pf.rp.protocol.MachineSummary(
                 machineId = "m1",
@@ -224,7 +226,7 @@ class AgentsSortingAndCardTest {
                 online = true,
             )
         val agents: List<AgentSummary> =
-            (1..10).map { i ->
+            (1..20).map { i ->
                 AgentSummary(
                     agentId = "a-$i",
                     machineId = "m1",
@@ -236,17 +238,20 @@ class AgentsSortingAndCardTest {
         val group = MachineGroup(machine = testMachine, agents = agents)
         val uiState = AgentsUiState(machines = listOf(testMachine), allAgents = agents, groups = listOf(group), selected = "all")
 
+        var listStateHolder: androidx.compose.foundation.lazy.LazyListState? = null
+
         rule.setContent {
             val listState =
                 androidx.compose.foundation.lazy
-                    .rememberLazyListState(initialFirstVisibleItemIndex = 2)
+                    .rememberLazyListState(initialFirstVisibleItemIndex = 0)
+            listStateHolder = listState
             RpTheme {
                 AgentsContent(
                     state = uiState,
                     conn = dev.j3pf.rp.data.net.ConnState.Connected,
                     listState = listState,
                     onOpenChat = {},
-                    onNewAgent = {},
+                    onNewAgent = { clicked = true },
                     onSelect = {},
                     onRefresh = {},
                     onResume = { _: AgentSummary, _: String -> },
@@ -255,15 +260,33 @@ class AgentsSortingAndCardTest {
             }
         }
 
+        // 1) Al inicio (firstVisibleItemIndex == 0), el FAB muestra el texto "Nuevo agente"
+        rule.onNodeWithText("Nuevo agente", useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithContentDescription("Nuevo agente").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Nuevo agente").assertIsDisplayed()
+
+        // 2) Tras desplazar la lista (firstVisibleItemIndex > 0), el texto desaparece
+        rule.runOnIdle {
+            kotlinx.coroutines.runBlocking {
+                listStateHolder?.scrollToItem(3)
+            }
+        }
+        rule.waitForIdle()
+
         org.junit.Assert.assertTrue(
             "Cuando se hace scroll, el texto del FAB extendido no debe estar visible",
             rule
                 .onAllNodes(
                     androidx.compose.ui.test
                         .hasText("Nuevo agente"),
+                    useUnmergedTree = true,
                 ).fetchSemanticsNodes()
                 .isEmpty(),
         )
+
+        // 3) El FAB (contentDescription) sigue siendo clickeable tras el colapso
+        rule.onNodeWithContentDescription("Nuevo agente").assertIsDisplayed().performClick()
+        rule.waitForIdle()
+        org.junit.Assert.assertTrue("El FAB debe seguir respondiendo a clicks tras colapsar", clicked)
     }
 }

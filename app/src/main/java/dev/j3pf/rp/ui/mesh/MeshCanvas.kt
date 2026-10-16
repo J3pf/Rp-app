@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -423,26 +424,37 @@ private fun drawNode(
     textPaint.color = scheme.onSurface.toArgb()
     textPaint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
     textPaint.textSize = 12f
-    canvas.drawText(ellipsize(textPaint, node.name, radius * 1.8f), x, y + radius + 16f, textPaint)
+
+    val maxLabelWidth = 160f
+    val labelLines = wrapText(textPaint, node.name, maxLabelWidth, maxLines = 2)
+    val lineHeight = 14f
+    val labelStartY = y + radius + 16f
+    labelLines.forEachIndexed { lineIdx, lineText ->
+        canvas.drawText(lineText, x, labelStartY + lineIdx * lineHeight, textPaint)
+    }
+    val labelExtraOffset = (labelLines.size - 1) * lineHeight
+
     node.todos?.takeIf { it.total > 0 }?.let { todos ->
         textPaint.textSize = 10f
         textPaint.color = scheme.onSurfaceVariant.toArgb()
-        canvas.drawText("${todos.done}/${todos.total}", x, y + radius + 29f, textPaint)
+        canvas.drawText("${todos.done}/${todos.total}", x, y + radius + 29f + labelExtraOffset, textPaint)
     }
     node.activity?.takeIf { it.isNotBlank() }?.let { activity ->
         textPaint.textSize = 10f
         textPaint.color = scheme.onSurfaceVariant.toArgb()
         canvas.drawText(
-            ellipsize(textPaint, activity, radius * 2.8f),
+            ellipsize(textPaint, activity, maxLabelWidth),
             x,
             y + radius +
-                if (node.todos?.total ?: 0 >
-                    0
-                ) {
-                    42f
-                } else {
-                    29f
-                },
+                (
+                    if (node.todos?.total ?: 0 >
+                        0
+                    ) {
+                        42f
+                    } else {
+                        29f
+                    }
+                ) + labelExtraOffset,
             textPaint,
         )
     }
@@ -483,6 +495,43 @@ private fun drawSpeechBubble(
     paint.color = background.toArgb()
     canvas.drawRoundRect(centerX - width / 2f, centerY - 12f, centerX + width / 2f, centerY + 12f, 12f, 12f, paint)
     canvas.drawText(display, centerX, centerY + 4f, textPaint)
+}
+
+private fun wrapText(
+    paint: AndroidPaint,
+    text: String,
+    maxWidth: Float,
+    maxLines: Int = 2,
+): List<String> {
+    if (paint.measureText(text) <= maxWidth) return listOf(text)
+    val words = text.split(" ")
+    val lines = mutableListOf<String>()
+    var currentLine = ""
+
+    for ((index, word) in words.withIndex()) {
+        val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+        if (paint.measureText(testLine) <= maxWidth) {
+            currentLine = testLine
+        } else {
+            if (currentLine.isNotEmpty()) {
+                lines.add(currentLine)
+                if (lines.size == maxLines - 1) {
+                    val remainingWords = words.subList(index, words.size).joinToString(" ")
+                    lines.add(ellipsize(paint, remainingWords, maxWidth))
+                    return lines
+                }
+                currentLine = word
+            } else {
+                lines.add(ellipsize(paint, word, maxWidth))
+                if (lines.size == maxLines) return lines
+                currentLine = ""
+            }
+        }
+    }
+    if (currentLine.isNotEmpty() && lines.size < maxLines) {
+        lines.add(currentLine)
+    }
+    return lines.take(maxLines)
 }
 
 private fun ellipsize(
