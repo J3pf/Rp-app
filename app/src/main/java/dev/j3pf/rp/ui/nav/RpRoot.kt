@@ -1,5 +1,7 @@
 package dev.j3pf.rp.ui.nav
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,7 +69,10 @@ import dev.j3pf.rp.ui.settings.NotificationSettingsScreen
 import dev.j3pf.rp.ui.settings.SecuritySettingsScreen
 import dev.j3pf.rp.ui.settings.SettingsDest
 import dev.j3pf.rp.ui.settings.SettingsScreen
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.RpMotion
+import dev.j3pf.rp.ui.theme.rememberIsReducedMotion
 import dev.j3pf.rp.util.BiometricGate
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -152,11 +158,22 @@ fun RpRoot(
             dest?.hasRoute<PendingRoute>() == true ||
             dest?.hasRoute<SettingsRoute>() == true
 
-    Scaffold(
-        bottomBar = { if (showBar) BottomBar(nav, pendingCount) },
-    ) { padding ->
-        NavHost(nav, startDestination = start, modifier = Modifier.padding(padding)) {
-            composable<OnboardingRoute> { OnboardingScreen(onStart = { nav.navigate(ScanRoute) }) }
+    val reducedMotion = rememberIsReducedMotion()
+
+    CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
+        Scaffold(
+            bottomBar = { if (showBar) BottomBar(nav, pendingCount) },
+        ) { padding ->
+            NavHost(
+                navController = nav,
+                startDestination = start,
+                modifier = Modifier.padding(padding),
+                enterTransition = { if (reducedMotion) EnterTransition.None else RpMotion.navEnter },
+                exitTransition = { if (reducedMotion) ExitTransition.None else RpMotion.navExit },
+                popEnterTransition = { if (reducedMotion) EnterTransition.None else RpMotion.navPopEnter },
+                popExitTransition = { if (reducedMotion) ExitTransition.None else RpMotion.navPopExit },
+            ) {
+                composable<OnboardingRoute> { OnboardingScreen(onStart = { nav.navigate(ScanRoute) }) }
             composable<ScanRoute> {
                 ScanScreen(
                     onResult = { u, c -> nav.navigate(PairRoute(u, c)) { popUpTo<ScanRoute> { inclusive = true } } },
@@ -208,7 +225,8 @@ fun RpRoot(
             composable<NotificationSettingsRoute> { NotificationSettingsScreen(onBack = { nav.popBackStack() }) }
             composable<SecuritySettingsRoute> { SecuritySettingsScreen(onBack = { nav.popBackStack() }) }
             composable<BatteryRoute> { BatteryScreen(onBack = { nav.popBackStack() }) }
-            composable<AboutRoute> { AboutScreen(onBack = { nav.popBackStack() }) }
+                composable<AboutRoute> { AboutScreen(onBack = { nav.popBackStack() }) }
+            }
         }
     }
 
