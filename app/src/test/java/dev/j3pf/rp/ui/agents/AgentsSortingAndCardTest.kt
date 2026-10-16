@@ -128,4 +128,76 @@ class AgentsSortingAndCardTest {
         // Vista previa del último mensaje visible
         rule.onNodeWithText("Vista previa del último mensaje del agente").assertIsDisplayed()
     }
+
+    @Test
+    fun `AgentsContent displays agents ordered by open prompts, then working, then idle`() {
+        val machine =
+            dev.j3pf.rp.protocol.MachineSummary(
+                machineId = "m1",
+                name = "PC Principal",
+                color = "#7AA2F7",
+                online = true,
+            )
+        val aPrompt =
+            AgentSummary(
+                agentId = "a-prompt",
+                machineId = "m1",
+                sessionName = "Sesión con Pregunta",
+                status = "waiting_input",
+                openPromptCount = 2,
+                lastSeenAt = 1000L,
+                online = true,
+            )
+        val aWorking =
+            AgentSummary(
+                agentId = "a-working",
+                machineId = "m1",
+                sessionName = "Sesión Trabajando",
+                status = "working",
+                openPromptCount = 0,
+                lastSeenAt = 2000L,
+                online = true,
+            )
+        val aIdle =
+            AgentSummary(
+                agentId = "a-idle",
+                machineId = "m1",
+                sessionName = "Sesión Inactiva",
+                status = "idle",
+                openPromptCount = 0,
+                lastSeenAt = 3000L,
+                online = true,
+            )
+
+        val group = MachineGroup(machine, sortAgentsWithinGroup(listOf(aIdle, aWorking, aPrompt)))
+        val uiState =
+            AgentsUiState(
+                machines = listOf(machine),
+                allAgents = listOf(aPrompt, aWorking, aIdle),
+                groups = listOf(group),
+                selected = "all",
+            )
+
+        rule.setContent {
+            RpTheme {
+                AgentsContent(
+                    state = uiState,
+                    conn = dev.j3pf.rp.data.net.ConnState.Connected,
+                    onOpenChat = {},
+                    onNewAgent = {},
+                    onSelect = {},
+                    onRefresh = {},
+                    onResume = { _: AgentSummary, _: String -> },
+                    onForget = {},
+                )
+            }
+        }
+
+        val topPrompt = rule.onNodeWithText("Sesión con Pregunta").fetchSemanticsNode().boundsInRoot.top
+        val topWorking = rule.onNodeWithText("Sesión Trabajando").fetchSemanticsNode().boundsInRoot.top
+        val topIdle = rule.onNodeWithText("Sesión Inactiva").fetchSemanticsNode().boundsInRoot.top
+
+        org.junit.Assert.assertTrue("Agente con prompts debe aparecer arriba del agente trabajando", topPrompt < topWorking)
+        org.junit.Assert.assertTrue("Agente trabajando debe aparecer arriba del agente inactivo", topWorking < topIdle)
+    }
 }

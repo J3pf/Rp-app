@@ -120,7 +120,7 @@ fun RpRoot(
             hadSession = true
         } else if (hadSession) {
             hadSession = false
-            nav.navigate(OnboardingRoute) { popUpTo(nav.graph.id) { inclusive = true } }
+            nav.navigate(OnboardingRoute) { popUpTo(nav.graph.findStartDestination().id) { inclusive = true } }
         }
     }
 
@@ -186,7 +186,7 @@ fun RpRoot(
                         initialUrl = r.url,
                         initialCode = r.code,
                         onScan = { nav.navigate(ScanRoute) },
-                        onPaired = { nav.navigate(PermissionsRoute) { popUpTo(nav.graph.id) { inclusive = true } } },
+                        onPaired = { nav.navigate(PermissionsRoute) { popUpTo(nav.graph.findStartDestination().id) { inclusive = true } } },
                     )
                 }
                 composable<PermissionsRoute> {
@@ -237,14 +237,25 @@ fun RpRoot(
     sheetPrompt?.let { id -> PromptSheet(promptId = id, onDismiss = mainVm::closePrompt) }
 }
 
-@Composable
-internal fun BottomBar(
-    nav: NavHostController,
-    pending: Int,
+enum class AppTab(
+    val route: Any,
+    val label: String,
 ) {
-    val entry by nav.currentBackStackEntryAsState()
-    val dest = entry?.destination
+    AGENTS(AgentsRoute, "Agentes"),
+    MESH(MeshRoute, "Red"),
+    PENDING(PendingRoute, "Pendientes"),
+    SETTINGS(SettingsRoute, "Ajustes"),
+}
+
+@Composable
+fun AppBottomBar(
+    selectedTab: AppTab,
+    pending: Int = 0,
+    onSelectTab: (AppTab) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     Surface(
+        modifier = modifier,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
     ) {
@@ -252,27 +263,15 @@ internal fun BottomBar(
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
         ) {
-            val tabs =
-                listOf(
-                    Triple(AgentsRoute as Any, "Agentes", dest?.hasRoute<AgentsRoute>() == true),
-                    Triple(MeshRoute as Any, "Red", dest?.hasRoute<MeshRoute>() == true),
-                    Triple(PendingRoute as Any, "Pendientes", dest?.hasRoute<PendingRoute>() == true),
-                    Triple(SettingsRoute as Any, "Ajustes", dest?.hasRoute<SettingsRoute>() == true),
-                )
-            tabs.forEach { (route, label, selected) ->
+            AppTab.entries.forEach { tab ->
+                val selected = tab == selectedTab
                 NavigationBarItem(
                     selected = selected,
                     alwaysShowLabel = true,
-                    onClick = {
-                        nav.navigate(route) {
-                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onClick = { onSelectTab(tab) },
                     icon = {
-                        when (route) {
-                            PendingRoute -> {
+                        when (tab) {
+                            AppTab.PENDING -> {
                                 BadgedBox(
                                     badge = {
                                         if (pending > 0) {
@@ -282,26 +281,18 @@ internal fun BottomBar(
                                         }
                                     },
                                 ) {
-                                    Icon(Icons.Filled.Inbox, contentDescription = label)
+                                    Icon(Icons.Filled.Inbox, contentDescription = tab.label)
                                 }
                             }
 
-                            AgentsRoute -> {
-                                Icon(Icons.Filled.SmartToy, contentDescription = label)
-                            }
-
-                            MeshRoute -> {
-                                Icon(Icons.Filled.Hub, contentDescription = label)
-                            }
-
-                            else -> {
-                                Icon(Icons.Filled.Settings, contentDescription = label)
-                            }
+                            AppTab.AGENTS -> Icon(Icons.Filled.SmartToy, contentDescription = tab.label)
+                            AppTab.MESH -> Icon(Icons.Filled.Hub, contentDescription = tab.label)
+                            AppTab.SETTINGS -> Icon(Icons.Filled.Settings, contentDescription = tab.label)
                         }
                     },
                     label = {
                         Text(
-                            text = label,
+                            text = tab.label,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                         )
@@ -318,6 +309,34 @@ internal fun BottomBar(
             }
         }
     }
+}
+
+@Composable
+internal fun BottomBar(
+    nav: NavHostController,
+    pending: Int,
+) {
+    val entry by nav.currentBackStackEntryAsState()
+    val dest = entry?.destination
+    val activeTab =
+        when {
+            dest?.hasRoute<AgentsRoute>() == true -> AppTab.AGENTS
+            dest?.hasRoute<MeshRoute>() == true -> AppTab.MESH
+            dest?.hasRoute<PendingRoute>() == true -> AppTab.PENDING
+            dest?.hasRoute<SettingsRoute>() == true -> AppTab.SETTINGS
+            else -> AppTab.AGENTS
+        }
+    AppBottomBar(
+        selectedTab = activeTab,
+        pending = pending,
+        onSelectTab = { tab ->
+            nav.navigate(tab.route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        },
+    )
 }
 
 /** Pantalla de bloqueo biométrico de la app (fase 4). */

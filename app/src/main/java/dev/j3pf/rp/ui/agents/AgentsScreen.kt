@@ -6,7 +6,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +59,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -88,20 +91,90 @@ import dev.j3pf.rp.util.parseColor
 import dev.j3pf.rp.util.relativeTime
 import kotlinx.coroutines.launch
 
+@Composable
+fun AgentsHeroStats(
+    agents: List<AgentSummary>,
+    machines: List<MachineSummary>,
+    modifier: Modifier = Modifier,
+) {
+    val working = agents.count { it.status == "working" && it.online }
+    val waiting = agents.sumOf { it.openPromptCount }
+    val onlineMachines = machines.count { it.online }
+
+    Surface(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape).background(
+                        if (working > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    ),
+                )
+                Text(
+                    text = "$working en ejecución",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape).background(
+                        if (waiting > 0) RpColors.warning else MaterialTheme.colorScheme.outline,
+                    ),
+                )
+                Text(
+                    text = "$waiting por responder",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape).background(
+                        if (onlineMachines > 0) RpColors.success else MaterialTheme.colorScheme.outline,
+                    ),
+                )
+                Text(
+                    text = "$onlineMachines online",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun AgentsScreen(
+fun AgentsContent(
+    state: AgentsUiState,
+    conn: dev.j3pf.rp.data.net.ConnState,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    bottomBar: @Composable () -> Unit = {
+        QuotaDynamicIsland(
+            machines = state.machines,
+            selectedMachineId = if (state.selected == AppSettings.ALL) null else state.selected,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+    },
     onOpenChat: (String) -> Unit,
     onNewAgent: () -> Unit,
-    mainVm: MainViewModel,
-    vm: AgentsViewModel = hiltViewModel(),
+    onSelect: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onResume: (AgentSummary, String) -> Unit,
+    onForget: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    val conn by mainVm.connState.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
     Scaffold(
+        modifier = modifier,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNewAgent,
@@ -112,14 +185,8 @@ fun AgentsScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             )
         },
-        bottomBar = {
-            QuotaDynamicIsland(
-                machines = state.machines,
-                selectedMachineId = if (state.selected == AppSettings.ALL) null else state.selected,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = bottomBar,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(
             modifier =
@@ -134,12 +201,17 @@ fun AgentsScreen(
                 title = "Tus Agentes",
             )
 
+            AgentsHeroStats(
+                agents = state.allAgents,
+                machines = state.machines,
+            )
+
             // Switcher de máquinas tipo Dropdown con Hero Card (design.md §1 y §6)
             MachineHeroDropdown(
                 machines = state.machines,
                 agents = state.allAgents,
                 selected = state.selected,
-                onSelect = vm::select,
+                onSelect = onSelect,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
 
@@ -153,18 +225,19 @@ fun AgentsScreen(
                     machines = state.machines,
                     agents = state.allAgents,
                     selected = state.selected,
-                    onSelect = vm::select,
+                    onSelect = onSelect,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
             }
 
+            val reducedMotion = LocalReducedMotion.current
             PullToRefreshBox(
-                isRefreshing = state.refreshing,
-                onRefresh = vm::refresh,
+                isRefreshing = state.refreshing && !reducedMotion,
+                onRefresh = onRefresh,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
                 when {
-                    state.refreshing && state.groups.isEmpty() -> {
+                    (state.isLoading || (state.refreshing && state.groups.isEmpty())) -> {
                         AgentSkeletonList(
                             count = 3,
                             modifier = Modifier.padding(top = 8.dp),
@@ -202,7 +275,7 @@ fun AgentsScreen(
 
                     else -> {
                         LazyColumn(
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 140.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             state.groups.forEach { g ->
@@ -215,18 +288,8 @@ fun AgentsScreen(
                                         modifier = Modifier.animateItem(),
                                         canResume = g.machine.hostOnline,
                                         onClick = { onOpenChat(a.agentId) },
-                                        onResume = {
-                                            if (g.machine.hostOnline) {
-                                                vm.resumeAgent(a) { msg ->
-                                                    scope.launch { snackbar.showSnackbar(msg) }
-                                                }
-                                            } else {
-                                                scope.launch {
-                                                    snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en ${g.machine.name}")
-                                                }
-                                            }
-                                        },
-                                        onForget = { vm.forget(a.agentId) },
+                                        onResume = { onResume(a, g.machine.name) },
+                                        onForget = { onForget(a.agentId) },
                                     )
                                 }
                             }
@@ -236,6 +299,41 @@ fun AgentsScreen(
             }
         }
     }
+}
+
+@Composable
+fun AgentsScreen(
+    onOpenChat: (String) -> Unit,
+    onNewAgent: () -> Unit,
+    mainVm: MainViewModel,
+    vm: AgentsViewModel = hiltViewModel(),
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val conn by mainVm.connState.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    AgentsContent(
+        state = state,
+        conn = conn,
+        snackbarHostState = snackbar,
+        onOpenChat = onOpenChat,
+        onNewAgent = onNewAgent,
+        onSelect = vm::select,
+        onRefresh = vm::refresh,
+        onResume = { a, machineName ->
+            if (state.machines.find { it.name == machineName }?.hostOnline == true) {
+                vm.resumeAgent(a) { msg ->
+                    scope.launch { snackbar.showSnackbar(msg) }
+                }
+            } else {
+                scope.launch {
+                    snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en $machineName")
+                }
+            }
+        },
+        onForget = vm::forget,
+    )
 }
 
 @Composable
@@ -290,6 +388,16 @@ fun AgentCard(
 ) {
     val (menu, setMenu) = remember { mutableStateOf(false) }
 
+    val statusColor =
+        when {
+            !a.online -> MaterialTheme.colorScheme.outline
+            a.openPromptCount > 0 || a.status == "waiting_input" -> RpColors.warning
+            a.status == "working" -> MaterialTheme.colorScheme.primary
+            a.status == "compacting" -> MaterialTheme.colorScheme.tertiary
+            a.status == "error" -> RpColors.danger
+            else -> RpColors.success
+        }
+
     SurfaceCard(
         onClick = onClick,
         modifier =
@@ -298,33 +406,35 @@ fun AgentCard(
                 .padding(horizontal = 16.dp, vertical = 2.dp),
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Fila superior: punto de color de máquina, título de sesión, campana y menú
+            // Fila superior: punto de color de máquina, título de sesión, tiempo relativo dedicado, campana y menú
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val isWorking = a.status == "working" && a.online
                 val reducedMotion = LocalReducedMotion.current
                 val avatarPulseTransition = rememberInfiniteTransition(label = "avatarPulse")
-                val avatarScale by if (isWorking && !reducedMotion) {
-                    avatarPulseTransition.animateFloat(
-                        initialValue = 1.0f,
-                        targetValue = 1.25f,
-                        animationSpec =
-                            infiniteRepeatable(
-                                animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                                repeatMode = RepeatMode.Reverse,
-                            ),
-                        label = "avatarScale",
-                    )
-                } else {
-                    remember { mutableFloatStateOf(1.0f) }
-                }
+                val avatarScale: Float =
+                    if (isWorking && !reducedMotion) {
+                        avatarPulseTransition.animateFloat(
+                            initialValue = 1.0f,
+                            targetValue = 1.25f,
+                            animationSpec =
+                                infiniteRepeatable(
+                                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                            label = "avatarScale",
+                        ).value
+                    } else {
+                        1.0f
+                    }
 
                 Surface(
                     shape = CircleShape,
@@ -333,8 +443,8 @@ fun AgentCard(
                         Modifier
                             .size(24.dp)
                             .graphicsLayer {
-                                scaleX = avatarScale
-                                scaleY = avatarScale
+                                this.scaleX = avatarScale
+                                this.scaleY = avatarScale
                             },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -350,6 +460,18 @@ fun AgentCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+
+                // R4: Slot dedicado y siempre visible para tiempo relativo de actividad
+                val timeText = if (a.status == "working" && a.online) "activo ahora" else relativeTime(a.lastSeenAt)
+                if (timeText.isNotBlank()) {
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (a.status == "working" && a.online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
 
                 if (a.openPromptCount > 0) {
                     BadgedBox(
@@ -411,15 +533,13 @@ fun AgentCard(
                 }
             }
 
-            // Metadatos técnicos (carpeta, rama, modelo, tiempo relativo de actividad)
-            val timeText = if (a.status == "working") "activo ahora" else relativeTime(a.lastSeenAt)
+            // Metadatos técnicos (carpeta, rama, modelo) con espaciado reducido (R4)
             val meta =
                 listOfNotNull(
                     lastSegment(a.cwd).takeIf { it.isNotEmpty() },
                     a.gitBranch?.let { "git:$it" },
                     a.model?.label?.takeIf { it.isNotEmpty() },
-                    timeText.takeIf { it.isNotEmpty() },
-                ).joinToString("  •  ")
+                ).joinToString(" • ")
 
             if (meta.isNotEmpty()) {
                 Text(

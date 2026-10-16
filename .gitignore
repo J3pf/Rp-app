@@ -13,3 +13,5 @@ app/google-services.json
 keystore.properties
 /dist/
 .pi/
+.kotlin/
+.pi-lens.json

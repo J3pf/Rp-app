@@ -1,35 +1,15 @@
 package dev.j3pf.rp.ui.screenshots
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,14 +17,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.UserMsg
+import dev.j3pf.rp.data.net.ConnState
+import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.Danger
@@ -52,6 +33,7 @@ import dev.j3pf.rp.protocol.HerdrInfo
 import dev.j3pf.rp.protocol.MachineQuota
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.MeshComm
+import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
@@ -59,25 +41,34 @@ import dev.j3pf.rp.protocol.ModelInfo
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.QuotaWindow
-import dev.j3pf.rp.ui.agents.AgentCard
+import dev.j3pf.rp.ui.agents.AgentsContent
+import dev.j3pf.rp.ui.agents.AgentsUiState
+import dev.j3pf.rp.ui.agents.MachineGroup
+import dev.j3pf.rp.ui.agents.sortAgentsWithinGroup
+import dev.j3pf.rp.ui.chat.ChatContent
 import dev.j3pf.rp.ui.chat.ChatUiState
 import dev.j3pf.rp.ui.chat.MessageList
-import dev.j3pf.rp.ui.components.AgentSkeletonList
-import dev.j3pf.rp.ui.components.AppHeader
-import dev.j3pf.rp.ui.components.EmptyState
-import dev.j3pf.rp.ui.components.MachineFilterBar
-import dev.j3pf.rp.ui.components.MachineHeroDropdown
 import dev.j3pf.rp.ui.components.QuotaDynamicIsland
-import dev.j3pf.rp.ui.components.SectionTitle
-import dev.j3pf.rp.ui.components.SurfaceCard
+import dev.j3pf.rp.ui.mesh.LiveCommBubble
 import dev.j3pf.rp.ui.mesh.MeshGroupChip
 import dev.j3pf.rp.ui.mesh.MeshMachineChip
 import dev.j3pf.rp.ui.mesh.MeshScreenContent
 import dev.j3pf.rp.ui.mesh.MeshUiState
+import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
+import dev.j3pf.rp.ui.nav.AppBottomBar
+import dev.j3pf.rp.ui.nav.AppTab
+import dev.j3pf.rp.ui.newagent.NewAgentContent
+import dev.j3pf.rp.ui.newagent.NewAgentForm
+import dev.j3pf.rp.ui.newagent.NewAgentUi
+import dev.j3pf.rp.ui.onboarding.OnboardingScreen
+import dev.j3pf.rp.ui.pending.PendingContent
 import dev.j3pf.rp.ui.pending.PendingItem
-import dev.j3pf.rp.ui.pending.PendingRow
+import dev.j3pf.rp.ui.pending.PendingUiState
+import dev.j3pf.rp.ui.promptsheet.PromptContent
+import dev.j3pf.rp.ui.settings.HealthState
+import dev.j3pf.rp.ui.settings.SettingsContent
+import dev.j3pf.rp.ui.settings.SettingsUiState
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
-import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.ui.theme.RpTheme
 import dev.j3pf.rp.ui.theme.RpThemeChoice
@@ -204,7 +195,10 @@ class RoborazziScreenshotTest {
                 captureRoboImage("src/test/screenshots/${screen}_${themeName}_$modeName.png") {
                     CompositionLocalProvider(LocalReducedMotion provides true) {
                         RpTheme(themeChoice = themeChoice, darkTheme = darkTheme) {
-                            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = MaterialTheme.colorScheme.background,
+                            ) {
                                 content()
                             }
                         }
@@ -217,83 +211,98 @@ class RoborazziScreenshotTest {
     // ───────────────────────────── 1. Agents Populated ─────────────────────────────
     @Test
     fun screenshotAgentsPopulated() {
+        val groups =
+            listOf(
+                MachineGroup(machineWork, sortAgentsWithinGroup(listOf(agentWorking, agentIdle))),
+                MachineGroup(machinePersonal, sortAgentsWithinGroup(listOf(agentWaiting))),
+            )
+        val uiState =
+            AgentsUiState(
+                machines = listOf(machineWork, machinePersonal),
+                allAgents = sampleAgents,
+                groups = groups,
+                selected = "all",
+            )
+
         captureScreen("agents_populated") {
-            Scaffold(
+            AgentsContent(
+                state = uiState,
+                conn = ConnState.Connected,
                 bottomBar = {
-                    QuotaDynamicIsland(
-                        machines = listOf(machineWork, machinePersonal),
-                        selectedMachineId = null,
-                        modifier = Modifier.padding(bottom = 6.dp),
-                    )
-                },
-            ) { padding ->
-                Column(
-                    Modifier
-                        .padding(padding)
-                        .fillMaxSize(),
-                ) {
-                    AppHeader(greeting = "¿Qué está ejecutando Pi?", title = "Tus Agentes")
-                    MachineHeroDropdown(
-                        machines = listOf(machineWork, machinePersonal),
-                        agents = sampleAgents,
-                        selected = "all",
-                        onSelect = {},
-                        modifier = Modifier.padding(bottom = 6.dp),
-                    )
-                    MachineFilterBar(
-                        machines = listOf(machineWork, machinePersonal),
-                        agents = sampleAgents,
-                        selected = "all",
-                        onSelect = {},
-                        modifier = Modifier.padding(bottom = 6.dp),
-                    )
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(sampleAgents, key = { it.agentId }) { a ->
-                            AgentCard(a = a, onClick = {}, onForget = {})
-                        }
+                    Column {
+                        QuotaDynamicIsland(
+                            machines = uiState.machines,
+                            selectedMachineId = null,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                        AppBottomBar(selectedTab = AppTab.AGENTS, pending = 2)
                     }
-                }
-            }
+                },
+                onOpenChat = {},
+                onNewAgent = {},
+                onSelect = {},
+                onRefresh = {},
+                onResume = { _: AgentSummary, _: String -> },
+                onForget = {},
+            )
         }
     }
 
     // ───────────────────────────── 2. Agents Empty ─────────────────────────────
     @Test
     fun screenshotAgentsEmpty() {
+        val uiState =
+            AgentsUiState(
+                machines = listOf(machineWork, machinePersonal),
+                allAgents = emptyList(),
+                groups = emptyList(),
+                selected = "all",
+            )
+
         captureScreen("agents_empty") {
-            Scaffold { padding ->
-                Column(Modifier.padding(padding).fillMaxSize()) {
-                    AppHeader(greeting = "¿Qué está ejecutando Pi?", title = "Tus Agentes")
-                    EmptyState(
-                        title = "Aún no hay agentes",
-                        subtitle = "Abre Pi con el plugin rp en tus PCs y tus sesiones aparecerán aquí.",
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Filled.SmartToy,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp),
-                            )
-                        },
-                    )
-                }
-            }
+            AgentsContent(
+                state = uiState,
+                conn = ConnState.Connected,
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.AGENTS, pending = 0)
+                },
+                onOpenChat = {},
+                onNewAgent = {},
+                onSelect = {},
+                onRefresh = {},
+                onResume = { _: AgentSummary, _: String -> },
+                onForget = {},
+            )
         }
     }
 
     // ───────────────────────────── 3. Agents Skeleton ─────────────────────────────
     @Test
     fun screenshotAgentsSkeleton() {
+        val uiState =
+            AgentsUiState(
+                machines = listOf(machineWork, machinePersonal),
+                allAgents = emptyList(),
+                groups = emptyList(),
+                selected = "all",
+                isLoading = true,
+                refreshing = false,
+            )
+
         captureScreen("agents_skeleton") {
-            Scaffold { padding ->
-                Column(Modifier.padding(padding).fillMaxSize()) {
-                    AppHeader(greeting = "¿Qué está ejecutando Pi?", title = "Tus Agentes")
-                    AgentSkeletonList(count = 4, modifier = Modifier.padding(top = 8.dp))
-                }
-            }
+            AgentsContent(
+                state = uiState,
+                conn = ConnState.Connected,
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.AGENTS, pending = 0)
+                },
+                onOpenChat = {},
+                onNewAgent = {},
+                onSelect = {},
+                onRefresh = {},
+                onResume = { _: AgentSummary, _: String -> },
+                onForget = {},
+            )
         }
     }
 
@@ -322,19 +331,42 @@ class RoborazziScreenshotTest {
                 ),
             )
 
+        val uiState = ChatUiState(agent = agentWorking, chat = ChatState(items = chatMessages))
+
         captureScreen("chat_streaming") {
-            Scaffold { padding ->
-                MessageList(
-                    ui = ChatUiState(chat = ChatState(items = chatMessages)),
-                    modifier = Modifier.padding(padding).fillMaxSize(),
-                    busyPromptId = null,
-                    onAnswerPrompt = { _, _ -> },
-                )
-            }
+            ChatContent(
+                ui = uiState,
+                text = "",
+                onText = {},
+                onBack = {},
+                onSend = {},
+                onChoice = {},
+                onWorkingDelivery = {},
+                onPicked = {},
+                onRemoveAttachment = {},
+            )
         }
     }
 
-    // ───────────────────────────── 5. Mesh ─────────────────────────────
+    // ───────────────────────────── 5. Chat Scrolled Up (Jump Button Visible) ─────────────────────────────
+    @Test
+    fun screenshotChatScrolledUp() {
+        val historyMessages =
+            (1..20).map { i ->
+                UserMsg(key = "hist-$i", text = "Mensaje histórico #$i en la conversación previa", at = 1000L + i)
+            }
+        val uiState = ChatUiState(agent = agentWorking, chat = ChatState(items = historyMessages))
+
+        captureScreen("chat_scrolled_up") {
+            val listState = rememberLazyListState(initialFirstVisibleItemIndex = 6, initialFirstVisibleItemScrollOffset = 50)
+            ChatContent(
+                ui = uiState,
+                listState = listState,
+            )
+        }
+    }
+
+    // ───────────────────────────── 6. Mesh List View ─────────────────────────────
     @Test
     fun screenshotMesh() {
         val nodes =
@@ -418,14 +450,147 @@ class RoborazziScreenshotTest {
             )
 
         captureScreen("mesh") {
-            MeshScreenContent(
-                uiState = meshUiState,
-                onOpenChat = {},
-            )
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
         }
     }
 
-    // ───────────────────────────── 6. Pending ─────────────────────────────
+    // ───────────────────────────── 7. Mesh Diagram View ─────────────────────────────
+    @Test
+    fun screenshotMeshDiagram() {
+        val nodes =
+            listOf(
+                MeshNode(
+                    agentId = "node-orch",
+                    machineId = "m-work",
+                    machineName = "PC Empresa",
+                    machineColor = "#7AA2F7",
+                    name = "Orquestador Principal",
+                    role = "orchestrator",
+                    status = "working",
+                    online = true,
+                    cwd = "/workspace/project",
+                    gitBranch = "main",
+                ),
+                MeshNode(
+                    agentId = "node-sub1",
+                    machineId = "m-work",
+                    machineName = "PC Empresa",
+                    machineColor = "#7AA2F7",
+                    name = "Worker UI",
+                    role = "subordinate",
+                    status = "working",
+                    online = true,
+                    cwd = "/workspace/ui",
+                    gitBranch = "feat/refresh",
+                ),
+                MeshNode(
+                    agentId = "node-sub2",
+                    machineId = "m-personal",
+                    machineName = "MacBook Pro",
+                    machineColor = "#D81B60",
+                    name = "Worker Protocol",
+                    role = "subordinate",
+                    status = "idle",
+                    online = true,
+                    cwd = "/workspace/protocol",
+                    gitBranch = "main",
+                ),
+            )
+
+        val edges =
+            listOf(
+                MeshEdge(
+                    edgeId = "edge-1",
+                    a = "node-orch",
+                    b = "node-sub1",
+                    count = 12,
+                    active = true,
+                    lastAction = "ask",
+                    lastPreview = "Validando pruebas de UI",
+                ),
+                MeshEdge(
+                    edgeId = "edge-2",
+                    a = "node-orch",
+                    b = "node-sub2",
+                    count = 5,
+                    active = false,
+                    lastAction = "reply",
+                ),
+            )
+
+        val groups =
+            listOf(
+                MeshGroup(
+                    groupId = "grp-1",
+                    label = "Orquestador",
+                    orchestratorAgentId = "node-orch",
+                    memberAgentIds = listOf("node-orch", "node-sub1", "node-sub2"),
+                ),
+            )
+
+        val snapshot = MeshSnapshot(groups = groups, nodes = nodes, edges = edges)
+        val layout = MeshLayoutEngine().computeLayout(nodes, edges)
+
+        val comm =
+            MeshComm(
+                commKey = "comm-bubble-1",
+                fromAgentId = "node-orch",
+                toAgentId = "node-sub1",
+                fromName = "Orquestador",
+                toName = "Worker UI",
+                action = CommAction.ASK,
+                text = "Coordinando tareas de UI",
+            )
+
+        val meshUiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                layoutResult = layout,
+                isListView = false,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 3),
+                        MeshMachineChip(machineId = "m-work", name = "PC Empresa", color = "#7AA2F7", agentCount = 2),
+                        MeshMachineChip(machineId = "m-personal", name = "MacBook Pro", color = "#D81B60", agentCount = 1),
+                    ),
+                groupChips =
+                    listOf(
+                        MeshGroupChip(groupId = "grp-1", label = "Orquestador", memberCount = 3),
+                    ),
+                liveComms = listOf(comm),
+                activeBubbles = listOf(LiveCommBubble(comm = comm, expiresAtMs = System.currentTimeMillis() + 6000L)),
+            )
+
+        captureScreen("mesh_diagram") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    // ───────────────────────────── 8. Pending ─────────────────────────────
     @Test
     fun screenshotPending() {
         val pendingItems =
@@ -456,165 +621,137 @@ class RoborazziScreenshotTest {
                 ),
             )
 
+        val uiState =
+            PendingUiState(
+                machines = listOf(machineWork, machinePersonal),
+                agents = sampleAgents,
+                items = pendingItems,
+                selected = "all",
+            )
+
         captureScreen("pending") {
-            Scaffold { padding ->
-                Column(Modifier.padding(padding).fillMaxSize()) {
-                    AppHeader(greeting = "¿Hay decisiones pendientes?", title = "Bandeja de Entrada")
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(pendingItems, key = { it.prompt.promptId }) { item ->
-                            PendingRow(item = item, onClick = {})
-                        }
-                    }
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.PENDING, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    PendingContent(
+                        state = uiState,
+                        onOpenPrompt = {},
+                        onSelect = {},
+                    )
                 }
             }
         }
     }
 
-    // ───────────────────────────── 7. Settings ─────────────────────────────
+    // ───────────────────────────── 9. Settings ─────────────────────────────
     @Test
     fun screenshotSettings() {
+        val uiState =
+            SettingsUiState(
+                session =
+                    Session(
+                        relayId = "r1",
+                        relayUrl = "https://relay.j3pf.dev",
+                        relayName = "Relay Principal",
+                        deviceId = "d1",
+                        deviceToken = "tok",
+                        pushKey = "key",
+                    ),
+                settings = AppSettings(appTheme = "auto"),
+                conn = ConnState.Connected,
+                health = HealthState(notificationsEnabled = true, batteryExcluded = true),
+            )
+
         captureScreen("settings") {
-            Scaffold { padding ->
-                Column(
-                    Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 24.dp),
-                ) {
-                    AppHeader(greeting = "Configuración y estado", title = "Ajustes")
-
-                    SectionTitle("Relay")
-                    SurfaceCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-                        shape = RpShapes.card,
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("Relay Principal", fontWeight = FontWeight.Bold) },
-                            supportingContent = { Text("https://relay.j3pf.dev", style = MaterialTheme.typography.bodySmall) },
-                            trailingContent = {
-                                Text("● conectado", style = MaterialTheme.typography.labelMedium, color = RpColors.success)
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-
-                    SectionTitle("Preferencias")
-                    SurfaceCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-                        shape = RpShapes.card,
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("Tema de la app") },
-                            supportingContent = { Text("Sincronizado con Pi (automático)", style = MaterialTheme.typography.bodySmall) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                        ListItem(
-                            headlineContent = { Text("Notificaciones") },
-                            supportingContent = { Text("Activas · Todas las categorías", style = MaterialTheme.typography.bodySmall) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                        ListItem(
-                            headlineContent = { Text("Seguridad") },
-                            supportingContent = { Text("Desbloqueo biométrico activo", style = MaterialTheme.typography.bodySmall) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-
-                    SectionTitle("Acerca de")
-                    SurfaceCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-                        shape = RpShapes.card,
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("Versión 0.3.0") },
-                            supportingContent = { Text("Licencias de código abierto", style = MaterialTheme.typography.bodySmall) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.SETTINGS, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    SettingsContent(
+                        state = uiState,
+                        onNav = {},
+                        onSelectTheme = {},
+                        onLogout = {},
+                    )
                 }
             }
         }
     }
 
-    // ───────────────────────────── 8. New Agent ─────────────────────────────
-    @OptIn(ExperimentalMaterial3Api::class)
+    // ───────────────────────────── 10. New Agent ─────────────────────────────
     @Test
     fun screenshotNewAgent() {
+        val uiState =
+            NewAgentUi(
+                machines = listOf(machineWork, machinePersonal),
+                form =
+                    NewAgentForm(
+                        machineId = "m-work",
+                        path = "/home/drift/Workspace/RP/Rp-app",
+                        launcher = "gentle-shell",
+                        name = "UI-Refresh",
+                        initialPrompt = "Hacer un refactor completo de la UI manteniendo los temas",
+                    ),
+            )
+
         captureScreen("new_agent") {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Nuevo agente") },
-                        navigationIcon = {
-                            IconButton(onClick = {}) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás")
-                            }
-                        },
+            NewAgentContent(
+                ui = uiState,
+                onBack = {},
+                onPickMachine = {},
+                onOpenDir = {},
+                onEnterDir = {},
+                onUpDir = {},
+                canGoUp = true,
+                onSetLauncher = {},
+                onSetBackend = {},
+                onSetName = {},
+                onSetPrompt = {},
+                onCreate = {},
+            )
+        }
+    }
+
+    // ───────────────────────────── 11. Onboarding ─────────────────────────────
+    @Test
+    fun screenshotOnboarding() {
+        captureScreen("onboarding") {
+            OnboardingScreen(onStart = {})
+        }
+    }
+
+    // ───────────────────────────── 12. Prompt Sheet (Open) ─────────────────────────────
+    @Test
+    fun screenshotPromptSheet() {
+        val criticalPrompt =
+            Prompt(
+                promptId = "prompt-crit-1",
+                agentId = "a-1",
+                title = "Autorizar ejecución de migración de base de datos",
+                message = "El agente solicita ejecutar: ./gradlew flywayMigrate -Denv=prod",
+                category = PromptCategory.PERMISSION,
+                danger = Danger.HIGH,
+            )
+
+        captureScreen("prompt_sheet") {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RpShapes.sheet,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            ) {
+                Column(Modifier.padding(20.dp)) {
+                    PromptContent(
+                        prompt = criticalPrompt,
+                        busy = false,
+                        onAnswer = {},
                     )
-                },
-            ) { padding ->
-                Column(
-                    Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 24.dp),
-                ) {
-                    SectionTitle("1 · PC")
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(selected = true, onClick = {}, label = { Text("PC Empresa") })
-                        FilterChip(selected = false, onClick = {}, label = { Text("MacBook Pro") })
-                    }
-
-                    SectionTitle("2 · Carpeta")
-                    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RpShapes.card) {
-                        Column(Modifier.padding(14.dp)) {
-                            Text("/home/drift/Workspace/RP/Rp-app", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-
-                    SectionTitle("3 · Lanzador")
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(selected = true, onClick = {}, label = { Text("gentle-shell") })
-                        FilterChip(selected = false, onClick = {}, label = { Text("herdr") })
-                        FilterChip(selected = false, onClick = {}, label = { Text("tmux") })
-                    }
-
-                    SectionTitle("4 · Nombre y prompt inicial (opcional)")
-                    OutlinedTextField(
-                        value = "UI-Refresh",
-                        onValueChange = {},
-                        label = { Text("Nombre de la sesión") },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    )
-                    OutlinedTextField(
-                        value = "Hacer un refactor completo de la UI manteniendo los temas",
-                        onValueChange = {},
-                        label = { Text("Prompt inicial") },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        minLines = 3,
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = {},
-                        shape = RpShapes.pill,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 48.dp),
-                    ) {
-                        Text("Crear agente", fontWeight = FontWeight.Bold)
-                    }
                 }
             }
         }

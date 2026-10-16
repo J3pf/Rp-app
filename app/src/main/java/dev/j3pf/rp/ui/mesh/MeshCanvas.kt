@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
 import dev.j3pf.rp.ui.mesh.layout.PositionedNode
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
@@ -62,11 +63,13 @@ fun MeshCanvas(
     val context = LocalContext.current
     val density = LocalDensity.current
     val scheme = MaterialTheme.colorScheme
-    val reducedMotion =
+    val localReducedMotion = LocalReducedMotion.current
+    val systemReducedMotion =
         remember(context) {
             runCatching { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
                 .getOrDefault(false)
         }
+    val reducedMotion = localReducedMotion || systemReducedMotion
     var zoom by remember { mutableFloatStateOf(1f) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }

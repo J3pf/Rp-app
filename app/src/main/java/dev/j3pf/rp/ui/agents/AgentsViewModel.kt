@@ -39,6 +39,7 @@ data class AgentsUiState(
     val allAgents: List<AgentSummary> = emptyList(),
     val groups: List<MachineGroup> = emptyList(),
     val selected: String = AppSettings.ALL,
+    val isLoading: Boolean = false,
     /** Alguna PC visible tiene `rp-host` conectado → se puede crear agentes. */
     val canSpawn: Boolean = false,
     val refreshing: Boolean = false,

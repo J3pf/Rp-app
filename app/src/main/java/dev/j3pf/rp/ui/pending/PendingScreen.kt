@@ -81,10 +81,15 @@ class PendingViewModel
         private val settings: SettingsRepository,
     ) : ViewModel() {
         val state: StateFlow<PendingUiState> =
-            combine(prompts.open, agents.agents, machines.machines, settings.settings) { ps, ags, ms, st ->
-                val byId = ags.associateBy { it.agentId }
+            combine(
+                prompts.open,
+                agents.agents,
+                machines.machines,
+                settings.settings,
+            ) { ps: List<Prompt>, ags: List<AgentSummary>, ms: List<MachineSummary>, st: AppSettings ->
+                val byId = ags.associateBy { a: AgentSummary -> a.agentId }
                 val items =
-                    ps.map { PendingItem(it, byId[it.agentId]) }.filter { item ->
+                    ps.map { p: Prompt -> PendingItem(p, byId[p.agentId]) }.filter { item: PendingItem ->
                         st.selectedContext == AppSettings.ALL || item.agent?.machineContext == st.selectedContext ||
                             item.agent?.machineId == st.selectedContext
                     }
@@ -109,26 +114,27 @@ class PendingViewModel
 
 /** Bandeja global: todos los prompts abiertos de todos los agentes; tocar abre la hoja de respuesta. */
 @Composable
-fun PendingScreen(
+fun PendingContent(
+    state: PendingUiState,
     onOpenPrompt: (String) -> Unit,
-    vm: PendingViewModel = hiltViewModel(),
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val st by vm.state.collectAsStateWithLifecycle()
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         AppHeader(
             greeting = "¿Hay decisiones pendientes?",
             title = "Bandeja de Entrada",
         )
 
         MachineHeroDropdown(
-            machines = st.machines,
-            agents = st.agents,
-            selected = st.selected,
-            onSelect = vm::select,
+            machines = state.machines,
+            agents = state.agents,
+            selected = state.selected,
+            onSelect = onSelect,
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
-        if (st.items.isEmpty()) {
+        if (state.items.isEmpty()) {
             EmptyState(
                 title = "Todo al día",
                 subtitle = "Cuando un agente pregunte o solicite autorización aparecerá aquí de inmediato.",
@@ -143,15 +149,28 @@ fun PendingScreen(
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(st.items, key = { it.prompt.promptId }) { item ->
+                items(state.items, key = { it.prompt.promptId }) { item: PendingItem ->
                     PendingRow(item) { onOpenPrompt(item.prompt.promptId) }
                 }
             }
         }
     }
+}
+
+@Composable
+fun PendingScreen(
+    onOpenPrompt: (String) -> Unit,
+    vm: PendingViewModel = hiltViewModel(),
+) {
+    val st by vm.state.collectAsStateWithLifecycle()
+    PendingContent(
+        state = st,
+        onOpenPrompt = onOpenPrompt,
+        onSelect = vm::select,
+    )
 }
 
 @Composable

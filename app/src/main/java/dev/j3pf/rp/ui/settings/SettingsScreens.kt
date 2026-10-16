@@ -22,6 +22,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -78,22 +87,22 @@ import dev.j3pf.rp.util.relativeTime
 
 /** Ajustes: relay, dispositivos y máquinas, notificaciones, seguridad, batería, versión/licencias y cerrar sesión. */
 @Composable
-fun SettingsScreen(
-    nav: (SettingsDest) -> Unit,
-    onLoggedOut: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel(),
+fun SettingsContent(
+    state: SettingsUiState,
+    onNav: (SettingsDest) -> Unit,
+    onSelectTheme: (String) -> Unit,
+    onLogout: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val st by vm.state.collectAsStateWithLifecycle()
     var confirmLogout by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
-    LifecycleRefresh { vm.refreshHealth() }
 
     Column(
         modifier =
-            Modifier
+            modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 96.dp),
+                .padding(bottom = 120.dp),
     ) {
         AppHeader(
             greeting = "Configuración y estado",
@@ -112,14 +121,14 @@ fun SettingsScreen(
             ListItem(
                 headlineContent = {
                     Text(
-                        st.session?.relayName?.ifBlank { null } ?: "Relay",
+                        state.session?.relayName?.ifBlank { null } ?: "Relay",
                         fontWeight = FontWeight.Bold,
                     )
                 },
-                supportingContent = { Text(st.session?.relayUrl.orEmpty(), style = MaterialTheme.typography.bodySmall) },
+                supportingContent = { Text(state.session?.relayUrl.orEmpty(), style = MaterialTheme.typography.bodySmall) },
                 trailingContent = {
                     val (statusText, statusColor) =
-                        when (st.conn) {
+                        when (state.conn) {
                             ConnState.Connected -> "● conectado" to RpColors.success
                             ConnState.Connecting -> "conectando…" to MaterialTheme.colorScheme.primary
                             is ConnState.Fatal -> "✕ cerrado" to MaterialTheme.colorScheme.error
@@ -145,11 +154,11 @@ fun SettingsScreen(
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
         ) {
-            NavRow("Dispositivos emparejados", "Revocar teléfonos") { nav(SettingsDest.Devices) }
+            NavRow("Dispositivos emparejados", "Revocar teléfonos", icon = Icons.Filled.Smartphone) { onNav(SettingsDest.Devices) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            NavRow("PCs / máquinas", "Nombre, contexto, color; revocar") { nav(SettingsDest.Machines) }
+            NavRow("PCs / máquinas", "Nombre, contexto, color; revocar", icon = Icons.Filled.Computer) { onNav(SettingsDest.Machines) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            NavRow("Añadir máquina", "Genera un código para `/rp pair`") { nav(SettingsDest.AddMachine) }
+            NavRow("Añadir máquina", "Genera un código para `/rp pair`", icon = Icons.Filled.Add) { onNav(SettingsDest.AddMachine) }
         }
 
         SectionTitle("Preferencias")
@@ -161,14 +170,18 @@ fun SettingsScreen(
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
         ) {
-            NavRow("Tema de la app", themeLabel(st.settings.appTheme)) { showThemeDialog = true }
+            NavRow("Tema de la app", themeLabel(state.settings.appTheme), icon = Icons.Filled.Palette) { showThemeDialog = true }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            NavRow("Notificaciones", healthSummary(st.health)) { nav(SettingsDest.Notifications) }
+            NavRow("Notificaciones", healthSummary(state.health), icon = Icons.Filled.Notifications) { onNav(SettingsDest.Notifications) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            NavRow("Seguridad", "Desbloqueo para aprobar, bloqueo de la app") { nav(SettingsDest.Security) }
+            NavRow("Seguridad", "Desbloqueo para aprobar, bloqueo de la app", icon = Icons.Filled.Security) { onNav(SettingsDest.Security) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            NavRow("Optimización de batería", if (st.health.batteryExcluded) "RP está excluida ✓" else "Recomendado excluir RP") {
-                nav(SettingsDest.Battery)
+            NavRow(
+                "Optimización de batería",
+                if (state.health.batteryExcluded) "RP está excluida ✓" else "Recomendado excluir RP",
+                icon = Icons.Filled.BatteryChargingFull,
+            ) {
+                onNav(SettingsDest.Battery)
             }
         }
 
@@ -181,7 +194,7 @@ fun SettingsScreen(
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
         ) {
-            NavRow("Versión ${BuildConfig.VERSION_NAME}", "Licencias de código abierto") { nav(SettingsDest.About) }
+            NavRow("Versión ${BuildConfig.VERSION_NAME}", "Licencias de código abierto", icon = Icons.Filled.Info) { onNav(SettingsDest.About) }
         }
 
         SurfaceCard(
@@ -221,7 +234,7 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmLogout = false
-                    vm.logout(onLoggedOut)
+                    onLogout()
                 }) { Text("Cerrar sesión") }
             },
             dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Cancelar") } },
@@ -237,14 +250,14 @@ fun SettingsScreen(
                         ListItem(
                             headlineContent = { Text(choice.label) },
                             trailingContent = {
-                                if (st.settings.appTheme == choice.id) Text("✓", color = MaterialTheme.colorScheme.primary)
+                                if (state.settings.appTheme == choice.id) Text("✓", color = MaterialTheme.colorScheme.primary)
                             },
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 48.dp)
                                     .clickable {
-                                        vm.setAppTheme(choice.id)
+                                        onSelectTheme(choice.id)
                                         showThemeDialog = false
                                     },
                         )
@@ -256,6 +269,22 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+@Composable
+fun SettingsScreen(
+    nav: (SettingsDest) -> Unit,
+    onLoggedOut: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
+    val st by vm.state.collectAsStateWithLifecycle()
+    LifecycleRefresh { vm.refreshHealth() }
+    SettingsContent(
+        state = st,
+        onNav = nav,
+        onSelectTheme = vm::setAppTheme,
+        onLogout = { vm.logout(onLoggedOut) },
+    )
 }
 
 private fun themeLabel(id: String): String = RpThemeChoice.entries.find { it.id == id }?.label ?: "Sincronizado con Pi (automático)"
@@ -273,9 +302,11 @@ private fun healthSummary(h: HealthState): String =
 private fun NavRow(
     title: String,
     subtitle: String,
+    icon: ImageVector? = null,
     onClick: () -> Unit,
 ) {
     ListItem(
+        leadingContent = icon?.let { { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.primary) } },
         headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
         supportingContent = {
             Text(

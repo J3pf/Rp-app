@@ -57,3 +57,12 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 ## Log
 L1: "Necesito que RESPETANDO LOS VALORES Y FUNCIONALIDAD DEL THEME, hagas un refactor para hacer de esta app una app mucho mas llamativa, elegante, full UX/UI, que sea agradable de usar, que no le toque al usuario estar deslizando para ver lo mas reciente de cada agente, literal que sea una app llamativa, moderna, con animaciones, placentera de usar"
 L2: [UI REFRESH — TOOLCHAIN GO-AHEAD] User authorized full toolchain migration (AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, compileSdk 37, platform 37, all deps latest stable). T0 created as isolated commit.
+L3: [UI REFRESH — CP2 REVIEW: CHANGES REQUIRED]
+R1: Hoist stateless screen-level composables per screen (AgentsContent, ChatContent, MeshScreenContent, PendingContent, SettingsContent, NewAgentContent). Make real Screen(vm) a thin wrapper. Screenshot those inside real app frame with bottom nav bar on tab screens. Add screenshots for Onboarding, PromptSheet (open), Chat (scrolled up with jump button), Mesh diagram view.
+R2: ChatBottomAnchorTest: streaming message with >= 60 lines of text, assert last line boundsInRoot.bottom <= composer top and > 0. Then append more text and re-assert. Open: assert last item bottom within viewport. Remove all debug printlns/printToLog.
+R3: Chat rendering: fix Cute light empty pink blobs and Omarchy dark user bubble overlap. Add test that two consecutive items' bounds do not overlap.
+R4: Relative activity time: dedicated always-visible right-aligned slot in card's title row. Reduce monospace meta row spacing.
+R5: Prove ordering in test through real screen/VM path (prompts > working > idle) inside machine group.
+R6: QuotaDynamicIsland clear bottom padding (clear island + FAB). Fix chip row clipping on right edge.
+R7: Visual polish: Agents hero summary with glanceable live stats (working/waiting/online) using theme gradient; status-tinted accent / glow on cards; Settings grouped cards with leading icons; fix Mesh empty state logic contradiction.
+R8: Keep git status --short empty at report time; run ktlint before committing.

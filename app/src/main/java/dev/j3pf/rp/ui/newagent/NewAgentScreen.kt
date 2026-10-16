@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,17 +56,26 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewAgentScreen(
+fun NewAgentContent(
+    ui: NewAgentUi,
     onBack: () -> Unit,
-    onCreated: () -> Unit,
-    vm: NewAgentViewModel = hiltViewModel(),
+    onPickMachine: (String) -> Unit,
+    onOpenDir: (String) -> Unit,
+    onEnterDir: (String) -> Unit,
+    onUpDir: () -> Unit,
+    canGoUp: Boolean,
+    onSetLauncher: (String) -> Unit,
+    onSetBackend: (String) -> Unit,
+    onSetName: (String) -> Unit,
+    onSetPrompt: (String) -> Unit,
+    onCreate: () -> Unit,
+    herdrSection: @Composable () -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    modifier: Modifier = Modifier,
 ) {
-    val ui by vm.state.collectAsStateWithLifecycle()
     val f = ui.form
-    val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    LaunchedEffect(f.created) { if (f.created) onCreated() }
 
     Scaffold(
         topBar = {
@@ -74,7 +84,8 @@ fun NewAgentScreen(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier,
     ) { padding ->
         Column(
             Modifier
@@ -103,7 +114,7 @@ fun NewAgentScreen(
                             modifier =
                                 Modifier.fillMaxWidth().clickable {
                                     clipboard.setText(AnnotatedString("npx @j3pf/pi-rp rp-host run"))
-                                    scope.launch { snackbar.showSnackbar("Comando copiado al portapapeles") }
+                                    scope.launch { snackbarHostState.showSnackbar("Comando copiado al portapapeles") }
                                 },
                         ) {
                             Row(
@@ -134,7 +145,7 @@ fun NewAgentScreen(
                     ui.machines.forEach { m ->
                         FilterChip(
                             selected = f.machineId == m.machineId,
-                            onClick = { vm.pickMachine(m.machineId) },
+                            onClick = { onPickMachine(m.machineId) },
                             leadingIcon = { ColorDot(parseColor(m.color)) },
                             label = { Text(m.name) },
                         )
@@ -151,10 +162,10 @@ fun NewAgentScreen(
                         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        roots.forEach { r -> FilterChip(f.path.startsWith(r), { vm.openDir(r) }, label = { Text(r) }) }
+                        roots.forEach { r -> FilterChip(f.path.startsWith(r), { onOpenDir(r) }, label = { Text(r) }) }
                     }
                 }
-                Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RpShapes.card) {
                     Column {
                         Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(f.path.ifBlank { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -162,16 +173,16 @@ fun NewAgentScreen(
                         }
                         HorizontalDivider()
                         Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-                            if (vm.canGoUp) {
+                            if (canGoUp) {
                                 ListItem(
                                     headlineContent = { Text("..", fontFamily = FontFamily.Monospace) },
-                                    modifier = Modifier.clickable { vm.up() },
+                                    modifier = Modifier.clickable { onUpDir() },
                                 )
                             }
                             f.dirs.forEach { d ->
                                 ListItem(
                                     headlineContent = { Text(d, fontFamily = FontFamily.Monospace) },
-                                    modifier = Modifier.clickable { vm.enter(d) },
+                                    modifier = Modifier.clickable { onEnterDir(d) },
                                 )
                             }
                             if (f.dirs.isEmpty() && !f.loadingDirs) {
@@ -190,7 +201,7 @@ fun NewAgentScreen(
                     ui.host
                         ?.launchers
                         .orEmpty()
-                        .forEach { l -> FilterChip(f.launcher == l, { vm.setLauncher(l) }, label = { Text(l) }) }
+                        .forEach { l -> FilterChip(f.launcher == l, { onSetLauncher(l) }, label = { Text(l) }) }
                 }
 
                 // 4) Dónde
@@ -201,29 +212,35 @@ fun NewAgentScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         ui.backends.forEach { b ->
-                            FilterChip(ui.effectiveBackend == b, { vm.setBackend(b) }, label = { Text(backendLabel(b)) })
+                            FilterChip(ui.effectiveBackend == b, { onSetBackend(b) }, label = { Text(backendLabel(b)) })
                         }
                     }
                 } else {
                     Text(ui.backends.firstOrNull()?.let(::backendLabel) ?: "Sin backend disponible", Modifier.padding(horizontal = 16.dp))
                 }
-                if (ui.effectiveBackend == "herdr") HerdrPlacementSection(ui, vm)
+                if (ui.effectiveBackend == "herdr") herdrSection()
 
                 // 5) Nombre y prompt
                 SectionTitle("5 · Nombre y prompt inicial (opcional)")
-                OutlinedTextField(f.name, vm::setName, Modifier.fillMaxWidth().padding(horizontal = 16.dp), label = {
-                    Text("Nombre de la sesión")
-                }, singleLine = true)
                 OutlinedTextField(
-                    f.initialPrompt,
-                    vm::setPrompt,
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    value = f.name,
+                    onValueChange = onSetName,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    label = {
+                        Text("Nombre de la sesión")
+                    },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = f.initialPrompt,
+                    onValueChange = onSetPrompt,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     label = { Text("Prompt inicial") },
                     minLines = 3,
                 )
                 f.error?.let { Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) }
                 Button(
-                    onClick = vm::create,
+                    onClick = onCreate,
                     enabled = ui.canCreate,
                     shape = RpShapes.pill,
                     modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 48.dp),
@@ -231,12 +248,41 @@ fun NewAgentScreen(
                     if (f.spawning) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        Text("Crear agente", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text("Crear agente", fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NewAgentScreen(
+    onBack: () -> Unit,
+    onCreated: () -> Unit,
+    vm: NewAgentViewModel = hiltViewModel(),
+) {
+    val ui by vm.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(ui.form.created) { if (ui.form.created) onCreated() }
+
+    NewAgentContent(
+        ui = ui,
+        onBack = onBack,
+        onPickMachine = vm::pickMachine,
+        onOpenDir = vm::openDir,
+        onEnterDir = vm::enter,
+        onUpDir = vm::up,
+        canGoUp = vm.canGoUp,
+        onSetLauncher = vm::setLauncher,
+        onSetBackend = vm::setBackend,
+        onSetName = vm::setName,
+        onSetPrompt = vm::setPrompt,
+        onCreate = vm::create,
+        herdrSection = { HerdrPlacementSection(ui, vm) },
+        snackbarHostState = snackbar,
+    )
 }
 
 private fun backendLabel(b: String) =

@@ -57,5 +57,5 @@ data class MeshUiState(
     val nodeDetail: MeshNodeDetail? = null,
     val conversationDetail: MeshConversationDetail? = null,
 ) {
-    val isEmpty: Boolean get() = snapshot != null && (layoutResult == null || layoutResult.nodes.isEmpty())
+    val isEmpty: Boolean get() = snapshot != null && snapshot.nodes.isEmpty()
 }

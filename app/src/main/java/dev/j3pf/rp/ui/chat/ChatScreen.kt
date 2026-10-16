@@ -83,7 +83,9 @@ import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.TodoItem
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.StatusChip
@@ -91,12 +93,187 @@ import dev.j3pf.rp.ui.components.TagChip
 import dev.j3pf.rp.ui.components.rememberActivity
 import dev.j3pf.rp.ui.promptsheet.AnswerUi
 import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.util.AuthResult
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.humanSize
 import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatContent(
+    ui: ChatUiState,
+    text: String = "",
+    onText: (String) -> Unit = {},
+    onBack: () -> Unit = {},
+    onSend: () -> Unit = {},
+    onChoice: (DeliveryChoice) -> Unit = {},
+    onWorkingDelivery: (String) -> Unit = {},
+    onPicked: (List<Uri>) -> Unit = {},
+    onRemoveAttachment: (String) -> Unit = {},
+    onRetryAttachment: (String) -> Unit = {},
+    newCameraTarget: () -> Uri = { Uri.EMPTY },
+    onAbort: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onAnswerPrompt: (Prompt, Answer) -> Unit = { _, _ -> },
+    onToggleMute: () -> Unit = {},
+    onQuit: () -> Unit = {},
+    onForget: () -> Unit = {},
+    onSwitchToNormal: () -> Unit = {},
+    busyPromptId: String? = null,
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    modifier: Modifier = Modifier,
+) {
+    val agent = ui.agent
+    val working = agent?.status == "working" || ui.chat.working
+    var showInfo by remember { mutableStateOf(false) }
+    var showQuitDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: ui.chat.sessionName ?: "Agente",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (agent != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                StatusChip(agent)
+                                (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }?.let {
+                                    Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
+                actions = {
+                    if (working) {
+                        IconButton(onClick = onAbort) { Icon(Icons.Filled.Stop, "Interrumpir", tint = MaterialTheme.colorScheme.error) }
+                    }
+                    var menu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
+                    DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(text = { Text("Información") }, onClick = {
+                            menu = false
+                            showInfo = true
+                        })
+                        DropdownMenuItem(
+                            text = { Text(if (ui.muted) "Activar notificaciones del agente" else "Silenciar notificaciones del agente") },
+                            onClick = {
+                                menu = false
+                                onToggleMute()
+                            },
+                        )
+                        if (agent != null && agent.online) {
+                            DropdownMenuItem(
+                                text = { Text("Cerrar agente (/quit)", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menu = false
+                                    showQuitDialog = true
+                                },
+                            )
+                        }
+                        if (agent != null && !agent.online) {
+                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
+                                menu = false
+                                onForget()
+                            })
+                        }
+                    }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier.imePadding(),
+    ) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            ConnectionBanner(ui.conn)
+            ui.chat.terminalWait?.let { w ->
+                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Esperando en la terminal (diálogo no remoto)" + (w.title?.let { ": $it" } ?: ""),
+                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            if (ui.isAuto) {
+                Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("AUTO · tus mensajes se envían como tecleados", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+            if (ui.interactiveUnavailable) {
+                Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("En Auto este mensaje no autoriza acciones", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = onSwitchToNormal) { Text("Pasar a Normal") }
+                    }
+                }
+            }
+            if (ui.chat.todos.isNotEmpty()) {
+                TodoBanner(todos = ui.chat.todos)
+            }
+
+            PullToRefreshBox(
+                isRefreshing = ui.refreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier.weight(1f),
+            ) {
+                MessageList(
+                    ui = ui,
+                    modifier = Modifier.fillMaxSize(),
+                    busyPromptId = busyPromptId,
+                    onAnswerPrompt = onAnswerPrompt,
+                    listState = listState,
+                )
+            }
+
+            Composer(
+                ui = ui,
+                working = working,
+                text = text,
+                onText = onText,
+                onChoice = onChoice,
+                onWorkingDelivery = onWorkingDelivery,
+                onPicked = onPicked,
+                onRemoveAttachment = onRemoveAttachment,
+                onRetryAttachment = onRetryAttachment,
+                newCameraTarget = newCameraTarget,
+                onSend = onSend,
+            )
+        }
+    }
+
+    if (showInfo && agent != null) InfoDialog(agent) { showInfo = false }
+    if (showQuitDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuitDialog = false },
+            title = { Text("Cerrar sesión de Pi") },
+            text = { Text("¿Deseas enviar /quit al agente para cerrar su proceso en la terminal de la PC?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showQuitDialog = false
+                    onQuit()
+                }) {
+                    Text("Cerrar agente", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQuitDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,8 +288,6 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val activity = rememberActivity()
     var text by rememberSaveable { mutableStateOf("") }
-    var showInfo by remember { mutableStateOf(false) }
-    var showQuitDialog by remember { mutableStateOf(false) }
     var busyPrompt by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(ui.message) {
@@ -146,195 +321,71 @@ fun ChatScreen(
         }
     }
 
-    val agent = ui.agent
-    val working = agent?.status == "working" || ui.chat.working
+    ChatContent(
+        ui = ui,
+        text = text,
+        onText = { text = it },
+        onBack = onBack,
+        onSend = {
+            scope.launch {
+                if (vm.needsAuth()) {
+                    if (activity == null) return@launch
+                    when (vm.gate.authenticate(activity, "Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
+                        AuthResult.OK -> Unit
+                        AuthResult.UNAVAILABLE -> {
+                            snackbar.showSnackbar("Configura un bloqueo de pantalla para enviar como tecleado")
+                            return@launch
+                        }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: ui.chat.sessionName ?: "Agente",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        if (agent != null) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                StatusChip(agent)
-                                (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }?.let {
-                                    Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
+                        AuthResult.FAILED -> {
+                            snackbar.showSnackbar("Desbloqueo cancelado")
+                            return@launch
                         }
                     }
-                },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
-                actions = {
-                    if (working) {
-                        IconButton(onClick = vm::abort) { Icon(Icons.Filled.Stop, "Interrumpir", tint = MaterialTheme.colorScheme.error) }
+                }
+                vm.send(text) { text = "" }
+            }
+        },
+        onChoice = vm::setChoice,
+        onWorkingDelivery = vm::setWorkingDelivery,
+        onPicked = vm::addAttachments,
+        onRemoveAttachment = vm::removeAttachment,
+        onRetryAttachment = vm::retryAttachment,
+        newCameraTarget = vm::newCameraTarget,
+        onAbort = vm::abort,
+        onRefresh = vm::refresh,
+        onAnswerPrompt = { p, answer ->
+            scope.launch {
+                if (promptVm.requiresAuth(p)) {
+                    if (activity == null) {
+                        snackbar.showSnackbar("No se pudo verificar tu identidad")
+                        return@launch
                     }
-                    var menu by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
-                    DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(text = { Text("Información") }, onClick = {
-                            menu = false
-                            showInfo = true
-                        })
-                        DropdownMenuItem(
-                            text = { Text(if (ui.muted) "Activar notificaciones del agente" else "Silenciar notificaciones del agente") },
-                            onClick = {
-                                menu = false
-                                vm.toggleMute()
+                    val r = promptVm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))
+                    if (r != AuthResult.OK) {
+                        snackbar.showSnackbar(
+                            if (r ==
+                                AuthResult.UNAVAILABLE
+                            ) {
+                                "Configura un bloqueo de pantalla para aprobar"
+                            } else {
+                                "Desbloqueo cancelado"
                             },
                         )
-                        if (agent != null && agent.online) {
-                            DropdownMenuItem(
-                                text = { Text("Cerrar agente (/quit)", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    menu = false
-                                    showQuitDialog = true
-                                },
-                            )
-                        }
-                        if (agent != null && !agent.online) {
-                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
-                                menu = false
-                                vm.forget(onBack)
-                            })
-                        }
+                        return@launch
                     }
-                },
-            )
+                }
+                busyPrompt = p.promptId
+                promptVm.answer(p.promptId, answer)
+            }
         },
-        snackbarHost = { SnackbarHost(snackbar) },
-        modifier = Modifier.imePadding(),
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            ConnectionBanner(ui.conn)
-            ui.chat.terminalWait?.let { w ->
-                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "Esperando en la terminal (diálogo no remoto)" + (w.title?.let { ": $it" } ?: ""),
-                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-            if (ui.isAuto) {
-                Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("AUTO · tus mensajes se envían como tecleados", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-            if (ui.interactiveUnavailable) {
-                Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("En Auto este mensaje no autoriza acciones", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = vm::switchToNormal) { Text("Pasar a Normal") }
-                    }
-                }
-            }
-            if (ui.chat.todos.isNotEmpty()) {
-                TodoBanner(todos = ui.chat.todos)
-            }
-
-            PullToRefreshBox(
-                isRefreshing = ui.refreshing,
-                onRefresh = vm::refresh,
-                modifier = Modifier.weight(1f),
-            ) {
-                MessageList(
-                    ui = ui,
-                    modifier = Modifier.fillMaxSize(),
-                    busyPromptId = busyPrompt,
-                    onAnswerPrompt = { p, answer ->
-                        scope.launch {
-                            if (promptVm.requiresAuth(p)) {
-                                if (activity == null) {
-                                    snackbar.showSnackbar("No se pudo verificar tu identidad")
-                                    return@launch
-                                }
-                                val r = promptVm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))
-                                if (r != AuthResult.OK) {
-                                    snackbar.showSnackbar(
-                                        if (r ==
-                                            AuthResult.UNAVAILABLE
-                                        ) {
-                                            "Configura un bloqueo de pantalla para aprobar"
-                                        } else {
-                                            "Desbloqueo cancelado"
-                                        },
-                                    )
-                                    return@launch
-                                }
-                            }
-                            busyPrompt = p.promptId
-                            promptVm.answer(p.promptId, answer)
-                        }
-                    },
-                )
-            }
-
-            Composer(
-                ui = ui,
-                working = working,
-                text = text,
-                onText = { text = it },
-                onChoice = vm::setChoice,
-                onWorkingDelivery = vm::setWorkingDelivery,
-                onPicked = vm::addAttachments,
-                onRemoveAttachment = vm::removeAttachment,
-                onRetryAttachment = vm::retryAttachment,
-                newCameraTarget = vm::newCameraTarget,
-                onSend = {
-                    scope.launch {
-                        if (vm.needsAuth()) {
-                            if (activity == null) return@launch
-                            when (vm.gate.authenticate(activity, "Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
-                                AuthResult.OK -> {
-                                    Unit
-                                }
-
-                                AuthResult.UNAVAILABLE -> {
-                                    snackbar.showSnackbar("Configura un bloqueo de pantalla para enviar como tecleado")
-                                    return@launch
-                                }
-
-                                AuthResult.FAILED -> {
-                                    snackbar.showSnackbar("Desbloqueo cancelado")
-                                    return@launch
-                                }
-                            }
-                        }
-                        vm.send(text) { text = "" }
-                    }
-                },
-            )
-        }
-    }
-
-    if (showInfo && agent != null) InfoDialog(agent) { showInfo = false }
-    if (showQuitDialog) {
-        AlertDialog(
-            onDismissRequest = { showQuitDialog = false },
-            title = { Text("Cerrar sesión de Pi") },
-            text = { Text("¿Deseas enviar /quit al agente para cerrar su proceso en la terminal de la PC?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showQuitDialog = false
-                    vm.quit(onBack)
-                }) {
-                    Text("Cerrar agente", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showQuitDialog = false }) { Text("Cancelar") }
-            },
-        )
-    }
+        onToggleMute = vm::toggleMute,
+        onQuit = { vm.quit(onBack) },
+        onForget = { vm.forget(onBack) },
+        onSwitchToNormal = vm::switchToNormal,
+        busyPromptId = busyPrompt,
+        snackbarHostState = snackbar,
+    )
 }
 
 @Composable
@@ -343,8 +394,8 @@ internal fun MessageList(
     modifier: Modifier,
     busyPromptId: String?,
     onAnswerPrompt: (dev.j3pf.rp.protocol.Prompt, dev.j3pf.rp.protocol.Answer) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
 ) {
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val items = ui.chat.display
 
@@ -399,7 +450,17 @@ internal fun MessageList(
                 key = { it.key },
                 contentType = { it::class.simpleName },
             ) { item ->
-                Box(modifier = Modifier.animateItem()) {
+                val reducedMotion = LocalReducedMotion.current
+                val itemModifier =
+                    if (reducedMotion) {
+                        Modifier
+                    } else {
+                        Modifier.animateItem(
+                            fadeInSpec = null,
+                            fadeOutSpec = null,
+                        )
+                    }
+                Box(modifier = itemModifier) {
                     ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
                 }
             }
