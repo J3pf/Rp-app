@@ -18,6 +18,9 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 
 ## Características principales
 
+- **Correcciones v0.3.2 (Decodificación Tolerante y Números Decimales)**:
+  - Serializador `LenientLongSerializer`: acepta enteros JSON y números decimales con coma flotante (redondeo half-up a `Long`) en todos los campos que el relay define como `Type.Number` (ej. marcas de tiempo y métricas de subagentes como `startedAt: 47725510.340108`).
+  - Decodificación tolerante en `MeshSnapshot`: deserializadores de lista tolerantes para nodos, aristas, grupos y subagentes que aíslan fallos en elementos corruptos y mantienen visibles los demás nodos válidos sin romper la pantalla.
 - **Correcciones v0.3.1 (Resiliencia de Red y Filtros)**:
   - Soporte de contratos de respuesta en `RelayApi` (desenvoltorio de objetos para dispositivos, máquinas y prompts) y filtrado de dispositivos revocados.
   - Corrección de serialización en `MeshSubscribe` garantizando envío de `{"machineId":null}` para visualización completa de la red en relays 0.5.0+.
@@ -60,15 +63,15 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 Puedes instalar la aplicación directamente en tu dispositivo sin necesidad de compilar:
 
 1. **Descargar el APK:**
-   - 📦 **[RP App v0.3.1 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.3.1)**
-   - Versión Release (canal directo sin Google): **[rp-v0.3.1-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.1/rp-v0.3.1-direct.apk)** (30 MB).
-   - Versión Release con FCM (Google Cloud Messaging opcional): **[rp-v0.3.1-fcm.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.1/rp-v0.3.1-fcm.apk)** (30 MB).
-   - Versión Debug (canal directo): **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.1/rp-direct-debug.apk)** (108 MB).
+   - 📦 **[RP App v0.3.2 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.3.2)**
+   - Versión Release (canal directo sin Google): **[rp-v0.3.2-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.2/rp-v0.3.2-direct.apk)** (30 MB).
+   - Versión Release con FCM (Google Cloud Messaging opcional): **[rp-v0.3.2-fcm.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.2/rp-v0.3.2-fcm.apk)** (30 MB).
+   - Versión Debug (canal directo): **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.2/rp-direct-debug.apk)** (108 MB).
 2. **Instalar en el móvil:**
    - **En el teléfono:** Abre el archivo descargado y concede permiso de «Instalar aplicaciones desconocidas» para tu navegador o gestor de archivos.
    - **Vía USB con ADB:** Conecta el teléfono con depuración USB y ejecuta:
      ```bash
-     adb install -r rp-v0.3.1-direct.apk
+     adb install -r rp-v0.3.2-direct.apk
      ```
 3. **Vincular con tu Relay:**
    - En el servidor Relay, ejecuta:

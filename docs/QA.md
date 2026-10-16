@@ -107,4 +107,12 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | F2.3 | Propiedad de suscripción ref-counted | Navegar rápidamente entre Mesh y otras pestañas, o abrir hojas de detalle y volver | La suscripción a Mesh no se cancela prematuramente por el desecho de ViewModels anteriores; el mapa permanece vivo |
 | F3.1 | Limpieza de filtros en Agentes | Abrir la pantalla principal de Agentes con múltiples máquinas o contextos | No aparece la fila redundante de chips («Todas / Empresa / Personal») debajo del selector; todos los contextos y máquinas permanecen accesibles exclusivamente desde el desplegable `MachineHeroDropdown` («Todas las máquinas», contextos y máquinas individuales) |
 
+## 8. Correcciones v0.3.2 (Decodificación Tolerante de Red y Números Decimales)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|---|---|---|
+| F4.1 | Subagente con timestamps decimales o tokens numéricos | Ejecutar subagentes en Pi cuyo plugin reporte `startedAt` con microsegundos (ej. `47725510.340108`) o tokens como número simple | El snapshot de la red decodifica sin errores; la pantalla de Mesh muestra el nodo y subagentes sin caer en pantalla de error |
+| F4.2 | Tolerancia ante subagente o nodo malformado | Enviar un snapshot con un subagente o nodo corrupto (ej. tipo inesperado en `turns`) junto a otros nodos válidos | La app omite únicamente el elemento corrupto registrando advertencia en log y renderiza los restantes nodos y subagentes válidos |
+| F4.3 | Manejo de snapshot raíz ilegible | Provocar payload no decodificable en el nivel superior (no es un objeto JSON) | La app transiciona limpiamente a `MeshErrorState` y permite reintentar |
+
 
