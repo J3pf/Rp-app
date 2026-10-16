@@ -72,16 +72,19 @@ class MeshScreenTest {
         rule.setContent {
             RpTheme {
                 MeshScreenContent(
-                    uiState = MeshUiState(
-                        isLoading = false,
-                        snapshot = empty,
-                        machineChips = listOf(
-                            MeshMachineChip(machineId = null, name = "", color = "", agentCount = 0),
+                    uiState =
+                        MeshUiState(
+                            isLoading = false,
+                            snapshot = empty,
+                            machineChips =
+                                listOf(
+                                    MeshMachineChip(machineId = null, name = "", color = "", agentCount = 0),
+                                ),
+                            groupChips =
+                                listOf(
+                                    MeshGroupChip(groupId = MeshViewModel.SOLO_GROUP_ID, label = "", isSolo = true, memberCount = 0),
+                                ),
                         ),
-                        groupChips = listOf(
-                            MeshGroupChip(groupId = MeshViewModel.SOLO_GROUP_ID, label = "", isSolo = true, memberCount = 0),
-                        ),
-                    ),
                     onOpenChat = {},
                 )
             }

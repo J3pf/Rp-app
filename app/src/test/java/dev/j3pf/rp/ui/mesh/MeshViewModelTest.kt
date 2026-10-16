@@ -85,7 +85,10 @@ class MeshViewModelTest {
             repository = MeshRepository(connection, bus, api, secrets, scope)
             db = inMemoryDb(context)
             machines = MachinesRepository(db.machines(), secrets, bus, api, NotificationChannels(context), scope)
-            val testDataStore = PreferenceDataStoreFactory.create(scope = scope, produceFile = { java.io.File.createTempFile("mesh_test", ".preferences_pb") })
+            val testDataStore =
+                PreferenceDataStoreFactory.create(scope = scope, produceFile = {
+                    java.io.File.createTempFile("mesh_test", ".preferences_pb")
+                })
             settings = SettingsRepository(testDataStore)
             viewModel = MeshViewModel(repository, machines, settings, MeshLayoutEngine())
         }
@@ -208,7 +211,13 @@ class MeshViewModelTest {
 
             val state = viewModel.uiState.value
             assertEquals(setOf("c", "d"), state.layoutResult?.nodes?.keys)
-            assertEquals(setOf("a", "b", "c", "d", "solo"), state.snapshot?.nodes?.map { it.agentId }?.toSet())
+            assertEquals(
+                setOf("a", "b", "c", "d", "solo"),
+                state.snapshot
+                    ?.nodes
+                    ?.map { it.agentId }
+                    ?.toSet(),
+            )
             assertEquals(listOf(null, "m1", "m2"), state.machineChips.map { it.machineId })
             assertEquals("", state.machineChips.first().name)
             assertEquals(5, state.machineChips.first().agentCount)
@@ -244,7 +253,10 @@ class MeshViewModelTest {
             viewModel.selectMachine("m1")
             viewModel.selectGroup("g1")
             withTimeout(3_000) {
-                viewModel.uiState.first { it.selectedMachineId == "m1" && it.selectedGroupId == "g1" && it.layoutResult?.nodes?.keys == setOf("a", "b") }
+                viewModel.uiState.first {
+                    it.selectedMachineId == "m1" && it.selectedGroupId == "g1" &&
+                        it.layoutResult?.nodes?.keys == setOf("a", "b")
+                }
             }
 
             assertEquals(
@@ -261,7 +273,12 @@ class MeshViewModelTest {
 
             viewModel.selectMachine(null)
             viewModel.selectGroup(MeshViewModel.SOLO_GROUP_ID)
-            withTimeout(3_000) { viewModel.uiState.first { it.selectedMachineId == null && it.selectedGroupId == MeshViewModel.SOLO_GROUP_ID && it.layoutResult?.nodes?.keys == setOf("solo") } }
+            withTimeout(3_000) {
+                viewModel.uiState.first {
+                    it.selectedMachineId == null && it.selectedGroupId == MeshViewModel.SOLO_GROUP_ID &&
+                        it.layoutResult?.nodes?.keys == setOf("solo")
+                }
+            }
             assertTrue(
                 viewModel.uiState.value.layoutResult!!
                     .edges

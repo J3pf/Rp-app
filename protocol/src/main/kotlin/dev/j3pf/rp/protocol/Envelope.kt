@@ -36,6 +36,7 @@ data class Envelope(
 
     companion object {
         fun parse(text: String): Envelope = RpJson.decodeFromString(serializer(), text)
+
         fun parseOrNull(text: String): Envelope? = runCatching { parse(text) }.getOrNull()
 
         inline fun <reified T> of(
@@ -46,13 +47,19 @@ data class Envelope(
             ts: Long = System.currentTimeMillis(),
         ): Envelope = Envelope(t = type, id = id, re = re, ts = ts, d = RpJson.encodeToJsonElement(body))
 
-        fun empty(type: String, id: String? = null) = Envelope(t = type, id = id, ts = System.currentTimeMillis())
+        fun empty(
+            type: String,
+            id: String? = null,
+        ) = Envelope(t = type, id = id, ts = System.currentTimeMillis())
     }
 }
 
 /** Cuerpo de un `error`. */
 @Serializable
-data class ErrorBody(val code: String, val message: String = "")
+data class ErrorBody(
+    val code: String,
+    val message: String = "",
+)
 
 object ErrorCodes {
     const val BAD_REQUEST = "bad_request"

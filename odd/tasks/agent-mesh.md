@@ -64,6 +64,7 @@ U2: Move UI labels ("Todas", "Sin grupo") from ViewModel to UI layer (composable
 U3: In MeshCanvas, key pointerInput for transform gestures with (widthPx, heightPx) instead of Unit.
 U4: Stack simultaneous comm bubbles on the same edge (vertical offset) or show latest with +N counter so bubbles don't draw on top of each other.
 After fixes: independent verification with gentle-ai-verify, update APK, rebuild tag v0.2.0, send report for final publish approval.
+L8: [AGENT MESH — OK TO PUBLISH] Review approved: U1–U4 verified, fixtures identical to relay main, gradle tests passed (protocol 54 + app 99). Push main+tag, create GitHub release v0.2.0 with APK and notes, report back.
 
 MANDATORY PROCESS: use ODD. Create odd/tasks/agent-mesh.md (Specs quoting this message verbatim as L1, Tasks, Log). Make a feature branch feat/agent-mesh. Implement through YOUR subagents (gentle-ai-explore / gentle-ai-worker / gentle-ai-verify), RED→GREEN tests. Ideal split: worker A = protocol + data/repo/VM, worker B = layout engine + Canvas/UI, then verify.
 

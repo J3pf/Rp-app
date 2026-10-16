@@ -14,17 +14,19 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable(with = CommActionSerializer::class)
-enum class CommAction(val raw: String) {
+enum class CommAction(
+    val raw: String,
+) {
     SEND("send"),
     ASK("ask"),
     REPLY("reply"),
     HANDOVER("handover"),
     MESSAGE("message"),
-    UNKNOWN("unknown");
+    UNKNOWN("unknown"),
+    ;
 
     companion object {
-        fun fromRaw(value: String?): CommAction =
-            entries.firstOrNull { it.raw.equals(value, ignoreCase = true) } ?: UNKNOWN
+        fun fromRaw(value: String?): CommAction = entries.firstOrNull { it.raw.equals(value, ignoreCase = true) } ?: UNKNOWN
     }
 }
 
@@ -34,7 +36,10 @@ object CommActionSerializer : KSerializer<CommAction> {
     override fun deserialize(decoder: Decoder): CommAction =
         runCatching { CommAction.fromRaw(decoder.decodeString()) }.getOrDefault(CommAction.UNKNOWN)
 
-    override fun serialize(encoder: Encoder, value: CommAction) {
+    override fun serialize(
+        encoder: Encoder,
+        value: CommAction,
+    ) {
         encoder.encodeString(value.raw)
     }
 }
@@ -45,7 +50,7 @@ data class MeshSubscribe(
 )
 
 @Serializable
-class MeshUnsubscribe()
+class MeshUnsubscribe
 
 @Serializable
 data class MeshGroup(
@@ -80,24 +85,36 @@ object MeshSubagentTokensSerializer : KSerializer<MeshSubagentTokens> {
     override fun deserialize(decoder: Decoder): MeshSubagentTokens {
         val jsonDecoder = decoder as? JsonDecoder ?: return MeshSubagentTokens()
         return when (val element = jsonDecoder.decodeJsonElement()) {
-            is JsonPrimitive -> MeshSubagentTokens(total = element.long())
-            is JsonObject -> MeshSubagentTokens(
-                prompt = element.long("prompt"),
-                completion = element.long("completion"),
-                total = element.long("total"),
-            )
-            else -> MeshSubagentTokens()
+            is JsonPrimitive -> {
+                MeshSubagentTokens(total = element.long())
+            }
+
+            is JsonObject -> {
+                MeshSubagentTokens(
+                    prompt = element.long("prompt"),
+                    completion = element.long("completion"),
+                    total = element.long("total"),
+                )
+            }
+
+            else -> {
+                MeshSubagentTokens()
+            }
         }
     }
 
-    override fun serialize(encoder: Encoder, value: MeshSubagentTokens) {
+    override fun serialize(
+        encoder: Encoder,
+        value: MeshSubagentTokens,
+    ) {
         val jsonEncoder = encoder as? JsonEncoder
         if (jsonEncoder != null) {
-            val map = buildMap<String, JsonElement> {
-                value.prompt?.let { put("prompt", JsonPrimitive(it)) }
-                value.completion?.let { put("completion", JsonPrimitive(it)) }
-                value.total?.let { put("total", JsonPrimitive(it)) }
-            }
+            val map =
+                buildMap<String, JsonElement> {
+                    value.prompt?.let { put("prompt", JsonPrimitive(it)) }
+                    value.completion?.let { put("completion", JsonPrimitive(it)) }
+                    value.total?.let { put("total", JsonPrimitive(it)) }
+                }
             jsonEncoder.encodeJsonElement(JsonObject(map))
         } else {
             encoder.encodeString(value.total?.toString() ?: "")

@@ -63,89 +63,89 @@ class SettingsRepository(
         @ApplicationContext context: Context,
     ) : this(context.rpDataStore)
 
-        val settings: Flow<AppSettings> =
-            store.data
-                .catch { e ->
-                    if (e is IOException) emit(emptyPreferences()) else throw e
-                }.map { p ->
-                    AppSettings(
-                        selectedContext = p[SELECTED] ?: AppSettings.ALL,
-                        directPush = p[DIRECT] ?: true,
-                        requireUnlockToApprove = p[REQUIRE_UNLOCK] ?: true,
-                        criticalAlways = p[CRITICAL] ?: true,
-                        appLock = p[APP_LOCK] ?: false,
-                        flagSecure = p[FLAG_SECURE] ?: false,
-                        onboardingDone = p[ONBOARDING] ?: false,
-                        batteryAsked = p[BATTERY] ?: false,
-                        notifyPrefs =
-                            p[PREFS]?.let { runCatching { RpJson.decodeFromString(NotifyPrefs.serializer(), it) }.getOrNull() }
-                                ?: NotifyPrefs(),
-                        mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
-                        appTheme = p[APP_THEME] ?: "auto",
-                        selectedMeshMachine = p[MESH_SELECTED_MACHINE],
-                        selectedMeshGroup = p[MESH_SELECTED_GROUP],
-                    )
-                }
-
-        suspend fun current(): AppSettings = settings.first()
-
-        suspend fun setSelectedContext(v: String) = edit { it[SELECTED] = v }
-
-        suspend fun setDirectPush(v: Boolean) = edit { it[DIRECT] = v }
-
-        suspend fun setRequireUnlock(v: Boolean) = edit { it[REQUIRE_UNLOCK] = v }
-
-        suspend fun setCriticalAlways(v: Boolean) = edit { it[CRITICAL] = v }
-
-        suspend fun setAppLock(v: Boolean) = edit { it[APP_LOCK] = v }
-
-        suspend fun setFlagSecure(v: Boolean) = edit { it[FLAG_SECURE] = v }
-
-        suspend fun setOnboardingDone(v: Boolean) = edit { it[ONBOARDING] = v }
-
-        suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
-
-        suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
-
-        suspend fun setMeshSelectedMachine(machineId: String?) =
-            edit {
-                if (machineId == null) it.remove(MESH_SELECTED_MACHINE) else it[MESH_SELECTED_MACHINE] = machineId
+    val settings: Flow<AppSettings> =
+        store.data
+            .catch { e ->
+                if (e is IOException) emit(emptyPreferences()) else throw e
+            }.map { p ->
+                AppSettings(
+                    selectedContext = p[SELECTED] ?: AppSettings.ALL,
+                    directPush = p[DIRECT] ?: true,
+                    requireUnlockToApprove = p[REQUIRE_UNLOCK] ?: true,
+                    criticalAlways = p[CRITICAL] ?: true,
+                    appLock = p[APP_LOCK] ?: false,
+                    flagSecure = p[FLAG_SECURE] ?: false,
+                    onboardingDone = p[ONBOARDING] ?: false,
+                    batteryAsked = p[BATTERY] ?: false,
+                    notifyPrefs =
+                        p[PREFS]?.let { runCatching { RpJson.decodeFromString(NotifyPrefs.serializer(), it) }.getOrNull() }
+                            ?: NotifyPrefs(),
+                    mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
+                    appTheme = p[APP_THEME] ?: "auto",
+                    selectedMeshMachine = p[MESH_SELECTED_MACHINE],
+                    selectedMeshGroup = p[MESH_SELECTED_GROUP],
+                )
             }
 
-        suspend fun setMeshSelectedGroup(groupId: String?) =
-            edit {
-                if (groupId == null) it.remove(MESH_SELECTED_GROUP) else it[MESH_SELECTED_GROUP] = groupId
-            }
+    suspend fun current(): AppSettings = settings.first()
 
-        suspend fun setNotifyPrefs(v: NotifyPrefs) = edit { it[PREFS] = RpJson.encodeToString(NotifyPrefs.serializer(), v) }
+    suspend fun setSelectedContext(v: String) = edit { it[SELECTED] = v }
 
-        suspend fun setAgentMuted(
-            agentId: String,
-            muted: Boolean,
-        ) = edit {
-            val cur = it[MUTED_AGENTS] ?: emptySet()
-            it[MUTED_AGENTS] = if (muted) cur + agentId else cur - agentId
+    suspend fun setDirectPush(v: Boolean) = edit { it[DIRECT] = v }
+
+    suspend fun setRequireUnlock(v: Boolean) = edit { it[REQUIRE_UNLOCK] = v }
+
+    suspend fun setCriticalAlways(v: Boolean) = edit { it[CRITICAL] = v }
+
+    suspend fun setAppLock(v: Boolean) = edit { it[APP_LOCK] = v }
+
+    suspend fun setFlagSecure(v: Boolean) = edit { it[FLAG_SECURE] = v }
+
+    suspend fun setOnboardingDone(v: Boolean) = edit { it[ONBOARDING] = v }
+
+    suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
+
+    suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
+
+    suspend fun setMeshSelectedMachine(machineId: String?) =
+        edit {
+            if (machineId == null) it.remove(MESH_SELECTED_MACHINE) else it[MESH_SELECTED_MACHINE] = machineId
         }
 
-        suspend fun wipe() = edit { it.clear() }
-
-        private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
-            store.edit { block(it) }
+    suspend fun setMeshSelectedGroup(groupId: String?) =
+        edit {
+            if (groupId == null) it.remove(MESH_SELECTED_GROUP) else it[MESH_SELECTED_GROUP] = groupId
         }
 
-        private companion object {
-            val SELECTED = stringPreferencesKey("selectedContext")
-            val DIRECT = booleanPreferencesKey("directPush")
-            val REQUIRE_UNLOCK = booleanPreferencesKey("requireUnlock")
-            val CRITICAL = booleanPreferencesKey("criticalAlways")
-            val APP_LOCK = booleanPreferencesKey("appLock")
-            val FLAG_SECURE = booleanPreferencesKey("flagSecure")
-            val ONBOARDING = booleanPreferencesKey("onboardingDone")
-            val BATTERY = booleanPreferencesKey("batteryAsked")
-            val PREFS = stringPreferencesKey("notifyPrefs")
-            val MUTED_AGENTS = stringSetPreferencesKey("mutedAgents")
-            val APP_THEME = stringPreferencesKey("appTheme")
-            val MESH_SELECTED_MACHINE = stringPreferencesKey("mesh_selected_machine")
-            val MESH_SELECTED_GROUP = stringPreferencesKey("mesh_selected_group")
-        }
+    suspend fun setNotifyPrefs(v: NotifyPrefs) = edit { it[PREFS] = RpJson.encodeToString(NotifyPrefs.serializer(), v) }
+
+    suspend fun setAgentMuted(
+        agentId: String,
+        muted: Boolean,
+    ) = edit {
+        val cur = it[MUTED_AGENTS] ?: emptySet()
+        it[MUTED_AGENTS] = if (muted) cur + agentId else cur - agentId
     }
+
+    suspend fun wipe() = edit { it.clear() }
+
+    private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+        store.edit { block(it) }
+    }
+
+    private companion object {
+        val SELECTED = stringPreferencesKey("selectedContext")
+        val DIRECT = booleanPreferencesKey("directPush")
+        val REQUIRE_UNLOCK = booleanPreferencesKey("requireUnlock")
+        val CRITICAL = booleanPreferencesKey("criticalAlways")
+        val APP_LOCK = booleanPreferencesKey("appLock")
+        val FLAG_SECURE = booleanPreferencesKey("flagSecure")
+        val ONBOARDING = booleanPreferencesKey("onboardingDone")
+        val BATTERY = booleanPreferencesKey("batteryAsked")
+        val PREFS = stringPreferencesKey("notifyPrefs")
+        val MUTED_AGENTS = stringSetPreferencesKey("mutedAgents")
+        val APP_THEME = stringPreferencesKey("appTheme")
+        val MESH_SELECTED_MACHINE = stringPreferencesKey("mesh_selected_machine")
+        val MESH_SELECTED_GROUP = stringPreferencesKey("mesh_selected_group")
+    }
+}
