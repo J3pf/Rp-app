@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -59,6 +60,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.repo.PairResult
 import dev.j3pf.rp.data.repo.SessionRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
+import dev.j3pf.rp.ui.theme.RpShapes
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -112,7 +114,11 @@ fun OnboardingScreen(onStart: () -> Unit) {
             "Ve y controla todos tus agentes Pi desde el móvil.\nRecibe preguntas y autorizaciones y respóndelas desde la propia notificación.",
             Modifier.padding(vertical = 24.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge,
         )
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Emparejar con mi relay") }
+        Button(
+            onClick = onStart,
+            shape = RpShapes.pill,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) { Text("Emparejar con mi relay") }
     }
 }
 
@@ -137,7 +143,12 @@ fun PairScreen(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Emparejar dispositivo", style = MaterialTheme.typography.headlineSmall)
         Text("En el servidor ejecuta `rp-relay pair device` y escanea el QR, o escribe la URL y el código.", style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = onScan, modifier = Modifier.fillMaxWidth(), enabled = !st.busy) { Text("Escanear código QR") }
+        Button(
+            onClick = onScan,
+            shape = RpShapes.pill,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            enabled = !st.busy,
+        ) { Text("Escanear código QR") }
         OutlinedTextField(
             url, { url = it; vm.clearError() }, Modifier.fillMaxWidth(), label = { Text("URL del relay (https://…)") },
             singleLine = true, enabled = !st.busy,
@@ -148,7 +159,12 @@ fun PairScreen(
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
         )
         st.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        OutlinedButton(onClick = { vm.pair(url, code) }, modifier = Modifier.fillMaxWidth(), enabled = !st.busy && url.isNotBlank() && code.isNotBlank()) {
+        OutlinedButton(
+            onClick = { vm.pair(url, code) },
+            shape = RpShapes.pill,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            enabled = !st.busy && url.isNotBlank() && code.isNotBlank(),
+        ) {
             if (st.busy) CircularProgressIndicator(Modifier.padding(end = 8.dp).then(Modifier), strokeWidth = 2.dp)
             Text("Emparejar")
         }

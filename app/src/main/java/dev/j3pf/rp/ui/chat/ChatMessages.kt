@@ -62,6 +62,8 @@ import dev.j3pf.rp.ui.components.RpMarkdown
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.promptsheet.PromptContent
 import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.RpShapes
+import dev.j3pf.rp.ui.theme.RpSpacing
 
 @Composable
 fun ChatItemView(
@@ -85,7 +87,8 @@ private fun UserBubble(m: UserMsg) {
         Surface(
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
+            shape = RpShapes.bubbleUser,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 if (m.fromMobile) {
@@ -112,7 +115,11 @@ private fun AssistantBubble(
             when (b) {
                 is Block.Text -> {
                     if (b.text.isNotBlank()) {
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RpShapes.bubbleAgent,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                        ) {
                             Box(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) { RpMarkdown(b.text) }
                         }
                     }
@@ -160,11 +167,13 @@ private fun ThinkingBlock(
     var open by rememberSaveable(key) { mutableStateOf(false) }
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
+        shape = RpShapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         tonalElevation = 1.dp,
+        modifier = Modifier.heightIn(min = 48.dp),
         onClick = { open = !open },
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 if (open) "Razonamiento ▾" else "Razonamiento ▸",
                 style = MaterialTheme.typography.labelMedium,
@@ -192,7 +201,7 @@ fun ToolCard(run: ToolRun) {
     val summary = remember(run.name, run.args) { run.summary() }
     SurfaceCard(
         onClick = { setOpen(!open) },
-        shape = RoundedCornerShape(16.dp),
+        shape = RpShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
     ) {

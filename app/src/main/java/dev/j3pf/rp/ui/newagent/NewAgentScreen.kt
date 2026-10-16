@@ -48,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.SectionTitle
+import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.parseColor
 import kotlinx.coroutines.launch
@@ -221,11 +222,16 @@ fun NewAgentScreen(
                     minLines = 3,
                 )
                 f.error?.let { Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) }
-                Button(onClick = vm::create, enabled = ui.canCreate, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Button(
+                    onClick = vm::create,
+                    enabled = ui.canCreate,
+                    shape = RpShapes.pill,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 48.dp),
+                ) {
                     if (f.spawning) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        Text("Crear agente")
+                        Text("Crear agente", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     }
                 }
             }

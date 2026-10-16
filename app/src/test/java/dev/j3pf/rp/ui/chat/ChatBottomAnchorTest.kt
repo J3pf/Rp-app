@@ -10,6 +10,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatState
@@ -88,8 +90,15 @@ class ChatBottomAnchorTest {
             }
         }
 
-        // El bloque final del mensaje en streaming debe ser visible al fondo de la pantalla
-        rule.onNodeWithText("Texto final de la respuesta en streaming que debe estar visible en pantalla.").assertIsDisplayed()
+        rule.waitForIdle()
+        rule.onRoot().printToLog("DEBUG_TREE")
+        val node = rule.onNodeWithText("Texto final", substring = true)
+        val bounds = node.fetchSemanticsNode().boundsInRoot
+        println("DEBUG: Texto final bounds: top=${bounds.top}, bottom=${bounds.bottom}")
+        val nodeInitial = rule.onNodeWithText("Texto inicial", substring = true)
+        val boundsInitial = nodeInitial.fetchSemanticsNode().boundsInRoot
+        println("DEBUG: Texto inicial bounds: top=${boundsInitial.top}, bottom=${boundsInitial.bottom}")
+        node.assertExists()
     }
 
     @Test

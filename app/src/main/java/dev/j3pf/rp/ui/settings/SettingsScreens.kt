@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -239,10 +240,13 @@ fun SettingsScreen(
                                 if (st.settings.appTheme == choice.id) Text("✓", color = MaterialTheme.colorScheme.primary)
                             },
                             modifier =
-                                Modifier.clickable {
-                                    vm.setAppTheme(choice.id)
-                                    showThemeDialog = false
-                                },
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable {
+                                        vm.setAppTheme(choice.id)
+                                        showThemeDialog = false
+                                    },
                         )
                     }
                 }
@@ -280,7 +284,11 @@ private fun NavRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }

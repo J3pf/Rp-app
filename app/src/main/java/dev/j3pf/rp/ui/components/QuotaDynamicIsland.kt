@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,7 @@ import dev.j3pf.rp.protocol.MachineQuota
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.QuotaWindow
 import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.util.parseColor
 import java.time.Instant
 import java.util.Locale
@@ -180,13 +182,24 @@ private fun QuotaProviderPill(
 ) {
     val primaryWindow = quota.primaryWindow()
     val statusColor = quota.statusColor(primaryWindow?.usedPercent)
+    val targetProgress = ((primaryWindow?.usedPercent ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
+    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
+        label = "quotaProgress",
+    )
+
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        onClick = onClick,
+        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+        shape = RpShapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     ) {
-        Column(Modifier.width(104.dp).padding(horizontal = 10.dp, vertical = 7.dp)) {
+        Column(
+            Modifier.width(108.dp).padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -209,7 +222,7 @@ private fun QuotaProviderPill(
             }
             Spacer(Modifier.height(5.dp))
             LinearProgressIndicator(
-                progress = { ((primaryWindow?.usedPercent ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f) },
+                progress = { animatedProgress },
                 modifier = Modifier.fillMaxWidth().height(3.dp),
                 color = statusColor,
                 trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
