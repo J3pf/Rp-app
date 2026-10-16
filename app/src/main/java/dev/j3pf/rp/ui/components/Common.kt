@@ -1,14 +1,19 @@
 package dev.j3pf.rp.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +49,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +60,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,7 +71,9 @@ import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.RpMotion
 import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.contextLabel
 import dev.j3pf.rp.util.parseColor
@@ -93,19 +102,35 @@ fun SurfaceCard(
     border: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val reducedMotion = LocalReducedMotion.current
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && onClick != null && !reducedMotion) RpMotion.PRESSED_SCALE else 1.0f,
+        animationSpec = RpMotion.springSnappy,
+        label = "cardPressScale",
+    )
+
+    val cardModifier =
+        modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+
     if (onClick != null) {
         Card(
             onClick = onClick,
-            modifier = modifier,
+            modifier = cardModifier,
             shape = shape,
             colors = CardDefaults.cardColors(containerColor = color, contentColor = contentColor),
             elevation = CardDefaults.cardElevation(defaultElevation = tonalElevation),
             border = border,
+            interactionSource = interactionSource,
             content = content,
         )
     } else {
         Card(
-            modifier = modifier,
+            modifier = cardModifier,
             shape = shape,
             colors = CardDefaults.cardColors(containerColor = color, contentColor = contentColor),
             elevation = CardDefaults.cardElevation(defaultElevation = tonalElevation),
@@ -474,7 +499,7 @@ fun StatusChip(
     agent: AgentSummary,
     modifier: Modifier = Modifier,
 ) {
-    val (text, color) =
+    val (text, targetColor) =
         when {
             !agent.online -> "Desconectado ${relativeTime(agent.lastSeenAt)}".trim() to MaterialTheme.colorScheme.outline
             agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to RpColors.warning
@@ -483,19 +508,72 @@ fun StatusChip(
             agent.status == AgentStatus.ERROR -> "Error" to RpColors.danger
             else -> "Inactivo" to RpColors.success
         }
+
+    val reducedMotion = LocalReducedMotion.current
+    val animatedColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = RpMotion.adaptiveSpec(reducedMotion, tween(durationMillis = 300)),
+        label = "statusColor",
+    )
+
+    val isWorking = (agent.status == AgentStatus.WORKING || agent.status == AgentStatus.COMPACTING) && agent.online
+    val infiniteTransition = rememberInfiniteTransition(label = "statusPulseTransition")
+    val pulseScale by if (isWorking && !reducedMotion) {
+        infiniteTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 2.2f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+            label = "pulseScale",
+        )
+    } else {
+        remember { mutableFloatStateOf(1.0f) }
+    }
+    val pulseAlpha by if (isWorking && !reducedMotion) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.55f,
+            targetValue = 0.0f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+            label = "pulseAlpha",
+        )
+    } else {
+        remember { mutableFloatStateOf(0.0f) }
+    }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
-        contentColor = color,
+        color = animatedColor.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, animatedColor.copy(alpha = 0.25f)),
+        contentColor = animatedColor,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ColorDot(color, size = 6)
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(10.dp)) {
+                if (isWorking && !reducedMotion && pulseAlpha > 0f) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .graphicsLayer {
+                                scaleX = pulseScale
+                                scaleY = pulseScale
+                                alpha = pulseAlpha
+                            }.clip(CircleShape)
+                            .background(animatedColor),
+                    )
+                }
+                ColorDot(animatedColor, size = 6)
+            }
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,

@@ -1,5 +1,11 @@
 package dev.j3pf.rp.ui.agents
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -44,12 +50,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +80,7 @@ import dev.j3pf.rp.ui.components.QuotaDynamicIsland
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.TagChip
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.lastSegment
@@ -203,6 +212,7 @@ fun AgentsScreen(
                                 items(g.agents, key = { it.agentId }) { a ->
                                     AgentCard(
                                         a = a,
+                                        modifier = Modifier.animateItem(),
                                         canResume = g.machine.hostOnline,
                                         onClick = { onOpenChat(a.agentId) },
                                         onResume = {
@@ -298,10 +308,34 @@ fun AgentCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                val isWorking = a.status == "working" && a.online
+                val reducedMotion = LocalReducedMotion.current
+                val avatarPulseTransition = rememberInfiniteTransition(label = "avatarPulse")
+                val avatarScale by if (isWorking && !reducedMotion) {
+                    avatarPulseTransition.animateFloat(
+                        initialValue = 1.0f,
+                        targetValue = 1.25f,
+                        animationSpec =
+                            infiniteRepeatable(
+                                animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                        label = "avatarScale",
+                    )
+                } else {
+                    remember { mutableFloatStateOf(1.0f) }
+                }
+
                 Surface(
                     shape = CircleShape,
                     color = parseColor(a.machineColor).copy(alpha = 0.16f),
-                    modifier = Modifier.size(24.dp),
+                    modifier =
+                        Modifier
+                            .size(24.dp)
+                            .graphicsLayer {
+                                scaleX = avatarScale
+                                scaleY = avatarScale
+                            },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         ColorDot(parseColor(a.machineColor), 8)

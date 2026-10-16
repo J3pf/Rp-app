@@ -59,21 +59,23 @@ class ChatBottomAnchorTest {
 
     @Test
     fun `tall streaming message keeps bottom visible`() {
-        val tallHistory =
-            (1..20).map { i ->
-                Block.Text("Bloque de streaming previo #$i con contenido que llena la pantalla.")
+        val priorMessages =
+            (1..15).map { i ->
+                UserMsg(key = "u-$i", text = "Mensaje previo en conversación #$i", at = 1000L + i)
             }
-        val latestBlock = Block.Text("FINAL DEL STREAMING - Fondo visible")
-
         val streamingMsg =
             AssistantMsg(
                 key = "streaming-1",
-                blocks = tallHistory + latestBlock,
+                blocks =
+                    listOf(
+                        Block.Text("Texto inicial de la respuesta en streaming."),
+                        Block.Text("Texto final de la respuesta en streaming que debe estar visible en pantalla."),
+                    ),
                 streaming = true,
                 at = 3000L,
             )
 
-        val uiState = ChatUiState(chat = ChatState(streaming = streamingMsg))
+        val uiState = ChatUiState(chat = ChatState(items = priorMessages, streaming = streamingMsg))
 
         rule.setContent {
             RpTheme {
@@ -87,7 +89,7 @@ class ChatBottomAnchorTest {
         }
 
         // El bloque final del mensaje en streaming debe ser visible al fondo de la pantalla
-        rule.onNodeWithText("FINAL DEL STREAMING - Fondo visible").assertIsDisplayed()
+        rule.onNodeWithText("Texto final de la respuesta en streaming que debe estar visible en pantalla.").assertIsDisplayed()
     }
 
     @Test

@@ -399,7 +399,9 @@ internal fun MessageList(
                 key = { it.key },
                 contentType = { it::class.simpleName },
             ) { item ->
-                ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
+                Box(modifier = Modifier.animateItem()) {
+                    ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
+                }
             }
         }
 
