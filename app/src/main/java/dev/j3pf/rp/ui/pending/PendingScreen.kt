@@ -155,7 +155,7 @@ fun PendingScreen(
 }
 
 @Composable
-private fun PendingRow(
+internal fun PendingRow(
     item: PendingItem,
     onClick: () -> Unit,
 ) {

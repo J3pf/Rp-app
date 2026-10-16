@@ -51,8 +51,8 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 - T5 (S3): AgentsScreen activity-at-a-glance redesign: wrap/condense chip rail, show status, active task, todo progress, last message preview (max 2 lines), relative time of last activity, agent sorting (prompts -> working -> lastSeenAt) [DONE]
 - T6 (S4, S6): Living agent feedback & animations: status pulse/shimmer for working agents, animated status transitions, counters/progress animations, press-scale tactile feedback [DONE]
 - T7 (S6, S7, S8): Screen polish across ALL routes (Agents, Chat, Mesh, Pending, NewAgent, Settings, Onboarding, PromptSheet, QuotaDynamicIsland, ConnectionBanner, empty/skeleton states) with theme-derived gradients, layered elevation, consistent typography, accessibility [DONE]
-- T8 (S10): Roborazzi screenshot tests for Agents (populated/empty/skeleton), Chat (streaming), Mesh, Pending, Settings, NewAgent in Gentle-Cute, Gentle-Sexy, Omarchy (light + dark) + commit reference PNGs [IN PROGRESS]
-- T9 (S7, S11, S12): Verification pass via gentle-ai-verify, assembleDebug & assembleRelease, QA manual cases in docs/QA.md, README feature updates, version 0.3.0 bump [PENDING]
+- T8 (S10): Roborazzi screenshot tests for Agents (populated/empty/skeleton), Chat (streaming), Mesh, Pending, Settings, NewAgent in Gentle-Cute, Gentle-Sexy, Omarchy (light + dark) + commit reference PNGs [DONE]
+- T9 (S7, S11, S12): Verification pass via gentle-ai-verify, assembleDebug & assembleRelease, QA manual cases in docs/QA.md, README feature updates, version 0.3.0 bump [IN PROGRESS]
 
 ## Log
 L1: "Necesito que RESPETANDO LOS VALORES Y FUNCIONALIDAD DEL THEME, hagas un refactor para hacer de esta app una app mucho mas llamativa, elegante, full UX/UI, que sea agradable de usar, que no le toque al usuario estar deslizando para ver lo mas reciente de cada agente, literal que sea una app llamativa, moderna, con animaciones, placentera de usar"

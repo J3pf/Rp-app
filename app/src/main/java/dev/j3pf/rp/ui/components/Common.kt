@@ -612,6 +612,15 @@ fun TagChip(
  */
 @Composable
 fun rememberShimmerBrush(): Brush {
+    val reducedMotion = LocalReducedMotion.current
+    val base = MaterialTheme.colorScheme.surfaceVariant
+    if (reducedMotion) {
+        return Brush.linearGradient(
+            colors = listOf(base.copy(alpha = 0.55f), base.copy(alpha = 0.70f)),
+            start = Offset(0f, 0f),
+            end = Offset(400f, 400f),
+        )
+    }
     val transition = rememberInfiniteTransition(label = "shimmerTransition")
     val translateAnim by transition.animateFloat(
         initialValue = 0f,
@@ -623,7 +632,6 @@ fun rememberShimmerBrush(): Brush {
             ),
         label = "shimmerTranslate",
     )
-    val base = MaterialTheme.colorScheme.surfaceVariant
     val shimmerColors =
         listOf(
             base.copy(alpha = 0.45f),
