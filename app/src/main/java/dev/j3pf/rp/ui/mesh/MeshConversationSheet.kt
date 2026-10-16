@@ -108,7 +108,7 @@ private fun ConversationBubble(
             Column(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (isFromA) comm.fromName else comm.fromName,
+                        comm.fromName,
                         style = MaterialTheme.typography.labelLarge,
                         color = if (isFromA) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.weight(1f),

@@ -47,8 +47,8 @@ S13: (A13) Delivery: when green → merge to main, bump versionName (minor, 0.2.
 - T3 (S3, S8, S9): MeshRepository (WS subscribe/unsubscribe lifecycle, snapshot/update/comm streams, HTTP queries, offline/reconnect handling), Settings/Preferences persistence for selected machine/group, MeshViewModel with immutable StateFlow<MeshUiState> + ViewModel unit tests [DONE - 67046f4]
 - T4 (S2, S4, S6, S7, S8, S10): MeshScreen UI, Compose Canvas diagram with pinch-to-zoom/pan/double-tap reset, animated nodes (status pulse, TODO ring, activity), glowing active/pending curved edges, comm particles & speech bubbles, reduced motion support, machine/group selector chips, collapsible Live strip, loading/empty/disconnected states, accessible List view toggle & semantics [DONE - 6573613]
 - T5 (S5, S7, S8): Node detail ModalBottomSheet (agent info, TODOs, subagents, conversations, navigation actions) & Edge conversation ModalBottomSheet (paging nextBefore, direction bubbles, badges) + Compose unit tests [DONE - 6573613]
-- T6 (S2): Navigation integration in Routes.kt and RpRoot.kt (drawer / bottom bar navigation item with clear icon) without breaking existing routes [DONE - commit pending]
-- T7 (S11, S12): Verification pass with gentle-ai-verify, QA manual scenarios doc in docs/QA.md (Spanish), README updates, full test suite & assemble validation
+- T6 (S2): Navigation integration in Routes.kt and RpRoot.kt (drawer / bottom bar navigation item with clear icon) without breaking existing routes [DONE - 8b6919c]
+- T7 (S11, S12): Verification pass with gentle-ai-verify, QA manual scenarios doc in docs/QA.md (Spanish), README updates, full test suite & assemble validation [DONE - commit pending]
 - T8 (S13): Merge to main, bump versionName to 0.2.0, build APK via scripts/build-apk.sh, git tag, push main + tags, create GitHub release with APK asset, update README download link
 
 ## Log

@@ -63,3 +63,21 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | P7 | Bloqueo de la app / FLAG_SECURE | Pide biometría al abrir; capturas bloqueadas |
 | P8 | Cerrar sesión | Borra credenciales, base de datos y canales; vuelve al onboarding |
 | P9 | Notificación de prueba | Ajustes → Notificaciones → "Enviar notificación de prueba" |
+
+## 5. Agent Mesh (Topología animada y comunicaciones)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|---|---|---|
+| M1 | Acceso y navegación | Abrir el menú inferior y pulsar la pestaña **Mesh** con icono de red | Se abre `MeshScreen` sin romper la navegación; el botón de la barra se resalta y muestra el diagrama o vista de lista |
+| M2 | Diagrama radial y satélites | Observar la pantalla con agentes de una máquina/grupo | El orquestador se posiciona al centro más grande y con badge de rol; los subordinados se distribuyen en un anillo concéntrico; los subagentes orbitan como satélites alrededor de su agente padre |
+| M3 | Aristas y estado de actividad | Provocar comunicación reciente entre agentes o una pregunta pendiente | Las aristas activas (últimos 20 s) brillan con trazo engrosado y translúcido; la arista con `pendingAsk` parpadea con trazo discontinuo; el brillo se apaga puntualmente a los 20 s |
+| M4 | Partículas y globos de diálogo | Enviar un mensaje entre agentes (`mesh.comm`) | Una partícula luminosa viaja por la curva desde el emisor hasta el receptor; aparece un globo con el texto (elipsado o "Contenido oculto" si está redactado) durante ~6 s junto a la arista |
+| M5 | Gestos de zoom y desplazamiento | Pellizcar la pantalla (pinch-to-zoom), arrastrar con un dedo y hacer doble toque | El zoom escala suavemente entre 0.3x y 3x; el arrastre desplaza la cámara; el doble toque restablece zoom a 1x y centra la vista |
+| M6 | Selectores de máquina y grupo | Seleccionar chips superiores de máquina y de grupo | Filtra los nodos y aristas visibles según la máquina o grupo elegido (incluyendo el grupo "Solo"); la selección se persiste; al abrir sin selección previa se preselecciona automáticamente el grupo con mayor actividad reciente |
+| M7 | Hoja de detalle de nodo | Tocar un nodo en el diagrama o en la lista | Se abre `ModalBottomSheet` con nombre, rol, máquina, cwd, rama git, modelo, estado, actividad, resumen de TODOs (con tarea actual resaltada y bloqueadas señaladas), lista de subagentes (estado, tokens, herramientas) y conversaciones recientes; incluye botones **Abrir chat** y **Ver conversación con X** |
+| M8 | Hoja de conversación entre agentes | Tocar una arista entre dos agentes | Se abre `ModalBottomSheet` con el historial de mensajes ordenados por dirección, badges de acción (`ask`, `reply`, `handover`, etc.), marcas de tiempo y paginación con **Cargar mensajes anteriores** vía `nextBefore` |
+| M9 | Tira "En vivo" inferior | Recibir mensajes en vivo | La tira inferior colapsable muestra los últimos mensajes en formato `Emisor → Receptor: texto` (máx. 20) |
+| M10 | Estado desconectado | Desconectar el relay o activar modo avión en la pantalla de Mesh | Muestra el banner superior "Desconectado — mostrando datos obsoletos" manteniendo la topología visible y ofreciendo botón **Reintentar** |
+| M11 | Accesibilidad y vista de lista | Pulsar el botón **Vista de lista** en la barra superior | Cambia a una lista accesible estructurada por tarjetas táctiles con touch targets ≥48 dp y descripciones semánticas completas ("Orchestrator X, working, 3 of 7 tasks") |
+| M12 | Reducción de movimiento | Habilitar `ANIMATOR_DURATION_SCALE=0` en ajustes de desarrollador de Android | Las partículas de viaje y pulsaciones de trabajo se desactivan completamente, manteniendo la visualización estática de nodos y aristas |
+| M13 | Ciclo de vida en segundo plano | Minimizar la app o cambiar a otra app | Se cancela la suscripción de WebSocket (`mesh.unsubscribe`); al reabrir la app (ON_START) se reconecta y resuscribe automáticamente |
