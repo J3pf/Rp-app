@@ -44,7 +44,7 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 - roborazzi: none -> 1.76.0
 
 ## Tasks
-- T0 (S9): Toolchain migration: install Android platform 37, bump AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, Compose BOM 2026.09.00, navigation 2.10.2, coil 3.6.3, activity-compose 1.13.0, lifecycle 2.11.0, hilt-nav/work 1.4.0, core-ktx 1.19.1, serialization 1.11.0, coroutines 1.11.0, roborazzi 1.76.0; compileSdk 37; verify all tests pass + assembleDebug + assembleRelease [IN PROGRESS]
+- T0 (S9): Toolchain migration: install Android platform 37, bump AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, Compose BOM 2026.09.00, navigation 2.10.2, coil 3.6.3, activity-compose 1.13.0, lifecycle 2.11.0, hilt-nav/work 1.4.0, core-ktx 1.19.1, serialization 1.11.0, coroutines 1.11.0, roborazzi 1.76.0; compileSdk 37; verify all tests pass + assembleDebug + assembleRelease [DONE - 458dd28]
 - T2 (S1): Unit tests pinning resolveThemeChoice and palette colors (Cute/Sexy/Omarchy/Default primary/background/surface) + central design tokens (Glows, Gradients, Spacing, Shapes, Motion) in ui/theme/ [PENDING]
 - T3 (S4, S5): Motion framework, reduced-motion helper (honoring animator_duration_scale 0), screen-to-screen navigation transitions in RpRoot.kt [PENDING]
 - T4 (S2): ChatScreen bottom-anchored message list (bottom of newest message visible on open, receive, streaming) + animated jump-to-latest button + Robolectric tests [PENDING]
