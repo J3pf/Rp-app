@@ -39,9 +39,16 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 - lifecycle: 2.9.4 -> 2.11.0
 - hiltAndroidx: 1.3.0 -> 1.4.0
 - coreKtx: 1.17.0 -> 1.19.1
-- serialization: 1.9.0 -> 1.11.0
-- coroutines: 1.10.2 -> 1.11.0
-- roborazzi: none -> 1.76.0
+- serialization: 1.11.0
+- coroutines: 1.11.0
+- roborazzi: 1.76.0
+- okhttp: 4.12.0 -> 5.5.0
+- markdown: 0.37.0 -> 0.46.0
+- tink: 1.18.0 -> 1.24.0
+- firebaseBom: 34.3.0 -> 35.0.2
+- camerax: 1.5.0 -> 1.6.2
+- work: 2.10.5 -> 2.12.0
+- datastore: 1.1.7 -> 1.2.1
 
 ## Tasks
 - T0 (S9): Toolchain migration: install Android platform 37, bump AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, Compose BOM 2026.09.00, navigation 2.10.2, coil 3.6.3, activity-compose 1.13.0, lifecycle 2.11.0, hilt-nav/work 1.4.0, core-ktx 1.19.1, serialization 1.11.0, coroutines 1.11.0, roborazzi 1.76.0; compileSdk 37; verify all tests pass + assembleDebug + assembleRelease [DONE - 458dd28]

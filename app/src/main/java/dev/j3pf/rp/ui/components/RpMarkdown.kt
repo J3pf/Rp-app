@@ -1,16 +1,12 @@
 package dev.j3pf.rp.ui.components
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.highlightedCodeFence
 import com.mikepenz.markdown.m3.Markdown
-import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
-import com.mikepenz.markdown.model.State
-import org.intellij.markdown.flavours.commonmark.CommonMarkFlavourDescriptor
-import org.intellij.markdown.parser.MarkdownParser
+import com.mikepenz.markdown.model.rememberMarkdownState
 
 private val RpMarkdownComponents =
     markdownComponents(
@@ -18,22 +14,20 @@ private val RpMarkdownComponents =
         codeFence = highlightedCodeFence,
     )
 
-private val flavour = CommonMarkFlavourDescriptor()
-
-/** Markdown con bloques de código resaltados y renderizado síncrono para evitar parpadeos y retrasos. */
+/** Markdown con bloques de código resaltados y renderizado optimizado para streaming sin bloqueos de hilo principal. */
 @Composable
 fun RpMarkdown(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    val state =
-        remember(text) {
-            val parser = MarkdownParser(flavour)
-            val tree = parser.buildMarkdownTreeFromString(text)
-            State.Success(tree, text, true, ReferenceLinkHandlerImpl())
-        }
+    val markdownState =
+        rememberMarkdownState(
+            content = text,
+            retainState = true,
+            immediate = true,
+        )
     Markdown(
-        state = state,
+        markdownState = markdownState,
         modifier = modifier,
         components = RpMarkdownComponents,
     )
