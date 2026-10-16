@@ -26,6 +26,14 @@ data class MachineGroup(
     val agents: List<AgentSummary>,
 )
 
+/** Ordena agentes dentro de una máquina: prompts primero, working segundo, lastSeenAt más reciente después. */
+fun sortAgentsWithinGroup(agents: List<AgentSummary>): List<AgentSummary> =
+    agents.sortedWith(
+        compareByDescending<AgentSummary> { it.openPromptCount > 0 }
+            .thenByDescending { it.status == "working" }
+            .thenByDescending { it.lastSeenAt ?: 0L },
+    )
+
 data class AgentsUiState(
     val machines: List<MachineSummary> = emptyList(),
     val allAgents: List<AgentSummary> = emptyList(),
@@ -59,16 +67,16 @@ class AgentsViewModel
                 val visibleMachines = if (sel == AppSettings.ALL) ms else ms.filter { it.context == sel || it.machineId == sel }
                 val visibleAgents = if (sel == AppSettings.ALL) all else all.filter { it.machineContext == sel || it.machineId == sel }
                 val byMachine = visibleAgents.groupBy { it.machineId }
-                // Agrupado por PC (cabecera de color); las PC sin agentes también se muestran si están online.
+                // Agrupado por PC (cabecera de color); orden: prompts primero, working segundo, lastSeenAt más reciente.
                 val groups =
                     visibleMachines.mapNotNull { m ->
                         val list = byMachine[m.machineId].orEmpty()
-                        if (list.isEmpty()) null else MachineGroup(m, list)
+                        if (list.isEmpty()) null else MachineGroup(m, sortAgentsWithinGroup(list))
                     } +
                         byMachine.filterKeys { id -> visibleMachines.none { it.machineId == id } }.map { (id, list) ->
                             MachineGroup(
                                 MachineSummary(id, list.first().machineName, list.first().machineContext, list.first().machineColor),
-                                list,
+                                sortAgentsWithinGroup(list),
                             )
                         }
                 AgentsUiState(ms, all, groups, sel, canSpawn = visibleMachines.any { it.hostOnline }, refreshing = refreshing)

@@ -59,17 +59,16 @@ class ChatBottomAnchorTest {
 
     @Test
     fun `tall streaming message keeps bottom visible`() {
-        val tallText =
-            buildString {
-                append("Línea inicial del asistente.\n")
-                repeat(30) { append("Línea de streaming progresivo #$it con contenido largo para generar altura.\n") }
-                append("FINAL DEL STREAMING - Fondo visible")
+        val tallHistory =
+            (1..20).map { i ->
+                Block.Text("Bloque de streaming previo #$i con contenido que llena la pantalla.")
             }
+        val latestBlock = Block.Text("FINAL DEL STREAMING - Fondo visible")
 
         val streamingMsg =
             AssistantMsg(
                 key = "streaming-1",
-                blocks = listOf(Block.Text(tallText)),
+                blocks = tallHistory + latestBlock,
                 streaming = true,
                 at = 3000L,
             )
@@ -87,10 +86,8 @@ class ChatBottomAnchorTest {
             }
         }
 
-        // El fondo del mensaje en streaming debe existir y ser visible
-        rule.onNodeWithText("FINAL DEL STREAMING", substring = true).assertExists()
-        // Verificar que el inicio (arriba) no esta visible porque la lista esta anclada al fondo
-        rule.onNodeWithText("Línea inicial", substring = true).assertExists()
+        // El bloque final del mensaje en streaming debe ser visible al fondo de la pantalla
+        rule.onNodeWithText("FINAL DEL STREAMING - Fondo visible").assertIsDisplayed()
     }
 
     @Test

@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -75,6 +76,7 @@ import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.lastSegment
 import dev.j3pf.rp.util.parseColor
+import dev.j3pf.rp.util.relativeTime
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -375,12 +377,14 @@ fun AgentCard(
                 }
             }
 
-            // Metadatos técnicos (carpeta, rama, modelo) en monospace
+            // Metadatos técnicos (carpeta, rama, modelo, tiempo relativo de actividad)
+            val timeText = if (a.status == "working") "activo ahora" else relativeTime(a.lastSeenAt)
             val meta =
                 listOfNotNull(
                     lastSegment(a.cwd).takeIf { it.isNotEmpty() },
                     a.gitBranch?.let { "git:$it" },
                     a.model?.label?.takeIf { it.isNotEmpty() },
+                    timeText.takeIf { it.isNotEmpty() },
                 ).joinToString("  •  ")
 
             if (meta.isNotEmpty()) {
@@ -397,10 +401,11 @@ fun AgentCard(
                 )
             }
 
-            // Rail horizontal de chips de estado
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            // Chips de estado condensados y envueltos sin scroll horizontal
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 StatusChip(a)
                 if (a.todoTotal > 0) {
