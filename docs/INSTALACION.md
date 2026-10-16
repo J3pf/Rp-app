@@ -21,9 +21,11 @@ Esta guía detalla cómo instalar la aplicación Android **RP**, vincularla con 
 ### Opción A: Descarga directa desde la Release oficial (Recomendado)
 
 1. En tu teléfono o PC, ingresa a la release oficial de GitHub:
-   👉 **[RP App v0.1.0 — Descargar APK](https://github.com/J3pf/Rp-app/releases/tag/v0.1.0)**
-2. Descarga el archivo de instalación:
-   - **`rp-direct-debug.apk`**: Sabor independiente de Google (utiliza el canal directo de push por WebSocket `remoteMessaging`).
+   👉 **[RP App v0.3.0 — Descargar APK](https://github.com/J3pf/Rp-app/releases/tag/v0.3.0)**
+2. Descarga el archivo de instalación correspondiente:
+   - **`rp-v0.3.0-direct.apk`** (30 MB): Sabor Release oficial independiente de Google (utiliza el canal directo de push por WebSocket `remoteMessaging`).
+   - **`rp-v0.3.0-fcm.apk`** (30 MB): Sabor Release con soporte para Firebase Cloud Messaging opcional.
+   - **`rp-direct-debug.apk`** (108 MB): Versión de depuración sabor directo.
 
 #### Instalación en el móvil:
 - **Desde el navegador del teléfono:**
@@ -34,7 +36,7 @@ Esta guía detalla cómo instalar la aplicación Android **RP**, vincularla con 
   1. Habilita las **Opciones de desarrollador** y activa **Depuración USB** en el teléfono.
   2. Ejecuta:
      ```bash
-     adb install -r rp-direct-debug.apk
+     adb install -r rp-v0.3.0-direct.apk
      ```
 
 ### Opción B: Compilación local desde el código fuente

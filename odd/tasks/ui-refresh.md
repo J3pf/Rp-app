@@ -85,4 +85,8 @@ C8 OPEN: Agents bottom crowded (FAB + island + nav ≈ 35% of screen, FAB covers
 C9 OPEN: horizontally scrollable rows clip with no affordance ("Interru…" in composer mode chips, filter chips, code blocks): theme-derived edge-fade.
 C10 OPEN: skeleton almost invisible in dark themes; raise contrast via theme tokens.
 C11 PROCESS: the previous agent twice left files reformatted AFTER reporting "clean". Run ktlint/formatter BEFORE every commit so it is a no-op afterwards; your final `git status --short` must be the LAST tool call before reporting, and empty.
+L5: [UI REFRESH — RELEASE PREPARATION P1 & P2]
+P1: Keystore restored at repo root (gitignored keystore.properties with storeFile=/home/drift/.config/rp/release.jks, alias rp-release). Verified with apksigner SHA-256 cert 6a7ef9a237db4483fbdacae7a323859df3e98198ae9bd6fb0a16229aecd62bc0 on both direct and fcm release APKs, and aapt2 dump badging confirming versionCode 73 (> 54) and versionName 0.3.0.
+P2: Updated download and release links in README.md and docs/INSTALACION.md to point to v0.3.0 assets (rp-direct-debug.apk 108 MB, rp-v0.3.0-direct.apk 30 MB, rp-v0.3.0-fcm.apk 30 MB).
+
 

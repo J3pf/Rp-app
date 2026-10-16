@@ -55,13 +55,15 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 Puedes instalar la aplicación directamente en tu dispositivo sin necesidad de compilar:
 
 1. **Descargar el APK:**
-   - 📦 **[RP App v0.2.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.2.0)**
-   - Archivo directo: **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.2.0/rp-direct-debug.apk)** (97 MB).
+   - 📦 **[RP App v0.3.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.3.0)**
+   - Versión Release (canal directo sin Google): **[rp-v0.3.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.0/rp-v0.3.0-direct.apk)** (30 MB).
+   - Versión Release con FCM (Google Cloud Messaging opcional): **[rp-v0.3.0-fcm.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.0/rp-v0.3.0-fcm.apk)** (30 MB).
+   - Versión Debug (canal directo): **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.0/rp-direct-debug.apk)** (108 MB).
 2. **Instalar en el móvil:**
    - **En el teléfono:** Abre el archivo descargado y concede permiso de «Instalar aplicaciones desconocidas» para tu navegador o gestor de archivos.
    - **Vía USB con ADB:** Conecta el teléfono con depuración USB y ejecuta:
      ```bash
-     adb install -r rp-direct-debug.apk
+     adb install -r rp-v0.3.0-direct.apk
      ```
 3. **Vincular con tu Relay:**
    - En el servidor Relay, ejecuta:
