@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -48,6 +49,7 @@ import dev.j3pf.rp.ui.MainViewModel
 import dev.j3pf.rp.ui.NavTarget
 import dev.j3pf.rp.ui.agents.AgentsScreen
 import dev.j3pf.rp.ui.chat.ChatScreen
+import dev.j3pf.rp.ui.mesh.MeshScreen
 import dev.j3pf.rp.ui.newagent.NewAgentScreen
 import dev.j3pf.rp.ui.onboarding.OnboardingScreen
 import dev.j3pf.rp.ui.onboarding.PairScreen
@@ -144,7 +146,11 @@ fun RpRoot(
 
     val backStack by nav.currentBackStackEntryAsState()
     val dest = backStack?.destination
-    val showBar = dest?.hasRoute<AgentsRoute>() == true || dest?.hasRoute<PendingRoute>() == true || dest?.hasRoute<SettingsRoute>() == true
+    val showBar =
+        dest?.hasRoute<AgentsRoute>() == true ||
+            dest?.hasRoute<MeshRoute>() == true ||
+            dest?.hasRoute<PendingRoute>() == true ||
+            dest?.hasRoute<SettingsRoute>() == true
 
     Scaffold(
         bottomBar = { if (showBar) BottomBar(nav, pendingCount) },
@@ -171,6 +177,9 @@ fun RpRoot(
             }
             composable<AgentsRoute> {
                 AgentsScreen(onOpenChat = { nav.navigate(ChatRoute(it)) }, onNewAgent = { nav.navigate(NewAgentRoute) }, mainVm = mainVm)
+            }
+            composable<MeshRoute> {
+                MeshScreen(onOpenChat = { nav.navigate(ChatRoute(it)) })
             }
             composable<PendingRoute> { PendingScreen(onOpenPrompt = mainVm::openPrompt) }
             composable<SettingsRoute> {
@@ -207,7 +216,7 @@ fun RpRoot(
 }
 
 @Composable
-private fun BottomBar(
+internal fun BottomBar(
     nav: NavHostController,
     pending: Int,
 ) {
@@ -224,6 +233,7 @@ private fun BottomBar(
             val tabs =
                 listOf(
                     Triple(AgentsRoute as Any, "Agentes", dest?.hasRoute<AgentsRoute>() == true),
+                    Triple(MeshRoute as Any, "Mesh", dest?.hasRoute<MeshRoute>() == true),
                     Triple(PendingRoute as Any, "Pendientes", dest?.hasRoute<PendingRoute>() == true),
                     Triple(SettingsRoute as Any, "Ajustes", dest?.hasRoute<SettingsRoute>() == true),
                 )
@@ -256,6 +266,10 @@ private fun BottomBar(
 
                             AgentsRoute -> {
                                 Icon(Icons.Filled.SmartToy, contentDescription = label)
+                            }
+
+                            MeshRoute -> {
+                                Icon(Icons.Filled.Hub, contentDescription = label)
                             }
 
                             else -> {

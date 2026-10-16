@@ -1,7 +1,8 @@
 # rp-app
 
 App Android (Kotlin + Jetpack Compose) para ver y controlar todos tus agentes [Pi](https://github.com/earendil-works/pi) a través
-de tu relay **RP**: chat en vivo, adjuntos y **notificaciones de preguntas/autorizaciones con respuesta directa desde la notificación**.
+de tu relay **RP**: chat en vivo, adjuntos, **notificaciones de preguntas/autorizaciones con respuesta directa desde la notificación**
+y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real).
 
 > Estado: **implementado** (ver «Compilar» abajo). El diseño está en `docs/`.
 
@@ -9,11 +10,24 @@ de tu relay **RP**: chat en vivo, adjuntos y **notificaciones de preguntas/autor
 |---|---|
 | [docs/INSTALACION.md](docs/INSTALACION.md) | Guía de instalación del APK y emparejamiento con el Relay |
 | [docs/PLAN-APP.md](docs/PLAN-APP.md) | Plan detallado de la app |
-| [docs/QA.md](docs/QA.md) | Pruebas manuales E2E (notificaciones con la app cerrada, modo avión, etc.) |
+| [docs/QA.md](docs/QA.md) | Pruebas manuales E2E (notificaciones con app cerrada, modo avión, topología Agent Mesh, etc.) |
 | [docs/RESILIENCIA.md](docs/RESILIENCIA.md) | Escalabilidad, resiliencia e independencia total (push sin Google, entrega interactiva sin herdr, Linux/Windows) |
 | [docs/COMPATIBILIDAD.md](docs/COMPATIBILIDAD.md) | herdr, gentle-ai, gentle-shell/gentle-pi y separación por PC: hechos verificados y matriz requisito × entorno |
 | [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Visión global (copia; canónica en `rp-relay`) |
 | [`rp-relay/docs/PROTOCOLO.md`](https://github.com/j3pf/rp-relay/blob/main/docs/PROTOCOLO.md) | Contrato de red |
+
+## Características principales
+
+- **Bandeja de Agentes y Chat en vivo**: Historial de mensajes, streaming en tiempo real, seguimiento de herramientas, diffs y soporte interactivo con biometría.
+- **Notificaciones interactivas**: Autorización y respuesta a preguntas directamente desde la notificación sin abrir la app, con soporte offline (WorkManager) y deduplicación.
+- **Agent Mesh (Topología animada)**:
+  - Diagrama visual en Canvas de alta velocidad (60 fps) con disposición radial-jerárquica: orquestadores al centro, subordinados en anillos y subagentes orbitando como satélites.
+  - Animación de partículas de comunicación en tiempo real (`mesh.comm`) y globos de diálogo junto a las aristas.
+  - Aristas activas con brillo dinámico y aristas discontinuas para solicitudes pendientes (`pendingAsk`).
+  - Anillos de progreso de TODOs por agente y pulsos animados según su estado de ejecución.
+  - Gestos táctiles fluidos: zoom con pellizco, desplazamiento panorámico y doble toque para reiniciar vista.
+  - Hojas de detalle completas (`ModalBottomSheet`) por agente (TODOs, subagentes con tokens/herramientas, conversaciones) y entre agentes con paginación de mensajes (`nextBefore`).
+  - Filtros y persistencia por máquina y grupo, barra "En vivo" colapsable y vista de lista accesible para lectores de pantalla.
 
 ## Referencias investigadas
 

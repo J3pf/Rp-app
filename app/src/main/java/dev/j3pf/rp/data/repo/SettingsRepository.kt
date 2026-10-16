@@ -1,6 +1,7 @@
 package dev.j3pf.rp.data.repo
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -45,6 +46,8 @@ data class AppSettings(
     /** Agentes silenciados (preferencia local por agente). */
     val mutedAgents: Set<String> = emptySet(),
     val appTheme: String = "auto",
+    val selectedMeshMachine: String? = null,
+    val selectedMeshGroup: String? = null,
 ) {
     companion object {
         const val ALL = "all"
@@ -52,35 +55,37 @@ data class AppSettings(
 }
 
 @Singleton
-class SettingsRepository
+class SettingsRepository(
+    private val store: DataStore<Preferences>,
+) {
     @Inject
     constructor(
-        @ApplicationContext private val context: Context,
-    ) {
-        private val store get() = context.rpDataStore
+        @ApplicationContext context: Context,
+    ) : this(context.rpDataStore)
 
         val settings: Flow<AppSettings> =
             store.data
                 .catch { e ->
                     if (e is IOException) emit(emptyPreferences()) else throw e
-                }
-                .map { p ->
+                }.map { p ->
                     AppSettings(
                         selectedContext = p[SELECTED] ?: AppSettings.ALL,
                         directPush = p[DIRECT] ?: true,
                         requireUnlockToApprove = p[REQUIRE_UNLOCK] ?: true,
-                    criticalAlways = p[CRITICAL] ?: true,
-                    appLock = p[APP_LOCK] ?: false,
-                    flagSecure = p[FLAG_SECURE] ?: false,
-                    onboardingDone = p[ONBOARDING] ?: false,
-                    batteryAsked = p[BATTERY] ?: false,
-                    notifyPrefs =
-                        p[PREFS]?.let { runCatching { RpJson.decodeFromString(NotifyPrefs.serializer(), it) }.getOrNull() }
-                            ?: NotifyPrefs(),
-                    mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
-                    appTheme = p[APP_THEME] ?: "auto",
-                )
-            }
+                        criticalAlways = p[CRITICAL] ?: true,
+                        appLock = p[APP_LOCK] ?: false,
+                        flagSecure = p[FLAG_SECURE] ?: false,
+                        onboardingDone = p[ONBOARDING] ?: false,
+                        batteryAsked = p[BATTERY] ?: false,
+                        notifyPrefs =
+                            p[PREFS]?.let { runCatching { RpJson.decodeFromString(NotifyPrefs.serializer(), it) }.getOrNull() }
+                                ?: NotifyPrefs(),
+                        mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
+                        appTheme = p[APP_THEME] ?: "auto",
+                        selectedMeshMachine = p[MESH_SELECTED_MACHINE],
+                        selectedMeshGroup = p[MESH_SELECTED_GROUP],
+                    )
+                }
 
         suspend fun current(): AppSettings = settings.first()
 
@@ -101,6 +106,16 @@ class SettingsRepository
         suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
 
         suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
+
+        suspend fun setMeshSelectedMachine(machineId: String?) =
+            edit {
+                if (machineId == null) it.remove(MESH_SELECTED_MACHINE) else it[MESH_SELECTED_MACHINE] = machineId
+            }
+
+        suspend fun setMeshSelectedGroup(groupId: String?) =
+            edit {
+                if (groupId == null) it.remove(MESH_SELECTED_GROUP) else it[MESH_SELECTED_GROUP] = groupId
+            }
 
         suspend fun setNotifyPrefs(v: NotifyPrefs) = edit { it[PREFS] = RpJson.encodeToString(NotifyPrefs.serializer(), v) }
 
@@ -130,5 +145,7 @@ class SettingsRepository
             val PREFS = stringPreferencesKey("notifyPrefs")
             val MUTED_AGENTS = stringSetPreferencesKey("mutedAgents")
             val APP_THEME = stringPreferencesKey("appTheme")
+            val MESH_SELECTED_MACHINE = stringPreferencesKey("mesh_selected_machine")
+            val MESH_SELECTED_GROUP = stringPreferencesKey("mesh_selected_group")
         }
     }

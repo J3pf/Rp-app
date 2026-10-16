@@ -80,6 +80,8 @@ object MsgType {
     const val HOST_HERDR_LAYOUT = "host.herdr_layout"
     const val HOST_SPAWN = "host.spawn"
     const val HOST_KILL = "host.kill"
+    const val MESH_SUBSCRIBE = "mesh.subscribe"
+    const val MESH_UNSUBSCRIBE = "mesh.unsubscribe"
 
     // Relay → app
     const val APP_WELCOME = "app.welcome"
@@ -97,6 +99,9 @@ object MsgType {
     const val HOST_DIRS = "host.dirs"
     const val HOST_HERDR_LAYOUT_RESULT = "host.herdr_layout.result"
     const val HOST_SPAWNED = "host.spawned"
+    const val MESH_SNAPSHOT = "mesh.snapshot"
+    const val MESH_UPDATE = "mesh.update"
+    const val MESH_COMM = "mesh.comm"
     const val ACK = "ack"
     const val ERROR = "error"
 }
