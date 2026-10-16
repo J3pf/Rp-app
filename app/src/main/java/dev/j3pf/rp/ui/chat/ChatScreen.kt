@@ -6,9 +6,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -86,6 +92,7 @@ import dev.j3pf.rp.ui.components.rememberActivity
 import dev.j3pf.rp.ui.promptsheet.AnswerUi
 import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
 import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.util.AuthResult
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.humanSize
@@ -331,49 +338,16 @@ fun ChatScreen(
 }
 
 @Composable
-private fun MessageList(
+internal fun MessageList(
     ui: ChatUiState,
     modifier: Modifier,
     busyPromptId: String?,
     onAnswerPrompt: (dev.j3pf.rp.protocol.Prompt, dev.j3pf.rp.protocol.Answer) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val items = ui.chat.display
-    val streamLen =
-        ui.chat.streaming?.blocks?.sumOf { b ->
-            when (b) {
-                is Block.Text -> b.text.length
-                is Block.Thinking -> b.text.length
-                is Block.ToolCall -> b.rawArgs.length
-            }
-        } ?: 0
-    val nearBottom by remember {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            last >= info.totalItemsCount - 2
-        }
-    }
-    var first by remember { mutableStateOf(true) }
-    var prevItemsSize by remember { mutableIntStateOf(0) }
-    LaunchedEffect(items.size, streamLen, ui.chat.tools.size) {
-        if (items.isEmpty()) {
-            prevItemsSize = 0
-            return@LaunchedEffect
-        }
-        val sizeChanged = items.size != prevItemsSize
-        prevItemsSize = items.size
-        if (first) {
-            listState.scrollToItem(items.lastIndex)
-            first = false
-        } else if (nearBottom) {
-            if (sizeChanged) {
-                listState.animateScrollToItem(items.lastIndex)
-            } else {
-                listState.scrollToItem(items.lastIndex)
-            }
-        }
-    }
+
     if (items.isEmpty()) {
         Column(
             modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
@@ -385,16 +359,89 @@ private fun MessageList(
         }
         return
     }
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxWidth(),
-        contentPadding =
-            androidx.compose.foundation.layout
-                .PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(items, key = { it.key }, contentType = { it::class.simpleName }) { item ->
-            ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
+
+    val reversedItems = remember(items) { items.asReversed() }
+
+    val isScrolledUp by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 20
+        }
+    }
+
+    val itemsCountWhenScrolledUp = remember { mutableIntStateOf(items.size) }
+
+    LaunchedEffect(isScrolledUp) {
+        if (!isScrolledUp) {
+            itemsCountWhenScrolledUp.intValue = items.size
+        }
+    }
+
+    val unreadNewItems by remember {
+        derivedStateOf {
+            if (isScrolledUp) {
+                (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
+            } else {
+                0
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            reverseLayout = true,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(
+                reversedItems,
+                key = { it.key },
+                contentType = { it::class.simpleName },
+            ) { item ->
+                ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isScrolledUp,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp),
+        ) {
+            Surface(
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                },
+                shape = RpShapes.pill,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shadowElevation = 6.dp,
+                tonalElevation = 3.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.ArrowDownward,
+                        contentDescription = "Ir al más reciente",
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = if (unreadNewItems > 0) "Más recientes ($unreadNewItems)" else "Más recientes",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
         }
     }
 }
