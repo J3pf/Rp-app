@@ -116,4 +116,116 @@ class RelayApiTest {
             assertIs<ApiResult.Network>(api.pairDevice("http://[::1]:bad", "ABCD2345", "Pixel", null))
         }
     }
+
+    @Test
+    fun `devices decodifica el wrapper json exacto del relay y filtra dispositivos revocados tolerando campos desconocidos`() {
+        runBlocking {
+            val json =
+                """
+                {
+                  "devices": [
+                    {
+                      "deviceId": "dev-current",
+                      "name": "Pixel 8",
+                      "createdAt": 1700000000000,
+                      "lastSeenAt": 1700001000000,
+                      "revoked": false,
+                      "current": true,
+                      "direct": true,
+                      "fcm": false,
+                      "connected": true,
+                      "unknownProperty": "extra"
+                    },
+                    {
+                      "deviceId": "dev-revoked",
+                      "name": "Antiguo Teléfono",
+                      "createdAt": 1690000000000,
+                      "lastSeenAt": 1690001000000,
+                      "revoked": true,
+                      "current": false,
+                      "direct": false,
+                      "fcm": false,
+                      "connected": false
+                    }
+                  ],
+                  "extraWrapperMeta": 123
+                }
+                """.trimIndent()
+            server.enqueue(MockResponse().setBody(json))
+
+            val res = api.devices()
+            assertIs<ApiResult.Ok<List<dev.j3pf.rp.protocol.DeviceInfo>>>(res)
+            val list = res.value
+            assertEquals(1, list.size, "El dispositivo revocado debe ser excluido")
+            assertEquals("dev-current", list[0].deviceId)
+            assertEquals("Pixel 8", list[0].name)
+            assertTrue(list[0].current)
+            assertEquals("/v1/devices", server.takeRequest().path)
+        }
+    }
+
+    @Test
+    fun `machines decodifica el wrapper json del relay y tolera campos desconocidos`() {
+        runBlocking {
+            val json =
+                """
+                {
+                  "machines": [
+                    {
+                      "machineId": "m-work",
+                      "name": "PC Empresa",
+                      "context": "work",
+                      "color": "#7AA2F7",
+                      "online": true,
+                      "hostOnline": true,
+                      "agentCount": 3,
+                      "unknownServerProp": "ignorado"
+                    }
+                  ],
+                  "serverTime": 99999999
+                }
+                """.trimIndent()
+            server.enqueue(MockResponse().setBody(json))
+
+            val res = api.machines()
+            assertIs<ApiResult.Ok<List<dev.j3pf.rp.protocol.MachineSummary>>>(res)
+            val list = res.value
+            assertEquals(1, list.size)
+            assertEquals("m-work", list[0].machineId)
+            assertEquals("PC Empresa", list[0].name)
+            assertEquals("/v1/machines", server.takeRequest().path)
+        }
+    }
+
+    @Test
+    fun `openPrompts decodifica el wrapper json del relay y tolera campos desconocidos`() {
+        runBlocking {
+            val json =
+                """
+                {
+                  "prompts": [
+                    {
+                      "promptId": "prompt-1",
+                      "agentId": "a-1",
+                      "title": "Autorizar comando",
+                      "message": "rm -rf build",
+                      "category": "permission",
+                      "danger": "high",
+                      "state": "open",
+                      "unknownField": [1, 2, 3]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            server.enqueue(MockResponse().setBody(json))
+
+            val res = api.openPrompts()
+            assertIs<ApiResult.Ok<List<dev.j3pf.rp.protocol.Prompt>>>(res)
+            val list = res.value
+            assertEquals(1, list.size)
+            assertEquals("prompt-1", list[0].promptId)
+            assertEquals("Autorizar comando", list[0].title)
+            assertEquals("/v1/prompts?state=open", server.takeRequest().path)
+        }
+    }
 }

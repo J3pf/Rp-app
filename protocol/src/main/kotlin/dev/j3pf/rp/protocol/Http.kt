@@ -3,7 +3,11 @@ package dev.j3pf.rp.protocol
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class PairDeviceRequest(val code: String, val name: String, val fcmToken: String? = null)
+data class PairDeviceRequest(
+    val code: String,
+    val name: String,
+    val fcmToken: String? = null,
+)
 
 @Serializable
 data class PairDeviceResponse(
@@ -14,10 +18,16 @@ data class PairDeviceResponse(
 )
 
 @Serializable
-data class PairCodeResponse(val code: String, val expiresAt: Long? = null)
+data class PairCodeResponse(
+    val code: String,
+    val expiresAt: Long? = null,
+)
 
 @Serializable
-data class PushChannelsRequest(val fcmToken: String? = null, val direct: Boolean)
+data class PushChannelsRequest(
+    val fcmToken: String? = null,
+    val direct: Boolean,
+)
 
 @Serializable
 data class MachinePatch(
@@ -29,7 +39,11 @@ data class MachinePatch(
 )
 
 @Serializable
-data class QuietHours(val from: String, val to: String, val tz: String? = null)
+data class QuietHours(
+    val from: String,
+    val to: String,
+    val tz: String? = null,
+)
 
 @Serializable
 data class MachinePrefs(
@@ -50,23 +64,58 @@ data class DeviceInfo(
     val name: String = "",
     val createdAt: Long? = null,
     val lastSeenAt: Long? = null,
+    val revoked: Boolean = false,
     val current: Boolean = false,
+    val direct: Boolean = false,
+    val fcm: Boolean = false,
+    val connected: Boolean = false,
 )
 
 @Serializable
-data class OkResponse(val ok: Boolean = true, val reason: String? = null)
+data class DevicesResponse(
+    val devices: List<DeviceInfo> = emptyList(),
+)
 
 @Serializable
-data class AnswerPromptRequest(val answer: Answer)
+data class MachinesResponse(
+    val machines: List<MachineSummary> = emptyList(),
+)
 
 @Serializable
-data class BlobInfo(val blobId: String, val sha256: String? = null, val size: Long = 0, val mime: String? = null)
+data class PromptsResponse(
+    val prompts: List<Prompt> = emptyList(),
+)
 
 @Serializable
-data class HealthResponse(val ok: Boolean = true, val version: String? = null, val uptime: Double? = null)
+data class OkResponse(
+    val ok: Boolean = true,
+    val reason: String? = null,
+)
 
 @Serializable
-data class PromptList(val prompts: List<Prompt> = emptyList())
+data class AnswerPromptRequest(
+    val answer: Answer,
+)
+
+@Serializable
+data class BlobInfo(
+    val blobId: String,
+    val sha256: String? = null,
+    val size: Long = 0,
+    val mime: String? = null,
+)
+
+@Serializable
+data class HealthResponse(
+    val ok: Boolean = true,
+    val version: String? = null,
+    val uptime: Double? = null,
+)
+
+@Serializable
+data class PromptList(
+    val prompts: List<Prompt> = emptyList(),
+)
 
 /** Cuerpos de los mensajes de rp-host (PROTOCOLO §9). */
 @Serializable
@@ -90,22 +139,40 @@ data class HostInfo(
 )
 
 @Serializable
-data class HostsUpdate(val upsert: List<HostInfo> = emptyList(), val remove: List<String> = emptyList())
+data class HostsUpdate(
+    val upsert: List<HostInfo> = emptyList(),
+    val remove: List<String> = emptyList(),
+)
 
 @Serializable
-data class HostListDirs(val machineId: String, val path: String)
+data class HostListDirs(
+    val machineId: String,
+    val path: String,
+)
 
 @Serializable
-data class HostDirs(val path: String, val dirs: List<String> = emptyList())
+data class HostDirs(
+    val path: String,
+    val dirs: List<String> = emptyList(),
+)
 
 @Serializable
-data class HostMachineRef(val machineId: String)
+data class HostMachineRef(
+    val machineId: String,
+)
 
 @Serializable
-data class HerdrPane(val id: String, val agent: String? = null)
+data class HerdrPane(
+    val id: String,
+    val agent: String? = null,
+)
 
 @Serializable
-data class HerdrTab(val id: String, val label: String = "", val panes: List<HerdrPane> = emptyList())
+data class HerdrTab(
+    val id: String,
+    val label: String = "",
+    val panes: List<HerdrPane> = emptyList(),
+)
 
 @Serializable
 data class HerdrWorkspace(
@@ -116,7 +183,9 @@ data class HerdrWorkspace(
 )
 
 @Serializable
-data class HerdrLayout(val workspaces: List<HerdrWorkspace> = emptyList())
+data class HerdrLayout(
+    val workspaces: List<HerdrWorkspace> = emptyList(),
+)
 
 @Serializable
 data class HerdrTarget(
@@ -147,4 +216,13 @@ data class HostSpawned(
 )
 
 @Serializable
-data class HerdrSpawnLoc(val workspaceId: String? = null, val paneId: String? = null)
+data class HostKill(
+    val machineId: String,
+    val spawnId: String,
+)
+
+@Serializable
+data class HerdrSpawnLoc(
+    val workspaceId: String? = null,
+    val paneId: String? = null,
+)

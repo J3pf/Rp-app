@@ -72,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.BuildConfig
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.repo.NotifyCategory
+import dev.j3pf.rp.protocol.DeviceInfo
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.AppHeader
 import dev.j3pf.rp.ui.components.ColorDot
@@ -370,22 +371,35 @@ private fun SubScreen(
 
 // ───────────────────────────── Dispositivos ─────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DevicesScreen(
+fun DevicesContent(
+    devices: List<DeviceInfo>,
     onBack: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel(),
+    onRevoke: (String) -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    modifier: Modifier = Modifier,
 ) {
-    val devices by vm.devices.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { vm.loadDevices() }
     var toRevoke by remember { mutableStateOf<String?>(null) }
-    SubScreen("Dispositivos", onBack, vm) {
-        if (devices.isEmpty()) Text("Sin dispositivos", Modifier.padding(16.dp))
-        devices.forEach { d ->
-            ListItem(
-                headlineContent = { Text(d.name.ifBlank { d.deviceId } + if (d.current) " (este)" else "") },
-                supportingContent = { Text("Visto ${relativeTime(d.lastSeenAt).ifBlank { "—" }}") },
-                trailingContent = { if (!d.current) TextButton(onClick = { toRevoke = d.deviceId }) { Text("Revocar") } },
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Dispositivos") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
             )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier,
+    ) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+            if (devices.isEmpty()) Text("Sin dispositivos", Modifier.padding(16.dp))
+            devices.forEach { d ->
+                ListItem(
+                    headlineContent = { Text(d.name.ifBlank { d.deviceId } + if (d.current) " (este)" else "") },
+                    supportingContent = { Text("Visto ${relativeTime(d.lastSeenAt).ifBlank { "—" }}") },
+                    trailingContent = { if (!d.current) TextButton(onClick = { toRevoke = d.deviceId }) { Text("Revocar") } },
+                )
+            }
         }
     }
     toRevoke?.let { id ->
@@ -395,13 +409,36 @@ fun DevicesScreen(
             text = { Text("Dejará de recibir notificaciones y de poder conectarse.") },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.revokeDevice(id)
+                    onRevoke(id)
                     toRevoke = null
                 }) { Text("Revocar") }
             },
             dismissButton = { TextButton(onClick = { toRevoke = null }) { Text("Cancelar") } },
         )
     }
+}
+
+@Composable
+fun DevicesScreen(
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
+    val devices by vm.devices.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val msg by vm.message.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.loadDevices() }
+    LaunchedEffect(msg) {
+        msg?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeMessage()
+        }
+    }
+    DevicesContent(
+        devices = devices,
+        onBack = onBack,
+        onRevoke = vm::revokeDevice,
+        snackbarHostState = snackbar,
+    )
 }
 
 // ───────────────────────────── Máquinas ─────────────────────────────
@@ -750,7 +787,11 @@ fun BatteryScreen(
     SubScreen("Optimización de batería", onBack, vm) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                if (st.health.batteryExcluded) "RP está excluida de la optimización de batería ✓" else "RP está sujeta a la optimización de batería",
+                if (st.health.batteryExcluded) {
+                    "RP está excluida de la optimización de batería ✓"
+                } else {
+                    "RP está sujeta a la optimización de batería"
+                },
             )
             Text(
                 "El canal directo mantiene una conexión permanente con tu relay. Algunos fabricantes (Xiaomi, Huawei, Oppo, Samsung…) " +

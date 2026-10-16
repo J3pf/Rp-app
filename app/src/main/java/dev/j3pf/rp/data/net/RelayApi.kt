@@ -5,9 +5,11 @@ import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AnswerPromptRequest
 import dev.j3pf.rp.protocol.BlobInfo
 import dev.j3pf.rp.protocol.DeviceInfo
+import dev.j3pf.rp.protocol.DevicesResponse
 import dev.j3pf.rp.protocol.HealthResponse
 import dev.j3pf.rp.protocol.MachinePatch
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.protocol.MachinesResponse
 import dev.j3pf.rp.protocol.MeshAgentCommsResponse
 import dev.j3pf.rp.protocol.MeshConversationResponse
 import dev.j3pf.rp.protocol.MeshSnapshot
@@ -17,16 +19,10 @@ import dev.j3pf.rp.protocol.PairCodeResponse
 import dev.j3pf.rp.protocol.PairDeviceRequest
 import dev.j3pf.rp.protocol.PairDeviceResponse
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.protocol.PromptsResponse
 import dev.j3pf.rp.protocol.PushChannelsRequest
 import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.UserMessage
-import java.io.IOException
-import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
@@ -44,21 +40,42 @@ import okio.Buffer
 import okio.BufferedSink
 import okio.ForwardingSink
 import okio.buffer
+import java.io.IOException
+import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /** Resultado de una llamada HTTP al relay. */
 sealed interface ApiResult<out T> {
-    data class Ok<T>(val value: T) : ApiResult<T>
+    data class Ok<T>(
+        val value: T,
+    ) : ApiResult<T>
 
     /** Respuesta no 2xx. `409` = `already_resolved`. */
-    data class Http(val code: Int, val body: String) : ApiResult<Nothing> {
+    data class Http(
+        val code: Int,
+        val body: String,
+    ) : ApiResult<Nothing> {
         val isConflict get() = code == 409
         val isUnauthorized get() = code == 401 || code == 403
     }
 
-    data class Network(val error: Throwable) : ApiResult<Nothing>
+    data class Network(
+        val error: Throwable,
+    ) : ApiResult<Nothing>
 }
 
 inline fun <T> ApiResult<T>.getOrNull(): T? = (this as? ApiResult.Ok)?.value
+
+inline fun <T, R> ApiResult<T>.map(transform: (T) -> R): ApiResult<R> =
+    when (this) {
+        is ApiResult.Ok -> ApiResult.Ok(transform(value))
+        is ApiResult.Http -> this
+        is ApiResult.Network -> this
+    }
 
 /** Resultado de responder un prompt. */
 sealed interface AnswerOutcome {
@@ -70,207 +87,286 @@ sealed interface AnswerOutcome {
     /** Sin red / error temporal: se reintenta con WorkManager. */
     data object Queued : AnswerOutcome
 
-    data class Failed(val message: String) : AnswerOutcome
+    data class Failed(
+        val message: String,
+    ) : AnswerOutcome
 }
 
 @Singleton
-class RelayApi @Inject constructor(
-    private val client: OkHttpClient,
-    private val secrets: SecretStore,
-) {
-    private val json = RpJson
-    private val jsonType = "application/json; charset=utf-8".toMediaType()
+class RelayApi
+    @Inject
+    constructor(
+        private val client: OkHttpClient,
+        private val secrets: SecretStore,
+    ) {
+        private val json = RpJson
+        private val jsonType = "application/json; charset=utf-8".toMediaType()
 
-    /** Cliente con timeout corto para las acciones de notificación (8 s, PLAN-APP §5.3). */
-    private val quick: OkHttpClient by lazy {
-        client.newBuilder().callTimeout(8, TimeUnit.SECONDS).build()
-    }
+        /** Cliente con timeout corto para las acciones de notificación (8 s, PLAN-APP §5.3). */
+        private val quick: OkHttpClient by lazy {
+            client.newBuilder().callTimeout(8, TimeUnit.SECONDS).build()
+        }
 
-    /** Cliente sin callTimeout global para subidas de blobs grandes. */
-    private val uploadClient: OkHttpClient by lazy {
-        client.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
-    }
+        /** Cliente sin callTimeout global para subidas de blobs grandes. */
+        private val uploadClient: OkHttpClient by lazy {
+            client.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
+        }
 
-    // ───────────────────────────── Emparejamiento ─────────────────────────────
+        // ───────────────────────────── Emparejamiento ─────────────────────────────
 
-    suspend fun healthz(baseUrl: String): ApiResult<HealthResponse> =
-        runCatching { Request.Builder().url(url(baseUrl, "/healthz")).get().build() }
-            .fold(
+        suspend fun healthz(baseUrl: String): ApiResult<HealthResponse> =
+            runCatching {
+                Request
+                    .Builder()
+                    .url(url(baseUrl, "/healthz"))
+                    .get()
+                    .build()
+            }.fold(
                 onSuccess = { call(it, HealthResponse.serializer()) },
                 onFailure = { ApiResult.Network(it) },
             )
 
-    suspend fun pairDevice(baseUrl: String, code: String, name: String, fcmToken: String?): ApiResult<PairDeviceResponse> =
-        runCatching {
-            Request.Builder().url(url(baseUrl, "/v1/pair/device"))
-                .post(encode(PairDeviceRequest.serializer(), PairDeviceRequest(code, name, fcmToken))).build()
-        }.fold(
-            onSuccess = { call(it, PairDeviceResponse.serializer()) },
-            onFailure = { ApiResult.Network(it) },
-        )
+        suspend fun pairDevice(
+            baseUrl: String,
+            code: String,
+            name: String,
+            fcmToken: String?,
+        ): ApiResult<PairDeviceResponse> =
+            runCatching {
+                Request
+                    .Builder()
+                    .url(url(baseUrl, "/v1/pair/device"))
+                    .post(encode(PairDeviceRequest.serializer(), PairDeviceRequest(code, name, fcmToken)))
+                    .build()
+            }.fold(
+                onSuccess = { call(it, PairDeviceResponse.serializer()) },
+                onFailure = { ApiResult.Network(it) },
+            )
 
-    // ───────────────────────────── Dispositivo / push ─────────────────────────────
+        // ───────────────────────────── Dispositivo / push ─────────────────────────────
 
-    suspend fun putPush(fcmToken: String?, direct: Boolean): ApiResult<OkResponse> =
-        authed("PUT", "/v1/devices/me/push", encode(PushChannelsRequest.serializer(), PushChannelsRequest(fcmToken, direct)), OkResponse.serializer())
+        suspend fun putPush(
+            fcmToken: String?,
+            direct: Boolean,
+        ): ApiResult<OkResponse> =
+            authed(
+                "PUT",
+                "/v1/devices/me/push",
+                encode(PushChannelsRequest.serializer(), PushChannelsRequest(fcmToken, direct)),
+                OkResponse.serializer(),
+            )
 
-    suspend fun pushTest(): ApiResult<OkResponse> =
-        authed("POST", "/v1/devices/me/push-test", emptyBody(), OkResponse.serializer())
+        suspend fun pushTest(): ApiResult<OkResponse> = authed("POST", "/v1/devices/me/push-test", emptyBody(), OkResponse.serializer())
 
-    suspend fun putPrefs(prefs: NotifyPrefs): ApiResult<OkResponse> =
-        authed("PUT", "/v1/devices/me/prefs", encode(NotifyPrefs.serializer(), prefs), OkResponse.serializer())
+        suspend fun putPrefs(prefs: NotifyPrefs): ApiResult<OkResponse> =
+            authed("PUT", "/v1/devices/me/prefs", encode(NotifyPrefs.serializer(), prefs), OkResponse.serializer())
 
-    suspend fun devices(): ApiResult<List<DeviceInfo>> =
-        authed("GET", "/v1/devices", null, ListSerializer(DeviceInfo.serializer()))
+        suspend fun devices(): ApiResult<List<DeviceInfo>> =
+            authed("GET", "/v1/devices", null, DevicesResponse.serializer())
+                .map { it.devices.filterNot { d -> d.revoked } }
 
-    suspend fun revokeDevice(id: String): ApiResult<OkResponse> =
-        authed("DELETE", "/v1/devices/$id", null, OkResponse.serializer())
+        suspend fun revokeDevice(id: String): ApiResult<OkResponse> = authed("DELETE", "/v1/devices/$id", null, OkResponse.serializer())
 
-    // ───────────────────────────── Máquinas ─────────────────────────────
+        // ───────────────────────────── Máquinas ─────────────────────────────
 
-    suspend fun machines(): ApiResult<List<MachineSummary>> =
-        authed("GET", "/v1/machines", null, ListSerializer(MachineSummary.serializer()))
+        suspend fun machines(): ApiResult<List<MachineSummary>> =
+            authed("GET", "/v1/machines", null, MachinesResponse.serializer())
+                .map { it.machines }
 
-    suspend fun patchMachine(id: String, patch: MachinePatch): ApiResult<MachineSummary> =
-        authed("PATCH", "/v1/machines/$id", encode(MachinePatch.serializer(), patch), MachineSummary.serializer())
+        suspend fun patchMachine(
+            id: String,
+            patch: MachinePatch,
+        ): ApiResult<MachineSummary> =
+            authed("PATCH", "/v1/machines/$id", encode(MachinePatch.serializer(), patch), MachineSummary.serializer())
 
-    suspend fun revokeMachine(id: String): ApiResult<OkResponse> =
-        authed("DELETE", "/v1/machines/$id", null, OkResponse.serializer())
+        suspend fun revokeMachine(id: String): ApiResult<OkResponse> = authed("DELETE", "/v1/machines/$id", null, OkResponse.serializer())
 
-    suspend fun createMachineCode(): ApiResult<PairCodeResponse> =
-        authed("POST", "/v1/pair/codes", emptyBody(), PairCodeResponse.serializer())
+        suspend fun createMachineCode(): ApiResult<PairCodeResponse> =
+            authed("POST", "/v1/pair/codes", emptyBody(), PairCodeResponse.serializer())
 
-    // ───────────────────────────── Agent mesh ─────────────────────────────
+        // ───────────────────────────── Agent mesh ─────────────────────────────
 
-    suspend fun getMesh(machineId: String? = null): ApiResult<MeshSnapshot> =
-        authed("GET", queryPath("/v1/mesh", "machineId" to machineId), null, MeshSnapshot.serializer())
+        suspend fun getMesh(machineId: String? = null): ApiResult<MeshSnapshot> =
+            authed("GET", queryPath("/v1/mesh", "machineId" to machineId), null, MeshSnapshot.serializer())
 
-    suspend fun getMeshConversation(
-        a: String,
-        b: String,
-        before: Long? = null,
-        limit: Int = 50,
-    ): ApiResult<MeshConversationResponse> =
-        authed(
-            "GET",
-            queryPath("/v1/mesh/conversation", "a" to a, "b" to b, "before" to before?.toString(), "limit" to limit.toString()),
-            null,
-            MeshConversationResponse.serializer(),
-        )
+        suspend fun getMeshConversation(
+            a: String,
+            b: String,
+            before: Long? = null,
+            limit: Int = 50,
+        ): ApiResult<MeshConversationResponse> =
+            authed(
+                "GET",
+                queryPath("/v1/mesh/conversation", "a" to a, "b" to b, "before" to before?.toString(), "limit" to limit.toString()),
+                null,
+                MeshConversationResponse.serializer(),
+            )
 
-    suspend fun getMeshAgentComms(agentId: String, limit: Int = 50): ApiResult<MeshAgentCommsResponse> =
-        authed(
-            "GET",
-            queryPath("/v1/mesh/agents/${encodePathSegment(agentId)}/comms", "limit" to limit.toString()),
-            null,
-            MeshAgentCommsResponse.serializer(),
-        )
+        suspend fun getMeshAgentComms(
+            agentId: String,
+            limit: Int = 50,
+        ): ApiResult<MeshAgentCommsResponse> =
+            authed(
+                "GET",
+                queryPath("/v1/mesh/agents/${encodePathSegment(agentId)}/comms", "limit" to limit.toString()),
+                null,
+                MeshAgentCommsResponse.serializer(),
+            )
 
-    // ───────────────────────────── Prompts y mensajes ─────────────────────────────
+        // ───────────────────────────── Prompts y mensajes ─────────────────────────────
 
-    suspend fun openPrompts(): ApiResult<List<Prompt>> =
-        authed("GET", "/v1/prompts?state=open", null, ListSerializer(Prompt.serializer()))
+        suspend fun openPrompts(): ApiResult<List<Prompt>> =
+            authed("GET", "/v1/prompts?state=open", null, PromptsResponse.serializer())
+                .map { it.prompts }
 
-    /** Usado por los botones de la notificación (HTTPS directo, timeout 8 s). */
-    suspend fun answerPrompt(promptId: String, answer: Answer): AnswerOutcome {
-        val res = authed(
-            "POST", "/v1/prompts/$promptId/answer",
-            encode(AnswerPromptRequest.serializer(), AnswerPromptRequest(answer)),
-            OkResponse.serializer(), quick,
-        )
-        return when (res) {
-            is ApiResult.Ok -> AnswerOutcome.Sent
-            is ApiResult.Http -> when {
-                res.isConflict -> AnswerOutcome.AlreadyResolved
-                res.code == 404 -> AnswerOutcome.AlreadyResolved
-                res.code >= 500 || res.code == 429 -> AnswerOutcome.Queued
-                else -> AnswerOutcome.Failed("HTTP ${res.code}")
-            }
-            is ApiResult.Network -> AnswerOutcome.Queued
-        }
-    }
+        /** Usado por los botones de la notificación (HTTPS directo, timeout 8 s). */
+        suspend fun answerPrompt(
+            promptId: String,
+            answer: Answer,
+        ): AnswerOutcome {
+            val res =
+                authed(
+                    "POST",
+                    "/v1/prompts/$promptId/answer",
+                    encode(AnswerPromptRequest.serializer(), AnswerPromptRequest(answer)),
+                    OkResponse.serializer(),
+                    quick,
+                )
+            return when (res) {
+                is ApiResult.Ok -> {
+                    AnswerOutcome.Sent
+                }
 
-    suspend fun sendMessage(msg: UserMessage): ApiResult<JsonObject> =
-        authed("POST", "/v1/agents/${msg.agentId}/messages", encode(UserMessage.serializer(), msg), JsonObject.serializer(), quick)
+                is ApiResult.Http -> {
+                    when {
+                        res.isConflict -> AnswerOutcome.AlreadyResolved
+                        res.code == 404 -> AnswerOutcome.AlreadyResolved
+                        res.code >= 500 || res.code == 429 -> AnswerOutcome.Queued
+                        else -> AnswerOutcome.Failed("HTTP ${res.code}")
+                    }
+                }
 
-    // ───────────────────────────── Adjuntos ─────────────────────────────
-
-    /** Sube un archivo (≤25 MiB) con progreso en bytes. */
-    suspend fun uploadBlob(
-        name: String,
-        mime: String,
-        body: RequestBody,
-        onProgress: (sent: Long, total: Long) -> Unit,
-    ): ApiResult<BlobInfo> {
-        val part = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("file", name, ProgressBody(body, onProgress)).build()
-        return authed("POST", "/v1/blobs", part, BlobInfo.serializer(), uploadClient)
-    }
-
-    // ───────────────────────────── Interno ─────────────────────────────
-
-    private suspend fun <T> authed(
-        method: String,
-        path: String,
-        body: RequestBody?,
-        serializer: KSerializer<T>,
-        http: OkHttpClient = client,
-    ): ApiResult<T> {
-        val s = secrets.current() ?: return ApiResult.Http(401, "sin sesión")
-        val req = runCatching {
-            Request.Builder().url(url(s.relayUrl, path))
-                .header("Authorization", "Bearer ${s.deviceToken}")
-                .method(method, body ?: if (method == "GET" || method == "DELETE") null else emptyBody())
-                .build()
-        }.getOrElse { return ApiResult.Network(it) }
-        return call(req, serializer, http)
-    }
-
-    private suspend fun <T> call(req: Request, serializer: KSerializer<T>, http: OkHttpClient = client): ApiResult<T> {
-        val response = try {
-            http.newCall(req).await()
-        } catch (e: IOException) {
-            return ApiResult.Network(e)
-        }
-        return response.use { r ->
-            val text = r.body?.string().orEmpty()
-            if (!r.isSuccessful) return@use ApiResult.Http(r.code, text)
-            try {
-                ApiResult.Ok(json.decodeFromString(serializer, text.ifBlank { "{}" }))
-            } catch (e: Exception) {
-                ApiResult.Network(IOException("Respuesta inválida: ${e.message}"))
+                is ApiResult.Network -> {
+                    AnswerOutcome.Queued
+                }
             }
         }
+
+        suspend fun sendMessage(msg: UserMessage): ApiResult<JsonObject> =
+            authed("POST", "/v1/agents/${msg.agentId}/messages", encode(UserMessage.serializer(), msg), JsonObject.serializer(), quick)
+
+        // ───────────────────────────── Adjuntos ─────────────────────────────
+
+        /** Sube un archivo (≤25 MiB) con progreso en bytes. */
+        suspend fun uploadBlob(
+            name: String,
+            mime: String,
+            body: RequestBody,
+            onProgress: (sent: Long, total: Long) -> Unit,
+        ): ApiResult<BlobInfo> {
+            val part =
+                MultipartBody
+                    .Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("file", name, ProgressBody(body, onProgress))
+                    .build()
+            return authed("POST", "/v1/blobs", part, BlobInfo.serializer(), uploadClient)
+        }
+
+        // ───────────────────────────── Interno ─────────────────────────────
+
+        private suspend fun <T> authed(
+            method: String,
+            path: String,
+            body: RequestBody?,
+            serializer: KSerializer<T>,
+            http: OkHttpClient = client,
+        ): ApiResult<T> {
+            val s = secrets.current() ?: return ApiResult.Http(401, "sin sesión")
+            val req =
+                runCatching {
+                    Request
+                        .Builder()
+                        .url(url(s.relayUrl, path))
+                        .header("Authorization", "Bearer ${s.deviceToken}")
+                        .method(method, body ?: if (method == "GET" || method == "DELETE") null else emptyBody())
+                        .build()
+                }.getOrElse { return ApiResult.Network(it) }
+            return call(req, serializer, http)
+        }
+
+        private suspend fun <T> call(
+            req: Request,
+            serializer: KSerializer<T>,
+            http: OkHttpClient = client,
+        ): ApiResult<T> {
+            val response =
+                try {
+                    http.newCall(req).await()
+                } catch (e: IOException) {
+                    return ApiResult.Network(e)
+                }
+            return response.use { r ->
+                val text = r.body?.string().orEmpty()
+                if (!r.isSuccessful) return@use ApiResult.Http(r.code, text)
+                try {
+                    ApiResult.Ok(json.decodeFromString(serializer, text.ifBlank { "{}" }))
+                } catch (e: Exception) {
+                    ApiResult.Network(IOException("Respuesta inválida: ${e.message}"))
+                }
+            }
+        }
+
+        private fun <T> encode(
+            s: KSerializer<T>,
+            v: T,
+        ): RequestBody = json.encodeToString(s, v).toRequestBody(jsonType)
+
+        private fun emptyBody(): RequestBody = "{}".toRequestBody(jsonType)
+
+        private fun queryPath(
+            path: String,
+            vararg params: Pair<String, String?>,
+        ): String {
+            val query =
+                params
+                    .filter { it.second != null }
+                    .joinToString("&") { (key, value) -> "${encodeQueryComponent(key)}=${encodeQueryComponent(value!!)}" }
+            return if (query.isEmpty()) path else "$path?$query"
+        }
+
+        private fun encodeQueryComponent(value: String): String = URLEncoder.encode(value, "UTF-8")
+
+        private fun encodePathSegment(value: String): String = encodeQueryComponent(value).replace("+", "%20")
+
+        private fun url(
+            base: String,
+            path: String,
+        ) = base.trimEnd('/') + path
     }
-
-    private fun <T> encode(s: KSerializer<T>, v: T): RequestBody = json.encodeToString(s, v).toRequestBody(jsonType)
-    private fun emptyBody(): RequestBody = "{}".toRequestBody(jsonType)
-    private fun queryPath(path: String, vararg params: Pair<String, String?>): String {
-        val query = params.filter { it.second != null }
-            .joinToString("&") { (key, value) -> "${encodeQueryComponent(key)}=${encodeQueryComponent(value!!)}" }
-        return if (query.isEmpty()) path else "$path?$query"
-    }
-
-    private fun encodeQueryComponent(value: String): String = URLEncoder.encode(value, "UTF-8")
-
-    private fun encodePathSegment(value: String): String = encodeQueryComponent(value).replace("+", "%20")
-
-    private fun url(base: String, path: String) = base.trimEnd('/') + path
-}
 
 /** `Call.await()` cancelable. */
-suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
-    enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            if (!cont.isCancelled) cont.resumeWithException(e)
-        }
+suspend fun Call.await(): Response =
+    suspendCancellableCoroutine { cont ->
+        enqueue(
+            object : Callback {
+                override fun onFailure(
+                    call: Call,
+                    e: IOException,
+                ) {
+                    if (!cont.isCancelled) cont.resumeWithException(e)
+                }
 
-        override fun onResponse(call: Call, response: Response) {
-            cont.resume(response)
-        }
-    })
-    cont.invokeOnCancellation { runCatching { cancel() } }
-}
+                override fun onResponse(
+                    call: Call,
+                    response: Response,
+                ) {
+                    cont.resume(response)
+                }
+            },
+        )
+        cont.invokeOnCancellation { runCatching { cancel() } }
+    }
 
 /** Cuerpo que informa de los bytes enviados. */
 class ProgressBody(
@@ -278,23 +374,29 @@ class ProgressBody(
     private val onProgress: (sent: Long, total: Long) -> Unit,
 ) : RequestBody() {
     override fun contentType() = delegate.contentType()
+
     override fun contentLength() = delegate.contentLength()
 
     override fun writeTo(sink: BufferedSink) {
         val total = contentLength()
         val step = if (total > 0) (total / 100).coerceAtLeast(8192L) else 8192L
-        val counting = object : ForwardingSink(sink) {
-            var written = 0L
-            var lastReported = 0L
-            override fun write(source: Buffer, byteCount: Long) {
-                super.write(source, byteCount)
-                written += byteCount
-                if (written == total || written - lastReported >= step) {
-                    lastReported = written
-                    onProgress(written, total)
+        val counting =
+            object : ForwardingSink(sink) {
+                var written = 0L
+                var lastReported = 0L
+
+                override fun write(
+                    source: Buffer,
+                    byteCount: Long,
+                ) {
+                    super.write(source, byteCount)
+                    written += byteCount
+                    if (written == total || written - lastReported >= step) {
+                        lastReported = written
+                        onProgress(written, total)
+                    }
                 }
-            }
-        }.buffer()
+            }.buffer()
         delegate.writeTo(counting)
         counting.flush()
     }
