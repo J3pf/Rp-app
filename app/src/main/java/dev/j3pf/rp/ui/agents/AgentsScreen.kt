@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -143,7 +146,7 @@ fun AgentsHeroStats(
                     ),
                 )
                 Text(
-                    text = "$onlineMachines online",
+                    text = "$onlineMachines en línea",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -171,15 +174,21 @@ fun AgentsContent(
     onRefresh: () -> Unit,
     onResume: (AgentSummary, String) -> Unit,
     onForget: (String) -> Unit,
+    listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
 ) {
+    val isFabExpanded by remember {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
+    }
+
     Scaffold(
         modifier = modifier,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNewAgent,
+                expanded = isFabExpanded,
                 shape = RoundedCornerShape(999.dp),
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                icon = { Icon(Icons.Filled.Add, contentDescription = "Nuevo agente") },
                 text = { Text("Nuevo agente", fontWeight = FontWeight.Bold) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -275,6 +284,7 @@ fun AgentsContent(
 
                     else -> {
                         LazyColumn(
+                            state = listState,
                             contentPadding = PaddingValues(top = 4.dp, bottom = 140.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {

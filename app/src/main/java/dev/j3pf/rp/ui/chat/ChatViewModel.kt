@@ -60,6 +60,7 @@ data class ChatUiState(
     /** Última entrega interactiva falló por indisponibilidad → ofrecer "Pasar a Normal". */
     val interactiveUnavailable: Boolean = false,
     val message: String? = null,
+    val unreadCount: Int = 0,
 ) {
     val isAuto get() = agent?.gentleMode == "auto"
     val canSend get() = !sending && attachments.none { it.state != UploadState.DONE && it.state != UploadState.ERROR }

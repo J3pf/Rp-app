@@ -228,6 +228,30 @@ class MeshLayoutEngineTest {
         assertTrue(elapsedMs < 50.0, "layout took ${elapsedMs}ms")
     }
 
+    @Test
+    fun `diagram layout bounds and canvas scaling fit available canvas spanning at least 60 percent`() {
+        val nodes =
+            listOf(
+                node("orch", role = "orchestrator"),
+                node("sub1", parent = "orch", role = "subordinate"),
+                node("sub2", parent = "orch", role = "subordinate"),
+            )
+        val edges = listOf(edge("e1", "orch", "sub1"), edge("e2", "orch", "sub2"))
+        val layout = engine.computeLayout(nodes, edges, width = 800f, height = 800f)
+
+        val canvasWidth = 1080f
+        val canvasHeight = 1920f
+        val canvasSpan = minOf(canvasWidth, canvasHeight)
+        val bounds = layout.bounds
+        val layoutSpan = maxOf(bounds.width, bounds.height)
+
+        val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
+        val scaledSpan = layoutSpan * fitScale
+
+        val coverageRatio = scaledSpan / canvasSpan
+        assertTrue(coverageRatio >= 0.60f, "Coverage ratio ($coverageRatio) must be >= 60%")
+    }
+
     private fun node(
         id: String,
         parent: String? = null,

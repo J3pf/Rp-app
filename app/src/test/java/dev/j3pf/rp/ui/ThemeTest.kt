@@ -155,4 +155,19 @@ class ThemeTest {
         assertEquals(DefaultLightColors, paletteFor(RpThemeChoice.SYSTEM, darkTheme = false))
         assertEquals(DefaultDarkColors, paletteFor(RpThemeChoice.SYSTEM, darkTheme = true))
     }
+
+    @Test
+    fun `tokens de skeleton ofrecen contraste adecuado en temas oscuros`() {
+        val darkPalettes = listOf(CuteDarkColors, SexyDarkColors, OmarchyDarkColors, DefaultDarkColors)
+        darkPalettes.forEach { palette ->
+            val base =
+                androidx.compose.ui.graphics
+                    .lerp(palette.surfaceVariant, palette.onSurface, 0.14f)
+            val highlight =
+                androidx.compose.ui.graphics
+                    .lerp(palette.surfaceVariant, palette.onSurface, 0.28f)
+            org.junit.Assert.assertNotEquals("Base de skeleton no debe coincidir con surfaceVariant", palette.surfaceVariant, base)
+            org.junit.Assert.assertNotEquals("Highlight de skeleton debe distinguirse de la base", base, highlight)
+        }
+    }
 }

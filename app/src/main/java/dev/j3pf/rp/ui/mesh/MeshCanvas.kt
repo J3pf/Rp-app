@@ -135,10 +135,18 @@ fun MeshCanvas(
                         },
                         onTap = { tap ->
                             val currentLayout = layout ?: return@detectTapGestures
+                            val bounds = currentLayout.bounds
+                            val layoutSpan = maxOf(bounds.width, bounds.height).coerceAtLeast(80f)
+                            val canvasSpan = minOf(widthPx, heightPx)
+                            val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
+                            val effectiveZoom = zoom * fitScale
+                            val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthPx / 2f
+                            val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else heightPx / 2f
+
                             val localTap =
                                 Offset(
-                                    x = (tap.x - widthPx / 2f - panX) / zoom + widthPx / 2f,
-                                    y = (tap.y - heightPx / 2f - panY) / zoom + heightPx / 2f,
+                                    x = (tap.x - widthPx / 2f - panX) / effectiveZoom + boundsCenterX,
+                                    y = (tap.y - heightPx / 2f - panY) / effectiveZoom + boundsCenterY,
                                 )
                             val hitNode =
                                 currentLayout.nodes.values
@@ -165,19 +173,28 @@ fun MeshCanvas(
             val centerX = size.width / 2f
             val centerY = size.height / 2f
 
+            val bounds = currentLayout.bounds
+            val layoutSpan = maxOf(bounds.width, bounds.height).coerceAtLeast(80f)
+            val canvasSpan = minOf(size.width, size.height)
+            val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
+            val effectiveZoom = zoom * fitScale
+
+            val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else centerX
+            val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else centerY
+
             nativeCanvas.save()
             nativeCanvas.translate(centerX + panX, centerY + panY)
-            nativeCanvas.scale(zoom, zoom)
+            nativeCanvas.scale(effectiveZoom, effectiveZoom)
 
             currentLayout.edges.forEach { positioned ->
                 val edge = positioned.edge
                 path.reset()
-                path.moveTo(positioned.fromX - centerX, positioned.fromY - centerY)
+                path.moveTo(positioned.fromX - boundsCenterX, positioned.fromY - boundsCenterY)
                 path.quadTo(
-                    positioned.controlX - centerX,
-                    positioned.controlY - centerY,
-                    positioned.toX - centerX,
-                    positioned.toY - centerY,
+                    positioned.controlX - boundsCenterX,
+                    positioned.controlY - boundsCenterY,
+                    positioned.toX - boundsCenterX,
+                    positioned.toY - boundsCenterY,
                 )
                 val age = edge.lastAt?.let { currentTimeMs - it }
                 val active = age?.let { it in 0..ACTIVE_EDGE_MS } ?: edge.active
@@ -256,14 +273,14 @@ fun MeshCanvas(
                         paint.reset()
                         paint.isAntiAlias = true
                         paint.color = scheme.primary.copy(alpha = 0.22f).toArgb()
-                        nativeCanvas.drawCircle(x - centerX, y - centerY, 12f, paint)
+                        nativeCanvas.drawCircle(x - boundsCenterX, y - boundsCenterY, 12f, paint)
                         paint.color = scheme.primary.toArgb()
-                        nativeCanvas.drawCircle(x - centerX, y - centerY, 5f, paint)
+                        nativeCanvas.drawCircle(x - boundsCenterX, y - boundsCenterY, 5f, paint)
                     }
-                    val bubbleOffsetY = midpointY - centerY - 17f - (index * 28f)
+                    val bubbleOffsetY = midpointY - boundsCenterY - 17f - (index * 28f)
                     drawSpeechBubble(
                         nativeCanvas,
-                        midpointX - centerX,
+                        midpointX - boundsCenterX,
                         bubbleOffsetY,
                         formatMeshCommText(comm.text),
                         paint,
@@ -275,10 +292,10 @@ fun MeshCanvas(
 
                 val hiddenCount = edgeBubbles.size - visibleBubbles.size
                 if (hiddenCount > 0) {
-                    val bubbleOffsetY = midpointY - centerY - 17f - (visibleBubbles.size * 28f)
+                    val bubbleOffsetY = midpointY - boundsCenterY - 17f - (visibleBubbles.size * 28f)
                     drawSpeechBubble(
                         nativeCanvas,
-                        midpointX - centerX,
+                        midpointX - boundsCenterX,
                         bubbleOffsetY,
                         "+$hiddenCount más",
                         paint,
@@ -290,7 +307,7 @@ fun MeshCanvas(
             }
 
             currentLayout.nodes.values.forEach { node ->
-                drawNode(nativeCanvas, node, centerX, centerY, currentTimeMs, reducedMotion, paint, textPaint, scheme)
+                drawNode(nativeCanvas, node, boundsCenterX, boundsCenterY, currentTimeMs, reducedMotion, paint, textPaint, scheme)
             }
             nativeCanvas.restore()
         }
@@ -299,11 +316,19 @@ fun MeshCanvas(
         layout?.nodes?.values?.forEach { positioned ->
             val node = positioned.node
             val label = formatMeshNodeContentDescription(node)
+            val bounds = layout.bounds
+            val layoutSpan = maxOf(bounds.width, bounds.height).coerceAtLeast(80f)
+            val canvasSpan = minOf(widthPx, heightPx)
+            val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
+            val effectiveZoom = zoom * fitScale
+            val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthPx / 2f
+            val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else heightPx / 2f
+
             Box(
                 Modifier
                     .offset {
-                        val transformedX = widthPx / 2f + panX + (positioned.x - widthPx / 2f) * zoom
-                        val transformedY = heightPx / 2f + panY + (positioned.y - heightPx / 2f) * zoom
+                        val transformedX = widthPx / 2f + panX + (positioned.x - boundsCenterX) * effectiveZoom
+                        val transformedY = heightPx / 2f + panY + (positioned.y - boundsCenterY) * effectiveZoom
                         IntOffset(
                             (transformedX - 24.dp.toPx()).roundToInt(),
                             (transformedY - 24.dp.toPx()).roundToInt(),

@@ -168,6 +168,14 @@ class ChatBottomAnchorTest {
                     ),
             )
         rule.waitForIdle()
+        rule.waitUntil(5000L) {
+            rule
+                .onAllNodes(
+                    androidx.compose.ui.test
+                        .hasText("Línea 66 TEXTO ANEXADO EN VIVO FINAL"),
+                ).fetchSemanticsNodes()
+                .isNotEmpty()
+        }
 
         // Re-verificar que la nueva línea final sigue visible sobre el composer sin desplazamiento manual
         val appendedLastNode = rule.onNodeWithText("Línea 66 TEXTO ANEXADO EN VIVO FINAL")
@@ -268,10 +276,10 @@ class ChatBottomAnchorTest {
         rule.waitForIdle()
 
         // El botón para saltar al más reciente debe aparecer con el contador de nuevos
-        rule.onNodeWithText("Más recientes", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Más recientes (2)").assertIsDisplayed()
 
         // Al pulsar el botón, vuelve a la parte inferior
-        rule.onNodeWithText("Más recientes", substring = true).performClick()
+        rule.onNodeWithText("Más recientes (2)").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Nuevo mensaje en vivo 2").assertIsDisplayed()
     }

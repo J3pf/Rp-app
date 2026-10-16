@@ -60,6 +60,7 @@ import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.SubagentInfo
 import dev.j3pf.rp.ui.components.RpMarkdown
 import dev.j3pf.rp.ui.components.SurfaceCard
+import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.promptsheet.PromptContent
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
@@ -498,8 +499,12 @@ fun SubagentCard(info: SubagentInfo) {
 
             // Herramientas internas (steps)
             if (info.tools.isNotEmpty()) {
+                val toolsScroll = rememberScrollState()
                 Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    modifier =
+                        Modifier
+                            .horizontalEdgeFade(toolsScroll, edgeColor = MaterialTheme.colorScheme.surfaceVariant)
+                            .horizontalScroll(toolsScroll),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     info.tools.forEach { t ->

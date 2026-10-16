@@ -90,6 +90,7 @@ import dev.j3pf.rp.protocol.TodoItem
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.TagChip
+import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.components.rememberActivity
 import dev.j3pf.rp.ui.promptsheet.AnswerUi
 import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
@@ -434,10 +435,14 @@ internal fun MessageList(
         }
     }
 
-    val unreadNewItems by remember {
+    val unreadNewItems by remember(items.size, ui.unreadCount) {
         derivedStateOf {
             if (isScrolledUp) {
-                (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
+                if (ui.unreadCount > 0) {
+                    ui.unreadCount
+                } else {
+                    (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
+                }
             } else {
                 0
             }
@@ -450,7 +455,7 @@ internal fun MessageList(
             reverseLayout = true,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
         ) {
             items(
                 reversedItems,
@@ -557,7 +562,13 @@ internal fun Composer(
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (ui.attachments.isNotEmpty()) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val attachmentsScroll = rememberScrollState()
+                Row(
+                    Modifier
+                        .horizontalEdgeFade(attachmentsScroll, edgeColor = MaterialTheme.colorScheme.surface)
+                        .horizontalScroll(attachmentsScroll),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     ui.attachments.forEach { a ->
                         AttachmentChip(a, onRemove = { onRemoveAttachment(a.id) }, onRetry = { onRetryAttachment(a.id) })
                     }
@@ -573,8 +584,11 @@ internal fun Composer(
                 }
 
             if (suggestions.isNotEmpty()) {
+                val suggestionsScroll = rememberScrollState()
                 Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
+                    Modifier
+                        .horizontalEdgeFade(suggestionsScroll, edgeColor = MaterialTheme.colorScheme.surface)
+                        .horizontalScroll(suggestionsScroll),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     suggestions.forEach { cmd ->
@@ -586,8 +600,11 @@ internal fun Composer(
                     }
                 }
             }
+            val composerScrollState = rememberScrollState()
             Row(
-                Modifier.horizontalScroll(rememberScrollState()),
+                Modifier
+                    .horizontalEdgeFade(composerScrollState, edgeColor = MaterialTheme.colorScheme.surface)
+                    .horizontalScroll(composerScrollState),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

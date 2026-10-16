@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.mesh
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +40,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.j3pf.rp.ui.components.horizontalEdgeFade
+import dev.j3pf.rp.ui.components.rememberShimmerBrush
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 
 @Composable
@@ -76,7 +80,7 @@ fun MeshScreen(
         onDismissNodeDetail = viewModel::dismissNodeDetail,
         onViewConversation = { peerId ->
             val nodeId = state.nodeDetail?.node?.agentId
-            val edge = state.snapshot?.edges?.firstOrNull { it.a == nodeId && it.b == peerId || it.b == nodeId && it.a == peerId }
+            val edge = state.snapshot?.edges?.firstOrNull { (it.a == nodeId && it.b == peerId) || (it.b == nodeId && it.a == peerId) }
             edge?.let { viewModel.onEdgeClick(it.edgeId) }
         },
         onDismissConversation = viewModel::dismissConversationDetail,
@@ -252,8 +256,14 @@ private fun SelectorRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp),
         )
+        val scrollState = rememberScrollState()
         Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalEdgeFade(scrollState, edgeColor = MaterialTheme.colorScheme.background)
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -264,14 +274,18 @@ private fun SelectorRow(
 
 @Composable
 private fun LoadingSkeleton(modifier: Modifier = Modifier) {
+    val shimmer = rememberShimmerBrush()
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Cargando red de agentes…", style = MaterialTheme.typography.bodyMedium)
         repeat(4) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().height(72.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-            ) {}
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(shimmer),
+            )
         }
     }
 }

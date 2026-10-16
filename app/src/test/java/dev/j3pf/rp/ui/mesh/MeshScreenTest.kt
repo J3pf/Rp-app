@@ -207,6 +207,70 @@ class MeshScreenTest {
         rule.onNodeWithText("Reintentar").assertIsDisplayed()
     }
 
+    @Test
+    fun `list view renders all 3 agent rows when snapshot has agents`() {
+        val nodes =
+            listOf(
+                MeshNode(
+                    agentId = "node-1",
+                    machineId = "m1",
+                    machineName = "Machine 1",
+                    name = "Orchestrator Agent",
+                    role = "orchestrator",
+                    status = "working",
+                ),
+                MeshNode(
+                    agentId = "node-2",
+                    machineId = "m1",
+                    machineName = "Machine 1",
+                    name = "Subordinate Worker 1",
+                    role = "subordinate",
+                    status = "working",
+                ),
+                MeshNode(
+                    agentId = "node-3",
+                    machineId = "m1",
+                    machineName = "Machine 1",
+                    name = "Subordinate Worker 2",
+                    role = "subordinate",
+                    status = "idle",
+                ),
+            )
+        val snapshot =
+            MeshSnapshot(
+                groups =
+                    listOf(
+                        dev.j3pf.rp.protocol.MeshGroup(
+                            groupId = "g1",
+                            label = "Orchestrator",
+                            memberAgentIds = listOf("node-1", "node-2", "node-3"),
+                        ),
+                    ),
+                nodes = nodes,
+                edges = emptyList(),
+            )
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                isListView = true,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(
+                    uiState = uiState,
+                    onOpenChat = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("Orchestrator Agent", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Subordinate Worker 1", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Subordinate Worker 2", substring = true).assertIsDisplayed()
+    }
+
     private fun node(
         id: String,
         name: String,

@@ -2,6 +2,7 @@ package dev.j3pf.rp.ui.agents
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.ui.theme.RpTheme
@@ -211,5 +212,58 @@ class AgentsSortingAndCardTest {
 
         org.junit.Assert.assertTrue("Agente con prompts debe aparecer arriba del agente trabajando", topPrompt < topWorking)
         org.junit.Assert.assertTrue("Agente trabajando debe aparecer arriba del agente inactivo", topWorking < topIdle)
+    }
+
+    @Test
+    fun `extended floating action button collapses when scrolled`() {
+        val testMachine =
+            dev.j3pf.rp.protocol.MachineSummary(
+                machineId = "m1",
+                name = "PC Principal",
+                color = "#7AA2F7",
+                online = true,
+            )
+        val agents: List<AgentSummary> =
+            (1..10).map { i ->
+                AgentSummary(
+                    agentId = "a-$i",
+                    machineId = "m1",
+                    sessionName = "Agente $i",
+                    status = "idle",
+                    online = true,
+                )
+            }
+        val group = MachineGroup(machine = testMachine, agents = agents)
+        val uiState = AgentsUiState(machines = listOf(testMachine), allAgents = agents, groups = listOf(group), selected = "all")
+
+        rule.setContent {
+            val listState =
+                androidx.compose.foundation.lazy
+                    .rememberLazyListState(initialFirstVisibleItemIndex = 2)
+            RpTheme {
+                AgentsContent(
+                    state = uiState,
+                    conn = dev.j3pf.rp.data.net.ConnState.Connected,
+                    listState = listState,
+                    onOpenChat = {},
+                    onNewAgent = {},
+                    onSelect = {},
+                    onRefresh = {},
+                    onResume = { _: AgentSummary, _: String -> },
+                    onForget = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("Nuevo agente").assertIsDisplayed()
+        org.junit.Assert.assertTrue(
+            "Cuando se hace scroll, el texto del FAB extendido no debe estar visible",
+            rule
+                .onAllNodes(
+                    androidx.compose.ui.test
+                        .hasText("Nuevo agente"),
+                ).fetchSemanticsNodes()
+                .isEmpty(),
+        )
     }
 }

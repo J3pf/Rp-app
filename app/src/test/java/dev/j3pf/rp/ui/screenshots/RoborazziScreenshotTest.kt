@@ -31,6 +31,8 @@ import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.HerdrInfo
+import dev.j3pf.rp.protocol.HostBackends
+import dev.j3pf.rp.protocol.HostInfo
 import dev.j3pf.rp.protocol.MachineQuota
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.MeshComm
@@ -191,7 +193,7 @@ class RoborazziScreenshotTest {
         RoborazziOptions(
             compareOptions =
                 RoborazziOptions.CompareOptions(
-                    changeThreshold = 0.01f,
+                    changeThreshold = 0f,
                 ),
         )
 
@@ -367,7 +369,7 @@ class RoborazziScreenshotTest {
             (1..20).map { i ->
                 UserMsg(key = "hist-$i", text = "Mensaje histórico #$i en la conversación previa", at = 1000L + i)
             }
-        val uiState = ChatUiState(agent = agentWorking, chat = ChatState(items = historyMessages))
+        val uiState = ChatUiState(agent = agentWorking, chat = ChatState(items = historyMessages), unreadCount = 5)
 
         captureScreen("chat_scrolled_up") {
             val listState = rememberLazyListState(initialFirstVisibleItemIndex = 6, initialFirstVisibleItemScrollOffset = 50)
@@ -583,7 +585,7 @@ class RoborazziScreenshotTest {
                         MeshGroupChip(groupId = "grp-1", label = "Orquestador", memberCount = 3),
                     ),
                 liveComms = listOf(comm),
-                activeBubbles = listOf(LiveCommBubble(comm = comm, expiresAtMs = System.currentTimeMillis() + 6000L)),
+                activeBubbles = listOf(LiveCommBubble(comm = comm, expiresAtMs = Long.MAX_VALUE)),
             )
 
         captureScreen("mesh_diagram") {
@@ -698,14 +700,33 @@ class RoborazziScreenshotTest {
     // ───────────────────────────── 10. New Agent ─────────────────────────────
     @Test
     fun screenshotNewAgent() {
+        val sampleHost =
+            HostInfo(
+                machineId = "m-work",
+                hostname = "PC Empresa",
+                roots = listOf("/home/drift/Workspace"),
+                online = true,
+                backends =
+                    HostBackends(
+                        herdr = "herdr",
+                        tmux = "tmux",
+                    ),
+                defaultBackend = "herdr",
+                launchers = listOf("gentle-shell", "pi"),
+                defaultLauncher = "gentle-shell",
+            )
+
         val uiState =
             NewAgentUi(
                 machines = listOf(machineWork, machinePersonal),
+                host = sampleHost,
                 form =
                     NewAgentForm(
                         machineId = "m-work",
                         path = "/home/drift/Workspace/RP/Rp-app",
+                        dirs = listOf("app", "protocol", "gradle"),
                         launcher = "gentle-shell",
+                        backend = "herdr",
                         name = "UI-Refresh",
                         initialPrompt = "Hacer un refactor completo de la UI manteniendo los temas",
                     ),

@@ -37,13 +37,24 @@ fun MeshListView(
     modifier: Modifier = Modifier,
 ) {
     val visibleNodes =
-        layout
-            ?.nodes
-            ?.values
-            ?.map { it.node }
-            .orEmpty()
+        if (layout != null && layout.nodes.isNotEmpty()) {
+            layout.nodes.values.map { it.node }
+        } else {
+            snapshot?.nodes.orEmpty()
+        }
     val groups = snapshot?.groups.orEmpty()
-    val groupedNodes = visibleNodes.groupBy { node -> if (isSolo(node)) SOLO_KEY else node.groupId ?: SOLO_KEY }
+
+    fun isNodeSolo(node: MeshNode): Boolean =
+        node.role == "solo" || (node.groupId == null && groups.none { node.agentId in it.memberAgentIds })
+
+    fun resolveGroupId(node: MeshNode): String {
+        if (isNodeSolo(node)) return SOLO_KEY
+        val groupId = node.groupId
+        if (!groupId.isNullOrBlank()) return groupId
+        val matchingGroup = groups.firstOrNull { node.agentId in it.memberAgentIds }
+        return matchingGroup?.groupId ?: SOLO_KEY
+    }
+    val groupedNodes = visibleNodes.groupBy { resolveGroupId(it) }
     val groupTitles = groups.associate { it.groupId to (it.label.ifBlank { it.orchestratorAgentId ?: it.groupId }) }
     val orderedGroups =
         buildList {
@@ -110,7 +121,11 @@ private fun MeshNodeListCard(
                 ) {}
                 Text(node.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.weight(1f))
-                Text(formatMeshRole(node.role), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    formatMeshRole(node.role),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Text("${node.machineName} · ${formatMeshStatus(node.status)}", style = MaterialTheme.typography.bodyMedium)
             node.activity
@@ -128,7 +143,9 @@ private fun MeshNodeListCard(
                 Text("Subagentes", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 node.subagents.forEach { subagent ->
                     Text(
-                        "${subagent.agent}${subagent.label?.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()} · ${formatMeshSubagentStatus(subagent.status)}",
+                        "${subagent.agent}${subagent.label?.takeIf(
+                            String::isNotBlank,
+                        )?.let { " · $it" }.orEmpty()} · ${formatMeshSubagentStatus(subagent.status)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -137,8 +154,6 @@ private fun MeshNodeListCard(
         }
     }
 }
-
-private fun isSolo(node: MeshNode): Boolean = node.role == "solo" || node.groupId == null
 
 @Composable
 private fun statusColor(

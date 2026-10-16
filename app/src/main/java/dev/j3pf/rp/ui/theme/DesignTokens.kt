@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -66,6 +67,21 @@ data class RpGradientTokens(
     val shimmer: Brush,
     val workingPulse: Brush,
 )
+
+/** Tokens de skeleton de alto contraste derivados del ColorScheme para temas claros y oscuros. */
+data class RpSkeletonTokens(
+    val base: Color,
+    val highlight: Color,
+)
+
+val ColorScheme.rpSkeleton: RpSkeletonTokens
+    @Composable
+    @ReadOnlyComposable
+    get() =
+        RpSkeletonTokens(
+            base = lerp(surfaceVariant, onSurface, 0.14f),
+            highlight = lerp(surfaceVariant, onSurface, 0.28f),
+        )
 
 val ColorScheme.rpGradients: RpGradientTokens
     @Composable

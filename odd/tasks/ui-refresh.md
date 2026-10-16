@@ -73,3 +73,16 @@ R5: Prove ordering in test through real screen/VM path (prompts > working > idle
 R6: QuotaDynamicIsland clear bottom padding (clear island + FAB). Fix chip row clipping on right edge.
 R7: Visual polish: Agents hero summary with glanceable live stats (working/waiting/online) using theme gradient; status-tinted accent / glow on cards; Settings grouped cards with leading icons; fix Mesh empty state logic contradiction.
 R8: Keep git status --short empty at report time; run ktlint before committing.
+L4: [UI REFRESH — ROUND-2 REVIEW]
+C1 OPEN (in progress): mesh LIST view is empty with 3 agents (mesh_sexy_dark: chips "Todas · 3 / Orquestador Principal · 3", live feed, no rows). Fix production code; test through MeshScreenContent asserting the 3 agent rows render in list view.
+C2 OPEN (in progress): mesh DIAGRAM renders tiny (~40px nodes in a narrow column, labels unreadable). Bounding box of nodes must span >= 60% of canvas width or height, centered, labels legible. Say if production or Robolectric-only. Test on layout engine/canvas scaling. Make diagram screenshot deterministic (frozen clock / reduced motion) and set changeThreshold back to 0 for ALL screenshots unless a per-test exception is justified in the feature doc.
+C3 VERIFY: RpMarkdown must not re-parse the whole text synchronously on the main thread per streamed chunk (O(n²) jank). With markdown 0.46.0 use the library's supported state API: no empty first frame AND previous content retained while new chunks parse. 03b1c63 touched RpMarkdown — confirm it meets this, explain how, keep `two consecutive chat items bounds do not overlap` green.
+C4 DONE in 03b1c63 (I will audit versions).
+C5 OPEN: new_agent (sexy dark) shows "3 · Lanzador" with NO options and "4 · Dónde: Sin backend disponible" while earlier it showed gentle-shell/herdr/tmux. Say fixture or regression; screenshot must show the populated happy path in all themes.
+C6 OPEN: Spanish UI — hero chip "2 online" → "2 en línea".
+C7 OPEN: chat with few messages sits at the TOP with a blank gap; bottom-align (e.g. Arrangement.spacedBy(8.dp, Alignment.Bottom)) so it hugs the composer. chat_scrolled_up shows "Más recientes" WITHOUT a count: fixture must include new items and the test must assert the count text.
+C8 OPEN: Agents bottom crowded (FAB + island + nav ≈ 35% of screen, FAB covers card text). ExtendedFloatingActionButton collapses to icon-only once scrolled (expanded = firstVisibleItemIndex == 0), animated.
+C9 OPEN: horizontally scrollable rows clip with no affordance ("Interru…" in composer mode chips, filter chips, code blocks): theme-derived edge-fade.
+C10 OPEN: skeleton almost invisible in dark themes; raise contrast via theme tokens.
+C11 PROCESS: the previous agent twice left files reformatted AFTER reporting "clean". Run ktlint/formatter BEFORE every commit so it is a no-op afterwards; your final `git status --short` must be the LAST tool call before reporting, and empty.
+

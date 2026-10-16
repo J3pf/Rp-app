@@ -10,6 +10,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,8 +28,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,12 +58,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +81,7 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpMotion
+import dev.j3pf.rp.ui.theme.rpSkeleton
 import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.contextLabel
 import dev.j3pf.rp.util.parseColor
@@ -450,6 +458,91 @@ fun MachineHeroDropdown(
 }
 
 /**
+ * Desvanecimiento sutil derivado del tema en bordes horizontales para indicar scroll.
+ */
+fun Modifier.horizontalEdgeFade(
+    scrollState: ScrollState? = null,
+    edgeColor: Color = Color.Unspecified,
+    length: Dp = 24.dp,
+): Modifier =
+    composed {
+        val resolvedColor = if (edgeColor.isSpecified) edgeColor else MaterialTheme.colorScheme.background
+        val density = LocalDensity.current
+        val lengthPx = with(density) { length.toPx() }
+
+        drawWithContent {
+            drawContent()
+            val canBackward = scrollState?.canScrollBackward ?: true
+            val canForward = scrollState?.canScrollForward ?: true
+
+            if (canBackward && size.width > lengthPx * 2f) {
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors = listOf(resolvedColor, resolvedColor.copy(alpha = 0f)),
+                            startX = 0f,
+                            endX = lengthPx,
+                        ),
+                    size = size.copy(width = lengthPx),
+                )
+            }
+            if (canForward && size.width > lengthPx * 2f) {
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors = listOf(resolvedColor.copy(alpha = 0f), resolvedColor),
+                            startX = size.width - lengthPx,
+                            endX = size.width,
+                        ),
+                    topLeft = Offset(size.width - lengthPx, 0f),
+                    size = size.copy(width = lengthPx),
+                )
+            }
+        }
+    }
+
+fun Modifier.horizontalEdgeFade(
+    lazyListState: LazyListState,
+    edgeColor: Color = Color.Unspecified,
+    length: Dp = 24.dp,
+): Modifier =
+    composed {
+        val resolvedColor = if (edgeColor.isSpecified) edgeColor else MaterialTheme.colorScheme.background
+        val density = LocalDensity.current
+        val lengthPx = with(density) { length.toPx() }
+
+        drawWithContent {
+            drawContent()
+            val canBackward = lazyListState.canScrollBackward
+            val canForward = lazyListState.canScrollForward
+
+            if (canBackward && size.width > lengthPx * 2f) {
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors = listOf(resolvedColor, resolvedColor.copy(alpha = 0f)),
+                            startX = 0f,
+                            endX = lengthPx,
+                        ),
+                    size = size.copy(width = lengthPx),
+                )
+            }
+            if (canForward && size.width > lengthPx * 2f) {
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors = listOf(resolvedColor.copy(alpha = 0f), resolvedColor),
+                            startX = size.width - lengthPx,
+                            endX = size.width,
+                        ),
+                    topLeft = Offset(size.width - lengthPx, 0f),
+                    size = size.copy(width = lengthPx),
+                )
+            }
+        }
+    }
+
+/**
  * Selector de PC persistente (chips horizontales para filtrado rápido).
  */
 @Composable
@@ -461,8 +554,10 @@ fun MachineFilterBar(
     modifier: Modifier = Modifier,
 ) {
     val contexts = remember(machines) { machines.map { it.context }.distinct() }
+    val rowState = rememberLazyListState()
     LazyRow(
-        modifier = modifier.fillMaxWidth(),
+        state = rowState,
+        modifier = modifier.fillMaxWidth().horizontalEdgeFade(rowState, edgeColor = MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -613,10 +708,12 @@ fun TagChip(
 @Composable
 fun rememberShimmerBrush(): Brush {
     val reducedMotion = LocalReducedMotion.current
-    val base = MaterialTheme.colorScheme.surfaceVariant
+    val tokens = MaterialTheme.colorScheme.rpSkeleton
+    val base = tokens.base
+    val highlight = tokens.highlight
     if (reducedMotion) {
         return Brush.linearGradient(
-            colors = listOf(base.copy(alpha = 0.55f), base.copy(alpha = 0.70f)),
+            colors = listOf(base, highlight),
             start = Offset(0f, 0f),
             end = Offset(400f, 400f),
         )
@@ -634,9 +731,9 @@ fun rememberShimmerBrush(): Brush {
     )
     val shimmerColors =
         listOf(
-            base.copy(alpha = 0.45f),
-            base.copy(alpha = 0.85f),
-            base.copy(alpha = 0.45f),
+            base,
+            highlight,
+            base,
         )
     return Brush.linearGradient(
         colors = shimmerColors,
