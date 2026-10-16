@@ -75,7 +75,7 @@ class MeshViewModelTest {
         runBlocking {
             Dispatchers.setMain(testDispatcher)
             server = MockWebServer().also { it.start() }
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            scope = CoroutineScope(SupervisorJob() + testDispatcher)
             val context = ApplicationProvider.getApplicationContext<android.app.Application>()
             val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
             bus = MessageBus()
@@ -91,12 +91,12 @@ class MeshViewModelTest {
 
     @After
     fun tearDown() {
-        testDispatcher.cancel()
         if (::connection.isInitialized) connection.stop()
         sockets.forEach { runCatching { it.close(1000, "test complete") } }
         if (::scope.isInitialized) scope.cancel()
         if (::db.isInitialized) db.close()
         if (::server.isInitialized) server.shutdown()
+        testDispatcher.cancel()
         Dispatchers.resetMain()
     }
 
