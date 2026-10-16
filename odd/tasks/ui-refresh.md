@@ -88,5 +88,8 @@ C11 PROCESS: the previous agent twice left files reformatted AFTER reporting "cl
 L5: [UI REFRESH — RELEASE PREPARATION P1 & P2]
 P1: Keystore restored at repo root (gitignored keystore.properties with storeFile=/home/drift/.config/rp/release.jks, alias rp-release). Verified with apksigner SHA-256 cert 6a7ef9a237db4483fbdacae7a323859df3e98198ae9bd6fb0a16229aecd62bc0 on both direct and fcm release APKs, and aapt2 dump badging confirming versionCode 73 (> 54) and versionName 0.3.0.
 P2: Updated download and release links in README.md and docs/INSTALACION.md to point to v0.3.0 assets (rp-direct-debug.apk 108 MB, rp-v0.3.0-direct.apk 30 MB, rp-v0.3.0-fcm.apk 30 MB).
+L6: [UI REFRESH — PUBLISHED v0.3.0]
+Published release v0.3.0 on GitHub (https://github.com/J3pf/Rp-app/releases/tag/v0.3.0) with signed release assets (rp-v0.3.0-direct.apk, rp-v0.3.0-fcm.apk, rp-direct-debug.apk). Main branch fast-forwarded to 6fadd31, tag v0.3.0 created at 6fadd31, and all remote branches synchronized.
+
 
 
