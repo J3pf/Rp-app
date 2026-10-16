@@ -289,4 +289,65 @@ class AgentsSortingAndCardTest {
         rule.waitForIdle()
         org.junit.Assert.assertTrue("El FAB debe seguir respondiendo a clicks tras colapsar", clicked)
     }
+
+    @Test
+    fun `no context chip row renders under the machine hero dropdown even with multiple contexts`() {
+        val machineWork =
+            dev.j3pf.rp.protocol.MachineSummary(
+                machineId = "m1",
+                name = "PC Empresa",
+                color = "#7AA2F7",
+                context = "work",
+                online = true,
+            )
+        val machinePersonal =
+            dev.j3pf.rp.protocol.MachineSummary(
+                machineId = "m2",
+                name = "PC Personal",
+                color = "#9ECE6A",
+                context = "personal",
+                online = true,
+            )
+        val agents =
+            listOf(
+                AgentSummary(
+                    agentId = "a-1",
+                    machineId = "m1",
+                    sessionName = "Agente Trabajo",
+                    status = "idle",
+                    online = true,
+                ),
+            )
+        val group = MachineGroup(machine = machineWork, agents = agents)
+        val uiState =
+            AgentsUiState(
+                machines = listOf(machineWork, machinePersonal),
+                allAgents = agents,
+                groups = listOf(group),
+                selected = "all",
+            )
+
+        rule.setContent {
+            RpTheme {
+                AgentsContent(
+                    state = uiState,
+                    conn = dev.j3pf.rp.data.net.ConnState.Connected,
+                    onOpenChat = {},
+                    onNewAgent = {},
+                    onSelect = {},
+                    onRefresh = {},
+                    onResume = { _, _ -> },
+                    onForget = {},
+                )
+            }
+        }
+
+        // MachineHeroDropdown renders "Todas las máquinas"
+        rule.onNodeWithText("Todas las máquinas").assertIsDisplayed()
+
+        // Assert that the old redundant context filter chips ("Empresa", "Personal")
+        // are NOT rendered as standalone chips on the screen
+        rule.onNodeWithText("Empresa").assertDoesNotExist()
+        rule.onNodeWithText("Personal").assertDoesNotExist()
+    }
 }

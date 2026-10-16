@@ -80,7 +80,6 @@ import dev.j3pf.rp.ui.components.AppHeader
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.EmptyState
-import dev.j3pf.rp.ui.components.MachineFilterBar
 import dev.j3pf.rp.ui.components.MachineHeroDropdown
 import dev.j3pf.rp.ui.components.QuotaDynamicIsland
 import dev.j3pf.rp.ui.components.StatusChip
@@ -223,21 +222,6 @@ fun AgentsContent(
                 onSelect = onSelect,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
-
-            // Filtros rápidos si hay más de 1 contexto
-            if (state.machines
-                    .map { it.context }
-                    .distinct()
-                    .size > 1
-            ) {
-                MachineFilterBar(
-                    machines = state.machines,
-                    agents = state.allAgents,
-                    selected = state.selected,
-                    onSelect = onSelect,
-                    modifier = Modifier.padding(bottom = 6.dp),
-                )
-            }
 
             val reducedMotion = LocalReducedMotion.current
             PullToRefreshBox(
