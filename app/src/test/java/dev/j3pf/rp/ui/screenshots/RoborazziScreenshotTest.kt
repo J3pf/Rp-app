@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
@@ -186,13 +187,24 @@ class RoborazziScreenshotTest {
 
     private val sampleAgents = listOf(agentWorking, agentWaiting, agentIdle)
 
+    private val roborazziOptions =
+        RoborazziOptions(
+            compareOptions =
+                RoborazziOptions.CompareOptions(
+                    changeThreshold = 0.01f,
+                ),
+        )
+
     private fun captureScreen(
         screen: String,
         content: @Composable () -> Unit,
     ) {
         themes.forEach { (themeName, themeChoice) ->
             modes.forEach { (modeName, darkTheme) ->
-                captureRoboImage("src/test/screenshots/${screen}_${themeName}_$modeName.png") {
+                captureRoboImage(
+                    filePath = "src/test/screenshots/${screen}_${themeName}_$modeName.png",
+                    roborazziOptions = roborazziOptions,
+                ) {
                     CompositionLocalProvider(LocalReducedMotion provides true) {
                         RpTheme(themeChoice = themeChoice, darkTheme = darkTheme) {
                             Surface(
