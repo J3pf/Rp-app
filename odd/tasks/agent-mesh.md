@@ -43,7 +43,7 @@ S13: (A13) Delivery: when green → merge to main, bump versionName (minor, 0.2.
 
 ## Tasks
 - T1 (S1, S9): Protocol models, serialization, WS message types, HTTP models & RelayApi additions, fixture decode tests [DONE - 8291c9d]
-- T2 (S9): Pure testable Kotlin layout engine (radial-hierarchical, satellites, stable positions, collision avoidance, multi-level) + unit tests
+- T2 (S9): Pure testable Kotlin layout engine (radial-hierarchical, satellites, stable positions, collision avoidance, multi-level) + unit tests [DONE - commit pending]
 - T3 (S3, S8, S9): MeshRepository (WS subscribe/unsubscribe lifecycle, snapshot/update/comm streams, HTTP queries, offline/reconnect handling), Settings/Preferences persistence for selected machine/group, MeshViewModel with immutable StateFlow<MeshUiState> + ViewModel unit tests
 - T4 (S2, S4, S6, S7, S8, S10): MeshScreen UI, Compose Canvas diagram with pinch-to-zoom/pan/double-tap reset, animated nodes (status pulse, TODO ring, activity), glowing active/pending curved edges, comm particles & speech bubbles, reduced motion support, machine/group selector chips, collapsible Live strip, loading/empty/disconnected states, accessible List view toggle & semantics
 - T5 (S5, S7, S8): Node detail ModalBottomSheet (agent info, TODOs, subagents, conversations, navigation actions) & Edge conversation ModalBottomSheet (paging nextBefore, direction bubbles, badges) + Compose unit tests
