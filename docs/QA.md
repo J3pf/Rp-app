@@ -81,3 +81,17 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | M11 | Accesibilidad y vista de lista | Pulsar el botón **Vista de lista** en la barra superior | Cambia a una lista accesible estructurada por tarjetas táctiles con touch targets ≥48 dp y descripciones semánticas completas ("Orchestrator X, working, 3 of 7 tasks") |
 | M12 | Reducción de movimiento | Habilitar `ANIMATOR_DURATION_SCALE=0` en ajustes de desarrollador de Android | Las partículas de viaje y pulsaciones de trabajo se desactivan completamente, manteniendo la visualización estática de nodos y aristas |
 | M13 | Ciclo de vida en segundo plano | Minimizar la app o cambiar a otra app | Se cancela la suscripción de WebSocket (`mesh.unsubscribe`); al reabrir la app (ON_START) se reconecta y resuscribe automáticamente |
+
+## 6. UI Refresh y Experiencia Visual Moderna (v0.3.0)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|---|---|---|
+| U1 | Preservación de temas y selector | Cambiar entre Gentle-Cute, Gentle-Sexy, Omarchy y Sistema en Ajustes | Cada pantalla adopta de inmediato los colores exactos de la paleta seleccionada; los valores primarios, fondos y superficies se mantienen fieles a las especificaciones originales |
+| U2 | Anclaje inferior del chat | Abrir un chat con mensajes y recibir respuestas o texto en streaming | La pantalla aterriza siempre en el contenido más reciente con el fondo del mensaje visible, sin necesidad de desplazamiento manual por parte del usuario |
+| U3 | Botón flotante «Más recientes» | En el chat, desplazarse hacia arriba para leer mensajes anteriores mientras llegan nuevos mensajes | El usuario no es interrumpido ni desplazado bruscamente; aparece un botón animado «Más recientes (N)» que al pulsarse realiza scroll suave hasta el fondo |
+| U4 | Tarjeta de agente de un vistazo | Observar la pantalla principal de agentes | Toda la información relevante (estado, tarea activa con indicador, progreso de tareas/TODOs, tiempo relativo de actividad y vista previa) es legible inmediatamente sin necesidad de scroll horizontal |
+| U5 | Orden prioritario de agentes | Comprobar el orden de agentes en cada grupo de máquina | Primero se listan los agentes con preguntas/autorizaciones pendientes, luego los agentes en ejecución («Trabajando»), y por último los ordenados por última actividad reciente |
+| U6 | Micro-interacciones y movimiento | Interactuar con tarjetas, botones y observar agentes en ejecución | Efecto de pulso vivo en agentes trabajando, respuesta táctil elástica (press-scale) en tarjetas y botones, y transiciones fluidas de pantalla con física de resortes (`Spring`) |
+| U7 | Reducción de movimiento del sistema | Activar `ANIMATOR_DURATION_SCALE=0` en el dispositivo | Todas las animaciones continuas (pulso de trabajo, brillo shimmer de esqueletos) pasan a estados estáticos y las transiciones se vuelven instantáneas |
+| U8 | Accesibilidad integral | Navegar por la app con TalkBack activo | Todos los elementos interactivos cuentan con `contentDescription` descriptivo en español y áreas táctiles de al menos 48 × 48 dp |
+

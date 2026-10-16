@@ -18,6 +18,16 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 
 ## Características principales
 
+- **UI Refresh & Experiencia Visual Moderna (v0.3.0)**:
+  - Sistema de diseño unificado con tokens centralizados (`RpSpacing`, `RpShapes`, `RpGlows`, `RpGradients`, `RpMotion`) derivados de `MaterialTheme.colorScheme`.
+  - Preservación íntegra de paletas temáticas (`Gentle-Cute`, `Gentle-Sexy`, `Omarchy / Gentle Shell`, `Material You / Sistema`) con re-skinning instantáneo desde Ajustes.
+  - Chat anclado al fondo (`reverseLayout`): visualización inmediata del mensaje más reciente y del fondo de respuestas en streaming sin scroll manual.
+  - Botón flotante animado «Más recientes (N)» que respeta la lectura del historial cuando el usuario sube y muestra el contador de nuevos mensajes.
+  - Tarjetas de agentes rediseñadas con información de actividad de un vistazo: chips de estado envueltos (sin scroll horizontal), tarea activa en curso, progreso de tareas/TODOs, tiempo relativo de actividad y vista previa compacta.
+  - Orden de agentes optimizado: decisiones/prompts abiertos primero, agentes trabajando en segundo lugar, y por última actividad reciente.
+  - Micro-interacciones y movimiento con física de resortes (`Spring`): transiciones entre pantallas, pulso vivo en agentes trabajando, feedback táctil al pulsar tarjetas y botones, y animaciones de lista con `animateItem()`.
+  - Cumplimiento estricto de accesibilidad y reducción de movimiento (`ANIMATOR_DURATION_SCALE=0` desactiva animaciones infinitas) y targets táctiles ≥ 48 dp.
+  - Suite de pruebas de regresión visual con Roborazzi 1.76.0 (48 capturas de referencia que cubren 8 pantallas en los 3 temas y modos claro/oscuro).
 - **Bandeja de Agentes y Chat en vivo**: Historial de mensajes, streaming en tiempo real, seguimiento de herramientas, diffs y soporte interactivo con biometría.
 - **Notificaciones interactivas**: Autorización y respuesta a preguntas directamente desde la notificación sin abrir la app, con soporte offline (WorkManager) y deduplicación.
 - **Agent Mesh (Topología animada)**:

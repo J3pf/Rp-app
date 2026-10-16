@@ -45,14 +45,14 @@ S12 Delivery: version bump to 0.3.0 (versionCode +1), README features + docs/QA.
 
 ## Tasks
 - T0 (S9): Toolchain migration: install Android platform 37, bump AGP 9.4.1, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, Gradle 9.8.1, Compose BOM 2026.09.00, navigation 2.10.2, coil 3.6.3, activity-compose 1.13.0, lifecycle 2.11.0, hilt-nav/work 1.4.0, core-ktx 1.19.1, serialization 1.11.0, coroutines 1.11.0, roborazzi 1.76.0; compileSdk 37; verify all tests pass + assembleDebug + assembleRelease [DONE - 458dd28]
-- T2 (S1): Unit tests pinning resolveThemeChoice and palette colors (Cute/Sexy/Omarchy/Default primary/background/surface) + central design tokens (Glows, Gradients, Spacing, Shapes, Motion) in ui/theme/ [PENDING]
+- T2 (S1): Unit tests pinning resolveThemeChoice and palette colors (Cute/Sexy/Omarchy/Default primary/background/surface) + central design tokens (Glows, Gradients, Spacing, Shapes, Motion) in ui/theme/ [DONE - 0d104af]
 - T3 (S4, S5): Motion framework, reduced-motion helper (honoring animator_duration_scale 0), screen-to-screen navigation transitions in RpRoot.kt [DONE - ec6147a]
-- T4 (S2): ChatScreen bottom-anchored message list (bottom of newest message visible on open, receive, streaming) + animated jump-to-latest button + Robolectric tests [IN PROGRESS]
-- T5 (S3): AgentsScreen activity-at-a-glance redesign: wrap/condense chip rail, show status, active task, todo progress, last message preview (max 2 lines), relative time of last activity, agent sorting (prompts -> working -> lastSeenAt) [DONE]
-- T6 (S4, S6): Living agent feedback & animations: status pulse/shimmer for working agents, animated status transitions, counters/progress animations, press-scale tactile feedback [DONE]
-- T7 (S6, S7, S8): Screen polish across ALL routes (Agents, Chat, Mesh, Pending, NewAgent, Settings, Onboarding, PromptSheet, QuotaDynamicIsland, ConnectionBanner, empty/skeleton states) with theme-derived gradients, layered elevation, consistent typography, accessibility [DONE]
-- T8 (S10): Roborazzi screenshot tests for Agents (populated/empty/skeleton), Chat (streaming), Mesh, Pending, Settings, NewAgent in Gentle-Cute, Gentle-Sexy, Omarchy (light + dark) + commit reference PNGs [DONE]
-- T9 (S7, S11, S12): Verification pass via gentle-ai-verify, assembleDebug & assembleRelease, QA manual cases in docs/QA.md, README feature updates, version 0.3.0 bump [IN PROGRESS]
+- T4 (S2): ChatScreen bottom-anchored message list (bottom of newest message visible on open, receive, streaming) + animated jump-to-latest button + Robolectric tests [DONE - afeb905]
+- T5 (S3): AgentsScreen activity-at-a-glance redesign: wrap/condense chip rail, show status, active task, todo progress, last message preview (max 2 lines), relative time of last activity, agent sorting (prompts -> working -> lastSeenAt) [DONE - e572ebd]
+- T6 (S4, S6): Living agent feedback & animations: status pulse/shimmer for working agents, animated status transitions, counters/progress animations, press-scale tactile feedback [DONE - 71360ac]
+- T7 (S6, S7, S8): Screen polish across ALL routes (Agents, Chat, Mesh, Pending, NewAgent, Settings, Onboarding, PromptSheet, QuotaDynamicIsland, ConnectionBanner, empty/skeleton states) with theme-derived gradients, layered elevation, consistent typography, accessibility [DONE - 9054808]
+- T8 (S10): Roborazzi screenshot tests for Agents (populated/empty/skeleton), Chat (streaming), Mesh, Pending, Settings, NewAgent in Gentle-Cute, Gentle-Sexy, Omarchy (light + dark) + commit reference PNGs [DONE - 88dc8bd]
+- T9 (S7, S11, S12): Verification pass via gentle-ai-verify, assembleDebug & assembleRelease, QA manual cases in docs/QA.md, README feature updates, version 0.3.0 bump [DONE]
 
 ## Log
 L1: "Necesito que RESPETANDO LOS VALORES Y FUNCIONALIDAD DEL THEME, hagas un refactor para hacer de esta app una app mucho mas llamativa, elegante, full UX/UI, que sea agradable de usar, que no le toque al usuario estar deslizando para ver lo mas reciente de cada agente, literal que sea una app llamativa, moderna, con animaciones, placentera de usar"
