@@ -137,14 +137,14 @@ object MeshSubagentTokensSerializer : KSerializer<MeshSubagentTokens> {
         val jsonDecoder = decoder as? JsonDecoder ?: return MeshSubagentTokens()
         return when (val element = jsonDecoder.decodeJsonElement()) {
             is JsonPrimitive -> {
-                MeshSubagentTokens(total = element.long())
+                MeshSubagentTokens(total = element.lenientLong())
             }
 
             is JsonObject -> {
                 MeshSubagentTokens(
-                    prompt = element.long("prompt"),
-                    completion = element.long("completion"),
-                    total = element.long("total"),
+                    prompt = element.lenientLong("prompt"),
+                    completion = element.lenientLong("completion"),
+                    total = element.lenientLong("total"),
                 )
             }
 
@@ -178,6 +178,7 @@ data class MeshToolCall(
     val toolCallId: String,
     val name: String,
     val status: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val durationMs: Long? = null,
 )
 
@@ -189,8 +190,11 @@ data class MeshSubagent(
     val status: String,
     val model: String? = null,
     val thinking: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val startedAt: Long? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val endedAt: Long? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val durationMs: Long? = null,
     val turns: Int? = null,
     val toolCalls: Int? = null,
@@ -200,6 +204,8 @@ data class MeshSubagent(
     val result: JsonElement? = null,
     val tools: List<String>? = null,
 )
+
+object TolerantMeshSubagentListSerializer : TolerantListSerializer<MeshSubagent>({ MeshSubagent.serializer() })
 
 @Serializable
 data class MeshNode(
@@ -218,7 +224,9 @@ data class MeshNode(
     val parentAgentId: String? = null,
     val groupId: String? = null,
     val todos: MeshTodos? = null,
+    @Serializable(with = TolerantMeshSubagentListSerializer::class)
     val subagents: List<MeshSubagent> = emptyList(),
+    @Serializable(with = LenientLongSerializer::class)
     val lastCommAt: Long? = null,
     val openPromptCount: Int = 0,
 )
@@ -231,6 +239,7 @@ data class MeshEdge(
     val count: Int = 0,
     val aToB: Int = 0,
     val bToA: Int = 0,
+    @Serializable(with = LenientLongSerializer::class)
     val lastAt: Long? = null,
     val lastFrom: String? = null,
     val lastAction: String? = null,
@@ -239,12 +248,24 @@ data class MeshEdge(
     val active: Boolean = false,
 )
 
+object TolerantMeshGroupListSerializer : TolerantListSerializer<MeshGroup>({ MeshGroup.serializer() })
+
+object TolerantMeshNodeListSerializer : TolerantListSerializer<MeshNode>({ MeshNode.serializer() })
+
+object TolerantMeshEdgeListSerializer : TolerantListSerializer<MeshEdge>({ MeshEdge.serializer() })
+
+object TolerantMeshCommListSerializer : TolerantListSerializer<MeshComm>({ MeshComm.serializer() })
+
 @Serializable
 data class MeshSnapshot(
     val machineId: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val generatedAt: Long = 0L,
+    @Serializable(with = TolerantMeshGroupListSerializer::class)
     val groups: List<MeshGroup> = emptyList(),
+    @Serializable(with = TolerantMeshNodeListSerializer::class)
     val nodes: List<MeshNode> = emptyList(),
+    @Serializable(with = TolerantMeshEdgeListSerializer::class)
     val edges: List<MeshEdge> = emptyList(),
 )
 
@@ -258,6 +279,7 @@ data class MeshComm(
     val action: CommAction = CommAction.UNKNOWN,
     val text: String? = null,
     val truncated: Boolean = false,
+    @Serializable(with = LenientLongSerializer::class)
     val at: Long = 0L,
     val groupId: String? = null,
 ) {
@@ -272,11 +294,14 @@ data class MeshCommEvent(
 
 @Serializable
 data class MeshConversationResponse(
+    @Serializable(with = TolerantMeshCommListSerializer::class)
     val items: List<MeshComm> = emptyList(),
+    @Serializable(with = LenientLongSerializer::class)
     val nextBefore: Long? = null,
 )
 
 @Serializable
 data class MeshAgentCommsResponse(
+    @Serializable(with = TolerantMeshCommListSerializer::class)
     val items: List<MeshComm> = emptyList(),
 )

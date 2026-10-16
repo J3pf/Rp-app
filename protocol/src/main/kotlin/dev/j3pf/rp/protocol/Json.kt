@@ -1,7 +1,16 @@
 package dev.j3pf.rp.protocol
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -50,3 +59,89 @@ fun JsonObject.bool(key: String): Boolean? = this[key].bool()
 fun JsonObject.obj(key: String): JsonObject? = this[key].obj()
 
 fun JsonObject.arr(key: String): JsonArray? = this[key].arr()
+
+fun JsonElement?.lenientLong(): Long? {
+    val p = this as? JsonPrimitive ?: return null
+    if (p.isString) return null
+    val d = p.doubleOrNull ?: return null
+    if (!d.isFinite()) return null
+    return p.longOrNull ?: Math.round(d)
+}
+
+fun JsonObject.lenientLong(key: String): Long? = this[key].lenientLong()
+
+/**
+ * Serializador tolerante de Long: acepta enteros JSON y números decimales (ej. 47725510.340108 o 1.0),
+ * redondeando con Math.round (half-up) a Long. Rechaza no-números (cadenas, booleanos, objetos).
+ */
+object LenientLongSerializer : KSerializer<Long> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("dev.j3pf.rp.protocol.LenientLong", PrimitiveKind.LONG)
+
+    override fun serialize(
+        encoder: Encoder,
+        value: Long,
+    ) {
+        encoder.encodeLong(value)
+    }
+
+    override fun deserialize(decoder: Decoder): Long =
+        if (decoder is JsonDecoder) {
+            val element = decoder.decodeJsonElement()
+            if (element !is JsonPrimitive || element.isString) {
+                throw SerializationException("Expected number primitive for Long but found $element")
+            }
+            val d = element.doubleOrNull
+            if (d != null && d.isFinite()) {
+                element.longOrNull ?: Math.round(d)
+            } else {
+                throw SerializationException("Invalid number literal for Long: ${element.content}")
+            }
+        } else {
+            decoder.decodeLong()
+        }
+}
+
+/**
+ * Serializador tolerante de listas: si un elemento individual falla al deserializarse,
+ * se registra una advertencia y se descarta dicho elemento sin romper la lista completa ni el objeto padre.
+ */
+open class TolerantListSerializer<T>(
+    private val elementSerializerProvider: () -> KSerializer<T>,
+) : KSerializer<List<T>> {
+    constructor(serializer: KSerializer<T>) : this({ serializer })
+
+    private val serializer by lazy { elementSerializerProvider() }
+
+    override val descriptor: SerialDescriptor
+        get() = ListSerializer(serializer).descriptor
+
+    override fun serialize(
+        encoder: Encoder,
+        value: List<T>,
+    ) {
+        ListSerializer(serializer).serialize(encoder, value)
+    }
+
+    override fun deserialize(decoder: Decoder): List<T> {
+        if (decoder !is JsonDecoder) {
+            return ListSerializer(serializer).deserialize(decoder)
+        }
+        val jsonElement = decoder.decodeJsonElement()
+        if (jsonElement !is JsonArray) {
+            return emptyList()
+        }
+        val result = ArrayList<T>(jsonElement.size)
+        val s = serializer
+        for (item in jsonElement) {
+            try {
+                result.add(decoder.json.decodeFromJsonElement(s, item))
+            } catch (e: Exception) {
+                java.util.logging.Logger
+                    .getLogger("RpProtocol")
+                    .log(java.util.logging.Level.WARNING, "Error al decodificar elemento tolerante, omitiendo: $item", e)
+            }
+        }
+        return result
+    }
+}

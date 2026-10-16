@@ -143,6 +143,7 @@ data class AgentSummary(
     val model: ModelInfo? = null,
     val status: String = AgentStatus.IDLE,
     val online: Boolean = false,
+    @Serializable(with = LenientLongSerializer::class)
     val lastSeenAt: Long? = null,
     val openPromptCount: Int = 0,
     val lastMessagePreview: String? = null,
@@ -229,7 +230,9 @@ data class Prompt(
     val source: PromptSource? = null,
     val tool: PromptTool? = null,
     val danger: String = Danger.LOW,
+    @Serializable(with = LenientLongSerializer::class)
     val expiresAt: Long? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val openedAt: Long? = null,
 )
 
@@ -281,6 +284,7 @@ data class PromptResolved(
 data class Entry(
     val eid: String,
     val kind: String,
+    @Serializable(with = LenientLongSerializer::class)
     val at: Long = 0,
     val msg: JsonObject? = null,
 )
@@ -303,6 +307,7 @@ data class AgentEvent(
     val epoch: String? = null,
     val seq: Long = 0,
     val e: JsonObject,
+    @Serializable(with = LenientLongSerializer::class)
     val ts: Long? = null,
 )
 
@@ -431,6 +436,7 @@ data class AttachmentRef(
     val blobId: String,
     val name: String,
     val mime: String,
+    @Serializable(with = LenientLongSerializer::class)
     val size: Long,
 )
 
@@ -515,6 +521,7 @@ data class PushPromptBody(
     val options: List<PromptOption> = emptyList(),
     val allowFreeText: Boolean = false,
     val danger: String = Danger.LOW,
+    @Serializable(with = LenientLongSerializer::class)
     val expiresAt: Long? = null,
 )
 
@@ -555,10 +562,15 @@ data class TodoState(
 
 @Serializable
 data class TokenUsage(
+    @Serializable(with = LenientLongSerializer::class)
     val input: Long = 0,
+    @Serializable(with = LenientLongSerializer::class)
     val output: Long = 0,
+    @Serializable(with = LenientLongSerializer::class)
     val cacheRead: Long = 0,
+    @Serializable(with = LenientLongSerializer::class)
     val cacheWrite: Long = 0,
+    @Serializable(with = LenientLongSerializer::class)
     val total: Long = 0,
     val cost: Double? = null,
 )
@@ -571,8 +583,11 @@ data class SubagentInfo(
     val status: String = "running", // running, done, error, interrupted
     val model: String? = null,
     val thinking: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val startedAt: Long = 0,
+    @Serializable(with = LenientLongSerializer::class)
     val endedAt: Long? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val durationMs: Long? = null,
     val turns: Int = 0,
     val toolCalls: Int = 0,

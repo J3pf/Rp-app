@@ -27,6 +27,7 @@ data class Envelope(
     val t: String,
     val id: String? = null,
     val re: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val ts: Long? = null,
     val d: JsonElement = JsonObject(emptyMap()),
 ) {

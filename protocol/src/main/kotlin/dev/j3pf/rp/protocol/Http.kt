@@ -20,6 +20,7 @@ data class PairDeviceResponse(
 @Serializable
 data class PairCodeResponse(
     val code: String,
+    @Serializable(with = LenientLongSerializer::class)
     val expiresAt: Long? = null,
 )
 
@@ -62,7 +63,9 @@ data class NotifyPrefs(
 data class DeviceInfo(
     val deviceId: String,
     val name: String = "",
+    @Serializable(with = LenientLongSerializer::class)
     val createdAt: Long? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val lastSeenAt: Long? = null,
     val revoked: Boolean = false,
     val current: Boolean = false,
@@ -101,6 +104,7 @@ data class AnswerPromptRequest(
 data class BlobInfo(
     val blobId: String,
     val sha256: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val size: Long = 0,
     val mime: String? = null,
 )
