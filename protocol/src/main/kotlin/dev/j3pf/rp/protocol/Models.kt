@@ -2,18 +2,27 @@ package dev.j3pf.rp.protocol
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.descriptors.element
+import kotlinx.serialization.encoding.CompositeDecoder
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 @Serializable
 data class QuotaWindow(
@@ -338,7 +347,61 @@ data class AgentsUpdate(
     val remove: List<String> = emptyList(),
 )
 
-@Serializable
+object AgentSubscribeSerializer : KSerializer<AgentSubscribe> {
+    override val descriptor: SerialDescriptor =
+        buildClassSerialDescriptor("dev.j3pf.rp.protocol.AgentSubscribe") {
+            element<String>("agentId")
+            element<Long?>("sinceSeq")
+            element<String?>("epoch")
+        }
+
+    override fun serialize(
+        encoder: Encoder,
+        value: AgentSubscribe,
+    ) {
+        if (encoder is JsonEncoder) {
+            val jsonObject =
+                buildJsonObject {
+                    put("agentId", JsonPrimitive(value.agentId))
+                    put("sinceSeq", value.sinceSeq?.let { JsonPrimitive(it) } ?: JsonNull)
+                    put("epoch", value.epoch?.let { JsonPrimitive(it) } ?: JsonNull)
+                }
+            encoder.encodeJsonElement(jsonObject)
+        } else {
+            val composite = encoder.beginStructure(descriptor)
+            composite.encodeStringElement(descriptor, 0, value.agentId)
+            composite.encodeNullableSerializableElement(descriptor, 1, Long.serializer().nullable, value.sinceSeq)
+            composite.encodeNullableSerializableElement(descriptor, 2, String.serializer().nullable, value.epoch)
+            composite.endStructure(descriptor)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): AgentSubscribe =
+        if (decoder is JsonDecoder) {
+            val element = decoder.decodeJsonElement().jsonObject
+            val agentId = element["agentId"]?.jsonPrimitive?.content.orEmpty()
+            val sinceSeq = element["sinceSeq"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.longOrNull
+            val epoch = element["epoch"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.contentOrNull
+            AgentSubscribe(agentId, sinceSeq, epoch)
+        } else {
+            val composite = decoder.beginStructure(descriptor)
+            var agentId = ""
+            var sinceSeq: Long? = null
+            var epoch: String? = null
+            loop@ while (true) {
+                when (val index = composite.decodeElementIndex(descriptor)) {
+                    CompositeDecoder.DECODE_DONE -> break@loop
+                    0 -> agentId = composite.decodeStringElement(descriptor, 0)
+                    1 -> sinceSeq = composite.decodeNullableSerializableElement(descriptor, 1, Long.serializer().nullable)
+                    2 -> epoch = composite.decodeNullableSerializableElement(descriptor, 2, String.serializer().nullable)
+                }
+            }
+            composite.endStructure(descriptor)
+            AgentSubscribe(agentId, sinceSeq, epoch)
+        }
+}
+
+@Serializable(with = AgentSubscribeSerializer::class)
 data class AgentSubscribe(
     val agentId: String,
     val sinceSeq: Long? = null,

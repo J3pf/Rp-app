@@ -2,16 +2,25 @@ package dev.j3pf.rp.protocol
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.descriptors.element
+import kotlinx.serialization.encoding.CompositeDecoder
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable(with = CommActionSerializer::class)
 enum class CommAction(
@@ -44,7 +53,49 @@ object CommActionSerializer : KSerializer<CommAction> {
     }
 }
 
-@Serializable
+object MeshSubscribeSerializer : KSerializer<MeshSubscribe> {
+    override val descriptor: SerialDescriptor =
+        buildClassSerialDescriptor("dev.j3pf.rp.protocol.MeshSubscribe") {
+            element<String?>("machineId")
+        }
+
+    override fun serialize(
+        encoder: Encoder,
+        value: MeshSubscribe,
+    ) {
+        if (encoder is JsonEncoder) {
+            val jsonObject =
+                buildJsonObject {
+                    put("machineId", value.machineId?.let { JsonPrimitive(it) } ?: JsonNull)
+                }
+            encoder.encodeJsonElement(jsonObject)
+        } else {
+            val composite = encoder.beginStructure(descriptor)
+            composite.encodeNullableSerializableElement(descriptor, 0, String.serializer().nullable, value.machineId)
+            composite.endStructure(descriptor)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): MeshSubscribe =
+        if (decoder is JsonDecoder) {
+            val element = decoder.decodeJsonElement().jsonObject
+            val machineId = element["machineId"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+            MeshSubscribe(machineId)
+        } else {
+            val composite = decoder.beginStructure(descriptor)
+            var machineId: String? = null
+            loop@ while (true) {
+                when (val index = composite.decodeElementIndex(descriptor)) {
+                    CompositeDecoder.DECODE_DONE -> break@loop
+                    0 -> machineId = composite.decodeNullableSerializableElement(descriptor, 0, String.serializer().nullable)
+                }
+            }
+            composite.endStructure(descriptor)
+            MeshSubscribe(machineId)
+        }
+}
+
+@Serializable(with = MeshSubscribeSerializer::class)
 data class MeshSubscribe(
     val machineId: String? = null,
 )

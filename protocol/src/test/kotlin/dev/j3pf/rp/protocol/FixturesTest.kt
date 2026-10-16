@@ -1,6 +1,7 @@
 package dev.j3pf.rp.protocol
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import java.io.File
@@ -57,6 +58,84 @@ class FixturesTest {
                     else -> Unit // mensajes del lado plugin/host que la app no consume
                 }
             }
+        }
+    }
+
+    @Test
+    fun `todos los fixtures appUp validos se decodifican y re-codifican exactamente iguales al fixture JSON`() {
+        val url = javaClass.getResource("/fixtures/relay") ?: return
+        val files =
+            File(url.toURI())
+                .listFiles { f -> f.name.startsWith("appUp__") && f.name.endsWith(".valid.json") }
+                .orEmpty()
+                .sortedBy { it.name }
+        assertTrue(files.isNotEmpty())
+
+        for (f in files) {
+            val originalJson = RpJson.parseToJsonElement(f.readText())
+            val env = RpJson.decodeFromJsonElement(Envelope.serializer(), originalJson)
+
+            val reEncodedBody: JsonElement =
+                when (env.t) {
+                    MsgType.APP_HELLO -> {
+                        RpJson.encodeToJsonElement(AppHello.serializer(), env.body<AppHello>())
+                    }
+
+                    MsgType.AGENT_SUBSCRIBE -> {
+                        RpJson.encodeToJsonElement(AgentSubscribe.serializer(), env.body<AgentSubscribe>())
+                    }
+
+                    MsgType.AGENT_UNSUBSCRIBE, MsgType.AGENT_ABORT, MsgType.AGENT_FORGET -> {
+                        RpJson.encodeToJsonElement(AgentRef.serializer(), env.body<AgentRef>())
+                    }
+
+                    MsgType.USER_MESSAGE -> {
+                        RpJson.encodeToJsonElement(UserMessage.serializer(), env.body<UserMessage>())
+                    }
+
+                    MsgType.PROMPT_ANSWER -> {
+                        RpJson.encodeToJsonElement(PromptAnswerRequest.serializer(), env.body<PromptAnswerRequest>())
+                    }
+
+                    MsgType.PUSH_ACK -> {
+                        RpJson.encodeToJsonElement(PushAck.serializer(), env.body<PushAck>())
+                    }
+
+                    MsgType.HOST_LIST_DIRS -> {
+                        RpJson.encodeToJsonElement(HostListDirs.serializer(), env.body<HostListDirs>())
+                    }
+
+                    MsgType.HOST_HERDR_LAYOUT -> {
+                        RpJson.encodeToJsonElement(HostMachineRef.serializer(), env.body<HostMachineRef>())
+                    }
+
+                    MsgType.HOST_SPAWN -> {
+                        RpJson.encodeToJsonElement(HostSpawn.serializer(), env.body<HostSpawn>())
+                    }
+
+                    MsgType.HOST_KILL -> {
+                        RpJson.encodeToJsonElement(HostKill.serializer(), env.body<HostKill>())
+                    }
+
+                    MsgType.MESH_SUBSCRIBE -> {
+                        RpJson.encodeToJsonElement(MeshSubscribe.serializer(), env.body<MeshSubscribe>())
+                    }
+
+                    MsgType.MESH_UNSUBSCRIBE -> {
+                        RpJson.encodeToJsonElement(MeshUnsubscribe.serializer(), env.body<MeshUnsubscribe>())
+                    }
+
+                    else -> {
+                        error("Tipo appUp no manejado: ${env.t} en ${f.name}")
+                    }
+                }
+
+            val expectedBody = (originalJson as JsonObject)["d"]
+            assertEquals(
+                expectedBody,
+                reEncodedBody,
+                "El cuerpo re-codificado de ${f.name} debe coincidir exactamente con el fixture original",
+            )
         }
     }
 

@@ -14,6 +14,10 @@ class MeshSerializationTest {
         assertEquals("""{"machineId":"machine-1"}""", encodedSubscribe)
         assertEquals(subscribe, RpJson.decodeFromString(MeshSubscribe.serializer(), encodedSubscribe))
 
+        val subscribeTodas = MeshSubscribe(machineId = null)
+        val encodedSubscribeTodas = RpJson.encodeToString(MeshSubscribe.serializer(), subscribeTodas)
+        assertEquals("""{"machineId":null}""", encodedSubscribeTodas)
+
         assertEquals("{}", RpJson.encodeToString(MeshUnsubscribe.serializer(), MeshUnsubscribe()))
         val decodedUnsubscribe = RpJson.decodeFromString(MeshUnsubscribe.serializer(), "{}")
         assertEquals("{}", RpJson.encodeToString(MeshUnsubscribe.serializer(), decodedUnsubscribe))
@@ -143,7 +147,8 @@ class MeshSerializationTest {
         )
         assertEquals("e", snapshot.edges.single().edgeId)
 
-        val commJson = """{"commKey":"c","fromAgentId":"a","toAgentId":"b","fromName":"A","toName":"B","action":"message","extraComm":true}"""
+        val commJson =
+            """{"commKey":"c","fromAgentId":"a","toAgentId":"b","fromName":"A","toName":"B","action":"message","extraComm":true}"""
         assertEquals("c", RpJson.decodeFromString(MeshComm.serializer(), commJson).commKey)
     }
 
