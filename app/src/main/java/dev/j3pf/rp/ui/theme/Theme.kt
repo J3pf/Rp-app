@@ -28,7 +28,7 @@ enum class RpThemeChoice(
 
 // ───────────────────────────── Paleta Gentle-Cute ─────────────────────────────
 
-private val CuteLightColors =
+internal val CuteLightColors =
     lightColorScheme(
         primary = Color(0xFFD81B60),
         onPrimary = Color(0xFFFFFFFF),
@@ -47,7 +47,7 @@ private val CuteLightColors =
         outline = Color(0xFF8A717B),
     )
 
-private val CuteDarkColors =
+internal val CuteDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF80AB),
         onPrimary = Color(0xFF560027),
@@ -68,7 +68,7 @@ private val CuteDarkColors =
 
 // ───────────────────────────── Paleta Gentle-Sexy ─────────────────────────────
 
-private val SexyLightColors =
+internal val SexyLightColors =
     lightColorScheme(
         primary = Color(0xFFC2185B),
         onPrimary = Color(0xFFFFFFFF),
@@ -87,7 +87,7 @@ private val SexyLightColors =
         outline = Color(0xFF89677B),
     )
 
-private val SexyDarkColors =
+internal val SexyDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF2A85),
         onPrimary = Color(0xFF4A0022),
@@ -108,7 +108,7 @@ private val SexyDarkColors =
 
 // ───────────────────────────── Paleta Omarchy / Gentle Shell ─────────────────────────────
 
-private val OmarchyLightColors =
+internal val OmarchyLightColors =
     lightColorScheme(
         primary = Color(0xFF3D59A1),
         onPrimary = Color(0xFFFFFFFF),
@@ -127,7 +127,7 @@ private val OmarchyLightColors =
         outline = Color(0xFF747783),
     )
 
-private val OmarchyDarkColors =
+internal val OmarchyDarkColors =
     darkColorScheme(
         primary = Color(0xFF7AA2F7),
         onPrimary = Color(0xFF152238),
@@ -149,19 +149,31 @@ private val OmarchyDarkColors =
 
 // ───────────────────────────── Paleta Material You / Default ─────────────────────────────
 
-private val DefaultLightColors =
+internal val DefaultLightColors =
     lightColorScheme(
         primary = Color(0xFF4F378B),
         secondary = Color(0xFF625B71),
         tertiary = Color(0xFF7D5260),
     )
 
-private val DefaultDarkColors =
+internal val DefaultDarkColors =
     darkColorScheme(
         primary = Color(0xFFCFBCFF),
         secondary = Color(0xFFCCC2DC),
         tertiary = Color(0xFFEFB8C8),
     )
+
+/** Obtiene la paleta estática de un tema dado. */
+fun paletteFor(
+    themeChoice: RpThemeChoice,
+    darkTheme: Boolean,
+): ColorScheme =
+    when (themeChoice) {
+        RpThemeChoice.GENTLE_CUTE -> if (darkTheme) CuteDarkColors else CuteLightColors
+        RpThemeChoice.GENTLE_SEXY -> if (darkTheme) SexyDarkColors else SexyLightColors
+        RpThemeChoice.OMARCHY -> if (darkTheme) OmarchyDarkColors else OmarchyLightColors
+        RpThemeChoice.SYSTEM, RpThemeChoice.AUTO -> if (darkTheme) DefaultDarkColors else DefaultLightColors
+    }
 
 /**
  * Resuelve el tema activo según la regla de negocio:

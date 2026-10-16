@@ -1,8 +1,19 @@
 package dev.j3pf.rp.ui
 
+import androidx.compose.ui.graphics.Color
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.ui.theme.CuteDarkColors
+import dev.j3pf.rp.ui.theme.CuteLightColors
+import dev.j3pf.rp.ui.theme.DefaultDarkColors
+import dev.j3pf.rp.ui.theme.DefaultLightColors
+import dev.j3pf.rp.ui.theme.OmarchyDarkColors
+import dev.j3pf.rp.ui.theme.OmarchyLightColors
+import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpThemeChoice
+import dev.j3pf.rp.ui.theme.SexyDarkColors
+import dev.j3pf.rp.ui.theme.SexyLightColors
+import dev.j3pf.rp.ui.theme.paletteFor
 import dev.j3pf.rp.ui.theme.resolveThemeChoice
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -80,5 +91,68 @@ class ThemeTest {
     @Test
     fun `auto sin datos cae a gentle cute por defecto`() {
         assertEquals(RpThemeChoice.GENTLE_CUTE, resolveThemeChoice("auto", emptyList(), emptyList()))
+    }
+
+    @Test
+    fun `paleta cute preserva colores primary background surface exactos`() {
+        assertEquals(Color(0xFFD81B60), CuteLightColors.primary)
+        assertEquals(Color(0xFFFFF7F9), CuteLightColors.background)
+        assertEquals(Color(0xFFFFF0F5), CuteLightColors.surface)
+
+        assertEquals(Color(0xFFFF80AB), CuteDarkColors.primary)
+        assertEquals(Color(0xFF1E171E), CuteDarkColors.background)
+        assertEquals(Color(0xFF281E29), CuteDarkColors.surface)
+    }
+
+    @Test
+    fun `paleta sexy preserva colores primary background surface exactos`() {
+        assertEquals(Color(0xFFC2185B), SexyLightColors.primary)
+        assertEquals(Color(0xFFFDF2F8), SexyLightColors.background)
+        assertEquals(Color(0xFFFCE7F3), SexyLightColors.surface)
+
+        assertEquals(Color(0xFFFF2A85), SexyDarkColors.primary)
+        assertEquals(Color(0xFF120815), SexyDarkColors.background)
+        assertEquals(Color(0xFF1B0D20), SexyDarkColors.surface)
+    }
+
+    @Test
+    fun `paleta omarchy preserva colores primary background surface exactos`() {
+        assertEquals(Color(0xFF3D59A1), OmarchyLightColors.primary)
+        assertEquals(Color(0xFFF5F6FA), OmarchyLightColors.background)
+        assertEquals(Color(0xFFE8EBF5), OmarchyLightColors.surface)
+
+        assertEquals(Color(0xFF7AA2F7), OmarchyDarkColors.primary)
+        assertEquals(Color(0xFF1A1B26), OmarchyDarkColors.background)
+        assertEquals(Color(0xFF232431), OmarchyDarkColors.surface)
+    }
+
+    @Test
+    fun `paleta default preserva colores primary background surface exactos`() {
+        assertEquals(Color(0xFF4F378B), DefaultLightColors.primary)
+        assertEquals(Color(0xFFFEF7FF), DefaultLightColors.background)
+        assertEquals(Color(0xFFFEF7FF), DefaultLightColors.surface)
+
+        assertEquals(Color(0xFFCFBCFF), DefaultDarkColors.primary)
+        assertEquals(DefaultDarkColors.background, paletteFor(RpThemeChoice.SYSTEM, darkTheme = true).background)
+        assertEquals(DefaultDarkColors.surface, paletteFor(RpThemeChoice.SYSTEM, darkTheme = true).surface)
+    }
+
+    @Test
+    fun `colores semanticos RpColors preservados`() {
+        assertEquals(Color(0xFFB3261E), RpColors.danger)
+        assertEquals(Color(0xFFB26A00), RpColors.warning)
+        assertEquals(Color(0xFF2E7D32), RpColors.success)
+    }
+
+    @Test
+    fun `paletteFor entrega la paleta correspondiente segun eleccion y modo oscuro`() {
+        assertEquals(CuteLightColors, paletteFor(RpThemeChoice.GENTLE_CUTE, darkTheme = false))
+        assertEquals(CuteDarkColors, paletteFor(RpThemeChoice.GENTLE_CUTE, darkTheme = true))
+        assertEquals(SexyLightColors, paletteFor(RpThemeChoice.GENTLE_SEXY, darkTheme = false))
+        assertEquals(SexyDarkColors, paletteFor(RpThemeChoice.GENTLE_SEXY, darkTheme = true))
+        assertEquals(OmarchyLightColors, paletteFor(RpThemeChoice.OMARCHY, darkTheme = false))
+        assertEquals(OmarchyDarkColors, paletteFor(RpThemeChoice.OMARCHY, darkTheme = true))
+        assertEquals(DefaultLightColors, paletteFor(RpThemeChoice.SYSTEM, darkTheme = false))
+        assertEquals(DefaultDarkColors, paletteFor(RpThemeChoice.SYSTEM, darkTheme = true))
     }
 }
