@@ -95,3 +95,16 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | U7 | Reducción de movimiento del sistema | Activar `ANIMATOR_DURATION_SCALE=0` en el dispositivo | Todas las animaciones continuas (pulso de trabajo, brillo shimmer de esqueletos) pasan a estados estáticos y las transiciones se vuelven instantáneas |
 | U8 | Accesibilidad integral | Navegar por la app con TalkBack activo | Todos los elementos interactivos cuentan con `contentDescription` descriptivo en español y áreas táctiles de al menos 48 × 48 dp |
 
+## 7. Correcciones v0.3.1 (Protocolo, Carga de Red y Filtros de Máquinas)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|---|---|---|
+| F1.1 | Carga de dispositivos emparejados | Ajustes → Dispositivos emparejados | Carga la lista completa de dispositivos sin error (desenvuelve `devices` del objeto devuelto por el relay); marca el dispositivo actual con «(este)» y permite revocar otros dispositivos |
+| F1.2 | Filtrado de dispositivos revocados | Revocar un dispositivo o abrir con dispositivos revocados en el relay | Los dispositivos marcados con `revoked: true` se filtran automáticamente y no aparecen en la lista activa |
+| F1.3 | Carga de máquinas y prompts abiertos | Abrir la pantalla de Agentes y Pendientes tras reiniciar la app | Las máquinas y prompts abiertos cargan inmediatamente sin fallos de deserialización HTTP (desenvuelve `machines` y `prompts`) |
+| F2.1 | Carga de red para «Todas las máquinas» | Pestaña Mesh → Chip «Todas las máquinas» | `MeshSubscribe` envía `{"machineId":null}`; el relay 0.5.0 devuelve el snapshot de toda la red sin quedarse en «Cargando red de agentes…» |
+| F2.2 | Tiempo de espera y fallback HTTP en Mesh | Provocar retardo o corte en WebSocket en la pantalla de Mesh (10 s) | Tras 10 s sin snapshot por WS, la app realiza un fallback a `GET /v1/mesh`; si el relay responde, el mapa carga; si el relay devuelve 404, muestra «Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior.» con botón **[Reintentar]** |
+| F2.3 | Propiedad de suscripción ref-counted | Navegar rápidamente entre Mesh y otras pestañas, o abrir hojas de detalle y volver | La suscripción a Mesh no se cancela prematuramente por el desecho de ViewModels anteriores; el mapa permanece vivo |
+| F3.1 | Limpieza de filtros en Agentes | Abrir la pantalla principal de Agentes con múltiples máquinas o contextos | No aparece la fila redundante de chips («Todas / Empresa / Personal») debajo del selector; todos los contextos y máquinas permanecen accesibles exclusivamente desde el desplegable `MachineHeroDropdown` («Todas las máquinas», contextos y máquinas individuales) |
+
+
