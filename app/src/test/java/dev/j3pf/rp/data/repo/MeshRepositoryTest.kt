@@ -180,4 +180,56 @@ class MeshRepositoryTest {
             assertEquals("machine-2", resubscribe.body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
             assertTrue(repository.isSubscribed)
         }
+
+    @Test
+    fun `subscription is ref-counted by owner token and only unsubscribes when all owners leave`() =
+        runBlocking {
+            acceptSocket()
+            connect()
+            awaitOutgoing(MsgType.APP_HELLO)
+
+            val ownerA = Any()
+            val ownerB = Any()
+
+            // Owner A subscribes
+            repository.subscribe(owner = ownerA, machineId = "m1")
+            val subEnv = awaitOutgoing(MsgType.MESH_SUBSCRIBE)
+            assertEquals("m1", subEnv.body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
+            assertTrue(repository.isSubscribed)
+
+            // Owner B subscribes
+            repository.subscribe(owner = ownerB, machineId = "m1")
+            assertTrue(repository.isSubscribed)
+
+            // Owner A unsubscribes (e.g. stale VM disposed) - subscription MUST stay active!
+            repository.unsubscribe(owner = ownerA)
+            assertTrue(repository.isSubscribed, "La suscripción debe permanecer activa mientras Owner B siga activo")
+            val remaining = outgoing.poll(200, TimeUnit.MILLISECONDS)
+            val remainingEnv = remaining?.let { Envelope.parse(it) }
+            assertEquals(null, remainingEnv?.takeIf { it.t == MsgType.MESH_UNSUBSCRIBE })
+
+            // Owner B unsubscribes - now subscription is dropped
+            repository.unsubscribe(owner = ownerB)
+            val unsubEnv = awaitOutgoing(MsgType.MESH_UNSUBSCRIBE)
+            unsubEnv.body<MeshUnsubscribe>()
+            assertFalse(repository.isSubscribed)
+        }
+
+    @Test
+    fun `decode error on mesh snapshot emits error message`() =
+        runBlocking {
+            val invalidSnapshotEnvelope =
+                Envelope(
+                    v = 1,
+                    t = MsgType.MESH_SNAPSHOT,
+                    ts = 1000L,
+                    d = kotlinx.serialization.json.JsonPrimitive("invalid-not-an-object"),
+                )
+
+            repository.meshErrors.test {
+                bus.publish(invalidSnapshotEnvelope)
+                val error = awaitItem()
+                assertTrue(error.contains("Error al decodificar la red de agentes"))
+            }
+        }
 }

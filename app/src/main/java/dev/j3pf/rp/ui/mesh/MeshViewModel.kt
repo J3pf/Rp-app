@@ -62,17 +62,32 @@ class MeshViewModel
             repository.commEvents
                 .onEach(::onIncomingComm)
                 .launchIn(viewModelScope)
+
+            repository.meshErrors
+                .onEach { err ->
+                    snapshotTimeoutJob?.cancel()
+                    _uiState.update { it.copy(isLoading = false, errorMessage = err) }
+                }.launchIn(viewModelScope)
         }
 
         fun onScreenVisible() {
             screenVisible = true
             subscribeForCurrentMachine()
+            startSnapshotTimeout()
         }
 
         fun onScreenInvisible() {
             screenVisible = false
             hasSentSubscription = false
-            repository.unsubscribe()
+            snapshotTimeoutJob?.cancel()
+            repository.unsubscribe(this)
+        }
+
+        fun retry() {
+            _uiState.update { it.copy(isLoading = it.snapshot == null, errorMessage = null) }
+            hasSentSubscription = false
+            subscribeForCurrentMachine()
+            startSnapshotTimeout()
         }
 
         fun selectMachine(machineId: String?) {
@@ -189,12 +204,17 @@ class MeshViewModel
             }
             selectionsInitialized = true
 
+            if (inputs.snapshot != null) {
+                snapshotTimeoutJob?.cancel()
+            }
             val updated =
                 previous
                     .copy(
-                        isLoading = inputs.snapshot == null && inputs.connectionState == ConnState.Connected,
+                        isLoading =
+                            previous.errorMessage == null && inputs.snapshot == null && inputs.connectionState == ConnState.Connected,
                         isConnected = inputs.connectionState == ConnState.Connected,
                         snapshot = inputs.snapshot,
+                        errorMessage = if (inputs.snapshot != null) null else previous.errorMessage,
                         selectedMachineId = machineId,
                         selectedGroupId = groupId,
                         machineChips = machineChips,
@@ -314,7 +334,7 @@ class MeshViewModel
             if (!screenVisible) return
             val machineId = _uiState.value.selectedMachineId
             if (hasSentSubscription && machineId == lastSubscribedMachineId) return
-            repository.subscribe(machineId)
+            repository.subscribe(this, machineId)
             hasSentSubscription = true
             lastSubscribedMachineId = machineId
         }
@@ -411,6 +431,44 @@ class MeshViewModel
             return copy(layoutResult = layout)
         }
 
+        private var snapshotTimeoutJob: Job? = null
+
+        private fun startSnapshotTimeout() {
+            snapshotTimeoutJob?.cancel()
+            if (_uiState.value.snapshot != null) return
+            snapshotTimeoutJob =
+                viewModelScope.launch {
+                    delay(SNAPSHOT_TIMEOUT_MS)
+                    if (_uiState.value.snapshot == null && _uiState.value.errorMessage == null) {
+                        val machineId = _uiState.value.selectedMachineId
+                        when (val res = repository.getMesh(machineId)) {
+                            is ApiResult.Ok -> {
+                                // Exitoso por fallback HTTP
+                            }
+
+                            is ApiResult.Http -> {
+                                val msg =
+                                    if (res.code == 404) {
+                                        "Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior."
+                                    } else {
+                                        "Error al cargar la red de agentes (${res.code})"
+                                    }
+                                _uiState.update { it.copy(isLoading = false, errorMessage = msg) }
+                            }
+
+                            is ApiResult.Network -> {
+                                _uiState.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        errorMessage = "Error de red al cargar la red de agentes",
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+
         companion object {
             const val SOLO_GROUP_ID = "solo"
             private const val MAX_LIVE_COMMS = 20
@@ -418,5 +476,6 @@ class MeshViewModel
             private const val BUBBLE_LIFETIME_MS = 6_000L
             private const val CONVERSATION_PAGE_SIZE = 50
             private const val DEFAULT_VIEWPORT_SIZE = 800f
+            const val SNAPSHOT_TIMEOUT_MS = 10_000L
         }
     }

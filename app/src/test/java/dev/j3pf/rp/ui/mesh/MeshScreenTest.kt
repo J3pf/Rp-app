@@ -1,6 +1,8 @@
 package dev.j3pf.rp.ui.mesh
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -273,6 +275,101 @@ class MeshScreenTest {
         rule.onNodeWithText("Orchestrator Agent", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Subordinate Worker 1", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Subordinate Worker 2", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `404 error shows unsupported relay message and retry button without skeleton`() {
+        var retried = false
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                errorMessage = "Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior.",
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(
+                    uiState = uiState,
+                    onOpenChat = {},
+                    onRetry = { retried = true },
+                )
+            }
+        }
+
+        rule.onNodeWithText("Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior.").assertIsDisplayed()
+        rule.onNodeWithText("Reintentar").assertIsDisplayed().performClick()
+        rule
+            .onAllNodes(
+                androidx.compose.ui.test
+                    .hasText("Cargando red de agentes…"),
+            ).fetchSemanticsNodes()
+            .isEmpty()
+        kotlin.test.assertTrue(retried)
+    }
+
+    @Test
+    fun `network error shows generic message and retry button without skeleton`() {
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                errorMessage = "Error al cargar la red de agentes",
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(
+                    uiState = uiState,
+                    onOpenChat = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("Error al cargar la red de agentes").assertIsDisplayed()
+        rule.onNodeWithText("Reintentar").assertIsDisplayed()
+        rule
+            .onAllNodes(
+                androidx.compose.ui.test
+                    .hasText("Cargando red de agentes…"),
+            ).fetchSemanticsNodes()
+            .isEmpty()
+    }
+
+    @Test
+    fun `retry recovery transitions from error to loaded nodes`() {
+        val nodes = listOf(node("agent-1", "Agente Principal", "solo"))
+        val snapshot = MeshSnapshot(nodes = nodes)
+        val layout = MeshLayoutEngine().computeLayout(nodes, emptyList())
+
+        var state by
+            androidx.compose.runtime.mutableStateOf(
+                MeshUiState(
+                    isLoading = false,
+                    errorMessage = "Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior.",
+                ),
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(
+                    uiState = state,
+                    onOpenChat = {},
+                    onRetry = {
+                        state =
+                            MeshUiState(
+                                isLoading = false,
+                                errorMessage = null,
+                                snapshot = snapshot,
+                                layoutResult = layout,
+                                isListView = true,
+                            )
+                    },
+                )
+            }
+        }
+
+        rule.onNodeWithText("Reintentar").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Agente Principal").assertIsDisplayed()
     }
 
     private fun node(

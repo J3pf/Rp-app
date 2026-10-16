@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -85,10 +87,7 @@ fun MeshScreen(
         },
         onDismissConversation = viewModel::dismissConversationDetail,
         onLoadMoreConversation = viewModel::loadMoreConversation,
-        onRetry = {
-            viewModel.onScreenInvisible()
-            viewModel.onScreenVisible()
-        },
+        onRetry = viewModel::retry,
     )
 }
 
@@ -195,6 +194,14 @@ internal fun MeshScreenContent(
         }
 
         when {
+            uiState.errorMessage != null -> {
+                MeshErrorState(
+                    message = uiState.errorMessage,
+                    onRetry = onRetry,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            }
+
             uiState.isLoading -> {
                 LoadingSkeleton(Modifier.weight(1f).fillMaxWidth())
             }
@@ -304,6 +311,35 @@ private fun EmptyMeshState(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun MeshErrorState(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Red de agentes no disponible", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = onRetry,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
+            Text("Reintentar")
+        }
     }
 }
 

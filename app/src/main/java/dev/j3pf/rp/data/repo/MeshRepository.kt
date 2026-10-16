@@ -8,6 +8,7 @@ import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.protocol.Envelope
+import dev.j3pf.rp.protocol.ErrorBody
 import dev.j3pf.rp.protocol.MeshAgentCommsResponse
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshCommEvent
@@ -49,15 +50,23 @@ class MeshRepository
             )
         val commEvents: SharedFlow<MeshComm> = _commEvents.asSharedFlow()
 
+        private val _meshErrors =
+            MutableSharedFlow<String>(
+                extraBufferCapacity = 16,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            )
+        val meshErrors: SharedFlow<String> = _meshErrors.asSharedFlow()
+
         val connState: StateFlow<ConnState> get() = connection.state
 
-        @Volatile
-        var isSubscribed: Boolean = false
-            private set
+        private val activeSubscribers = mutableMapOf<Any, String?>()
+        private var lastSubscribeEnvelopeId: String? = null
 
-        @Volatile
-        var subscribedMachineId: String? = null
-            private set
+        val isSubscribed: Boolean
+            get() = synchronized(subscriptionLock) { activeSubscribers.isNotEmpty() }
+
+        val subscribedMachineId: String?
+            get() = synchronized(subscriptionLock) { activeSubscribers.values.lastOrNull() }
 
         private val subscriptionLock = Any()
 
@@ -66,11 +75,26 @@ class MeshRepository
                 .onEach { envelope ->
                     when (envelope.t) {
                         MsgType.MESH_SNAPSHOT, MsgType.MESH_UPDATE -> {
-                            runCatching { envelope.body<MeshSnapshot>() }.getOrNull()?.let { _snapshot.value = it }
+                            try {
+                                _snapshot.value = envelope.body<MeshSnapshot>()
+                            } catch (e: Exception) {
+                                android.util.Log.e("MeshRepository", "Fallo al decodificar MESH_SNAPSHOT", e)
+                                _meshErrors.tryEmit("Error al decodificar la red de agentes: ${e.message ?: "formato inválido"}")
+                            }
                         }
 
                         MsgType.MESH_COMM -> {
                             runCatching { envelope.body<MeshCommEvent>() }.getOrNull()?.let { _commEvents.tryEmit(it.comm) }
+                        }
+
+                        MsgType.ERROR -> {
+                            val subId = lastSubscribeEnvelopeId
+                            if (subId != null && envelope.re == subId) {
+                                val msg =
+                                    runCatching { envelope.body<ErrorBody>().message }.getOrNull()
+                                        ?: "Error al suscribir a la red de agentes"
+                                _meshErrors.tryEmit(msg)
+                            }
                         }
                     }
                 }.launchIn(scope)
@@ -79,33 +103,61 @@ class MeshRepository
                 .onEach { state ->
                     if (state == ConnState.Connected) {
                         synchronized(subscriptionLock) {
-                            if (isSubscribed) sendSubscribe(subscribedMachineId)
+                            if (activeSubscribers.isNotEmpty()) sendSubscribe(activeSubscribers.values.lastOrNull())
                         }
                     }
                 }.launchIn(scope)
         }
 
         fun subscribe(machineId: String? = null) {
+            subscribe(DEFAULT_OWNER, machineId)
+        }
+
+        fun subscribe(
+            owner: Any,
+            machineId: String?,
+        ) {
             synchronized(subscriptionLock) {
-                isSubscribed = true
-                subscribedMachineId = machineId
-                sendSubscribe(machineId)
+                val wasEmpty = activeSubscribers.isEmpty()
+                val previousMachineId = activeSubscribers.values.lastOrNull()
+                activeSubscribers[owner] = machineId
+                if (wasEmpty || previousMachineId != machineId) {
+                    sendSubscribe(machineId)
+                }
             }
         }
 
         fun unsubscribe() {
+            unsubscribe(DEFAULT_OWNER)
+        }
+
+        fun unsubscribe(owner: Any) {
             synchronized(subscriptionLock) {
-                isSubscribed = false
-                subscribedMachineId = null
-                connection.send(Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe()))
+                activeSubscribers.remove(owner)
+                if (activeSubscribers.isEmpty()) {
+                    connection.send(Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe()))
+                } else {
+                    val remainingMachineId = activeSubscribers.values.lastOrNull()
+                    if (remainingMachineId != subscribedMachineId) {
+                        sendSubscribe(remainingMachineId)
+                    }
+                }
             }
         }
 
         private fun sendSubscribe(machineId: String?) {
-            connection.send(Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId)))
+            val env = Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId))
+            lastSubscribeEnvelopeId = env.id
+            connection.send(env)
         }
 
-        suspend fun getMesh(machineId: String? = null): ApiResult<MeshSnapshot> = api.getMesh(machineId)
+        suspend fun getMesh(machineId: String? = null): ApiResult<MeshSnapshot> {
+            val res = api.getMesh(machineId)
+            if (res is ApiResult.Ok) {
+                _snapshot.value = res.value
+            }
+            return res
+        }
 
         suspend fun getMeshConversation(
             a: String,
@@ -120,4 +172,8 @@ class MeshRepository
         ): ApiResult<MeshAgentCommsResponse> = api.getMeshAgentComms(agentId, limit)
 
         fun retryConnection() = connection.retryNow()
+
+        companion object {
+            private val DEFAULT_OWNER = Any()
+        }
     }
