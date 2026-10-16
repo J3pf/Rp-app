@@ -58,11 +58,11 @@ class MeshSerializationTest {
                                         durationMs = 10,
                                         turns = 2,
                                         toolCalls = 1,
-                                        tokens = 300,
+                                        tokens = MeshSubagentTokens(total = 300),
                                         cost = 0.02,
                                         error = null,
-                                        result = "Done",
-                                        tools = listOf(MeshToolCall("tool-1", "gradle", "completed", 5)),
+                                        result = null,
+                                        tools = listOf("gradle"),
                                     ),
                                 ),
                             lastCommAt = 30,
@@ -116,7 +116,7 @@ class MeshSerializationTest {
                   "extraNode":{"future":1},
                   "subagents":[{
                     "taskId":"t","agent":"worker","label":"Worker","status":"running","extraSubagent":2,
-                    "tools":[{"toolCallId":"tc","name":"shell","extraTool":"future"}]
+                    "tools":["shell"]
                   }]
                 }],
                 "edges":[{"edgeId":"e","a":"a","b":"b","extraEdge":false}],
@@ -134,14 +134,12 @@ class MeshSerializationTest {
                 .label,
         )
         assertEquals(
-            "shell",
+            listOf("shell"),
             snapshot.nodes
                 .single()
                 .subagents
                 .single()
-                .tools!!
-                .single()
-                .name,
+                .tools,
         )
         assertEquals("e", snapshot.edges.single().edgeId)
 

@@ -7,6 +7,11 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable(with = CommActionSerializer::class)
 enum class CommAction(val raw: String) {
@@ -62,6 +67,44 @@ data class MeshTodos(
     val current: String? = null,
 )
 
+@Serializable(with = MeshSubagentTokensSerializer::class)
+data class MeshSubagentTokens(
+    val prompt: Long? = null,
+    val completion: Long? = null,
+    val total: Long? = null,
+)
+
+object MeshSubagentTokensSerializer : KSerializer<MeshSubagentTokens> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("MeshSubagentTokens", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): MeshSubagentTokens {
+        val jsonDecoder = decoder as? JsonDecoder ?: return MeshSubagentTokens()
+        return when (val element = jsonDecoder.decodeJsonElement()) {
+            is JsonPrimitive -> MeshSubagentTokens(total = element.long())
+            is JsonObject -> MeshSubagentTokens(
+                prompt = element.long("prompt"),
+                completion = element.long("completion"),
+                total = element.long("total"),
+            )
+            else -> MeshSubagentTokens()
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: MeshSubagentTokens) {
+        val jsonEncoder = encoder as? JsonEncoder
+        if (jsonEncoder != null) {
+            val map = buildMap<String, JsonElement> {
+                value.prompt?.let { put("prompt", JsonPrimitive(it)) }
+                value.completion?.let { put("completion", JsonPrimitive(it)) }
+                value.total?.let { put("total", JsonPrimitive(it)) }
+            }
+            jsonEncoder.encodeJsonElement(JsonObject(map))
+        } else {
+            encoder.encodeString(value.total?.toString() ?: "")
+        }
+    }
+}
+
 @Serializable
 data class MeshToolCall(
     val toolCallId: String,
@@ -74,7 +117,7 @@ data class MeshToolCall(
 data class MeshSubagent(
     val taskId: String,
     val agent: String,
-    val label: String,
+    val label: String? = null,
     val status: String,
     val model: String? = null,
     val thinking: String? = null,
@@ -83,11 +126,11 @@ data class MeshSubagent(
     val durationMs: Long? = null,
     val turns: Int? = null,
     val toolCalls: Int? = null,
-    val tokens: Long? = null,
+    val tokens: MeshSubagentTokens? = null,
     val cost: Double? = null,
     val error: String? = null,
-    val result: String? = null,
-    val tools: List<MeshToolCall>? = null,
+    val result: JsonElement? = null,
+    val tools: List<String>? = null,
 )
 
 @Serializable
