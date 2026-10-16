@@ -285,9 +285,17 @@ fun AppBottomBar(
                                 }
                             }
 
-                            AppTab.AGENTS -> Icon(Icons.Filled.SmartToy, contentDescription = tab.label)
-                            AppTab.MESH -> Icon(Icons.Filled.Hub, contentDescription = tab.label)
-                            AppTab.SETTINGS -> Icon(Icons.Filled.Settings, contentDescription = tab.label)
+                            AppTab.AGENTS -> {
+                                Icon(Icons.Filled.SmartToy, contentDescription = tab.label)
+                            }
+
+                            AppTab.MESH -> {
+                                Icon(Icons.Filled.Hub, contentDescription = tab.label)
+                            }
+
+                            AppTab.SETTINGS -> {
+                                Icon(Icons.Filled.Settings, contentDescription = tab.label)
+                            }
                         }
                     },
                     label = {

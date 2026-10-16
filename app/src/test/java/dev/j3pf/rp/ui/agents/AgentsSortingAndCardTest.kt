@@ -193,9 +193,21 @@ class AgentsSortingAndCardTest {
             }
         }
 
-        val topPrompt = rule.onNodeWithText("Sesión con Pregunta").fetchSemanticsNode().boundsInRoot.top
-        val topWorking = rule.onNodeWithText("Sesión Trabajando").fetchSemanticsNode().boundsInRoot.top
-        val topIdle = rule.onNodeWithText("Sesión Inactiva").fetchSemanticsNode().boundsInRoot.top
+        val topPrompt =
+            rule
+                .onNodeWithText("Sesión con Pregunta")
+                .fetchSemanticsNode()
+                .boundsInRoot.top
+        val topWorking =
+            rule
+                .onNodeWithText("Sesión Trabajando")
+                .fetchSemanticsNode()
+                .boundsInRoot.top
+        val topIdle =
+            rule
+                .onNodeWithText("Sesión Inactiva")
+                .fetchSemanticsNode()
+                .boundsInRoot.top
 
         org.junit.Assert.assertTrue("Agente con prompts debe aparecer arriba del agente trabajando", topPrompt < topWorking)
         org.junit.Assert.assertTrue("Agente trabajando debe aparecer arriba del agente inactivo", topWorking < topIdle)

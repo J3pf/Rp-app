@@ -422,16 +422,17 @@ fun AgentCard(
                 val avatarPulseTransition = rememberInfiniteTransition(label = "avatarPulse")
                 val avatarScale: Float =
                     if (isWorking && !reducedMotion) {
-                        avatarPulseTransition.animateFloat(
-                            initialValue = 1.0f,
-                            targetValue = 1.25f,
-                            animationSpec =
-                                infiniteRepeatable(
-                                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                                    repeatMode = RepeatMode.Reverse,
-                                ),
-                            label = "avatarScale",
-                        ).value
+                        avatarPulseTransition
+                            .animateFloat(
+                                initialValue = 1.0f,
+                                targetValue = 1.25f,
+                                animationSpec =
+                                    infiniteRepeatable(
+                                        animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                                        repeatMode = RepeatMode.Reverse,
+                                    ),
+                                label = "avatarScale",
+                            ).value
                     } else {
                         1.0f
                     }
@@ -467,7 +468,14 @@ fun AgentCard(
                     Text(
                         text = timeText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (a.status == "working" && a.online) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color =
+                            if (a.status == "working" &&
+                                a.online
+                            ) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                     )

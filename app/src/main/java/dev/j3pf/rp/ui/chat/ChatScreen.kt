@@ -123,7 +123,9 @@ fun ChatContent(
     onForget: () -> Unit = {},
     onSwitchToNormal: () -> Unit = {},
     busyPromptId: String? = null,
-    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
+    listState: androidx.compose.foundation.lazy.LazyListState =
+        androidx.compose.foundation.lazy
+            .rememberLazyListState(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier,
 ) {
@@ -331,7 +333,10 @@ fun ChatScreen(
                 if (vm.needsAuth()) {
                     if (activity == null) return@launch
                     when (vm.gate.authenticate(activity, "Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
-                        AuthResult.OK -> Unit
+                        AuthResult.OK -> {
+                            Unit
+                        }
+
                         AuthResult.UNAVAILABLE -> {
                             snackbar.showSnackbar("Configura un bloqueo de pantalla para enviar como tecleado")
                             return@launch
@@ -394,7 +399,9 @@ internal fun MessageList(
     modifier: Modifier,
     busyPromptId: String?,
     onAnswerPrompt: (dev.j3pf.rp.protocol.Prompt, dev.j3pf.rp.protocol.Answer) -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
+    listState: androidx.compose.foundation.lazy.LazyListState =
+        androidx.compose.foundation.lazy
+            .rememberLazyListState(),
 ) {
     val scope = rememberCoroutineScope()
     val items = ui.chat.display

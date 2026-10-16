@@ -194,7 +194,11 @@ fun SettingsContent(
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
         ) {
-            NavRow("Versión ${BuildConfig.VERSION_NAME}", "Licencias de código abierto", icon = Icons.Filled.Info) { onNav(SettingsDest.About) }
+            NavRow(
+                "Versión ${BuildConfig.VERSION_NAME}",
+                "Licencias de código abierto",
+                icon = Icons.Filled.Info,
+            ) { onNav(SettingsDest.About) }
         }
 
         SurfaceCard(
