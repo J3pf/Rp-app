@@ -6,12 +6,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToLog
+import androidx.compose.ui.test.swipeDown
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatState

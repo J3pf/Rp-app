@@ -174,57 +174,61 @@ fun RpRoot(
                 popExitTransition = { if (reducedMotion) ExitTransition.None else RpMotion.navPopExit },
             ) {
                 composable<OnboardingRoute> { OnboardingScreen(onStart = { nav.navigate(ScanRoute) }) }
-            composable<ScanRoute> {
-                ScanScreen(
-                    onResult = { u, c -> nav.navigate(PairRoute(u, c)) { popUpTo<ScanRoute> { inclusive = true } } },
-                    onManual = { nav.navigate(PairRoute()) { popUpTo<ScanRoute> { inclusive = true } } },
-                )
-            }
-            composable<PairRoute> { e ->
-                val r = e.toRoute<PairRoute>()
-                PairScreen(
-                    initialUrl = r.url,
-                    initialCode = r.code,
-                    onScan = { nav.navigate(ScanRoute) },
-                    onPaired = { nav.navigate(PermissionsRoute) { popUpTo(nav.graph.id) { inclusive = true } } },
-                )
-            }
-            composable<PermissionsRoute> {
-                PermissionsScreen(onDone = { nav.navigate(AgentsRoute) { popUpTo(nav.graph.id) { inclusive = true } } })
-            }
-            composable<AgentsRoute> {
-                AgentsScreen(onOpenChat = { nav.navigate(ChatRoute(it)) }, onNewAgent = { nav.navigate(NewAgentRoute) }, mainVm = mainVm)
-            }
-            composable<MeshRoute> {
-                MeshScreen(onOpenChat = { nav.navigate(ChatRoute(it)) })
-            }
-            composable<PendingRoute> { PendingScreen(onOpenPrompt = mainVm::openPrompt) }
-            composable<SettingsRoute> {
-                SettingsScreen(
-                    nav = { d ->
-                        nav.navigate(
-                            when (d) {
-                                SettingsDest.Devices -> DevicesRoute
-                                SettingsDest.Machines -> MachinesRoute
-                                SettingsDest.AddMachine -> AddMachineRoute
-                                SettingsDest.Notifications -> NotificationSettingsRoute
-                                SettingsDest.Security -> SecuritySettingsRoute
-                                SettingsDest.Battery -> BatteryRoute
-                                SettingsDest.About -> AboutRoute
-                            },
-                        )
-                    },
-                    onLoggedOut = {},
-                )
-            }
-            composable<ChatRoute> { ChatScreen(onBack = { nav.popBackStack() }) }
-            composable<NewAgentRoute> { NewAgentScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack() }) }
-            composable<DevicesRoute> { DevicesScreen(onBack = { nav.popBackStack() }) }
-            composable<MachinesRoute> { MachinesScreen(onBack = { nav.popBackStack() }) }
-            composable<AddMachineRoute> { AddMachineScreen(onBack = { nav.popBackStack() }) }
-            composable<NotificationSettingsRoute> { NotificationSettingsScreen(onBack = { nav.popBackStack() }) }
-            composable<SecuritySettingsRoute> { SecuritySettingsScreen(onBack = { nav.popBackStack() }) }
-            composable<BatteryRoute> { BatteryScreen(onBack = { nav.popBackStack() }) }
+                composable<ScanRoute> {
+                    ScanScreen(
+                        onResult = { u, c -> nav.navigate(PairRoute(u, c)) { popUpTo<ScanRoute> { inclusive = true } } },
+                        onManual = { nav.navigate(PairRoute()) { popUpTo<ScanRoute> { inclusive = true } } },
+                    )
+                }
+                composable<PairRoute> { e ->
+                    val r = e.toRoute<PairRoute>()
+                    PairScreen(
+                        initialUrl = r.url,
+                        initialCode = r.code,
+                        onScan = { nav.navigate(ScanRoute) },
+                        onPaired = { nav.navigate(PermissionsRoute) { popUpTo(nav.graph.id) { inclusive = true } } },
+                    )
+                }
+                composable<PermissionsRoute> {
+                    PermissionsScreen(onDone = { nav.navigate(AgentsRoute) { popUpTo(nav.graph.id) { inclusive = true } } })
+                }
+                composable<AgentsRoute> {
+                    AgentsScreen(
+                        onOpenChat = { nav.navigate(ChatRoute(it)) },
+                        onNewAgent = { nav.navigate(NewAgentRoute) },
+                        mainVm = mainVm,
+                    )
+                }
+                composable<MeshRoute> {
+                    MeshScreen(onOpenChat = { nav.navigate(ChatRoute(it)) })
+                }
+                composable<PendingRoute> { PendingScreen(onOpenPrompt = mainVm::openPrompt) }
+                composable<SettingsRoute> {
+                    SettingsScreen(
+                        nav = { d ->
+                            nav.navigate(
+                                when (d) {
+                                    SettingsDest.Devices -> DevicesRoute
+                                    SettingsDest.Machines -> MachinesRoute
+                                    SettingsDest.AddMachine -> AddMachineRoute
+                                    SettingsDest.Notifications -> NotificationSettingsRoute
+                                    SettingsDest.Security -> SecuritySettingsRoute
+                                    SettingsDest.Battery -> BatteryRoute
+                                    SettingsDest.About -> AboutRoute
+                                },
+                            )
+                        },
+                        onLoggedOut = {},
+                    )
+                }
+                composable<ChatRoute> { ChatScreen(onBack = { nav.popBackStack() }) }
+                composable<NewAgentRoute> { NewAgentScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack() }) }
+                composable<DevicesRoute> { DevicesScreen(onBack = { nav.popBackStack() }) }
+                composable<MachinesRoute> { MachinesScreen(onBack = { nav.popBackStack() }) }
+                composable<AddMachineRoute> { AddMachineScreen(onBack = { nav.popBackStack() }) }
+                composable<NotificationSettingsRoute> { NotificationSettingsScreen(onBack = { nav.popBackStack() }) }
+                composable<SecuritySettingsRoute> { SecuritySettingsScreen(onBack = { nav.popBackStack() }) }
+                composable<BatteryRoute> { BatteryScreen(onBack = { nav.popBackStack() }) }
                 composable<AboutRoute> { AboutScreen(onBack = { nav.popBackStack() }) }
             }
         }

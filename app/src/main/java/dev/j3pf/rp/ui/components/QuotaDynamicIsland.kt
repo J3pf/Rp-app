@@ -185,7 +185,9 @@ private fun QuotaProviderPill(
     val targetProgress = ((primaryWindow?.usedPercent ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
     val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
+        animationSpec =
+            androidx.compose.animation.core
+                .tween(durationMillis = 350),
         label = "quotaProgress",
     )
 
