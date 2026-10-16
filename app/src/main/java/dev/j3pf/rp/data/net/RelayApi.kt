@@ -8,6 +8,9 @@ import dev.j3pf.rp.protocol.DeviceInfo
 import dev.j3pf.rp.protocol.HealthResponse
 import dev.j3pf.rp.protocol.MachinePatch
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.protocol.MeshAgentCommsResponse
+import dev.j3pf.rp.protocol.MeshConversationResponse
+import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.protocol.NotifyPrefs
 import dev.j3pf.rp.protocol.OkResponse
 import dev.j3pf.rp.protocol.PairCodeResponse
@@ -18,6 +21,7 @@ import dev.j3pf.rp.protocol.PushChannelsRequest
 import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.UserMessage
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -136,6 +140,32 @@ class RelayApi @Inject constructor(
     suspend fun createMachineCode(): ApiResult<PairCodeResponse> =
         authed("POST", "/v1/pair/codes", emptyBody(), PairCodeResponse.serializer())
 
+    // ───────────────────────────── Agent mesh ─────────────────────────────
+
+    suspend fun getMesh(machineId: String? = null): ApiResult<MeshSnapshot> =
+        authed("GET", queryPath("/v1/mesh", "machineId" to machineId), null, MeshSnapshot.serializer())
+
+    suspend fun getMeshConversation(
+        a: String,
+        b: String,
+        before: Long? = null,
+        limit: Int = 50,
+    ): ApiResult<MeshConversationResponse> =
+        authed(
+            "GET",
+            queryPath("/v1/mesh/conversation", "a" to a, "b" to b, "before" to before?.toString(), "limit" to limit.toString()),
+            null,
+            MeshConversationResponse.serializer(),
+        )
+
+    suspend fun getMeshAgentComms(agentId: String, limit: Int = 50): ApiResult<MeshAgentCommsResponse> =
+        authed(
+            "GET",
+            queryPath("/v1/mesh/agents/${encodePathSegment(agentId)}/comms", "limit" to limit.toString()),
+            null,
+            MeshAgentCommsResponse.serializer(),
+        )
+
     // ───────────────────────────── Prompts y mensajes ─────────────────────────────
 
     suspend fun openPrompts(): ApiResult<List<Prompt>> =
@@ -215,6 +245,16 @@ class RelayApi @Inject constructor(
 
     private fun <T> encode(s: KSerializer<T>, v: T): RequestBody = json.encodeToString(s, v).toRequestBody(jsonType)
     private fun emptyBody(): RequestBody = "{}".toRequestBody(jsonType)
+    private fun queryPath(path: String, vararg params: Pair<String, String?>): String {
+        val query = params.filter { it.second != null }
+            .joinToString("&") { (key, value) -> "${encodeQueryComponent(key)}=${encodeQueryComponent(value!!)}" }
+        return if (query.isEmpty()) path else "$path?$query"
+    }
+
+    private fun encodeQueryComponent(value: String): String = URLEncoder.encode(value, "UTF-8")
+
+    private fun encodePathSegment(value: String): String = encodeQueryComponent(value).replace("+", "%20")
+
     private fun url(base: String, path: String) = base.trimEnd('/') + path
 }
 

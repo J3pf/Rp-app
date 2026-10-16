@@ -52,6 +52,8 @@ class FixturesTest {
                     MsgType.USER_MESSAGE_ACK -> env.body<UserMessageAck>()
                     MsgType.PUSH_NOTIFY -> env.body<PushNotify>()
                     MsgType.HOSTS_UPDATE -> env.body<HostsUpdate>()
+                    MsgType.MESH_SNAPSHOT, MsgType.MESH_UPDATE -> env.body<MeshSnapshot>()
+                    MsgType.MESH_COMM -> env.body<MeshCommEvent>()
                     else -> Unit // mensajes del lado plugin/host que la app no consume
                 }
             }
