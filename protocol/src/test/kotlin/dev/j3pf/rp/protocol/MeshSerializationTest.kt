@@ -202,25 +202,28 @@ class MeshSerializationTest {
 
     @Test
     fun `explicit nulls are accepted for every nullable mesh property`() {
-        val snapshot = RpJson.decodeFromString(
-            MeshSnapshot.serializer(),
-            """{
-              "machineId":null,
-              "groups":[{"groupId":"g","label":"Group","orchestratorAgentId":null}],
-              "nodes":[{
-                "agentId":"a","machineId":"m","machineName":"Machine","name":"Agent","status":"idle",
-                "cwd":null,"gitBranch":null,"model":null,"activity":null,"parentAgentId":null,"groupId":null,
-                "todos":{"current":null},
-                "subagents":[{
-                  "taskId":"t","agent":"worker","label":"Worker","status":"pending","model":null,"thinking":null,
-                  "startedAt":null,"endedAt":null,"durationMs":null,"turns":null,"toolCalls":null,"tokens":null,
-                  "cost":null,"error":null,"result":null,"tools":null
-                }],
-                "lastCommAt":null
-              }],
-              "edges":[{"edgeId":"e","a":"a","b":"b","lastAt":null,"lastFrom":null,"lastAction":null,"lastPreview":null}]
-            }""".trimIndent(),
-        )
+        val snapshot =
+            RpJson.decodeFromString(
+                MeshSnapshot.serializer(),
+                """
+                {
+                  "machineId":null,
+                  "groups":[{"groupId":"g","label":"Group","orchestratorAgentId":null}],
+                  "nodes":[{
+                    "agentId":"a","machineId":"m","machineName":"Machine","name":"Agent","status":"idle",
+                    "cwd":null,"gitBranch":null,"model":null,"activity":null,"parentAgentId":null,"groupId":null,
+                    "todos":{"current":null},
+                    "subagents":[{
+                      "taskId":"t","agent":"worker","label":"Worker","status":"pending","model":null,"thinking":null,
+                      "startedAt":null,"endedAt":null,"durationMs":null,"turns":null,"toolCalls":null,"tokens":null,
+                      "cost":null,"error":null,"result":null,"tools":null
+                    }],
+                    "lastCommAt":null
+                  }],
+                  "edges":[{"edgeId":"e","a":"a","b":"b","lastAt":null,"lastFrom":null,"lastAction":null,"lastPreview":null}]
+                }
+                """.trimIndent(),
+            )
         assertNull(snapshot.machineId)
         assertNull(snapshot.groups.single().orchestratorAgentId)
         val node = snapshot.nodes.single()
@@ -251,13 +254,20 @@ class MeshSerializationTest {
         assertNull(edge.lastAction)
         assertNull(edge.lastPreview)
 
-        assertNull(RpJson.decodeFromString(MeshToolCall.serializer(), """{"toolCallId":"tc","name":"shell","status":null,"durationMs":null}""").status)
+        assertNull(
+            RpJson
+                .decodeFromString(
+                    MeshToolCall.serializer(),
+                    """{"toolCallId":"tc","name":"shell","status":null,"durationMs":null}""",
+                ).status,
+        )
         assertNull(RpJson.decodeFromString(MeshConversationResponse.serializer(), """{"nextBefore":null}""").nextBefore)
         assertNull(
-            RpJson.decodeFromString(
-                MeshComm.serializer(),
-                """{"commKey":"c","fromAgentId":"a","toAgentId":"b","fromName":"A","toName":"B","action":"send","text":null,"groupId":null}""",
-            ).text,
+            RpJson
+                .decodeFromString(
+                    MeshComm.serializer(),
+                    """{"commKey":"c","fromAgentId":"a","toAgentId":"b","fromName":"A","toName":"B","action":"send","text":null,"groupId":null}""",
+                ).text,
         )
     }
 
