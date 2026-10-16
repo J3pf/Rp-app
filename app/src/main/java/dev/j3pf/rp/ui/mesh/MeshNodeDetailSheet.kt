@@ -56,32 +56,32 @@ fun MeshNodeDetailSheet(
                 Column(Modifier.weight(1f)) {
                     Text(node.name, style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        "${roleName(node.role)} · ${node.status.replace('_', ' ')}",
+                        "${formatMeshRole(node.role)} · ${formatMeshStatus(node.status)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                BadgeText(roleName(node.role), emphasized = true)
+                BadgeText(formatMeshRole(node.role), emphasized = true)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BadgeText(node.machineName)
-                BadgeText(if (node.online) "Online" else "Offline", emphasized = node.online)
+                BadgeText(if (node.online) "En línea" else "Desconectado", emphasized = node.online)
             }
-            node.activity?.takeIf { it.isNotBlank() }?.let { Text("Activity: $it", style = MaterialTheme.typography.bodyMedium) }
+            node.activity?.takeIf { it.isNotBlank() }?.let { Text("Actividad: $it", style = MaterialTheme.typography.bodyMedium) }
 
-            SectionTitle("Details")
-            DetailLine("Machine", node.machineName)
-            DetailLine("cwd", node.cwd ?: "Not reported")
-            DetailLine("Git branch", node.gitBranch ?: "Not reported")
-            DetailLine("Model", node.model ?: "Not reported")
-            DetailLine("Thinking", "Not reported by relay")
+            SectionTitle("Detalles")
+            DetailLine("Máquina", node.machineName)
+            DetailLine("Directorio (cwd)", node.cwd ?: "No reportado")
+            DetailLine("Rama git", node.gitBranch ?: "No reportado")
+            DetailLine("Modelo", node.model ?: "No reportado")
+            DetailLine("Razonamiento", "No reportado")
 
             SectionTitle("TODOs")
             node.todos?.let { todos ->
-                DetailLine("Progress", "${todos.done} of ${todos.total} tasks")
-                DetailLine("In progress", todos.inProgress.toString())
-                DetailLine("Pending", todos.pending.toString())
-                if (todos.blocked > 0) BadgeText("Blocked · ${todos.blocked}", emphasized = true)
+                DetailLine("Progreso", formatMeshTodos(todos.done, todos.total))
+                DetailLine("En progreso", todos.inProgress.toString())
+                DetailLine("Pendientes", todos.pending.toString())
+                if (todos.blocked > 0) BadgeText("Bloqueadas · ${todos.blocked}", emphasized = true)
                 todos.current?.takeIf { it.isNotBlank() }?.let { current ->
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -89,7 +89,7 @@ fun MeshNodeDetailSheet(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            BadgeText("Current", emphasized = true)
+                            BadgeText("Actual", emphasized = true)
                             Text(
                                 current,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -99,20 +99,20 @@ fun MeshNodeDetailSheet(
                     }
                 }
                 Text(
-                    "Full TODO item details are not included in the mesh data.",
+                    "Los detalles completos de los elementos TODO no se incluyen en los datos de la red.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
                 ?: Text(
-                    "No TODO progress reported",
+                    "No se reporta progreso de TODOs",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-            SectionTitle("Subagents")
+            SectionTitle("Subagentes")
             if (node.subagents.isEmpty()) {
-                Text("No subagents", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No hay subagentes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 node.subagents.forEach { subagent ->
                     Surface(
@@ -127,28 +127,28 @@ fun MeshNodeDetailSheet(
                                     style = MaterialTheme.typography.titleSmall,
                                     modifier = Modifier.weight(1f),
                                 )
-                                BadgeText(subagent.status, emphasized = subagent.status == "working")
+                                BadgeText(formatMeshSubagentStatus(subagent.status), emphasized = subagent.status == "working")
                             }
-                            DetailLine("Task", subagent.taskId)
-                            DetailLine("Agent", subagent.agent)
-                            subagent.durationMs?.let { DetailLine("Duration", formatDuration(it)) }
+                            DetailLine("Tarea", subagent.taskId)
+                            DetailLine("Agente", subagent.agent)
+                            subagent.durationMs?.let { DetailLine("Duración", formatDuration(it)) }
                             subagent.tokens?.let { tokens ->
                                 val count = tokens.total ?: listOfNotNull(tokens.prompt, tokens.completion).sum().takeIf { it > 0 }
                                 count?.let { DetailLine("Tokens", it.toString()) }
                             }
-                            subagent.tools?.takeIf { it.isNotEmpty() }?.let { DetailLine("Tools", it.joinToString(", ")) }
-                            subagent.thinking?.let { DetailLine("Thinking", it) }
+                            subagent.tools?.takeIf { it.isNotEmpty() }?.let { DetailLine("Herramientas", it.joinToString(", ")) }
+                            subagent.thinking?.let { DetailLine("Razonamiento", it) }
                         }
                     }
                 }
             }
 
-            SectionTitle("Recent conversations")
+            SectionTitle("Conversaciones recientes")
             if (detail.isLoadingComms && detail.recentComms.isEmpty()) {
-                Text("Loading conversations…", style = MaterialTheme.typography.bodyMedium)
+                Text("Cargando conversaciones…", style = MaterialTheme.typography.bodyMedium)
             } else if (detail.recentComms.isEmpty()) {
                 Text(
-                    "No recent conversations",
+                    "Sin conversaciones recientes",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -162,7 +162,7 @@ fun MeshNodeDetailSheet(
                             onClick = { onViewConversation(peerId) },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         ) {
-                            Text("View conversation with $peerName")
+                            Text("Ver conversación con $peerName")
                         }
                     }
                 }
@@ -173,13 +173,13 @@ fun MeshNodeDetailSheet(
                     onClick = { onOpenChat(node.agentId) },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) {
-                    Text("Open chat")
+                    Text("Abrir chat")
                 }
                 OutlinedButton(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) {
-                    Text("Close")
+                    Text("Cerrar")
                 }
             }
         }
@@ -199,9 +199,9 @@ private fun RecentCommRow(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BadgeText(if (incoming) "In" else "Out", emphasized = incoming)
+                BadgeText(if (incoming) "Entrante" else "Saliente", emphasized = incoming)
                 Spacer(Modifier.width(8.dp))
-                BadgeText(actionName(comm.action.raw))
+                BadgeText(formatMeshCommAction(comm.action.raw))
                 Spacer(Modifier.weight(1f))
                 Text(
                     formatTimestamp(comm.at),
@@ -210,7 +210,7 @@ private fun RecentCommRow(
                 )
             }
             Text("${comm.fromName} → ${comm.toName}", style = MaterialTheme.typography.labelMedium)
-            Text(comm.displayText, style = MaterialTheme.typography.bodyMedium)
+            Text(formatMeshCommText(comm.text), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -271,23 +271,6 @@ private fun peerName(
     node: MeshNode,
     comm: MeshComm,
 ): String = if (comm.fromAgentId == node.agentId) comm.toName else comm.fromName
-
-private fun roleName(role: String): String =
-    when (role) {
-        "orchestrator" -> "Orchestrator"
-        "subordinate" -> "Subordinate"
-        else -> "Solo agent"
-    }
-
-private fun actionName(action: String): String =
-    when (action) {
-        "ask" -> "Ask"
-        "reply" -> "Reply"
-        "handover" -> "Handover"
-        "send" -> "Send"
-        "message" -> "Message"
-        else -> "Message"
-    }
 
 private fun formatDuration(durationMs: Long): String =
     when {

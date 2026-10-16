@@ -114,7 +114,7 @@ fun MeshCanvas(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { onViewportSizeChanged(it.width.toFloat(), it.height.toFloat()) }
-                .pointerInput(Unit) {
+                .pointerInput(widthPx, heightPx) {
                     detectTransformGestures { centroid, pan, zoomChange, _ ->
                         val oldZoom = zoom
                         val newZoom = (oldZoom * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
@@ -203,48 +203,88 @@ fun MeshCanvas(
                 paint.pathEffect = null
             }
 
-            activeBubbles
-                .asSequence()
-                .filter { it.expiresAtMs > currentTimeMs }
-                .forEach { bubble ->
-                    val comm = bubble.comm
-                    val sender = comm.fromAgentId?.let(currentLayout.nodes::get)
-                    val receiver = comm.toAgentId?.let(currentLayout.nodes::get)
-                    if (sender != null && receiver != null) {
-                        val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
-                        val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
-                        val edge =
-                            currentLayout.edges.firstOrNull {
-                                (it.edge.a == comm.fromAgentId && it.edge.b == comm.toAgentId) ||
-                                    (it.edge.a == comm.toAgentId && it.edge.b == comm.fromAgentId)
-                            }
-                        val controlX = edge?.controlX ?: (sender.x + receiver.x) / 2f
-                        val controlY = edge?.controlY ?: (sender.y + receiver.y) / 2f
-                        if (!reducedMotion) {
-                            val inverse = 1f - progress
-                            val x = inverse * inverse * sender.x + 2f * inverse * progress * controlX + progress * progress * receiver.x
-                            val y = inverse * inverse * sender.y + 2f * inverse * progress * controlY + progress * progress * receiver.y
-                            paint.reset()
-                            paint.isAntiAlias = true
-                            paint.color = scheme.primary.copy(alpha = 0.22f).toArgb()
-                            nativeCanvas.drawCircle(x - centerX, y - centerY, 12f, paint)
-                            paint.color = scheme.primary.toArgb()
-                            nativeCanvas.drawCircle(x - centerX, y - centerY, 5f, paint)
-                        }
-                        val midpointX = 0.25f * sender.x + 0.5f * controlX + 0.25f * receiver.x
-                        val midpointY = 0.25f * sender.y + 0.5f * controlY + 0.25f * receiver.y
-                        drawSpeechBubble(
-                            nativeCanvas,
-                            midpointX - centerX,
-                            midpointY - centerY - 17f,
-                            comm.displayText,
-                            paint,
-                            textPaint,
-                            scheme.surfaceVariant,
-                            scheme.onSurfaceVariant,
-                        )
+            val bubblesByEdge =
+                activeBubbles
+                    .asSequence()
+                    .filter { it.expiresAtMs > currentTimeMs }
+                    .filter { bubble ->
+                        val from = bubble.comm.fromAgentId
+                        val to = bubble.comm.toAgentId
+                        from != null && to != null && from in currentLayout.nodes && to in currentLayout.nodes
+                    }.groupBy { bubble ->
+                        val a = bubble.comm.fromAgentId ?: ""
+                        val b = bubble.comm.toAgentId ?: ""
+                        val edgeKey = if (a < b) "$a|$b" else "$b|$a"
+                        edgeKey
                     }
+
+            bubblesByEdge.values.forEach { edgeBubbles ->
+                val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(2)
+                val firstComm = visibleBubbles.first().comm
+                val firstSender = firstComm.fromAgentId?.let(currentLayout.nodes::get) ?: return@forEach
+                val firstReceiver = firstComm.toAgentId?.let(currentLayout.nodes::get) ?: return@forEach
+                val firstEdge =
+                    currentLayout.edges.firstOrNull {
+                        (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
+                            (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
+                    }
+                val controlX = firstEdge?.controlX ?: (firstSender.x + firstReceiver.x) / 2f
+                val controlY = firstEdge?.controlY ?: (firstSender.y + firstReceiver.y) / 2f
+                val midpointX = 0.25f * firstSender.x + 0.5f * controlX + 0.25f * firstReceiver.x
+                val midpointY = 0.25f * firstSender.y + 0.5f * controlY + 0.25f * firstReceiver.y
+
+                visibleBubbles.forEachIndexed { index, bubble ->
+                    val comm = bubble.comm
+                    val sender = comm.fromAgentId?.let(currentLayout.nodes::get) ?: return@forEachIndexed
+                    val receiver = comm.toAgentId?.let(currentLayout.nodes::get) ?: return@forEachIndexed
+                    val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
+                    val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
+                    val edge =
+                        currentLayout.edges.firstOrNull {
+                            (it.edge.a == comm.fromAgentId && it.edge.b == comm.toAgentId) ||
+                                (it.edge.a == comm.toAgentId && it.edge.b == comm.fromAgentId)
+                        }
+                    val particleControlX = edge?.controlX ?: (sender.x + receiver.x) / 2f
+                    val particleControlY = edge?.controlY ?: (sender.y + receiver.y) / 2f
+                    if (!reducedMotion) {
+                        val inverse = 1f - progress
+                        val x = inverse * inverse * sender.x + 2f * inverse * progress * particleControlX + progress * progress * receiver.x
+                        val y = inverse * inverse * sender.y + 2f * inverse * progress * particleControlY + progress * progress * receiver.y
+                        paint.reset()
+                        paint.isAntiAlias = true
+                        paint.color = scheme.primary.copy(alpha = 0.22f).toArgb()
+                        nativeCanvas.drawCircle(x - centerX, y - centerY, 12f, paint)
+                        paint.color = scheme.primary.toArgb()
+                        nativeCanvas.drawCircle(x - centerX, y - centerY, 5f, paint)
+                    }
+                    val bubbleOffsetY = midpointY - centerY - 17f - (index * 28f)
+                    drawSpeechBubble(
+                        nativeCanvas,
+                        midpointX - centerX,
+                        bubbleOffsetY,
+                        formatMeshCommText(comm.text),
+                        paint,
+                        textPaint,
+                        scheme.surfaceVariant,
+                        scheme.onSurfaceVariant,
+                    )
                 }
+
+                val hiddenCount = edgeBubbles.size - visibleBubbles.size
+                if (hiddenCount > 0) {
+                    val bubbleOffsetY = midpointY - centerY - 17f - (visibleBubbles.size * 28f)
+                    drawSpeechBubble(
+                        nativeCanvas,
+                        midpointX - centerX,
+                        bubbleOffsetY,
+                        "+$hiddenCount más",
+                        paint,
+                        textPaint,
+                        scheme.surfaceVariant,
+                        scheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             currentLayout.nodes.values.forEach { node ->
                 drawNode(nativeCanvas, node, centerX, centerY, currentTimeMs, reducedMotion, paint, textPaint, scheme)
@@ -255,8 +295,7 @@ fun MeshCanvas(
         // Canvas has a single gesture surface; these 48dp semantic targets expose each node to assistive technology.
         layout?.nodes?.values?.forEach { positioned ->
             val node = positioned.node
-            val taskProgress = node.todos?.let { ", ${it.done} of ${it.total} tasks" }.orEmpty()
-            val label = "${roleLabel(node.role)} ${node.name}, ${node.status.replace('_', ' ')}$taskProgress"
+            val label = formatMeshNodeContentDescription(node)
             Box(
                 Modifier
                     .offset {
@@ -319,8 +358,8 @@ private fun drawNode(
 
     val badge =
         when (node.role) {
-            "orchestrator" -> "ORCHESTRATOR"
-            "subordinate" -> "SUBORDINATE"
+            "orchestrator" -> formatMeshRole(node.role).uppercase()
+            "subordinate" -> formatMeshRole(node.role).uppercase()
             else -> null
         }
     if (badge != null) {
@@ -436,13 +475,6 @@ private fun parseMachineColor(
 ): Color = runCatching { Color(android.graphics.Color.parseColor(raw)) }.getOrDefault(fallback)
 
 private fun pulse(nowMs: Long): Float = (0.5f + 0.5f * sin(nowMs / 700f * (2f * PI.toFloat()))).toFloat()
-
-private fun roleLabel(role: String): String =
-    when (role) {
-        "orchestrator" -> "Orchestrator"
-        "subordinate" -> "Subordinate"
-        else -> "Agent"
-    }
 
 private fun distanceToCurve(
     point: Offset,

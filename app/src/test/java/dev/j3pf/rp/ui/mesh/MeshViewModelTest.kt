@@ -210,7 +210,10 @@ class MeshViewModelTest {
             assertEquals(setOf("c", "d"), state.layoutResult?.nodes?.keys)
             assertEquals(setOf("a", "b", "c", "d", "solo"), state.snapshot?.nodes?.map { it.agentId }?.toSet())
             assertEquals(listOf(null, "m1", "m2"), state.machineChips.map { it.machineId })
+            assertEquals("", state.machineChips.first().name)
+            assertEquals(5, state.machineChips.first().agentCount)
             assertEquals(listOf("g1", "g2", MeshViewModel.SOLO_GROUP_ID), state.groupChips.map { it.groupId })
+            assertEquals("", state.groupChips.last().label)
             assertEquals("g2", state.selectedGroupId)
             assertTrue(state.groupChips.last().isSolo)
         }

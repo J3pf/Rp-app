@@ -28,7 +28,7 @@ class MeshNavigationTest {
     @get:Rule val rule = createComposeRule()
 
     @Test
-    fun `bottom bar displays mesh tab and navigates between agents and mesh`() {
+    fun `bottom bar displays Red tab and navigates between agents and mesh`() {
         lateinit var navController: NavHostController
 
         rule.setContent {
@@ -41,7 +41,7 @@ class MeshNavigationTest {
                 ) { padding ->
                     NavHost(navController, startDestination = AgentsRoute, modifier = Modifier.padding(padding)) {
                         composable<AgentsRoute> { Text("Agentes Content") }
-                        composable<MeshRoute> { Text("Mesh Content") }
+                        composable<MeshRoute> { Text("Red de agentes") }
                         composable<PendingRoute> { Text("Pendientes Content") }
                         composable<SettingsRoute> { Text("Ajustes Content") }
                     }
@@ -53,20 +53,20 @@ class MeshNavigationTest {
 
         // Bottom bar tabs are present
         rule.onNodeWithText("Agentes").assertExists()
-        rule.onNodeWithText("Mesh").assertExists()
+        rule.onNodeWithText("Red").assertExists()
         rule.onNodeWithText("Pendientes").assertExists()
         rule.onNodeWithText("Ajustes").assertExists()
 
         // Initially at Agentes
         rule.onNodeWithText("Agentes Content").assertIsDisplayed()
 
-        // Click Mesh tab
-        rule.onNodeWithText("Mesh").performClick()
+        // Click Red tab
+        rule.onNodeWithText("Red").performClick()
         rule.waitForIdle()
 
-        // Navigated to Mesh
+        // Navigated to Red
         assertEquals(true, navController.currentDestination?.hasRoute<MeshRoute>())
-        rule.onNodeWithText("Mesh Content").assertIsDisplayed()
+        rule.onNodeWithText("Red de agentes").assertIsDisplayed()
 
         // Return to Agentes
         rule.onNodeWithText("Agentes").performClick()

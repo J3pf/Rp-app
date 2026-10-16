@@ -58,6 +58,12 @@ L3: [AGENT MESH — orchestrator, operating rule] Every Gradle/test command must
 L4: [AGENT MESH — contract note] edge.active is computed by the relay at snapshot time. In the UI, decide "active" (glow) locally as `now - edge.lastAt <= 20s` with a ticker that is only active while the screen is visible, and use the field only as the initial value. That way the glow fades out on time even if no update arrives.
 L5: [AGENT MESH — review 67046f4] Fixture sync and contract verification: run `scripts/sync-fixtures.sh /home/drift/Workspace/RP/Rp-relay` (relay frozen at 59c8f41); test decoding from files: appDown__mesh.snapshot__completo, appDown__mesh.update__basico, appDown__mesh.comm__basico, appUp__mesh.subscribe__basico/todas, appUp__mesh.unsubscribe__vacio (serialize and compare), mesh-conversation-response.json, mesh-agent-comms-response.json. Ensure subscription cut on ON_STOP.
 L6: [AGENT MESH — relay on main] Rp-relay v0.5.0 is already on main and released. Its mesh/comm fixtures are identical to 59c8f41 (the only change: "comm" was added to features in up__agent.hello__completo). Sync from /home/drift/Workspace/RP/Rp-relay (main) for A1.
+L7: [AGENT MESH — orchestrator review of local main da32ab0] Orchestrator quality gate review before release approval. Required corrections:
+U1: (blocker, UX) Full Spanish localization for the entire screen, navigation, bottom bar, bottom sheets, live strip, accessibility labels, statuses, roles via central mapping.
+U2: Move UI labels ("Todas", "Sin grupo") from ViewModel to UI layer (composable resolves from flags/ids).
+U3: In MeshCanvas, key pointerInput for transform gestures with (widthPx, heightPx) instead of Unit.
+U4: Stack simultaneous comm bubbles on the same edge (vertical offset) or show latest with +N counter so bubbles don't draw on top of each other.
+After fixes: independent verification with gentle-ai-verify, update APK, rebuild tag v0.2.0, send report for final publish approval.
 
 MANDATORY PROCESS: use ODD. Create odd/tasks/agent-mesh.md (Specs quoting this message verbatim as L1, Tasks, Log). Make a feature branch feat/agent-mesh. Implement through YOUR subagents (gentle-ai-explore / gentle-ai-worker / gentle-ai-verify), RED→GREEN tests. Ideal split: worker A = protocol + data/repo/VM, worker B = layout engine + Canvas/UI, then verify.
 

@@ -42,9 +42,9 @@ fun MeshConversationSheet(
                 .padding(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("Conversation between ${detail.agentAName} and ${detail.agentBName}", style = MaterialTheme.typography.titleLarge)
+            Text("Conversación entre ${detail.agentAName} y ${detail.agentBName}", style = MaterialTheme.typography.titleLarge)
             Text(
-                "${detail.items.size} messages",
+                "${detail.items.size} mensajes",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -63,19 +63,19 @@ fun MeshConversationSheet(
                         enabled = !detail.isLoadingMore,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (detail.isLoadingMore) "Loading older messages…" else "Load older messages")
+                        Text(if (detail.isLoadingMore) "Cargando mensajes anteriores…" else "Cargar mensajes anteriores")
                     }
                 }
             }
             if (detail.isLoading && detail.items.isEmpty()) {
                 item(key = "loading") {
-                    Text("Loading conversation…", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+                    Text("Cargando conversación…", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             if (!detail.isLoading && detail.items.isEmpty()) {
                 item(key = "empty") {
                     Text(
-                        "No messages in this conversation yet.",
+                        "No hay mensajes en esta conversación.",
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -116,7 +116,7 @@ private fun ConversationBubble(
                     ActionBadge(comm.action.raw, isFromA)
                 }
                 Text(
-                    comm.displayText,
+                    formatMeshCommText(comm.text),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isFromA) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                 )
@@ -136,15 +136,7 @@ private fun ActionBadge(
     action: String,
     isFromA: Boolean,
 ) {
-    val label =
-        when (action) {
-            "ask" -> "Ask"
-            "reply" -> "Reply"
-            "handover" -> "Handover"
-            "send" -> "Send"
-            "message" -> "Message"
-            else -> "Message"
-        }
+    val label = formatMeshCommAction(action)
     Surface(
         shape = RoundedCornerShape(999.dp),
         color =

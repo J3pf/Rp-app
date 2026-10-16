@@ -111,12 +111,12 @@ internal fun MeshScreenContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Agent Mesh", style = MaterialTheme.typography.headlineSmall)
+            Text("Red de agentes", style = MaterialTheme.typography.headlineSmall)
             TextButton(
                 onClick = onToggleListView,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
-                Text(if (uiState.isListView) "Diagram view" else "List view")
+                Text(if (uiState.isListView) "Vista de diagrama" else "Vista de lista")
             }
         }
 
@@ -127,17 +127,17 @@ internal fun MeshScreenContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "Disconnected — showing stale data",
+                    "Desconectado — mostrando datos locales",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry") }
+                TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reintentar") }
             }
         }
 
         if (uiState.machineChips.isNotEmpty()) {
-            SelectorRow(label = "Machines") {
+            SelectorRow(label = "Máquinas") {
                 uiState.machineChips.forEach { machine ->
                     FilterChip(
                         selected = uiState.selectedMachineId == machine.machineId,
@@ -147,7 +147,13 @@ internal fun MeshScreenContent(
                                 if (machine.machineId != null && machine.color.isNotBlank()) {
                                     Surface(Modifier.size(10.dp), shape = CircleShape, color = parseRelayColor(machine.color)) {}
                                 }
-                                Text(if (machine.machineId == null) "All" else "${machine.name} · ${machine.agentCount}")
+                                Text(
+                                    if (machine.machineId == null) {
+                                        if (machine.agentCount > 0) "Todas · ${machine.agentCount}" else "Todas"
+                                    } else {
+                                        "${machine.name} · ${machine.agentCount}"
+                                    },
+                                )
                             }
                         },
                         modifier = Modifier.heightIn(min = 48.dp),
@@ -157,19 +163,23 @@ internal fun MeshScreenContent(
         }
 
         if (uiState.groupChips.isNotEmpty()) {
-            SelectorRow(label = "Groups") {
+            SelectorRow(label = "Grupos") {
                 uiState.groupChips.forEach { group ->
                     val groupLabel =
-                        uiState.snapshot
-                            ?.groups
-                            ?.firstOrNull { it.groupId == group.groupId }
-                            ?.orchestratorAgentId
-                            ?.let { id ->
-                                uiState.snapshot.nodes
-                                    .firstOrNull { it.agentId == id }
-                                    ?.name
-                            }
-                            ?: group.label
+                        if (group.isSolo) {
+                            "Sin grupo"
+                        } else {
+                            uiState.snapshot
+                                ?.groups
+                                ?.firstOrNull { it.groupId == group.groupId }
+                                ?.orchestratorAgentId
+                                ?.let { id ->
+                                    uiState.snapshot.nodes
+                                        .firstOrNull { it.agentId == id }
+                                        ?.name
+                                }
+                                ?: group.label
+                        }
                     FilterChip(
                         selected = uiState.selectedGroupId == group.groupId,
                         onClick = { onSelectGroup(group.groupId) },
@@ -255,6 +265,7 @@ private fun SelectorRow(
 @Composable
 private fun LoadingSkeleton(modifier: Modifier = Modifier) {
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Cargando red de agentes…", style = MaterialTheme.typography.bodyMedium)
         repeat(4) {
             Surface(
                 modifier = Modifier.fillMaxWidth().height(72.dp),
@@ -272,10 +283,10 @@ private fun EmptyMeshState(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("No agents found", style = MaterialTheme.typography.headlineSmall)
+        Text("No hay agentes", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Open Pi with the rp plugin on your machines to see agents here.",
+            "Abre Pi con el plugin rp en tus PCs para ver la red de agentes aquí.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -291,15 +302,15 @@ private fun LiveStrip(comms: List<dev.j3pf.rp.protocol.MeshComm>) {
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .clickable(role = Role.Button, onClick = { expanded = !expanded })
-                .semantics { contentDescription = if (expanded) "Collapse Live messages" else "Expand Live messages" },
+                .semantics { contentDescription = if (expanded) "Contraer mensajes en vivo" else "Expandir mensajes en vivo" },
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Live · ${comms.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text("En vivo", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             val visible = if (expanded) comms.take(5) else comms.take(1)
             visible.forEach { comm ->
                 Text(
-                    "${comm.fromName} → ${comm.toName}: ${comm.displayText}",
+                    "${comm.fromName} → ${comm.toName}: ${formatMeshCommText(comm.text)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -307,7 +318,7 @@ private fun LiveStrip(comms: List<dev.j3pf.rp.protocol.MeshComm>) {
             }
             if (comms.isEmpty()) {
                 Text(
-                    "No recent messages",
+                    "Sin mensajes recientes",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

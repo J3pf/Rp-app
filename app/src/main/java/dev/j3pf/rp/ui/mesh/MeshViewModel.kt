@@ -245,7 +245,8 @@ class MeshViewModel
                         )
                 }
             }
-            return listOf(MeshMachineChip(machineId = null, name = "All", color = "")) + byId.values
+            val allAgentCount = snapshot?.nodes?.size ?: machines.sumOf { it.agentCount }
+            return listOf(MeshMachineChip(machineId = null, name = "", color = "", agentCount = allAgentCount)) + byId.values
         }
 
         private fun buildGroupChips(snapshot: MeshSnapshot?): List<MeshGroupChip> {
@@ -261,7 +262,7 @@ class MeshViewModel
             val soloNodes = snapshot.nodes.filter(::isSolo)
             return groups +
                 if (soloNodes.isNotEmpty()) {
-                    listOf(MeshGroupChip(SOLO_GROUP_ID, "Solo", isSolo = true, memberCount = soloNodes.size))
+                    listOf(MeshGroupChip(SOLO_GROUP_ID, "", isSolo = true, memberCount = soloNodes.size))
                 } else {
                     emptyList()
                 }

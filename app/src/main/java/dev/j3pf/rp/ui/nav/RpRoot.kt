@@ -233,7 +233,7 @@ internal fun BottomBar(
             val tabs =
                 listOf(
                     Triple(AgentsRoute as Any, "Agentes", dest?.hasRoute<AgentsRoute>() == true),
-                    Triple(MeshRoute as Any, "Mesh", dest?.hasRoute<MeshRoute>() == true),
+                    Triple(MeshRoute as Any, "Red", dest?.hasRoute<MeshRoute>() == true),
                     Triple(PendingRoute as Any, "Pendientes", dest?.hasRoute<PendingRoute>() == true),
                     Triple(SettingsRoute as Any, "Ajustes", dest?.hasRoute<SettingsRoute>() == true),
                 )

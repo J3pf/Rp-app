@@ -65,7 +65,7 @@ fun MeshListView(
             item(key = "group-$groupId") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = if (groupId == SOLO_KEY) "Solo" else groupTitles[groupId] ?: "Agent group",
+                        text = if (groupId == SOLO_KEY) "Sin grupo" else groupTitles[groupId] ?: "Grupo de agentes",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 4.dp, top = 4.dp),
@@ -84,9 +84,7 @@ private fun MeshNodeListCard(
     node: MeshNode,
     onClick: () -> Unit,
 ) {
-    val status = node.status.replace('_', ' ')
-    val taskLabel = node.todos?.let { ", ${it.done} of ${it.total} tasks" }.orEmpty()
-    val accessibleLabel = "${roleName(node.role)} ${node.name}, $status$taskLabel"
+    val accessibleLabel = formatMeshNodeContentDescription(node)
     Surface(
         modifier =
             Modifier
@@ -112,25 +110,25 @@ private fun MeshNodeListCard(
                 ) {}
                 Text(node.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.weight(1f))
-                Text(roleName(node.role), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatMeshRole(node.role), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("${node.machineName} · ${node.status.replace('_', ' ')}", style = MaterialTheme.typography.bodyMedium)
+            Text("${node.machineName} · ${formatMeshStatus(node.status)}", style = MaterialTheme.typography.bodyMedium)
             node.activity
                 ?.takeIf {
                     it.isNotBlank()
                 }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             node.todos?.let { todos ->
                 Text(
-                    "${todos.done} of ${todos.total} tasks · ${todos.inProgress} in progress · ${todos.blocked} blocked",
+                    "${formatMeshTodos(todos.done, todos.total)} · ${todos.inProgress} en progreso · ${todos.blocked} bloqueadas",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (node.subagents.isNotEmpty()) {
-                Text("Subagents", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Subagentes", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 node.subagents.forEach { subagent ->
                     Text(
-                        "${subagent.agent}${subagent.label?.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()} · ${subagent.status}",
+                        "${subagent.agent}${subagent.label?.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()} · ${formatMeshSubagentStatus(subagent.status)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -141,13 +139,6 @@ private fun MeshNodeListCard(
 }
 
 private fun isSolo(node: MeshNode): Boolean = node.role == "solo" || node.groupId == null
-
-private fun roleName(role: String): String =
-    when (role) {
-        "orchestrator" -> "Orchestrator"
-        "subordinate" -> "Subordinate"
-        else -> "Agent"
-    }
 
 @Composable
 private fun statusColor(
