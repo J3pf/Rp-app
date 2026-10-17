@@ -74,9 +74,7 @@ Puedes instalar la aplicación directamente en tu dispositivo sin necesidad de c
 
 1. **Descargar el APK:**
    - 📦 **[RP App v0.3.4 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.3.4)**
-   - Versión Release (canal directo sin Google): **[rp-v0.3.4-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-v0.3.4-direct.apk)** (30 MB).
-   - Versión Release con FCM (Google Cloud Messaging opcional): **[rp-v0.3.4-fcm.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-v0.3.4-fcm.apk)** (30 MB).
-   - Versión Debug (canal directo): **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-direct-debug.apk)** (108 MB).
+   - Versión Release oficial (canal directo sin Google): **[rp-v0.3.4-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-v0.3.4-direct.apk)** (30 MB).
 2. **Instalar en el móvil:**
    - **En el teléfono:** Abre el archivo descargado y concede permiso de «Instalar aplicaciones desconocidas» para tu navegador o gestor de archivos.
    - **Vía USB con ADB:** Conecta el teléfono con depuración USB y ejecuta:

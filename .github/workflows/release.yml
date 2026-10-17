@@ -1,7 +1,7 @@
 ---
 name: Release
 
-# Al etiquetar vX.Y.Z se construye el APK firmado (sabores direct y fcm)
+# Al etiquetar vX.Y.Z se construye el APK firmado (sabor direct)
 # y se publica en GitHub Releases (sideload).
 on:
   push:
@@ -20,15 +20,14 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - name: Secretos de firma y Firebase
+      - name: Secretos de firma
         env:
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > release.jks
@@ -39,20 +38,15 @@ jobs:
               echo "keyPassword=$KEY_PASSWORD"
             } > keystore.properties
           fi
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            echo "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json
-          fi
       - name: Tests
         run: ./gradlew :protocol:test :app:testDirectDebugUnitTest
-      - name: APK firmados
-        run: ./gradlew :app:assembleDirectRelease :app:assembleFcmRelease
+      - name: APK firmado (sabor direct)
+        run: ./gradlew :app:assembleDirectRelease
       - name: Renombrar
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/direct/release/*.apk \
             "dist/rp-${GITHUB_REF_NAME}-direct.apk"
-          cp app/build/outputs/apk/fcm/release/*.apk \
-            "dist/rp-${GITHUB_REF_NAME}-fcm.apk"
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.apk
