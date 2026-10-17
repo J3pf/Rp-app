@@ -363,16 +363,35 @@ class ChatReducerTest {
 
     @Test
     fun `settle marca subagentes activos como completados o abortados`() {
-        var s = ChatState()
+        var s = ChatState(tools = mapOf("task-1" to ToolRun(toolCallId = "task-1", name = "subagent_run")))
         val json = """{"type":"subagent_update","taskId":"task-1","agent":"worker","status":"running"}"""
         s = ChatReducer.reduce(s, ev(1, json))
         assertEquals("running", s.subagents["task-1"]?.status)
+        assertEquals("running", s.tools["task-1"]?.subagent?.status)
+        assertEquals("running", (s.items.single() as SubagentCardItem).info.status)
 
         s = ChatReducer.reduce(s, ev(2, """{"type":"agent_settled","aborted":false}"""))
         assertEquals("done", s.subagents["task-1"]?.status)
+        assertEquals("done", s.tools["task-1"]?.subagent?.status)
+        assertEquals("done", (s.items.single() as SubagentCardItem).info.status)
 
         s = ChatReducer.reduce(s, ev(3, json))
         s = ChatReducer.reduce(s, ev(4, """{"type":"agent_settled","aborted":true}"""))
         assertEquals("aborted", s.subagents["task-1"]?.status)
+        assertEquals("aborted", s.tools["task-1"]?.subagent?.status)
+        assertEquals("aborted", (s.items.single() as SubagentCardItem).info.status)
+    }
+
+    @Test
+    fun `cambio de epoch limpia todos y subagents`() {
+        var s = ChatState()
+        s = ChatReducer.reduce(s, ev(1, """{"type":"todo_update","tasks":[{"id":1,"title":"T","status":"done"}]}""", epoch = "E1"))
+        s = ChatReducer.reduce(s, ev(2, """{"type":"subagent_update","taskId":"t1","agent":"w","status":"running"}""", epoch = "E1"))
+        assertEquals(1, s.todos.size)
+        assertEquals(1, s.subagents.size)
+
+        s = ChatReducer.reduce(s, ev(1, """{"type":"agent_start"}""", epoch = "E2"))
+        assertTrue(s.todos.isEmpty())
+        assertTrue(s.subagents.isEmpty())
     }
 }

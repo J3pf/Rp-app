@@ -75,6 +75,7 @@ sealed interface SendResult {
 private val PERSISTED_EVENTS = setOf(
     "agent_start", "agent_settled", "message_end", "tool_execution_start", "tool_execution_end",
     "session_info_changed", "model_select", "thinking_level_select", "session_compact",
+    "todo_update", "subagent_update",
 )
 
 @Singleton

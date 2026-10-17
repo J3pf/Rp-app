@@ -232,4 +232,42 @@ class MeshRepositoryTest {
                 assertTrue(error.contains("Error al decodificar la red de agentes"))
             }
         }
+
+    @Test
+    fun `unsubscribing latest owner re-subscribes to remaining owner machine`() =
+        runBlocking {
+            acceptSocket()
+            connect()
+            awaitOutgoing(MsgType.APP_HELLO)
+
+            val ownerA = Any()
+            val ownerB = Any()
+
+            repository.subscribe(owner = ownerA, machineId = "m1")
+            assertEquals("m1", awaitOutgoing(MsgType.MESH_SUBSCRIBE).body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
+
+            repository.subscribe(owner = ownerB, machineId = "m2")
+            assertEquals("m2", awaitOutgoing(MsgType.MESH_SUBSCRIBE).body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
+
+            repository.unsubscribe(owner = ownerB)
+            val fallbackSub = awaitOutgoing(MsgType.MESH_SUBSCRIBE)
+            assertEquals("m1", fallbackSub.body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
+            assertEquals("m1", repository.subscribedMachineId)
+        }
+
+    @Test
+    fun `clear resets snapshot and active subscribers`() =
+        runBlocking {
+            val snap = MeshSnapshot(generatedAt = 99)
+            bus.publish(Envelope.of(MsgType.MESH_SNAPSHOT, snap))
+            withTimeout(2_000) { repository.snapshot.first { it == snap } }
+            repository.subscribe("m1")
+            assertTrue(repository.isSubscribed)
+
+            repository.clear()
+
+            assertFalse(repository.isSubscribed)
+            assertEquals(null, repository.subscribedMachineId)
+            assertEquals(null, repository.snapshot.value)
+        }
 }

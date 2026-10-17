@@ -40,6 +40,29 @@ class MappersTest {
         assertNull(machineEntity(quotasJson = "[{}]").toModel().quotas)
     }
 
+    @Test
+    fun `agent summary theme and todo fields persist and map back`() {
+        val summary =
+            dev.j3pf.rp.protocol.AgentSummary(
+                agentId = "agent-1",
+                machineId = "machine-1",
+                machineName = "Development",
+                theme = "gentle-sexy",
+                todoCompleted = 3,
+                todoTotal = 5,
+                activeTask = "Implementing feature",
+            )
+
+        val entity = summary.toEntity(relayId = "relay-1")
+        assertEquals("gentle-sexy", entity.theme)
+        assertEquals(3, entity.todoCompleted)
+        assertEquals(5, entity.todoTotal)
+        assertEquals("Implementing feature", entity.activeTask)
+
+        val mapped = entity.toModel()
+        assertEquals(summary, mapped)
+    }
+
     private fun machineEntity(quotasJson: String?) =
         MachineEntity(
             relayId = "relay-1",

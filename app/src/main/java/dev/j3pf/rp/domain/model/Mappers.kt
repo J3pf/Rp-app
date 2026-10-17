@@ -69,6 +69,10 @@ fun AgentSummary.toEntity(relayId: String) =
         gentleMode = gentleMode,
         redacted = redacted,
         spawnedByHost = spawnedByHost,
+        theme = theme,
+        todoCompleted = todoCompleted,
+        todoTotal = todoTotal,
+        activeTask = activeTask,
     )
 
 fun AgentEntity.toModel(openPrompts: Int = 0) =
@@ -97,6 +101,10 @@ fun AgentEntity.toModel(openPrompts: Int = 0) =
         gentleMode = gentleMode,
         redacted = redacted,
         spawnedByHost = spawnedByHost,
+        theme = theme,
+        todoCompleted = todoCompleted,
+        todoTotal = todoTotal,
+        activeTask = activeTask,
     )
 
 fun Prompt.toEntity(

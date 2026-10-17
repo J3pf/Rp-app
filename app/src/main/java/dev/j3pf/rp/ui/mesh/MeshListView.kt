@@ -37,7 +37,7 @@ fun MeshListView(
     modifier: Modifier = Modifier,
 ) {
     val visibleNodes =
-        if (layout != null && layout.nodes.isNotEmpty()) {
+        if (layout != null) {
             layout.nodes.values.map { it.node }
         } else {
             snapshot?.nodes.orEmpty()

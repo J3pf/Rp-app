@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         OutboxEntity::class,
         DedupEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class RpDatabase : RoomDatabase() {
@@ -35,6 +35,16 @@ abstract class RpDatabase : RoomDatabase() {
             object : Migration(1, 2) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE machines ADD COLUMN quotasJson TEXT DEFAULT NULL")
+                }
+            }
+
+        val MIGRATION_2_3 =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE agents ADD COLUMN theme TEXT DEFAULT NULL")
+                    db.execSQL("ALTER TABLE agents ADD COLUMN todoCompleted INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE agents ADD COLUMN todoTotal INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE agents ADD COLUMN activeTask TEXT DEFAULT NULL")
                 }
             }
     }
