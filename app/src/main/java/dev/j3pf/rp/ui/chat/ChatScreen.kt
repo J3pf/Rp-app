@@ -405,23 +405,7 @@ internal fun MessageList(
             .rememberLazyListState(),
 ) {
     val scope = rememberCoroutineScope()
-    val rawItems = ui.chat.display
-    val items =
-        remember(rawItems) {
-            val inlineToolCallIds =
-                rawItems
-                    .asSequence()
-                    .filterIsInstance<dev.j3pf.rp.chat.AssistantMsg>()
-                    .flatMap { it.blocks.asSequence() }
-                    .filterIsInstance<Block.ToolCall>()
-                    .mapNotNull { it.toolCallId }
-                    .toSet()
-            if (inlineToolCallIds.isEmpty()) {
-                rawItems
-            } else {
-                rawItems.filterNot { it is dev.j3pf.rp.chat.SubagentCardItem && it.info.taskId in inlineToolCallIds }
-            }
-        }
+    val items = ui.chat.display
 
     if (items.isEmpty()) {
         Column(

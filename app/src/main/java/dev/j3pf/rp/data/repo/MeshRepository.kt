@@ -133,25 +133,16 @@ class MeshRepository
 
         fun unsubscribe(owner: Any) {
             synchronized(subscriptionLock) {
-                val previousMachineId = activeSubscribers.values.lastOrNull()
                 activeSubscribers.remove(owner)
                 if (activeSubscribers.isEmpty()) {
                     connection.send(Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe()))
                 } else {
                     val remainingMachineId = activeSubscribers.values.lastOrNull()
-                    if (remainingMachineId != previousMachineId) {
+                    if (remainingMachineId != subscribedMachineId) {
                         sendSubscribe(remainingMachineId)
                     }
                 }
             }
-        }
-
-        fun clear() {
-            synchronized(subscriptionLock) {
-                activeSubscribers.clear()
-                lastSubscribeEnvelopeId = null
-            }
-            _snapshot.value = null
         }
 
         private fun sendSubscribe(machineId: String?) {

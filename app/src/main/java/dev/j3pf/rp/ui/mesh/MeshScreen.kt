@@ -81,9 +81,9 @@ fun MeshScreen(
         onViewportSizeChanged = viewModel::onViewportSizeChanged,
         onDismissNodeDetail = viewModel::dismissNodeDetail,
         onViewConversation = { peerId ->
-            state.nodeDetail?.node?.agentId?.let { nodeId ->
-                viewModel.onOpenConversation(nodeId, peerId)
-            }
+            val nodeId = state.nodeDetail?.node?.agentId
+            val edge = state.snapshot?.edges?.firstOrNull { (it.a == nodeId && it.b == peerId) || (it.b == nodeId && it.a == peerId) }
+            edge?.let { viewModel.onEdgeClick(it.edgeId) }
         },
         onDismissConversation = viewModel::dismissConversationDetail,
         onLoadMoreConversation = viewModel::loadMoreConversation,

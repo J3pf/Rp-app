@@ -390,27 +390,4 @@ class MeshViewModelTest {
         viewModel.toggleListView()
         assertFalse(viewModel.uiState.value.isListView)
     }
-
-    @Test
-    fun `onOpenConversation opens conversation even when no edge exists and failed loadMore preserves nextBefore`() {
-        runBlocking {
-            publish()
-            server.enqueue(
-                MockResponse().setBody(
-                    """{"items":[{"commKey":"c1","fromAgentId":"a","toAgentId":"solo","fromName":"Agent a","toName":"Agent solo","action":"ask","at":90}],"nextBefore":50}""",
-                ),
-            )
-            server.enqueue(MockResponse().setResponseCode(500))
-
-            viewModel.onOpenConversation("a", "solo")
-            withTimeout(5_000) { viewModel.uiState.first { it.conversationDetail?.isLoading == false } }
-            assertEquals("a", viewModel.uiState.value.conversationDetail?.agentA)
-            assertEquals("solo", viewModel.uiState.value.conversationDetail?.agentB)
-            assertEquals(50L, viewModel.uiState.value.conversationDetail?.nextBefore)
-
-            viewModel.loadMoreConversation()
-            withTimeout(5_000) { viewModel.uiState.first { it.conversationDetail?.isLoadingMore == false } }
-            assertEquals(50L, viewModel.uiState.value.conversationDetail?.nextBefore)
-        }
-    }
 }

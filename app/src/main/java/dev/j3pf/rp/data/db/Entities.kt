@@ -46,10 +46,6 @@ data class AgentEntity(
     val gentleMode: String?,
     val redacted: Boolean,
     val spawnedByHost: Boolean,
-    val theme: String? = null,
-    val todoCompleted: Int = 0,
-    val todoTotal: Int = 0,
-    val activeTask: String? = null,
 )
 
 /** Agente + contador de prompts abiertos calculado desde la tabla `prompts`. */

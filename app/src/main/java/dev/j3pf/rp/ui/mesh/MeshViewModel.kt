@@ -93,30 +93,10 @@ class MeshViewModel
         fun selectMachine(machineId: String?) {
             val state = _uiState.value
             val selected = machineId?.takeIf { id -> state.machineChips.any { it.machineId == id } }
-            var updatedGroupId = state.selectedGroupId
             _uiState.update { current ->
-                val newGroupChips = buildGroupChips(current.snapshot, selected)
-                var nextGroup = current.selectedGroupId
-                if (current.snapshot != null) {
-                    if (nextGroup != null && newGroupChips.none { it.groupId == nextGroup }) nextGroup = null
-                    if (nextGroup == null && newGroupChips.isNotEmpty()) {
-                        nextGroup = mostActiveGroup(current.snapshot, newGroupChips, selected)
-                    }
-                }
-                updatedGroupId = nextGroup
-                current
-                    .copy(
-                        selectedMachineId = selected,
-                        selectedGroupId = nextGroup,
-                        groupChips = newGroupChips,
-                    ).withLayout(layoutEngine, viewportWidth, viewportHeight)
+                current.copy(selectedMachineId = selected).withLayout(layoutEngine, viewportWidth, viewportHeight)
             }
-            viewModelScope.launch {
-                settings.setMeshSelectedMachine(selected)
-                if (updatedGroupId != state.selectedGroupId) {
-                    settings.setMeshSelectedGroup(updatedGroupId)
-                }
-            }
+            viewModelScope.launch { settings.setMeshSelectedMachine(selected) }
             subscribeForCurrentMachine()
         }
 
@@ -153,35 +133,24 @@ class MeshViewModel
                 }
         }
 
-        fun onOpenConversation(
-            agentA: String,
-            agentB: String,
-        ) {
-            val nodes =
-                _uiState.value.snapshot
-                    ?.nodes
-                    .orEmpty()
-                    .associateBy { it.agentId }
-            val nodeA = nodes[agentA]
-            val nodeB = nodes[agentB]
+        fun onEdgeClick(edgeId: String) {
+            val snapshot = _uiState.value.snapshot ?: return
+            val edge = snapshot.edges.firstOrNull { it.edgeId == edgeId } ?: return
+            val nodes = snapshot.nodes.associateBy { it.agentId }
+            val nodeA = nodes[edge.a]
+            val nodeB = nodes[edge.b]
             nodeCommsJob?.cancel()
             conversationJob?.cancel()
             val detail =
                 MeshConversationDetail(
-                    agentA = agentA,
-                    agentB = agentB,
-                    agentAName = nodeA?.name ?: agentA,
-                    agentBName = nodeB?.name ?: agentB,
+                    agentA = edge.a,
+                    agentB = edge.b,
+                    agentAName = nodeA?.name ?: edge.a,
+                    agentBName = nodeB?.name ?: edge.b,
                     isLoading = true,
                 )
             _uiState.update { it.copy(nodeDetail = null, conversationDetail = detail) }
             conversationJob = viewModelScope.launch { loadConversationPage(detail, before = null, append = false) }
-        }
-
-        fun onEdgeClick(edgeId: String) {
-            val snapshot = _uiState.value.snapshot ?: return
-            val edge = snapshot.edges.firstOrNull { it.edgeId == edgeId } ?: return
-            onOpenConversation(edge.a, edge.b)
         }
 
         fun loadMoreConversation() {
@@ -224,16 +193,14 @@ class MeshViewModel
         private fun applyInputs(inputs: Inputs) {
             val previous = _uiState.value
             val machineChips = buildMachineChips(inputs.machineList, inputs.snapshot)
+            val groupChips = buildGroupChips(inputs.snapshot)
             var machineId = if (selectionsInitialized) previous.selectedMachineId else inputs.selectedMachineId
-            if (inputs.snapshot != null && machineId != null && machineChips.none { it.machineId == machineId }) {
-                machineId = null
-            }
-            val groupChips = buildGroupChips(inputs.snapshot, machineId)
             var groupId = if (selectionsInitialized) previous.selectedGroupId else inputs.selectedGroupId
 
             if (inputs.snapshot != null) {
+                if (machineId != null && machineChips.none { it.machineId == machineId }) machineId = null
                 if (groupId != null && groupChips.none { it.groupId == groupId }) groupId = null
-                if (groupId == null && groupChips.isNotEmpty()) groupId = mostActiveGroup(inputs.snapshot, groupChips, machineId)
+                if (groupId == null && groupChips.isNotEmpty()) groupId = mostActiveGroup(inputs.snapshot, groupChips)
             }
             selectionsInitialized = true
 
@@ -302,25 +269,17 @@ class MeshViewModel
             return listOf(MeshMachineChip(machineId = null, name = "", color = "", agentCount = allAgentCount)) + byId.values
         }
 
-        private fun buildGroupChips(
-            snapshot: MeshSnapshot?,
-            machineId: String? = null,
-        ): List<MeshGroupChip> {
+        private fun buildGroupChips(snapshot: MeshSnapshot?): List<MeshGroupChip> {
             if (snapshot == null) return emptyList()
             val groups =
-                snapshot.groups.mapNotNull { group ->
-                    val count = membersOf(snapshot, group.groupId, machineId).size
-                    if (machineId != null && count == 0) {
-                        null
-                    } else {
-                        MeshGroupChip(
-                            groupId = group.groupId,
-                            label = group.label,
-                            memberCount = count,
-                        )
-                    }
+                snapshot.groups.map { group ->
+                    MeshGroupChip(
+                        groupId = group.groupId,
+                        label = group.label,
+                        memberCount = membersOf(snapshot, group.groupId).size,
+                    )
                 }
-            val soloNodes = snapshot.nodes.filter { (machineId == null || it.machineId == machineId) && isSolo(it) }
+            val soloNodes = snapshot.nodes.filter(::isSolo)
             return groups +
                 if (soloNodes.isNotEmpty()) {
                     listOf(MeshGroupChip(SOLO_GROUP_ID, "", isSolo = true, memberCount = soloNodes.size))
@@ -332,20 +291,18 @@ class MeshViewModel
         private fun mostActiveGroup(
             snapshot: MeshSnapshot,
             chips: List<MeshGroupChip>,
-            machineId: String? = null,
         ): String? =
             chips
                 .maxWithOrNull(
-                    compareBy<MeshGroupChip> { activityFor(snapshot, it, machineId) }
+                    compareBy<MeshGroupChip> { activityFor(snapshot, it) }
                         .thenByDescending { it.groupId.orEmpty() },
                 )?.groupId
 
         private fun activityFor(
             snapshot: MeshSnapshot,
             chip: MeshGroupChip,
-            machineId: String? = null,
         ): Long {
-            val members = membersOf(snapshot, chip.groupId, machineId)
+            val members = membersOf(snapshot, chip.groupId)
             val nodeActivity =
                 snapshot.nodes
                     .filter { it.agentId in members }
@@ -362,12 +319,11 @@ class MeshViewModel
         private fun membersOf(
             snapshot: MeshSnapshot,
             groupId: String?,
-            machineId: String? = null,
         ): Set<String> {
-            val machineNodes = snapshot.nodes.asSequence().filter { machineId == null || it.machineId == machineId }
-            if (groupId == SOLO_GROUP_ID) return machineNodes.filter(::isSolo).mapTo(mutableSetOf()) { it.agentId }
+            if (groupId == SOLO_GROUP_ID) return snapshot.nodes.filter(::isSolo).mapTo(mutableSetOf()) { it.agentId }
             val group = snapshot.groups.firstOrNull { it.groupId == groupId } ?: return emptySet()
-            return machineNodes
+            return snapshot.nodes
+                .asSequence()
                 .filter { it.groupId == groupId || it.agentId in group.memberAgentIds }
                 .mapTo(mutableSetOf()) { it.agentId }
         }
@@ -420,19 +376,11 @@ class MeshViewModel
                     } else {
                         items.distinctBy { it.commKey }
                     }
-                val nextBefore =
-                    if (response != null) {
-                        response.nextBefore
-                    } else if (append) {
-                        current.nextBefore
-                    } else {
-                        null
-                    }
                 state.copy(
                     conversationDetail =
                         current.copy(
                             items = merged.toList(),
-                            nextBefore = nextBefore,
+                            nextBefore = response?.nextBefore,
                             isLoading = false,
                             isLoadingMore = false,
                         ),

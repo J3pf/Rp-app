@@ -35,7 +35,6 @@ class SessionRepository @Inject constructor(
     private val chat: ChatRepository,
     private val prompts: PromptsRepository,
     private val hosts: HostRepository,
-    private val mesh: MeshRepository,
     private val dedup: DedupDao,
     private val tokens: PushTokenProvider,
     private val channels: NotificationChannels,
@@ -128,7 +127,6 @@ class SessionRepository @Inject constructor(
         chat.clear()
         prompts.clear()
         hosts.clear()
-        mesh.clear()
         dedup.clear()
     }
 
