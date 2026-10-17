@@ -591,12 +591,35 @@ internal fun Composer(
                 }
             }
             val isSlashText = text.trimStart().startsWith("/")
-            val slashCommands = remember { listOf("/clear", "/compact", "/model", "/quit", "/undo", "/sdd-status", "/help") }
-            val suggestions =
-                if (isSlashText && !text.trim().contains(" ")) {
-                    slashCommands.filter { it.startsWith(text.trim()) && it != text.trim() }
-                } else {
-                    emptyList()
+            val slashCommands =
+                remember {
+                    listOf("/clear", "/compact", "/model", "/thinking", "/quit", "/undo", "/sdd-status", "/help")
+                }
+            val thinkingLevels =
+                remember {
+                    listOf("off", "minimal", "low", "medium", "high", "xhigh", "max")
+                }
+            val suggestions: List<Pair<String, String>> =
+                remember(text) {
+                    val trimmed = text.trimStart()
+                    if (!trimmed.startsWith("/")) {
+                        emptyList()
+                    } else if (trimmed == "/thinking" || trimmed.startsWith("/thinking ")) {
+                        val arg = trimmed.removePrefix("/thinking").trimStart()
+                        val matchingLevels =
+                            if (arg.isEmpty()) {
+                                thinkingLevels
+                            } else {
+                                thinkingLevels.filter { it.startsWith(arg.lowercase()) && it != arg.lowercase() }
+                            }
+                        matchingLevels.map { level -> level to "/thinking $level" }
+                    } else if (!trimmed.contains(" ")) {
+                        slashCommands
+                            .filter { it.startsWith(trimmed) && it != trimmed }
+                            .map { cmd -> cmd to "$cmd " }
+                    } else {
+                        emptyList()
+                    }
                 }
 
             if (suggestions.isNotEmpty()) {
@@ -607,10 +630,10 @@ internal fun Composer(
                         .horizontalScroll(suggestionsScroll),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    suggestions.forEach { cmd ->
+                    suggestions.forEach { (label, replacement) ->
                         SuggestionChip(
-                            onClick = { onText("$cmd ") },
-                            label = { Text(cmd) },
+                            onClick = { onText(replacement) },
+                            label = { Text(label) },
                             shape = RoundedCornerShape(8.dp),
                         )
                     }

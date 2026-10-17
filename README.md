@@ -18,6 +18,10 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 
 ## Características principales
 
+- **Soporte de Comandos `/model` y `/thinking` (v0.3.4)**:
+  - Sugerencia y autocompletado contextual de comandos slash en el compositor de chat, incorporando `"/thinking"` a la lista principal de comandos (`/clear`, `/compact`, `/model`, `/thinking`, `/quit`, `/undo`, `/sdd-status`, `/help`).
+  - Chips interactivos con niveles de thinking soportados (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) al escribir `"/thinking "` o cuando el comando activo es `"/thinking"`.
+  - Integración fluida con el sistema de prompts interactivos (`PromptBottomSheet` en modo `select`) para selección visual de modelo o nivel de thinking cuando los comandos se envían sin argumentos.
 - **Consolidación v0.3.3 (Persistencia Room v3, Conversaciones entre Pares y Estado de Chat)**:
   - Migración Room 2→3 verificada (`MIGRATION_2_3`): persistencia de tema, estado de TODOs y tarea activa por agente sin pérdida de datos.
   - Conversaciones entre agentes en Mesh: apertura directa de historiales de conversación entre pares desde la hoja de nodo (`onOpenConversation`) sin requerir arista previa, y preservación del cursor de paginación (`nextBefore`).
@@ -69,15 +73,15 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 Puedes instalar la aplicación directamente en tu dispositivo sin necesidad de compilar:
 
 1. **Descargar el APK:**
-   - 📦 **[RP App v0.3.3 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.3.3)**
-   - Versión Release (canal directo sin Google): **[rp-v0.3.3-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.3/rp-v0.3.3-direct.apk)** (30 MB).
-   - Versión Release con FCM (Google Cloud Messaging opcional): **[rp-v0.3.3-fcm.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.3/rp-v0.3.3-fcm.apk)** (30 MB).
-   - Versión Debug (canal directo): **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.3/rp-direct-debug.apk)** (108 MB).
+   - 📦 **[RP App v0.3.4 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.3.4)**
+   - Versión Release (canal directo sin Google): **[rp-v0.3.4-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-v0.3.4-direct.apk)** (30 MB).
+   - Versión Release con FCM (Google Cloud Messaging opcional): **[rp-v0.3.4-fcm.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-v0.3.4-fcm.apk)** (30 MB).
+   - Versión Debug (canal directo): **[rp-direct-debug.apk](https://github.com/J3pf/Rp-app/releases/download/v0.3.4/rp-direct-debug.apk)** (108 MB).
 2. **Instalar en el móvil:**
    - **En el teléfono:** Abre el archivo descargado y concede permiso de «Instalar aplicaciones desconocidas» para tu navegador o gestor de archivos.
    - **Vía USB con ADB:** Conecta el teléfono con depuración USB y ejecuta:
      ```bash
-     adb install -r rp-v0.3.3-direct.apk
+     adb install -r rp-v0.3.4-direct.apk
      ```
 3. **Vincular con tu Relay:**
    - En el servidor Relay, ejecuta:

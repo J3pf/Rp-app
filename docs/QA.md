@@ -123,5 +123,15 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | F5.2 | Apertura de conversación entre pares sin arista previa | En la pantalla Mesh, abrir la hoja de detalle de un nodo y pulsar «Ver conversación con X» | Se abre directamente la conversación entre ambos agentes sin requerir que exista una arista previa en el snapshot |
 | F5.3 | Filtrado de grupos por máquina | En la pantalla Mesh, seleccionar una máquina específica | La barra de chips de grupo muestra únicamente los grupos con miembros en esa máquina, seleccionando automáticamente el más activo |
 
+## 10. Soporte de Comandos /model y /thinking (v0.3.4)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|---|---|---|
+| F6.1 | Sugerencia de comando `/thinking` | Escribir `/th` en el campo de texto del chat | Aparece el chip de sugerencia `/thinking`. Al pulsarlo, el texto se completa a `/thinking ` con espacio al final |
+| F6.2 | Chips de niveles de thinking | Escribir `/thinking ` o `/thinking` en el compositor | Se despliegan chips interactivos con todos los niveles soportados (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
+| F6.3 | Selección y filtrado de nivel de thinking | Pulsar el chip de un nivel (ej. `medium`) o escribir un prefijo (ej. `/thinking mi`) | El texto se reemplaza limpiamente por `/thinking medium` o se filtra a `minimal` respectivamente; las sugerencias se ocultan al completar el nivel |
+| F6.4 | Ejecución interactiva sin argumentos | Enviar `/model` o `/thinking` sin argumentos al agente | Rp-plugin dispara un diálogo interactivo de selección (`select`), que se despliega en la hoja inferior de prompts (`PromptBottomSheet`) permitiendo elegir opción de forma visual |
+
+
 
 
