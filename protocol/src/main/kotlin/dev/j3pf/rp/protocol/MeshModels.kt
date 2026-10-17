@@ -93,7 +93,10 @@ object MeshSubscribeSerializer : KSerializer<MeshSubscribe> {
             var hasExplicit = false
             loop@ while (true) {
                 when (val index = composite.decodeElementIndex(descriptor)) {
-                    CompositeDecoder.DECODE_DONE -> break@loop
+                    CompositeDecoder.DECODE_DONE -> {
+                        break@loop
+                    }
+
                     0 -> {
                         machineId = composite.decodeNullableSerializableElement(descriptor, 0, String.serializer().nullable)
                         hasExplicit = true
