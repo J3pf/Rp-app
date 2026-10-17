@@ -115,4 +115,13 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | F4.2 | Tolerancia ante subagente o nodo malformado | Enviar un snapshot con un subagente o nodo corrupto (ej. tipo inesperado en `turns`) junto a otros nodos válidos | La app omite únicamente el elemento corrupto registrando advertencia en log y renderiza los restantes nodos y subagentes válidos |
 | F4.3 | Manejo de snapshot raíz ilegible | Provocar payload no decodificable en el nivel superior (no es un objeto JSON) | La app transiciona limpiamente a `MeshErrorState` y permite reintentar |
 
+## 9. Consolidación v0.3.3 (Persistencia Room v3, Conversaciones y Grupos)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|---|---|---|
+| F5.1 | Migración Room 2→3 | Actualizar app desde v0.3.2 a v0.3.3 con agentes guardados en base de datos local | Los agentes conservan todos sus campos; las nuevas columnas (`theme`, `todoCompleted`, `todoTotal`, `activeTask`) se inicializan con valores por defecto sin pérdida de datos |
+| F5.2 | Apertura de conversación entre pares sin arista previa | En la pantalla Mesh, abrir la hoja de detalle de un nodo y pulsar «Ver conversación con X» | Se abre directamente la conversación entre ambos agentes sin requerir que exista una arista previa en el snapshot |
+| F5.3 | Filtrado de grupos por máquina | En la pantalla Mesh, seleccionar una máquina específica | La barra de chips de grupo muestra únicamente los grupos con miembros en esa máquina, seleccionando automáticamente el más activo |
+
+
 
