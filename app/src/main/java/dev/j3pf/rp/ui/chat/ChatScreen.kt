@@ -149,8 +149,11 @@ fun ChatContent(
                         if (agent != null) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 StatusChip(agent)
-                                (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }?.let {
-                                    Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                val modelText = (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
+                                val thinkingText = ui.chat.thinkingLevel?.takeIf { it.isNotBlank() }
+                                val subtitle = listOfNotNull(modelText, thinkingText).joinToString(" · ")
+                                if (subtitle.isNotBlank()) {
+                                    Text(subtitle, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -257,7 +260,14 @@ fun ChatContent(
         }
     }
 
-    if (showInfo && agent != null) InfoDialog(agent) { showInfo = false }
+    if (showInfo && agent != null) {
+        InfoDialog(
+            a = agent,
+            liveModel = ui.chat.model,
+            liveThinking = ui.chat.thinkingLevel,
+            onDismiss = { showInfo = false },
+        )
+    }
     if (showQuitDialog) {
         AlertDialog(
             onDismissRequest = { showQuitDialog = false },
@@ -602,10 +612,11 @@ internal fun Composer(
             val suggestions: List<Pair<String, String>> =
                 remember(text) {
                     val trimmed = text.trimStart()
-                    if (!trimmed.startsWith("/")) {
+                    val lowerTrimmed = trimmed.lowercase()
+                    if (!lowerTrimmed.startsWith("/")) {
                         emptyList()
-                    } else if (trimmed == "/thinking" || trimmed.startsWith("/thinking ")) {
-                        val arg = trimmed.removePrefix("/thinking").trimStart()
+                    } else if (lowerTrimmed == "/thinking" || lowerTrimmed.startsWith("/thinking ")) {
+                        val arg = trimmed.substring("/thinking".length).trimStart()
                         val matchingLevels =
                             if (arg.isEmpty()) {
                                 thinkingLevels
@@ -613,9 +624,9 @@ internal fun Composer(
                                 thinkingLevels.filter { it.startsWith(arg.lowercase()) && it != arg.lowercase() }
                             }
                         matchingLevels.map { level -> level to "/thinking $level" }
-                    } else if (!trimmed.contains(" ")) {
+                    } else if (!lowerTrimmed.contains(" ")) {
                         slashCommands
-                            .filter { it.startsWith(trimmed) && it != trimmed }
+                            .filter { it.startsWith(lowerTrimmed) && it != lowerTrimmed }
                             .map { cmd -> cmd to "$cmd " }
                     } else {
                         emptyList()
@@ -771,6 +782,8 @@ private fun AttachmentChip(
 @Composable
 private fun InfoDialog(
     a: AgentSummary,
+    liveModel: String? = null,
+    liveThinking: String? = null,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -783,7 +796,8 @@ private fun InfoDialog(
                     "PC" to a.machineName,
                     "Carpeta" to a.cwd,
                     "Rama" to a.gitBranch,
-                    "Modelo" to a.model?.label,
+                    "Modelo" to (liveModel ?: a.model?.label),
+                    "Razonamiento" to liveThinking,
                     "Lanzador" to a.launcher,
                     "herdr" to a.herdr?.let { listOfNotNull(it.workspaceId, it.tabId, it.paneId).joinToString(" / ") },
                     "Modo gentle" to a.gentleMode,

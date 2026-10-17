@@ -164,4 +164,32 @@ class SlashCommandSuggestionsTest {
 
         assertEquals("/model ", currentText)
     }
+
+    @Test
+    fun `uppercase slash command prefix still suggests commands and thinking levels`() {
+        var currentText by mutableStateOf("/Thinking HI")
+
+        rule.setContent {
+            RpTheme {
+                Composer(
+                    ui = ChatUiState(),
+                    working = false,
+                    text = currentText,
+                    onText = { currentText = it },
+                    onChoice = {},
+                    onWorkingDelivery = {},
+                    onPicked = {},
+                    onRemoveAttachment = {},
+                    newCameraTarget = { Uri.EMPTY },
+                    onSend = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("high").assertIsDisplayed()
+        rule.onNodeWithText("high").performClick()
+        rule.waitForIdle()
+
+        assertEquals("/thinking high", currentText)
+    }
 }
