@@ -49,7 +49,16 @@ object ChatReducer {
     ): ChatState {
         var s = state
         if (event.epoch != null && event.epoch != s.epoch) {
-            s = s.copy(epoch = event.epoch, lastSeq = 0, streaming = null, working = false, needsResync = false)
+            s =
+                s.copy(
+                    epoch = event.epoch,
+                    lastSeq = 0,
+                    streaming = null,
+                    working = false,
+                    needsResync = false,
+                    todos = emptyList(),
+                    subagents = emptyMap(),
+                )
         }
         if (event.seq in 1..s.lastSeq) return s // duplicado o antiguo
         if (event.seq > s.lastSeq + 1 && s.lastSeq > 0) s = s.copy(needsResync = true)
@@ -63,8 +72,28 @@ object ChatReducer {
         entries: List<Entry>,
         epoch: String? = state.epoch,
     ): ChatState {
-        var s = state.copy(items = emptyList(), tools = emptyMap(), streaming = null, epoch = epoch ?: state.epoch)
+        val epochChanged = epoch != null && state.epoch != null && epoch != state.epoch
+        var s =
+            state.copy(
+                items = emptyList(),
+                tools = emptyMap(),
+                streaming = null,
+                epoch = epoch ?: state.epoch,
+                todos = if (epochChanged) emptyList() else state.todos,
+                subagents = if (epochChanged) emptyMap() else state.subagents,
+            )
         for (e in entries) s = applyEntry(s, e)
+        if (s.subagents.isNotEmpty()) {
+            val enrichedTools =
+                s.tools.mapValues { (id, run) ->
+                    s.subagents[id]?.let { run.copy(subagent = it) } ?: run
+                }
+            val subItems =
+                s.subagents.values
+                    .filter { info -> s.items.none { it.key == "subagent:${info.taskId}" } }
+                    .map { info -> SubagentCardItem("subagent:${info.taskId}", info) }
+            s = s.copy(tools = enrichedTools, items = s.items + subItems)
+        }
         return s.copy(needsResync = false)
     }
 
@@ -76,6 +105,9 @@ object ChatReducer {
     ): ChatState {
         var s = state
         val epochChanged = h.epoch != null && h.epoch != s.epoch
+        if (epochChanged) {
+            s = s.copy(todos = emptyList(), subagents = emptyMap())
+        }
         if (h.entries.isNotEmpty() || epochChanged) {
             s = applyEntries(s, h.entries, h.epoch)
             s = s.copy(lastSeq = if (epochChanged) 0 else s.lastSeq)
@@ -225,26 +257,44 @@ object ChatReducer {
         s: ChatState,
         aborted: Boolean,
     ): ChatState {
+        val settledSubStatus = if (aborted) "aborted" else "done"
         val st = s.streaming
-        val items =
+        val baseItems =
             if (st != null && st.blocks.isNotEmpty()) {
                 s.items + st.copy(streaming = false, stopReason = if (aborted) "aborted" else st.stopReason)
             } else {
                 s.items
             }
+        val items =
+            baseItems.map { item ->
+                if (item is SubagentCardItem && item.info.status == "running") {
+                    item.copy(info = item.info.copy(status = settledSubStatus))
+                } else {
+                    item
+                }
+            }
         val tools =
             s.tools.mapValues { (_, t) ->
-                if (t.status ==
-                    ToolStatus.RUNNING
-                ) {
-                    t.copy(status = ToolStatus.ERROR, isError = true, result = t.result ?: "Interrumpido")
+                val updatedSub =
+                    t.subagent?.let { sub ->
+                        if (sub.status == "running") sub.copy(status = settledSubStatus) else sub
+                    }
+                if (t.status == ToolStatus.RUNNING) {
+                    t.copy(
+                        status = ToolStatus.ERROR,
+                        isError = true,
+                        result = t.result ?: "Interrumpido",
+                        subagent = updatedSub,
+                    )
+                } else if (updatedSub != t.subagent) {
+                    t.copy(subagent = updatedSub)
                 } else {
                     t
                 }
             }
         val subagents =
             s.subagents.mapValues { (_, sub) ->
-                if (sub.status == "running") sub.copy(status = if (aborted) "aborted" else "done") else sub
+                if (sub.status == "running") sub.copy(status = settledSubStatus) else sub
             }
         return s.copy(working = false, streaming = null, items = items, tools = tools, subagents = subagents, terminalWait = null)
     }

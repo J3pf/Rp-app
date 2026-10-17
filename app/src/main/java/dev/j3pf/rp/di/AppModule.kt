@@ -44,7 +44,7 @@ object AppModule {
     ): RpDatabase =
         Room
             .databaseBuilder(ctx, RpDatabase::class.java, "rp.db")
-            .addMigrations(RpDatabase.MIGRATION_1_2)
+            .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3)
             .fallbackToDestructiveMigration()
             .build()
 
