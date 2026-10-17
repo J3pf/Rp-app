@@ -53,6 +53,7 @@ object CommActionSerializer : KSerializer<CommAction> {
     }
 }
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 object MeshSubscribeSerializer : KSerializer<MeshSubscribe> {
     override val descriptor: SerialDescriptor =
         buildClassSerialDescriptor("dev.j3pf.rp.protocol.MeshSubscribe") {
@@ -66,12 +67,16 @@ object MeshSubscribeSerializer : KSerializer<MeshSubscribe> {
         if (encoder is JsonEncoder) {
             val jsonObject =
                 buildJsonObject {
-                    put("machineId", value.machineId?.let { JsonPrimitive(it) } ?: JsonNull)
+                    if (value.machineId != null || value.hasExplicitMachineId) {
+                        put("machineId", value.machineId?.let { JsonPrimitive(it) } ?: JsonNull)
+                    }
                 }
             encoder.encodeJsonElement(jsonObject)
         } else {
             val composite = encoder.beginStructure(descriptor)
-            composite.encodeNullableSerializableElement(descriptor, 0, String.serializer().nullable, value.machineId)
+            if (value.machineId != null || value.hasExplicitMachineId) {
+                composite.encodeNullableSerializableElement(descriptor, 0, String.serializer().nullable, value.machineId)
+            }
             composite.endStructure(descriptor)
         }
     }
@@ -79,26 +84,40 @@ object MeshSubscribeSerializer : KSerializer<MeshSubscribe> {
     override fun deserialize(decoder: Decoder): MeshSubscribe =
         if (decoder is JsonDecoder) {
             val element = decoder.decodeJsonElement().jsonObject
+            val hasExplicit = element.containsKey("machineId")
             val machineId = element["machineId"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
-            MeshSubscribe(machineId)
+            MeshSubscribe(machineId = machineId, hasExplicitMachineId = hasExplicit)
         } else {
             val composite = decoder.beginStructure(descriptor)
             var machineId: String? = null
+            var hasExplicit = false
             loop@ while (true) {
                 when (val index = composite.decodeElementIndex(descriptor)) {
                     CompositeDecoder.DECODE_DONE -> break@loop
-                    0 -> machineId = composite.decodeNullableSerializableElement(descriptor, 0, String.serializer().nullable)
+                    0 -> {
+                        machineId = composite.decodeNullableSerializableElement(descriptor, 0, String.serializer().nullable)
+                        hasExplicit = true
+                    }
                 }
             }
             composite.endStructure(descriptor)
-            MeshSubscribe(machineId)
+            MeshSubscribe(machineId = machineId, hasExplicitMachineId = hasExplicit)
         }
 }
 
 @Serializable(with = MeshSubscribeSerializer::class)
 data class MeshSubscribe(
     val machineId: String? = null,
-)
+    val hasExplicitMachineId: Boolean = true,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MeshSubscribe) return false
+        return machineId == other.machineId
+    }
+
+    override fun hashCode(): Int = machineId?.hashCode() ?: 0
+}
 
 @Serializable
 class MeshUnsubscribe
