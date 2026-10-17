@@ -61,6 +61,7 @@ class MeshRepository
 
         private val activeSubscribers = mutableMapOf<Any, String?>()
         private var lastSubscribeEnvelopeId: String? = null
+        private var lastSubscribedMachineId: String? = null
 
         val isSubscribed: Boolean
             get() = synchronized(subscriptionLock) { activeSubscribers.isNotEmpty() }
@@ -101,9 +102,17 @@ class MeshRepository
 
             connection.state
                 .onEach { state ->
-                    if (state == ConnState.Connected) {
-                        synchronized(subscriptionLock) {
-                            if (activeSubscribers.isNotEmpty()) sendSubscribe(activeSubscribers.values.lastOrNull())
+                    synchronized(subscriptionLock) {
+                        if (state == ConnState.Connected) {
+                            val targetMachineId = activeSubscribers.values.lastOrNull()
+                            if (activeSubscribers.isNotEmpty() &&
+                                (lastSubscribedMachineId != targetMachineId || lastSubscribeEnvelopeId == null)
+                            ) {
+                                sendSubscribe(targetMachineId)
+                            }
+                        } else {
+                            lastSubscribedMachineId = null
+                            lastSubscribeEnvelopeId = null
                         }
                     }
                 }.launchIn(scope)
@@ -150,6 +159,7 @@ class MeshRepository
             synchronized(subscriptionLock) {
                 activeSubscribers.clear()
                 lastSubscribeEnvelopeId = null
+                lastSubscribedMachineId = null
             }
             _snapshot.value = null
         }
@@ -157,6 +167,7 @@ class MeshRepository
         private fun sendSubscribe(machineId: String?) {
             val env = Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId))
             lastSubscribeEnvelopeId = env.id
+            lastSubscribedMachineId = machineId
             connection.send(env)
         }
 

@@ -84,6 +84,10 @@ android {
         buildConfig = true
     }
 
+    sourceSets {
+        getByName("debug").assets.srcDirs("$projectDir/schemas")
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
@@ -172,6 +176,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.room.testing)
     testImplementation(libs.turbine)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
