@@ -48,6 +48,7 @@ import dev.j3pf.rp.ui.agents.MachineGroup
 import dev.j3pf.rp.ui.agents.sortAgentsWithinGroup
 import dev.j3pf.rp.ui.chat.ChatContent
 import dev.j3pf.rp.ui.chat.ChatUiState
+import dev.j3pf.rp.ui.components.LocalHighlightDispatcher
 import dev.j3pf.rp.ui.components.QuotaDynamicIsland
 import dev.j3pf.rp.ui.mesh.LiveCommBubble
 import dev.j3pf.rp.ui.mesh.MeshGroupChip
@@ -72,6 +73,7 @@ import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.ui.theme.RpTheme
 import dev.j3pf.rp.ui.theme.RpThemeChoice
+import kotlinx.coroutines.Dispatchers
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -212,7 +214,10 @@ class RoborazziScreenshotTest {
                     filePath = "src/test/screenshots/${screen}_${themeName}_$modeName.png",
                     roborazziOptions = roborazziOptions,
                 ) {
-                    CompositionLocalProvider(LocalReducedMotion provides true) {
+                    CompositionLocalProvider(
+                        LocalReducedMotion provides true,
+                        LocalHighlightDispatcher provides Dispatchers.Unconfined,
+                    ) {
                         RpTheme(themeChoice = themeChoice, darkTheme = darkTheme) {
                             Surface(
                                 modifier = Modifier.fillMaxSize(),

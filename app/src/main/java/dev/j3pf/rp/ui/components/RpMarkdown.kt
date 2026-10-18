@@ -1,6 +1,5 @@
 package dev.j3pf.rp.ui.components
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -9,9 +8,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -27,47 +29,64 @@ import dev.snipme.highlights.model.BoldHighlight
 import dev.snipme.highlights.model.ColorHighlight
 import dev.snipme.highlights.model.SyntaxLanguage
 import dev.snipme.highlights.model.SyntaxThemes
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+val LocalHighlightDispatcher = compositionLocalOf<CoroutineDispatcher> { Dispatchers.Default }
 
 @Composable
-fun SynchronousHighlightedCode(
+fun HighlightedCode(
     code: String,
     language: String?,
     style: TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    val isDark = isSystemInDarkTheme()
-    val annotatedString =
-        remember(code, language, isDark) {
-            val syntaxLanguage = language?.let { SyntaxLanguage.getByName(it) }
-            val highlights =
-                Highlights
-                    .Builder()
-                    .code(code)
-                    .theme(SyntaxThemes.default(darkMode = isDark))
-                    .apply { if (syntaxLanguage != null) language(syntaxLanguage) }
-                    .build()
-                    .getHighlights()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val dispatcher = LocalHighlightDispatcher.current
+    val annotatedString by
+        produceState(
+            initialValue = buildAnnotatedString { append(code) },
+            code,
+            language,
+            isDark,
+            dispatcher,
+        ) {
+            value =
+                withContext(dispatcher) {
+                    val syntaxLanguage = language?.let { SyntaxLanguage.getByName(it) }
+                    val highlights =
+                        Highlights
+                            .Builder()
+                            .code(code)
+                            .theme(SyntaxThemes.default(darkMode = isDark))
+                            .apply { if (syntaxLanguage != null) language(syntaxLanguage) }
+                            .build()
+                            .getHighlights()
 
-            buildAnnotatedString {
-                append(code)
-                highlights.forEach { highlight ->
-                    when (highlight) {
-                        is ColorHighlight ->
-                            addStyle(
-                                SpanStyle(color = Color(highlight.rgb)),
-                                highlight.location.start,
-                                highlight.location.end,
-                            )
+                    buildAnnotatedString {
+                        append(code)
+                        highlights.forEach { highlight ->
+                            when (highlight) {
+                                is ColorHighlight -> {
+                                    addStyle(
+                                        SpanStyle(color = Color(highlight.rgb)),
+                                        highlight.location.start,
+                                        highlight.location.end,
+                                    )
+                                }
 
-                        is BoldHighlight ->
-                            addStyle(
-                                SpanStyle(fontWeight = FontWeight.Bold),
-                                highlight.location.start,
-                                highlight.location.end,
-                            )
+                                is BoldHighlight -> {
+                                    addStyle(
+                                        SpanStyle(fontWeight = FontWeight.Bold),
+                                        highlight.location.start,
+                                        highlight.location.end,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
         }
 
     Surface(
@@ -89,14 +108,14 @@ private fun rememberRpMarkdownComponents() =
         codeBlock = { model ->
             Box(Modifier.horizontalEdgeFade(edgeColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 MarkdownCodeBlock(model.content, model.node) { code, language, style ->
-                    SynchronousHighlightedCode(code, language, style)
+                    HighlightedCode(code, language, style)
                 }
             }
         },
         codeFence = { model ->
             Box(Modifier.horizontalEdgeFade(edgeColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 MarkdownCodeFence(model.content, model.node) { code, language, style ->
-                    SynchronousHighlightedCode(code, language, style)
+                    HighlightedCode(code, language, style)
                 }
             }
         },
