@@ -1,6 +1,91 @@
 package dev.j3pf.rp.ui.mesh
 
+import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
+
+private val UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}.*")
+private val TRUNCATED_UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{3,}.*")
+private val HEX_SUBAGENT_REGEX = Regex("^(subagent-chat|agent|session)-[0-9a-fA-F-]+.*", RegexOption.IGNORE_CASE)
+private val LONG_HEX_REGEX = Regex("^[0-9a-fA-F]{16,}$")
+private val ULID_REGEX = Regex("^[0-9A-HJ-KM-NP-TV-Z]{26}$", RegexOption.IGNORE_CASE)
+
+fun isIdLooking(text: String?): Boolean {
+    if (text.isNullOrBlank()) return true
+    val trimmed = text.trim()
+    if (UUID_REGEX.containsMatchIn(trimmed)) return true
+    if (TRUNCATED_UUID_REGEX.containsMatchIn(trimmed)) return true
+    if (HEX_SUBAGENT_REGEX.matches(trimmed)) return true
+    if (LONG_HEX_REGEX.matches(trimmed)) return true
+    if (ULID_REGEX.matches(trimmed)) return true
+    if (trimmed.endsWith("…") || trimmed.endsWith("...")) {
+        val withoutEllipsis = trimmed.trimEnd('…', '.').trim()
+        if (withoutEllipsis.length >= 8 && Regex("^[0-9a-fA-F-]+$").matches(withoutEllipsis)) return true
+    }
+    return false
+}
+
+fun extractCwdBasename(cwd: String?): String? {
+    if (cwd.isNullOrBlank()) return null
+    val clean = cwd.replace('\\', '/').trimEnd('/')
+    val lastSlash = clean.lastIndexOf('/')
+    val name = if (lastSlash >= 0) clean.substring(lastSlash + 1) else clean
+    return name.takeIf { it.isNotBlank() && it != "/" && !isIdLooking(it) }
+}
+
+fun formatMeshDisplayName(
+    node: MeshNode,
+    allNodes: List<MeshNode> = emptyList(),
+): String {
+    val baseName = resolveBaseDisplayName(node)
+    if (allNodes.size <= 1) return baseName
+
+    val duplicates = allNodes.filter { resolveBaseDisplayName(it) == baseName }
+    if (duplicates.size <= 1) return baseName
+
+    val machineGroups = duplicates.groupBy { it.machineName }
+    val sameMachineNodes = machineGroups[node.machineName].orEmpty()
+    return if (sameMachineNodes.size > 1) {
+        val sorted = sameMachineNodes.sortedBy { it.agentId }
+        val index = sorted.indexOfFirst { it.agentId == node.agentId }.coerceAtLeast(0)
+        "$baseName (${node.machineName} · ${index + 1})"
+    } else {
+        "$baseName (${node.machineName})"
+    }
+}
+
+private fun resolveBaseDisplayName(node: MeshNode): String {
+    val candidate = node.name.trim()
+    if (candidate.isNotBlank() && !isIdLooking(candidate) && candidate != node.agentId && candidate != node.machineId) {
+        return candidate
+    }
+    val fromCwd = extractCwdBasename(node.cwd)
+    if (fromCwd != null) return fromCwd
+    return "Agente"
+}
+
+fun formatMeshSecondaryLine(node: MeshNode): String {
+    val branchOrModel = node.gitBranch?.takeIf { it.isNotBlank() } ?: node.model?.takeIf { it.isNotBlank() }
+    return if (branchOrModel != null) {
+        "${node.machineName} · $branchOrModel"
+    } else {
+        node.machineName
+    }
+}
+
+fun formatMeshGroupChipLabel(
+    group: MeshGroup,
+    orchestratorNode: MeshNode?,
+    allNodes: List<MeshNode> = emptyList(),
+): String {
+    if (group.groupId == "solo" || group.label == "Sin grupo") return "Sin grupo"
+    if (orchestratorNode != null) {
+        return formatMeshDisplayName(orchestratorNode, allNodes)
+    }
+    if (group.label.isNotBlank() && !isIdLooking(group.label)) {
+        return group.label
+    }
+    return "Grupo de agentes"
+}
 
 fun formatMeshRole(role: String): String =
     when (role.lowercase()) {
@@ -49,6 +134,9 @@ fun formatMeshTodos(
     total: Int,
 ): String = "$done de $total tareas"
 
-fun formatMeshNodeContentDescription(node: MeshNode): String =
-    "${formatMeshRole(node.role)} ${node.name}, ${formatMeshStatus(node.status)}" +
+fun formatMeshNodeContentDescription(
+    node: MeshNode,
+    allNodes: List<MeshNode> = emptyList(),
+): String =
+    "${formatMeshRole(node.role)} ${formatMeshDisplayName(node, allNodes)}, ${formatMeshStatus(node.status)}" +
         (node.todos?.let { ", ${formatMeshTodos(it.done, it.total)}" } ?: "")

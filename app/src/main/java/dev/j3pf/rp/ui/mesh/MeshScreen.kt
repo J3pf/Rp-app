@@ -168,21 +168,18 @@ internal fun MeshScreenContent(
         if (uiState.groupChips.isNotEmpty()) {
             SelectorRow(label = "Grupos") {
                 uiState.groupChips.forEach { group ->
+                    val matchingGroup = uiState.snapshot?.groups?.firstOrNull { it.groupId == group.groupId }
+                    val orchestratorNode =
+                        matchingGroup?.orchestratorAgentId?.let { id ->
+                            uiState.snapshot.nodes.firstOrNull { it.agentId == id }
+                        }
                     val groupLabel =
                         if (group.isSolo) {
                             "Sin grupo"
+                        } else if (matchingGroup != null) {
+                            formatMeshGroupChipLabel(matchingGroup, orchestratorNode, uiState.snapshot.nodes)
                         } else {
-                            group.label.ifBlank {
-                                uiState.snapshot
-                                    ?.groups
-                                    ?.firstOrNull { it.groupId == group.groupId }
-                                    ?.orchestratorAgentId
-                                    ?.let { id ->
-                                        uiState.snapshot.nodes
-                                            .firstOrNull { it.agentId == id }
-                                            ?.name
-                                    }.orEmpty()
-                            }
+                            if (!isIdLooking(group.label)) group.label else "Grupo de agentes"
                         }
                     FilterChip(
                         selected = uiState.selectedGroupId == group.groupId,
@@ -232,7 +229,7 @@ internal fun MeshScreenContent(
             }
         }
 
-        LiveStrip(uiState.liveComms)
+        LiveStrip(comms = uiState.liveComms, nodes = uiState.snapshot?.nodes.orEmpty())
     }
 
     uiState.nodeDetail?.let { detail ->
@@ -345,7 +342,10 @@ private fun MeshErrorState(
 }
 
 @Composable
-private fun LiveStrip(comms: List<dev.j3pf.rp.protocol.MeshComm>) {
+private fun LiveStrip(
+    comms: List<dev.j3pf.rp.protocol.MeshComm>,
+    nodes: List<dev.j3pf.rp.protocol.MeshNode> = emptyList(),
+) {
     var expanded by remember { mutableStateOf(false) }
     Surface(
         modifier =
@@ -360,8 +360,16 @@ private fun LiveStrip(comms: List<dev.j3pf.rp.protocol.MeshComm>) {
             Text("En vivo", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             val visible = if (expanded) comms.take(5) else comms.take(1)
             visible.forEach { comm ->
+                val fromNode = comm.fromAgentId?.let { id -> nodes.firstOrNull { it.agentId == id } }
+                val toNode = comm.toAgentId?.let { id -> nodes.firstOrNull { it.agentId == id } }
+                val fromName =
+                    fromNode?.let { formatMeshDisplayName(it, nodes) }
+                        ?: if (!isIdLooking(comm.fromName)) comm.fromName else "Agente"
+                val toName =
+                    toNode?.let { formatMeshDisplayName(it, nodes) }
+                        ?: if (!isIdLooking(comm.toName)) comm.toName else "Agente"
                 Text(
-                    "${comm.fromName} → ${comm.toName}: ${formatMeshCommText(comm.text)}",
+                    "$fromName → $toName: ${formatMeshCommText(comm.text)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

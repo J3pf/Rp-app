@@ -55,7 +55,11 @@ fun MeshListView(
         return matchingGroup?.groupId ?: SOLO_KEY
     }
     val groupedNodes = visibleNodes.groupBy { resolveGroupId(it) }
-    val groupTitles = groups.associate { it.groupId to (it.label.ifBlank { it.orchestratorAgentId ?: it.groupId }) }
+    val groupTitles =
+        groups.associate { group ->
+            val orch = group.orchestratorAgentId?.let { orchId -> visibleNodes.firstOrNull { it.agentId == orchId } }
+            group.groupId to formatMeshGroupChipLabel(group, orch, visibleNodes)
+        }
     val orderedGroups =
         buildList {
             groups.forEach { group ->
@@ -82,7 +86,11 @@ fun MeshListView(
                         modifier = Modifier.padding(start = 4.dp, top = 4.dp),
                     )
                     nodes.forEach { node ->
-                        MeshNodeListCard(node = node, onClick = { onNodeClick(node.agentId) })
+                        MeshNodeListCard(
+                            node = node,
+                            allNodes = visibleNodes,
+                            onClick = { onNodeClick(node.agentId) },
+                        )
                     }
                 }
             }
@@ -93,9 +101,12 @@ fun MeshListView(
 @Composable
 private fun MeshNodeListCard(
     node: MeshNode,
+    allNodes: List<MeshNode>,
     onClick: () -> Unit,
 ) {
-    val accessibleLabel = formatMeshNodeContentDescription(node)
+    val accessibleLabel = formatMeshNodeContentDescription(node, allNodes)
+    val displayName = formatMeshDisplayName(node, allNodes)
+    val secondaryLine = formatMeshSecondaryLine(node)
     Surface(
         modifier =
             Modifier
@@ -119,7 +130,7 @@ private fun MeshNodeListCard(
                     shape = CircleShape,
                     color = statusColor(node.status, node.online),
                 ) {}
-                Text(node.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(displayName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.weight(1f))
                 Text(
                     formatMeshRole(node.role),
@@ -127,7 +138,7 @@ private fun MeshNodeListCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text("${node.machineName} · ${formatMeshStatus(node.status)}", style = MaterialTheme.typography.bodyMedium)
+            Text("$secondaryLine · ${formatMeshStatus(node.status)}", style = MaterialTheme.typography.bodyMedium)
             node.activity
                 ?.takeIf {
                     it.isNotBlank()

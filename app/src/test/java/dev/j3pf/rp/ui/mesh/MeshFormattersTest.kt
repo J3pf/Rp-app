@@ -82,4 +82,158 @@ class MeshFormattersTest {
             formatMeshNodeContentDescription(nodeWithoutTodos),
         )
     }
+
+    @Test
+    fun `formatMeshDisplayName filters out raw IDs and falls back to cwd basename or Agente`() {
+        val uuidNode =
+            MeshNode(
+                agentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                status = "working",
+            )
+        assertEquals("Rp-app", formatMeshDisplayName(uuidNode))
+
+        val truncatedUuidNode =
+            MeshNode(
+                agentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "01a14fbb-44e3-765f-99e1-…",
+                cwd = "/home/drift/Workspace/RP/Rp-relay",
+                status = "idle",
+            )
+        assertEquals("Rp-relay", formatMeshDisplayName(truncatedUuidNode))
+
+        val subagentChatNode =
+            MeshNode(
+                agentId = "subagent-chat-01a14fbb-2812-7332",
+                machineId = "m2",
+                machineName = "Croma",
+                name = "subagent-chat-01a14fbb-2812-7332",
+                cwd = "/home/drift/Workspace/RP",
+                status = "working",
+            )
+        assertEquals("RP", formatMeshDisplayName(subagentChatNode))
+
+        val uuidWithSuffixNode =
+            MeshNode(
+                agentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "01a14fbb-2812-7332-aae5-d003f17b8fe7 · 4",
+                cwd = null,
+                status = "working",
+            )
+        assertEquals("Agente", formatMeshDisplayName(uuidWithSuffixNode))
+
+        val humanNode =
+            MeshNode(
+                agentId = "agent-123",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "Orquestador Principal",
+                cwd = "/home/drift/Workspace/RP",
+                status = "working",
+            )
+        assertEquals("Orquestador Principal", formatMeshDisplayName(humanNode))
+    }
+
+    @Test
+    fun `formatMeshDisplayName disambiguates duplicates`() {
+        val node1 =
+            MeshNode(
+                agentId = "a1",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "Worker",
+                cwd = "/app",
+                status = "idle",
+            )
+        val node2 =
+            MeshNode(
+                agentId = "a2",
+                machineId = "m2",
+                machineName = "Croma",
+                name = "Worker",
+                cwd = "/app",
+                status = "idle",
+            )
+        val allNodes = listOf(node1, node2)
+        assertEquals("Worker (Omarchy)", formatMeshDisplayName(node1, allNodes))
+        assertEquals("Worker (Croma)", formatMeshDisplayName(node2, allNodes))
+
+        val node3 =
+            MeshNode(
+                agentId = "a3",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "Worker",
+                cwd = "/app",
+                status = "idle",
+            )
+        val sameMachineNodes = listOf(node1, node3)
+        assertEquals("Worker (Omarchy · 1)", formatMeshDisplayName(node1, sameMachineNodes))
+        assertEquals("Worker (Omarchy · 2)", formatMeshDisplayName(node3, sameMachineNodes))
+    }
+
+    @Test
+    fun `formatMeshSecondaryLine formats machine and branch or model`() {
+        val nodeWithBranch =
+            MeshNode(
+                agentId = "a1",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "Worker",
+                gitBranch = "feat/mesh-redesign",
+                model = "sonnet",
+                status = "idle",
+            )
+        assertEquals("Omarchy · feat/mesh-redesign", formatMeshSecondaryLine(nodeWithBranch))
+
+        val nodeWithModelOnly =
+            MeshNode(
+                agentId = "a2",
+                machineId = "m2",
+                machineName = "Croma",
+                name = "Worker",
+                model = "gemini-flash",
+                status = "idle",
+            )
+        assertEquals("Croma · gemini-flash", formatMeshSecondaryLine(nodeWithModelOnly))
+
+        val nodeWithNeither =
+            MeshNode(
+                agentId = "a3",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "Worker",
+                status = "idle",
+            )
+        assertEquals("Omarchy", formatMeshSecondaryLine(nodeWithNeither))
+    }
+
+    @Test
+    fun `formatMeshGroupChipLabel uses orchestrator display name and filters raw IDs`() {
+        val orchNode =
+            MeshNode(
+                agentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                status = "working",
+            )
+        val allNodes = listOf(orchNode)
+        val group =
+            dev.j3pf.rp.protocol.MeshGroup(
+                groupId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                label = "01a14fbb-2812-7332-aae5-d003f17b8fe7 · 4",
+                orchestratorAgentId = orchNode.agentId,
+                memberAgentIds = listOf(orchNode.agentId),
+            )
+        assertEquals("Rp-app", formatMeshGroupChipLabel(group, orchNode, allNodes))
+    }
 }

@@ -166,12 +166,22 @@ class MeshViewModel
             val nodeB = nodes[agentB]
             nodeCommsJob?.cancel()
             conversationJob?.cancel()
+            val allNodes =
+                _uiState.value.snapshot
+                    ?.nodes
+                    .orEmpty()
+            val nameA =
+                nodeA?.let { formatMeshDisplayName(it, allNodes) }
+                    ?: if (!isIdLooking(agentA)) agentA else "Agente"
+            val nameB =
+                nodeB?.let { formatMeshDisplayName(it, allNodes) }
+                    ?: if (!isIdLooking(agentB)) agentB else "Agente"
             val detail =
                 MeshConversationDetail(
                     agentA = agentA,
                     agentB = agentB,
-                    agentAName = nodeA?.name ?: agentA,
-                    agentBName = nodeB?.name ?: agentB,
+                    agentAName = nameA,
+                    agentBName = nameB,
                     isLoading = true,
                 )
             _uiState.update { it.copy(nodeDetail = null, conversationDetail = detail) }

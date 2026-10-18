@@ -82,9 +82,11 @@ fun MeshConversationSheet(
                 }
             }
             items(detail.items, key = { it.commKey }) { comm ->
+                val isFromA = isFromAgentA(comm, detail.agentA, detail.agentAName)
                 ConversationBubble(
                     comm = comm,
-                    isFromA = isFromAgentA(comm, detail.agentA, detail.agentAName),
+                    senderName = if (isFromA) detail.agentAName else detail.agentBName,
+                    isFromA = isFromA,
                 )
             }
         }
@@ -94,6 +96,7 @@ fun MeshConversationSheet(
 @Composable
 private fun ConversationBubble(
     comm: MeshComm,
+    senderName: String,
     isFromA: Boolean,
 ) {
     Row(
@@ -108,9 +111,14 @@ private fun ConversationBubble(
             Column(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        comm.fromName,
+                        senderName,
                         style = MaterialTheme.typography.labelLarge,
-                        color = if (isFromA) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                        color =
+                            if (isFromA) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
                         modifier = Modifier.weight(1f),
                     )
                     ActionBadge(comm.action.raw, isFromA)
