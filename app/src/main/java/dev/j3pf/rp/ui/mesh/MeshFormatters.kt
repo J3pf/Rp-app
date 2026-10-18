@@ -5,7 +5,7 @@ import dev.j3pf.rp.protocol.MeshNode
 
 private val UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}.*")
 private val TRUNCATED_UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{3,}.*")
-private val HEX_SUBAGENT_REGEX = Regex("^(subagent-chat|agent|session)-[0-9a-fA-F-]+.*", RegexOption.IGNORE_CASE)
+private val HEX_SUBAGENT_REGEX = Regex("^(subagent-chat|agent|session)-[0-9a-fA-F]{4,}(-[0-9a-fA-F]+)*$", RegexOption.IGNORE_CASE)
 private val LONG_HEX_REGEX = Regex("^[0-9a-fA-F]{16,}$")
 private val ULID_REGEX = Regex("^[0-9A-HJ-KM-NP-TV-Z]{26}$", RegexOption.IGNORE_CASE)
 
@@ -71,12 +71,20 @@ private fun resolveBaseDisplayName(node: MeshNode): String {
     return "Agente"
 }
 
+fun formatMeshMachineName(machineName: String?): String {
+    if (machineName.isNullOrBlank() || isIdLooking(machineName)) return "Máquina"
+    return machineName.trim()
+}
+
 fun formatMeshSecondaryLine(node: MeshNode): String {
-    val branchOrModel = node.gitBranch?.takeIf { it.isNotBlank() } ?: node.model?.takeIf { it.isNotBlank() }
+    val machine = formatMeshMachineName(node.machineName)
+    val branchOrModel =
+        node.gitBranch?.takeIf { it.isNotBlank() && !isIdLooking(it) }
+            ?: node.model?.takeIf { it.isNotBlank() && !isIdLooking(it) }
     return if (branchOrModel != null) {
-        "${node.machineName} · $branchOrModel"
+        "$machine · $branchOrModel"
     } else {
-        node.machineName
+        machine
     }
 }
 
@@ -106,6 +114,7 @@ fun formatMeshRole(role: String): String =
     when (role.lowercase()) {
         "orchestrator" -> "Orquestador"
         "subordinate" -> "Subordinado"
+        "subagent" -> "Subagente"
         "solo" -> "Individual"
         else -> "Agente"
     }

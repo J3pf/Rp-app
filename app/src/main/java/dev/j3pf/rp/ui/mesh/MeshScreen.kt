@@ -37,14 +37,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.components.rememberShimmerBrush
-import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 
 @Composable
 fun MeshScreen(
@@ -154,7 +153,7 @@ internal fun MeshScreenContent(
                                     if (machine.machineId == null) {
                                         if (machine.agentCount > 0) "Todas · ${machine.agentCount}" else "Todas"
                                     } else {
-                                        "${machine.name} · ${machine.agentCount}"
+                                        "${formatMeshMachineName(machine.name)} · ${machine.agentCount}"
                                     },
                                 )
                             }
@@ -179,7 +178,11 @@ internal fun MeshScreenContent(
                         } else if (matchingGroup != null) {
                             formatMeshGroupChipLabel(matchingGroup, orchestratorNode, uiState.snapshot.nodes)
                         } else {
-                            if (!isIdLooking(group.label)) group.label else "Grupo de agentes"
+                            if (!isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
+                                group.label
+                            } else {
+                                "Grupo de agentes"
+                            }
                         }
                     FilterChip(
                         selected = uiState.selectedGroupId == group.groupId,
@@ -364,10 +367,10 @@ private fun LiveStrip(
                 val toNode = comm.toAgentId?.let { id -> nodes.firstOrNull { it.agentId == id } }
                 val fromName =
                     fromNode?.let { formatMeshDisplayName(it, nodes) }
-                        ?: if (!isIdLooking(comm.fromName)) comm.fromName else "Agente"
+                        ?: if (!isIdLooking(comm.fromName) && !comm.fromName.equals("Agent", ignoreCase = true)) comm.fromName else "Agente"
                 val toName =
                     toNode?.let { formatMeshDisplayName(it, nodes) }
-                        ?: if (!isIdLooking(comm.toName)) comm.toName else "Agente"
+                        ?: if (!isIdLooking(comm.toName) && !comm.toName.equals("Agent", ignoreCase = true)) comm.toName else "Agente"
                 Text(
                     "$fromName → $toName: ${formatMeshCommText(comm.text)}",
                     style = MaterialTheme.typography.bodySmall,

@@ -12,6 +12,7 @@ class MeshFormattersTest {
         assertEquals("Orquestador", formatMeshRole("orchestrator"))
         assertEquals("Subordinado", formatMeshRole("subordinate"))
         assertEquals("Individual", formatMeshRole("solo"))
+        assertEquals("Subagente", formatMeshRole("subagent"))
         assertEquals("Agente", formatMeshRole("custom_role"))
     }
 
@@ -291,5 +292,33 @@ class MeshFormattersTest {
                 memberAgentIds = listOf("node-1"),
             )
         assertEquals("Grupo de agentes", formatMeshGroupChipLabel(groupSentinel, null, emptyList()))
+    }
+
+    @Test
+    fun `isIdLooking keeps human names like agent-deploy and agent-docs`() {
+        kotlin.test.assertFalse(isIdLooking("agent-deploy"))
+        kotlin.test.assertFalse(isIdLooking("agent-docs"))
+        kotlin.test.assertFalse(isIdLooking("session-manager"))
+        kotlin.test.assertTrue(isIdLooking("agent-01a14fbb-2812"))
+        kotlin.test.assertTrue(isIdLooking("subagent-chat-01a14fbb-2812-7332"))
+    }
+
+    @Test
+    fun `formatMeshMachineName and secondary line sanitize machine IDs`() {
+        assertEquals("Omarchy", formatMeshMachineName("Omarchy"))
+        assertEquals("Máquina", formatMeshMachineName(null))
+        assertEquals("Máquina", formatMeshMachineName(""))
+        assertEquals("Máquina", formatMeshMachineName("01a14fbb-2812-7332-aae5-d003f17b8fe7"))
+
+        val nodeWithRawMachine =
+            MeshNode(
+                agentId = "node-1",
+                machineId = "m1",
+                machineName = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                name = "Worker",
+                gitBranch = "main",
+                status = "idle",
+            )
+        assertEquals("Máquina · main", formatMeshSecondaryLine(nodeWithRawMachine))
     }
 }

@@ -8,20 +8,19 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,10 +32,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -68,25 +71,6 @@ fun MeshAgentCard(
     val isWorking = node.status == "working"
     val isOffline = !node.online || node.status == "offline"
 
-    val borderStroke =
-        when {
-            isWorking && !reducedMotion -> {
-                BorderStroke(1.5.dp, rememberWorkingCardBorderBrush())
-            }
-
-            isWorking -> {
-                BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-            }
-
-            node.status == "error" -> {
-                BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-            }
-
-            else -> {
-                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            }
-        }
-
     val cardColor =
         if (isOffline) {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -103,10 +87,14 @@ fun MeshAgentCard(
                 .clickable(role = Role.Button, onClick = onClick)
                 .semantics(mergeDescendants = true) {
                     contentDescription = accessibleDesc
-                },
+                }.workingCardBorder(
+                    isWorking = isWorking,
+                    reducedMotion = reducedMotion,
+                    primaryColor = MaterialTheme.colorScheme.primary,
+                    secondaryColor = MaterialTheme.colorScheme.secondary,
+                ),
         shape = RpShapes.medium,
         color = cardColor,
-        border = borderStroke,
         tonalElevation = if (isWorking) 4.dp else 1.dp,
     ) {
         Column(
@@ -257,7 +245,7 @@ fun AgentAvatar(
         color = accentColor.copy(alpha = if (online) 0.22f else 0.10f),
         border = BorderStroke(1.dp, accentColor.copy(alpha = if (online) 0.80f else 0.40f)),
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = initial,
                 style = MaterialTheme.typography.labelMedium,
@@ -293,7 +281,9 @@ fun MeshRoleBadge(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             color = textColor,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
     }
 }
@@ -391,13 +381,16 @@ private fun WorkingActivityDots() {
             ),
         label = "dotsPulse",
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.graphicsLayer { this.alpha = alpha },
+    ) {
         repeat(3) {
             Box(
                 modifier =
                     Modifier
                         .size(3.dp)
-                        .alpha(alpha)
                         .background(MaterialTheme.colorScheme.primary, CircleShape),
             )
         }
@@ -405,23 +398,47 @@ private fun WorkingActivityDots() {
 }
 
 @Composable
-private fun rememberWorkingCardBorderBrush(): Brush {
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
+private fun Modifier.workingCardBorder(
+    isWorking: Boolean,
+    reducedMotion: Boolean,
+    primaryColor: Color,
+    secondaryColor: Color,
+): Modifier {
+    if (!isWorking) {
+        return this.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RpShapes.medium)
+    }
+    if (reducedMotion) {
+        return this.border(1.5.dp, primaryColor, RpShapes.medium)
+    }
     val transition = rememberInfiniteTransition(label = "workingCardBorder")
-    val offset by transition.animateFloat(
+    val progress by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 600f,
+        targetValue = 1f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(durationMillis = 1800, easing = LinearEasing),
+                animation = tween(durationMillis = 2000, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart,
             ),
-        label = "workingBorderTranslate",
+        label = "workingBorderProgress",
     )
-    return Brush.linearGradient(
-        colors = listOf(primary, secondary, primary),
-        start = Offset(offset, offset),
-        end = Offset(offset + 300f, offset + 300f),
-    )
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    return this.drawWithCache {
+        val strokePx = 1.5.dp.toPx()
+        val cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())
+        val offset = progress * (size.width + size.height)
+        val brush =
+            Brush.linearGradient(
+                colors = listOf(primaryColor, secondaryColor, primaryColor),
+                start = Offset(offset, offset),
+                end = Offset(offset + size.width, offset + size.height),
+            )
+        onDrawWithContent {
+            drawContent()
+            drawRoundRect(
+                brush = brush,
+                style = Stroke(width = strokePx),
+                cornerRadius = cornerRadius,
+            )
+        }
+    }
 }

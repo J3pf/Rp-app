@@ -88,7 +88,6 @@ class MeshLayoutEngineTest {
                     assertTrue(positioned.top >= 0f, "${positioned.node.agentId} top=${positioned.top} at ${width}x$height")
                     assertTrue(positioned.right <= width, "${positioned.node.agentId} right=${positioned.right} at ${width}x$height")
                     assertTrue(positioned.bottom <= height, "${positioned.node.agentId} bottom=${positioned.bottom} at ${width}x$height")
-                    assertEquals(maxOf(positioned.width, positioned.height) / 2f, positioned.radius)
                 }
             }
         }
@@ -114,9 +113,8 @@ class MeshLayoutEngineTest {
         val adjacent = PositionedNode(node("right"), x = 251f, y = 50f, width = 200f, height = 90f, level = 0, satellites = emptyList())
 
         assertEquals(200f, left.width)
-        assertEquals(90f, left.height)
-        assertEquals(100f, left.radius)
-        assertEquals(LayoutBounds(-50f, 5f, 150f, 95f), left.bounds())
+        assertEquals(96f, left.height)
+        assertEquals(LayoutBounds(-50f, 2f, 150f, 98f), left.bounds())
         assertFalse(left.intersects(adjacent))
         assertTrue(left.intersects(adjacent, margin = 2f))
     }
@@ -135,7 +133,6 @@ class MeshLayoutEngineTest {
         assertEquals(4, parent.satellites.size)
         parent.satellites.forEach { satellite ->
             assertEquals("root", satellite.parentAgentId)
-            assertEquals(0f, satellite.orbitRadius)
             val (offsetX, offsetY) = satellite.calculatePosition()
             assertEquals(satellite.offsetX, offsetX)
             assertEquals(satellite.offsetY, offsetY)
@@ -301,20 +298,40 @@ class MeshLayoutEngineTest {
     }
 
     @Test
-    fun `satellites with positive orbit radius retain animated orbit calculation`() {
-        val satellite =
-            PositionedSatellite(
-                subagent = subagent("task"),
-                parentAgentId = "root",
-                orbitRadius = 48f,
-                baseAngleRad = 0f,
-                radius = 10f,
-            )
-        val (x, y) = satellite.calculatePosition()
-        assertEquals(48f, hypot(x.toDouble(), y.toDouble()).toFloat(), 0.001f)
-        val (rotatedX, rotatedY) = satellite.calculatePosition(PI.toFloat() / 2f)
-        assertEquals(48f, hypot(rotatedX.toDouble(), rotatedY.toDouble()).toFloat(), 0.001f)
-        assertEquals(PI.toFloat() / 2f, atan2(rotatedY, rotatedX), 0.001f)
+    fun `density sweep across one through twelve agents with zero to four subagents preserves legible card width`() {
+        val density = 2.625f
+        val widthPx = 1080f
+        val heightPx = 1800f
+        val widthDp = widthPx / density
+        val heightDp = heightPx / density
+
+        for (count in 1..12) {
+            for (subagentCount in 0..4) {
+                val nodes =
+                    hierarchy(count).map { node ->
+                        val subs = (1..subagentCount).map { subagent("sub-$it") }
+                        node.copy(subagents = subs)
+                    }
+                val result = engine.computeLayout(nodes, emptyList(), width = widthDp, height = heightDp)
+                result.nodes.values.forEach { node ->
+                    assertTrue(
+                        node.width >= 140f - 0.01f,
+                        "Node ${node.node.agentId} has width ${node.width} < 140dp at count=$count, subs=$subagentCount",
+                    )
+                    assertTrue(node.left >= 0f, "Node ${node.node.agentId} left < 0 at count=$count")
+                    assertTrue(node.right <= widthDp + 0.01f, "Node ${node.node.agentId} right > widthDp at count=$count")
+                }
+                val positioned = result.nodes.values.toList()
+                positioned.forEachIndexed { index, left ->
+                    positioned.drop(index + 1).forEach { right ->
+                        assertFalse(
+                            left.intersects(right, margin = 2f),
+                            "${left.node.agentId} overlaps ${right.node.agentId} at count=$count with $subagentCount subs",
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun hierarchy(count: Int): List<MeshNode> =

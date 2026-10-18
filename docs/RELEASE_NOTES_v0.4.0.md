@@ -29,21 +29,21 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 
 #### 4. Real-State Motion System
 - Animations reflect **real state only**:
-  - Working agent: animated border shimmer + typing activity indicator dots.
+  - Working agent: animated border shimmer + typing activity indicator dots (rendered on render thread with zero recompositions).
   - Running subagent: active circular progress spinner.
-  - Comm in flight: particles travelling along Bezier connector curves with speech preview bubbles.
-  - Idle state: calm, static outline; frame ticker stopped to preserve CPU and battery.
+  - Comm in flight: particles riding along the exact drawn Bezier connector curves from border to border, accompanied by speech preview bubbles placed cleanly in the connector gap without covering cards.
+  - Idle state: calm, static outline; canvas frame ticker stopped completely when no active comms or pending asks exist to preserve CPU and battery.
   - Offline state: muted, desaturated surface.
   - Full respect for system `ANIMATOR_DURATION_SCALE == 0` and `LocalReducedMotion`.
 
 #### 5. ID Sanitization & Technical Details Drawer
-- Zero raw UUIDs or hex hashes appear on the graph, chips, sheets, or list view.
-- Centralized display name formatter with pure fallbacks (`node.name` → `basename(cwd)` → `"Agente"`).
-- Collapsed **"Detalles técnicos"** section in the node detail sheet provides one-tap clipboard copy for agent IDs, machine IDs, group IDs, and full directory paths.
+- Zero raw UUIDs or hex hashes appear on the graph, machine chips, group chips, sheets, or list view.
+- Centralized display name formatter with pure fallbacks (`node.name` → `basename(cwd)` → `"Agente"`), handling English sentinels (`"Agent"`, `"Mesh Group"`) and preserving `(n)` duplicate suffixes. Machine names sanitized with fallback `"Máquina"`.
+- Collapsed **"Detalles técnicos"** section in the node detail sheet provides one-tap clipboard copy for agent IDs, machine IDs, group IDs, parent agent IDs, and full directory paths with 48dp touch targets.
 
 #### 6. Comprehensive Test Coverage & Parity
-- **Roborazzi Screenshot Tests**: 1 agent, 4 agents (Omarchy + Croma scenario), and 12 agents across Cute, Sexy, and Omarchy themes in light & dark modes, on 360dp and tablet viewports.
-- **Unit Tests**: Formatter, layout collision, viewport containment, and Compose UI tests all passing.
+- **Roborazzi Screenshot Tests**: 66 mesh screenshots (126 total in repository) covering 11 scenarios across Cute, Sexy, and Omarchy themes in light & dark modes: 411dp portrait default, 1 agent solo, 12 agents with in-flight comms, 360dp phone width, landscape (800dp width), tablet (800dp width), reduced motion, collapsed detail sheet, expanded detail sheet, and conversation sheet.
+- **Unit Tests**: Formatter, layout collision, viewport containment, density sweep (1080x1800 at 2.625 density), and Compose UI tests all passing with 100% green verification. Zero deprecation warnings across app and tests.
 
 ---
 

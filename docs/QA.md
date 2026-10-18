@@ -64,24 +64,24 @@ Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android)
 | P8 | Cerrar sesión | Borra credenciales, base de datos y canales; vuelve al onboarding |
 | P9 | Notificación de prueba | Ajustes → Notificaciones → "Enviar notificación de prueba" |
 
-## 5. Agent Mesh (Topología animada y comunicaciones)
+## 5. Agent Mesh (Animated Topology & Real-Time Communications — v0.4.0)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected Result |
 | --- | --- | --- | --- |
-| M1 | Acceso y navegación | Abrir el menú inferior y pulsar la pestaña **Mesh** con icono de red | Se abre `MeshScreen` sin romper la navegación; el botón de la barra se resalta y muestra el diagrama o vista de lista |
-| M2 | Tarjetas de agentes y flujo top-down | Observar la pantalla con agentes de una máquina/grupo | El orquestador se posiciona arriba al centro en su tarjeta con avatar teñido por color de máquina; los subordinados se ubican debajo en filas jerárquicas; los subagentes aparecen como chips adjuntos a su tarjeta padre con su propio estado de ejecución |
-| M3 | Contención y recorte en viewport | Observar el lienzo con filtros y barras activas | El lienzo gráfico se contiene estrictamente debajo de los chips de cabecera y por encima de la tira "En vivo"; nunca se dibuja encima de los botones ni filtros superiores |
-| M4 | Aristas y estado de actividad | Provocar comunicación reciente entre agentes o una pregunta pendiente | Las aristas activas (últimos 20 s) brillan con trazo engrosado y translúcido; la arista con `pendingAsk` parpadea con trazo discontinuo; el brillo se apaga puntualmente a los 20 s |
-| M5 | Partículas y globos de diálogo | Enviar un mensaje entre agentes (`mesh.comm`) | Una partícula luminosa viaja por la curva desde el emisor hasta el receptor; aparece un globo con el texto durante ~6 s junto a la arista |
-| M6 | Gestos de zoom y desplazamiento | Pellizcar la pantalla (pinch-to-zoom), arrastrar con un dedo y hacer doble toque | El zoom escala suavemente entre 0.5x y 3x con auto-fit por defecto; el arrastre desplaza la cámara; el doble toque restablece zoom a 1x y centra la vista |
-| M7 | Selectores de máquina y grupo | Seleccionar chips superiores de máquina y de grupo | Filtra los nodos y aristas visibles según la máquina o grupo elegido (incluyendo el grupo "Solo"); los chips muestran nombres legibles sin UUIDs crudos; la selección se persiste |
-| M8 | Hoja de detalle y detalles técnicos | Tocar una tarjeta en el diagrama o en la lista | Se abre `ModalBottomSheet` con avatar, nombre formateado legible, rol, máquina, rama git, modelo, estado, actividad, resumen de TODOs y subagentes; los IDs crudos se encuentran exclusivamente en la sección colapsable "Detalles técnicos" con botones de copia al portapapeles |
-| M9 | Hoja de conversación entre agentes | Tocar una arista entre dos agentes | Se abre `ModalBottomSheet` con el historial de mensajes ordenados por dirección con nombres legibles, badges de acción (`ask`, `reply`, `handover`, etc.), marcas de tiempo y paginación con **Cargar mensajes anteriores** vía `nextBefore` |
-| M10 | Tira "En vivo" inferior | Recibir mensajes en vivo | La tira inferior colapsable muestra los últimos mensajes en formato `Emisor → Receptor: texto` usando nombres limpios (sin UUIDs crudos) |
-| M11 | Estado desconectado | Desconectar el relay o activar modo avión en la pantalla de Mesh | Muestra el banner superior "Desconectado — mostrando datos locales" manteniendo la topología visible y ofreciendo botón **Reintentar** |
-| M12 | Accesibilidad y vista de lista | Pulsar el botón **Vista de lista** en la barra superior | Cambia a una lista accesible estructurada con las mismas tarjetas de agentes, touch targets ≥48 dp y descripciones semánticas completas |
-| M13 | Reducción de movimiento | Habilitar `ANIMATOR_DURATION_SCALE=0` en ajustes de desarrollador de Android | Las partículas de viaje, brillo shimmer y pulsaciones se desactivan completamente, manteniendo la visualización estática de tarjetas y conectores sin redibujo continuo |
-| M14 | Ciclo de vida en segundo plano | Minimizar la app o cambiar a otra app | Se cancela la suscripción de WebSocket (`mesh.unsubscribe`); al reabrir la app (ON_START) se reconecta y resuscribe automáticamente |
+| M1 | Access & Navigation | Open bottom navigation bar and tap **Mesh** tab | Opens `MeshScreen` cleanly; bottom tab highlights; displays diagram or list view |
+| M2 | Hierarchical Top-Down Cards | Observe screen with agents | Orchestrator is positioned top-center with machine-tinted avatar; subordinates arranged in rows below; subagents shown as attached chips with their own execution state |
+| M3 | Viewport Containment & Clipping | Observe canvas with filters and live strip | Graph is contained strictly below top chips and above live strip (`clipToBounds()`); never overlaps buttons or filter chips |
+| M4 | Connector Edges & Activity | Trigger recent communication or pending ask | Active edges (last 20s) glow with accent border; `pendingAsk` edges pulse with dashed line; glow turns off after 20s |
+| M5 | Comm Particles & Speech Bubbles | Send inter-agent comm (`mesh.comm`) | Particle travels along the drawn Bezier connector; speech bubble preview appears in the connector gap without covering cards |
+| M6 | Pan & Zoom Gestures | Pinch-to-zoom, drag with one finger, double-tap | Zoom scales smoothly (0.5x to 3.0x) with auto-fit default; double-tap resets zoom and centers view |
+| M7 | Machine & Group Selectors | Tap top machine and group chips | Filters visible nodes and edges; chips display clean human names without raw UUIDs; selection persists |
+| M8 | Node Detail & Technical Section | Tap card in diagram or list view | Opens `ModalBottomSheet` with avatar, clean display name, role badge, machine, git branch, model, status, activity, TODOs, and subagents; raw IDs are located strictly in collapsed "Detalles técnicos" with one-tap copy buttons |
+| M9 | Agent Conversation History | Tap edge connector between agents | Opens `ModalBottomSheet` with message history ordered by direction with clean names, action badges, timestamps, and "Cargar mensajes anteriores" pagination |
+| M10 | Live Strip | Receive live comms | Collapsible bottom strip shows latest messages (`Sender → Receiver: text`) using clean human names |
+| M11 | Disconnected State | Disconnect relay or enable airplane mode on Mesh | Shows top banner "Desconectado — mostrando datos locales" while keeping topology visible with "Reintentar" button |
+| M12 | Accessibility & List View | Tap "Vista de lista" button | Switches to accessible list view sharing identical cards, >=48dp touch targets, and full semantic descriptions |
+| M13 | Reduced Motion | Enable system `ANIMATOR_DURATION_SCALE=0` | Travelling particles, shimmer border, and pulse dots stop; renders static indicators without continuous redraw |
+| M14 | Background Lifecycle | Minimize app or switch apps | Cancels websocket subscription (`mesh.unsubscribe`); resubscribes automatically on resume (ON_START) |
 
 ## 6. UI Refresh y Experiencia Visual Moderna (v0.3.0)
 

@@ -172,10 +172,10 @@ class MeshViewModel
                     .orEmpty()
             val nameA =
                 nodeA?.let { formatMeshDisplayName(it, allNodes) }
-                    ?: if (!isIdLooking(agentA)) agentA else "Agente"
+                    ?: if (!isIdLooking(agentA) && !agentA.equals("Agent", ignoreCase = true)) agentA else "Agente"
             val nameB =
                 nodeB?.let { formatMeshDisplayName(it, allNodes) }
-                    ?: if (!isIdLooking(agentB)) agentB else "Agente"
+                    ?: if (!isIdLooking(agentB) && !agentB.equals("Agent", ignoreCase = true)) agentB else "Agente"
             val detail =
                 MeshConversationDetail(
                     agentA = agentA,

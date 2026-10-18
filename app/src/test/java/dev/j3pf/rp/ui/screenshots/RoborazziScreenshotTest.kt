@@ -131,6 +131,8 @@ class RoborazziScreenshotTest {
             hostOnline = true,
         )
 
+    private val FIXED_TEST_TIMESTAMP = 1776510000000L
+
     private val agentWorking =
         AgentSummary(
             agentId = "a-1",
@@ -466,7 +468,9 @@ class RoborazziScreenshotTest {
     @Test
     @Config(qualifiers = "w360dp-h640dp-xhdpi")
     fun screenshotMeshDiagram360dp() {
-        val (_, meshUiState) = build4AgentsScenario()
+        val (snapshot, meshUiState) = build4AgentsScenario()
+        val layout360 = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 360f, height = 640f)
+        val state360 = meshUiState.copy(layoutResult = layout360)
 
         captureScreen("mesh_diagram_360dp") {
             Scaffold(
@@ -476,7 +480,30 @@ class RoborazziScreenshotTest {
             ) { padding: PaddingValues ->
                 Box(Modifier.padding(padding).fillMaxSize()) {
                     MeshScreenContent(
-                        uiState = meshUiState,
+                        uiState = state360,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h480dp-xhdpi")
+    fun screenshotMeshDiagramLandscape() {
+        val (snapshot, meshUiState) = build4AgentsScenario()
+        val landscapeLayout = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 800f, height = 480f)
+        val landscapeState = meshUiState.copy(layoutResult = landscapeLayout)
+
+        captureScreen("mesh_diagram_landscape") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = landscapeState,
                         onOpenChat = {},
                     )
                 }
@@ -487,7 +514,9 @@ class RoborazziScreenshotTest {
     @Test
     @Config(qualifiers = "w800dp-h1280dp-xhdpi")
     fun screenshotMeshDiagramTablet() {
-        val (_, meshUiState) = build4AgentsScenario()
+        val (snapshot, meshUiState) = build4AgentsScenario()
+        val tabletLayout = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 800f, height = 1280f)
+        val tabletState = meshUiState.copy(layoutResult = tabletLayout)
 
         captureScreen("mesh_diagram_tablet") {
             Scaffold(
@@ -497,10 +526,164 @@ class RoborazziScreenshotTest {
             ) { padding: PaddingValues ->
                 Box(Modifier.padding(padding).fillMaxSize()) {
                     MeshScreenContent(
-                        uiState = meshUiState,
+                        uiState = tabletState,
                         onOpenChat = {},
                     )
                 }
+            }
+        }
+    }
+
+    @Test
+    fun screenshotMeshDiagramReducedMotion() {
+        val (_, meshUiState) = build4AgentsScenario()
+
+        captureScreen("mesh_diagram_reduced_motion") {
+            CompositionLocalProvider(LocalReducedMotion provides true) {
+                Scaffold(
+                    bottomBar = {
+                        AppBottomBar(selectedTab = AppTab.MESH, pending = 2)
+                    },
+                ) { padding: PaddingValues ->
+                    Box(Modifier.padding(padding).fillMaxSize()) {
+                        MeshScreenContent(
+                            uiState = meshUiState,
+                            onOpenChat = {},
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun screenshotMeshNodeDetailCollapsed() {
+        val (snapshot, _) = build4AgentsScenario()
+        val node = snapshot.nodes.first()
+        val detail =
+            dev.j3pf.rp.ui.mesh.MeshNodeDetail(
+                node = node,
+                recentComms =
+                    listOf(
+                        MeshComm(
+                            commKey = "c1",
+                            fromAgentId = node.agentId,
+                            toAgentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                            fromName = "Rp-app",
+                            toName = "Rp-relay",
+                            action = CommAction.ASK,
+                            text = "Validando endpoints de red",
+                            at = FIXED_TEST_TIMESTAMP - 30_000L,
+                        ),
+                    ),
+            )
+
+        captureScreen("mesh_node_detail_collapsed") {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RpShapes.sheet,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            ) {
+                dev.j3pf.rp.ui.mesh.MeshNodeDetailContent(
+                    detail = detail,
+                    onDismiss = {},
+                    onOpenChat = {},
+                    onViewConversation = {},
+                    initiallyExpandedTechnicalDetails = false,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun screenshotMeshNodeDetailExpanded() {
+        val (snapshot, _) = build4AgentsScenario()
+        val node = snapshot.nodes.first()
+        val detail =
+            dev.j3pf.rp.ui.mesh.MeshNodeDetail(
+                node = node,
+                recentComms =
+                    listOf(
+                        MeshComm(
+                            commKey = "c1",
+                            fromAgentId = node.agentId,
+                            toAgentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                            fromName = "Rp-app",
+                            toName = "Rp-relay",
+                            action = CommAction.ASK,
+                            text = "Validando endpoints de red",
+                            at = FIXED_TEST_TIMESTAMP - 30_000L,
+                        ),
+                    ),
+            )
+
+        captureScreen("mesh_node_detail_expanded") {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RpShapes.sheet,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            ) {
+                dev.j3pf.rp.ui.mesh.MeshNodeDetailContent(
+                    detail = detail,
+                    onDismiss = {},
+                    onOpenChat = {},
+                    onViewConversation = {},
+                    initiallyExpandedTechnicalDetails = true,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun screenshotMeshConversation() {
+        val detail =
+            dev.j3pf.rp.ui.mesh.MeshConversationDetail(
+                agentA = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                agentB = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                agentAName = "Rp-app",
+                agentBName = "Rp-relay",
+                items =
+                    listOf(
+                        MeshComm(
+                            commKey = "c1",
+                            fromAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                            toAgentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                            fromName = "Rp-app",
+                            toName = "Rp-relay",
+                            action = CommAction.ASK,
+                            text = "Iniciando refactor de la red de agentes",
+                            at = FIXED_TEST_TIMESTAMP - 60_000L,
+                        ),
+                        MeshComm(
+                            commKey = "c2",
+                            fromAgentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                            toAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                            fromName = "Rp-relay",
+                            toName = "Rp-app",
+                            action = CommAction.REPLY,
+                            text = "Contrato de red validado y listo",
+                            at = FIXED_TEST_TIMESTAMP - 30_000L,
+                        ),
+                    ),
+            )
+
+        captureScreen("mesh_conversation") {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RpShapes.sheet,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            ) {
+                dev.j3pf.rp.ui.mesh.MeshConversationContent(
+                    detail = detail,
+                    onDismiss = {},
+                    onLoadOlder = {},
+                )
             }
         }
     }
@@ -754,6 +937,16 @@ class RoborazziScreenshotTest {
             }
         val snapshot = MeshSnapshot(nodes = allNodes, edges = edges)
         val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 411f, height = 750f)
+        val comm12 =
+            MeshComm(
+                commKey = "comm-12",
+                fromAgentId = "orch-root",
+                toAgentId = "sub-1",
+                fromName = "Orquestador Maestro",
+                toName = "Worker-1",
+                action = CommAction.SEND,
+                text = "Coordinando enjambre de 12 agentes",
+            )
         val uiState =
             MeshUiState(
                 isLoading = false,
@@ -771,6 +964,8 @@ class RoborazziScreenshotTest {
                     listOf(
                         MeshGroupChip(groupId = "grp-all", label = "Orquestador Maestro", memberCount = 12),
                     ),
+                liveComms = listOf(comm12),
+                activeBubbles = listOf(LiveCommBubble(comm = comm12, expiresAtMs = Long.MAX_VALUE)),
             )
         return snapshot to uiState
     }

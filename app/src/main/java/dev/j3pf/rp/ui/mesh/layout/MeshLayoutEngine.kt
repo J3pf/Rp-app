@@ -84,88 +84,86 @@ class MeshLayoutEngine(
         }
 
         val nodesByLevel = orderedNodes.groupBy { levels.getValue(it.agentId) }.toSortedMap()
-        val largestLevel = nodesByLevel.values.maxOf { it.size }
         val horizontalPadding = config.viewportPaddingX.coerceAtLeast(0f)
         val verticalPadding = config.viewportPaddingY.coerceAtLeast(0f)
         val availableWidth = (width - 2f * horizontalPadding).coerceAtLeast(0f)
         val availableHeight = (height - 2f * verticalPadding).coerceAtLeast(0f)
-        val horizontalSpacing = config.cardSpacingX.coerceAtLeast(2f)
-        val minimumWidth = config.minCardWidth.coerceAtLeast(1f)
-        val preferredWidth = config.cardWidth.coerceAtLeast(minimumWidth)
-        val widthCapacity =
-            floor((availableWidth + horizontalSpacing) / (minimumWidth + horizontalSpacing))
-                .toInt()
-                .coerceAtLeast(1)
-        val preferredColumns =
-            floor((availableWidth + horizontalSpacing) / (preferredWidth + horizontalSpacing))
-                .toInt()
-                .coerceAtLeast(1)
-        val aspectColumns =
-            if (availableHeight > 0f && availableWidth > 0f) {
-                ceil(sqrt(largestLevel * availableWidth / availableHeight)).toInt().coerceAtLeast(1)
-            } else {
-                largestLevel
+        val horizontalSpacing = config.cardSpacingX.coerceAtLeast(4f)
+        val maxColumns =
+            when {
+                availableWidth >= 800f -> 4
+                availableWidth >= 520f -> 3
+                else -> 2
             }
-        val columnCount =
-            max(preferredColumns, aspectColumns)
-                .coerceAtMost(widthCapacity)
-                .coerceAtMost(largestLevel)
-                .coerceAtLeast(1)
-        val cardWidth =
-            min(
-                preferredWidth,
-                ((availableWidth - (columnCount - 1) * horizontalSpacing) / columnCount).coerceAtLeast(0f),
-            )
 
         val previousNodes = previousLayout?.nodes.orEmpty()
+        // Group each level into balanced rows that fill available width
         val rows =
             nodesByLevel.values.flatMap { levelNodes ->
-                levelNodes
-                    .sortedWith(
+                val sorted =
+                    levelNodes.sortedWith(
                         compareBy<MeshNode>(
                             { previousNodes[it.agentId]?.y ?: Float.POSITIVE_INFINITY },
                             { previousNodes[it.agentId]?.x ?: Float.POSITIVE_INFINITY },
                             { it.agentId },
                         ),
-                    ).chunked(columnCount)
+                    )
+                // If single node (e.g. orchestrator level), keep on its own row
+                if (sorted.size == 1) {
+                    listOf(sorted)
+                } else {
+                    sorted.chunked(maxColumns)
+                }
             }
-        val rowCount = rows.size
-        val minimumHeight = config.minCardHeight.coerceAtLeast(0f)
-        val preferredHeight = config.cardHeight.coerceAtLeast(minimumHeight)
-        val requestedVerticalSpacing = config.cardSpacingY.coerceAtLeast(2f)
+        val rowCount = rows.size.coerceAtLeast(1)
+
+        val requestedVerticalSpacing = config.cardSpacingY.coerceAtLeast(6f)
+        val preferredHeight = config.cardHeight.coerceAtLeast(config.minCardHeight)
         val verticalSpacing =
             if (rowCount > 1) {
-                val spacingThatPreservesMinimumCards =
-                    ((availableHeight - rowCount * minimumHeight) / (rowCount - 1)).coerceAtLeast(2f)
-                min(requestedVerticalSpacing, spacingThatPreservesMinimumCards)
+                min(requestedVerticalSpacing, ((availableHeight - rowCount * config.minCardHeight) / (rowCount - 1)).coerceAtLeast(4f))
             } else {
                 0f
             }
         val cardHeight =
             min(
                 preferredHeight,
-                ((availableHeight - verticalSpacing * (rowCount - 1)) / rowCount).coerceAtLeast(0f),
+                ((availableHeight - verticalSpacing * (rowCount - 1)) / rowCount).coerceAtLeast(config.minCardHeight),
             )
+
         val positions = mutableMapOf<String, Pair<Float, Float>>()
+        val nodeWidths = mutableMapOf<String, Float>()
+
         rows.forEachIndexed { rowIndex, rowNodes ->
-            val rowWidth = rowNodes.size * cardWidth + (rowNodes.size - 1) * horizontalSpacing
-            val firstCenterX = width / 2f - rowWidth / 2f + cardWidth / 2f
+            val cols = rowNodes.size
+            // Sizing: single card fills up to 360dp, multi-cards fill available width nicely
+            val rowCardWidth =
+                if (cols == 1) {
+                    min(360f, availableWidth)
+                } else {
+                    min(220f, (availableWidth - (cols - 1) * horizontalSpacing) / cols)
+                }
+            val rowWidth = cols * rowCardWidth + (cols - 1) * horizontalSpacing
+            val firstCenterX = width / 2f - rowWidth / 2f + rowCardWidth / 2f
             val centerY = verticalPadding + cardHeight / 2f + rowIndex * (cardHeight + verticalSpacing)
+
             rowNodes.forEachIndexed { columnIndex, node ->
-                positions[node.agentId] = firstCenterX + columnIndex * (cardWidth + horizontalSpacing) to centerY
+                positions[node.agentId] = firstCenterX + columnIndex * (rowCardWidth + horizontalSpacing) to centerY
+                nodeWidths[node.agentId] = rowCardWidth
             }
         }
 
         val positionedNodes = linkedMapOf<String, PositionedNode>()
         orderedNodes.forEach { node ->
             val (x, y) = positions.getValue(node.agentId)
-            val satellites = positionSatellites(node, cardWidth, cardHeight)
+            val nodeWidth = nodeWidths.getValue(node.agentId)
+            val satellites = positionSatellites(node, nodeWidth, cardHeight)
             positionedNodes[node.agentId] =
                 PositionedNode(
                     node = node,
                     x = x,
                     y = y,
-                    width = cardWidth,
+                    width = nodeWidth,
                     height = cardHeight,
                     level = levels.getValue(node.agentId),
                     satellites = satellites,
@@ -213,9 +211,6 @@ class MeshLayoutEngine(
             PositionedSatellite(
                 subagent = subagent,
                 parentAgentId = node.agentId,
-                orbitRadius = 0f,
-                baseAngleRad = 0f,
-                radius = config.satelliteRadius.coerceAtLeast(0f),
                 offsetX = offsetX,
                 offsetY = offsetY,
                 width = satelliteWidth,

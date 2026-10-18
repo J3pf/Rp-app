@@ -35,6 +35,22 @@ fun MeshConversationSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
+        MeshConversationContent(
+            detail = detail,
+            onDismiss = onDismiss,
+            onLoadOlder = onLoadOlder,
+        )
+    }
+}
+
+@Composable
+fun MeshConversationContent(
+    detail: MeshConversationDetail,
+    onDismiss: () -> Unit,
+    onLoadOlder: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -82,7 +98,7 @@ fun MeshConversationSheet(
                 }
             }
             items(detail.items, key = { it.commKey }) { comm ->
-                val isFromA = isFromAgentA(comm, detail.agentA, detail.agentAName)
+                val isFromA = isFromAgentA(comm, detail.agentA, detail.agentB)
                 ConversationBubble(
                     comm = comm,
                     senderName = if (isFromA) detail.agentAName else detail.agentBName,
@@ -168,9 +184,10 @@ private fun ActionBadge(
 private fun isFromAgentA(
     comm: MeshComm,
     agentA: String,
-    agentAName: String,
+    agentB: String,
 ): Boolean =
     when {
         comm.fromAgentId != null -> comm.fromAgentId == agentA
-        else -> comm.fromName == agentAName
+        comm.toAgentId != null -> comm.toAgentId == agentB
+        else -> false
     }

@@ -47,25 +47,45 @@ fun MeshNodeDetailSheet(
     onDismiss: () -> Unit,
     onOpenChat: (String) -> Unit,
     onViewConversation: (String) -> Unit,
+    initiallyExpandedTechnicalDetails: Boolean = false,
 ) {
-    val node = detail.node
-    val displayName = formatMeshDisplayName(node)
-    val secondaryLine = formatMeshSecondaryLine(node)
-    var showTechnicalDetails by remember { mutableStateOf(false) }
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+        MeshNodeDetailContent(
+            detail = detail,
+            onDismiss = onDismiss,
+            onOpenChat = onOpenChat,
+            onViewConversation = onViewConversation,
+            initiallyExpandedTechnicalDetails = initiallyExpandedTechnicalDetails,
+        )
+    }
+}
+
+@Composable
+fun MeshNodeDetailContent(
+    detail: MeshNodeDetail,
+    onDismiss: () -> Unit,
+    onOpenChat: (String) -> Unit,
+    onViewConversation: (String) -> Unit,
+    initiallyExpandedTechnicalDetails: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val node = detail.node
+    val displayName = formatMeshDisplayName(node)
+    val secondaryLine = formatMeshSecondaryLine(node)
+    var showTechnicalDetails by remember { mutableStateOf(initiallyExpandedTechnicalDetails) }
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
             // Header with Avatar, Display Name, Role Badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -244,7 +264,6 @@ fun MeshNodeDetailSheet(
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -285,7 +304,7 @@ private fun TechnicalCopyRow(
                     clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(label, value))
                     copied = true
                 },
-                modifier = Modifier.heightIn(min = 36.dp),
+                modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 Text(
                     text = if (copied) "Copiado" else "Copiar",
@@ -302,8 +321,18 @@ private fun RecentCommRow(
     comm: MeshComm,
 ) {
     val incoming = comm.toAgentId == node.agentId
-    val fromDisp = if (!isIdLooking(comm.fromName)) comm.fromName else "Agente"
-    val toDisp = if (!isIdLooking(comm.toName)) comm.toName else "Agente"
+    val fromDisp =
+        if (!isIdLooking(comm.fromName) && !comm.fromName.equals("Agent", ignoreCase = true)) {
+            comm.fromName
+        } else {
+            "Agente"
+        }
+    val toDisp =
+        if (!isIdLooking(comm.toName) && !comm.toName.equals("Agent", ignoreCase = true)) {
+            comm.toName
+        } else {
+            "Agente"
+        }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -385,7 +414,7 @@ private fun peerName(
     comm: MeshComm,
 ): String {
     val raw = if (comm.fromAgentId == node.agentId) comm.toName else comm.fromName
-    return if (!isIdLooking(raw)) raw else "Agente"
+    return if (!isIdLooking(raw) && !raw.equals("Agent", ignoreCase = true)) raw else "Agente"
 }
 
 private fun formatDuration(durationMs: Long): String =

@@ -18,13 +18,13 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 
 ## Características principales
 
-- **Rediseño Integral de Red de Agentes (Agent Mesh v0.4.0)**:
-  - **Tarjetas de Agentes Interactivas (S2)**: Reemplazo total de los círculos planos por tarjetas con avatar teñido por el color de la máquina, nombre humano legible, línea secundaria (`máquina · rama/modelo`), insignia de rol (`Orquestador`, `Subordinado`, `Subagente`), estado, actividad en curso en una línea, barra de progreso de TODOs y chips de subagentes adjuntos con spinners de ejecución.
-  - **Disposición Jerárquica Top-Down (S2, S3)**: Motor de diseño radial reemplazado por distribución jerárquica de arriba hacia abajo (orquestador arriba, subordinados abajo) con prevención estricta de colisiones de cajas delimitadoras para 1..12 agentes.
-  - **Contención en Viewport y Auto-Fit (S3)**: El lienzo vive estrictamente debajo de los botones y filtros superiores, con auto-fit zoom por defecto y gestos fluidos de pellizco y desplazamiento (pan/zoom) con doble toque para centrar.
-  - **Sistema de Movimiento en Tiempo Real (S2)**: Borde brillante/shimmer y puntos de actividad en agentes trabajando, animación de partículas en comunicaciones en vuelo y reposo total en estado inactivo sin redibujo innecesario. Respeto estricto a reducción de movimiento.
-  - **Formateo y Sanitización de Identificadores (S1)**: Ocultación absoluta de UUIDs crudos y hashes en la interfaz; resolución limpia a nombre humano, `basename(cwd)` o `"Agente"`. Sección colapsable «Detalles técnicos» en la hoja de detalle con copiado de IDs con un toque.
-  - **Documentación y Arquitectura ([docs/MESH.md](docs/MESH.md))**: Especificación completa de reglas de resolución de nombres, leyenda de movimiento y motor de diseño.
+- **Agent Mesh Screen Redesign (v0.4.0)**:
+  - **Interactive Agent Cards (S2)**: Completely replaces bare circles with rich agent cards featuring a machine-tinted avatar initial, clean display name, secondary line (`machine · branch/model`), role tag (`Orquestador`, `Subordinado`, `Subagente`, `Individual`), live status dot, single-line activity preview, TODO progress bar, and attached subagent chips with real-time execution spinners.
+  - **Hierarchical Top-Down Layout (S2, S3)**: Replaces radial concentric rings with top-down hierarchical flow (orchestrator centered at top, subordinates below in balanced rows) with strict bounding-box collision avoidance for 1..12 agents.
+  - **Viewport Containment & Auto-Fit (S3)**: Canvas lives strictly below header and filter chips (`clipToBounds()`), featuring default fit-to-content auto-zoom and smooth pinch-to-zoom (0.5x–3.0x) and pan gestures with double-tap reset.
+  - **Real-State Motion System (S2)**: Shimmering border glow and typing activity dots on working agents, execution spinners on running subagents, travelling particles riding along the drawn Bezier connectors with message preview bubbles, and calm static idle state with zero continuous redraw loops. Fully respects system `ANIMATOR_DURATION_SCALE=0` and reduced motion.
+  - **Display Name Formatting & ID Sanitization (S1)**: Total seclusion of raw UUIDs and hex hashes; pure resolution to human name, `basename(cwd)`, or `"Agente"`. Collapsed "Detalles técnicos" drawer in node detail sheet with one-tap clipboard copy for raw IDs.
+  - **Architecture Specification & Legend ([docs/MESH.md](docs/MESH.md))**: Full documentation of name resolution rules, motion legend, and layout engine.
 - **Soporte de Comandos `/model` y `/thinking` (v0.3.4)**:
   - Sugerencia y autocompletado contextual de comandos slash en el compositor de chat, incorporando `"/thinking"` a la lista principal de comandos (`/clear`, `/compact`, `/model`, `/thinking`, `/quit`, `/undo`, `/sdd-status`, `/help`).
   - Chips interactivos con niveles de thinking soportados (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) al escribir `"/thinking "` o cuando el comando activo es `"/thinking"`.

@@ -3,8 +3,6 @@ package dev.j3pf.rp.ui.mesh.layout
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSubagent
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** A mesh node positioned in layout coordinates. */
 data class PositionedNode(
@@ -12,8 +10,7 @@ data class PositionedNode(
     val x: Float,
     val y: Float,
     val width: Float = 200f,
-    val height: Float = 90f,
-    val radius: Float = maxOf(width, height) / 2f,
+    val height: Float = 96f,
     val level: Int,
     val satellites: List<PositionedSatellite>,
 ) {
@@ -34,25 +31,16 @@ data class PositionedNode(
             bottom > other.top - margin
 }
 
-/** A subagent positioned relative to its parent node. */
+/** An attached subagent chip positioned relative to its parent node. */
 data class PositionedSatellite(
     val subagent: MeshSubagent,
     val parentAgentId: String,
-    val orbitRadius: Float,
-    val baseAngleRad: Float,
-    val radius: Float,
     val offsetX: Float = 0f,
     val offsetY: Float = 0f,
     val width: Float = 88f,
     val height: Float = 22f,
 ) {
-    fun calculatePosition(currentAngleOffsetRad: Float = 0f): Pair<Float, Float> =
-        if (orbitRadius > 0f) {
-            val angle = baseAngleRad + currentAngleOffsetRad
-            (cos(angle) * orbitRadius) to (sin(angle) * orbitRadius)
-        } else {
-            offsetX to offsetY
-        }
+    fun calculatePosition(): Pair<Float, Float> = offsetX to offsetY
 }
 
 /** An edge represented by a quadratic Bezier curve. */
@@ -85,19 +73,11 @@ data class LayoutBounds(
 }
 
 data class LayoutConfig(
-    val orchestratorRadius: Float = 44f,
-    val subordinateRadius: Float = 32f,
-    val soloRadius: Float = 28f,
-    val baseRingRadius: Float = 160f,
-    val levelRingStep: Float = 140f,
-    val minNodeSpacing: Float = 80f,
-    val satelliteOrbitRadius: Float = 48f,
-    val satelliteRadius: Float = 10f,
     val edgeCurveOffset: Float = 24f,
-    val cardWidth: Float = 180f,
-    val cardHeight: Float = 90f,
-    val minCardWidth: Float = 84f,
-    val minCardHeight: Float = 56f,
+    val cardWidth: Float = 200f,
+    val cardHeight: Float = 96f,
+    val minCardWidth: Float = 140f,
+    val minCardHeight: Float = 72f,
     val cardSpacingX: Float = 12f,
     val cardSpacingY: Float = 20f,
     val viewportPaddingX: Float = 12f,

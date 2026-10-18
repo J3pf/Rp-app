@@ -4,7 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -432,6 +433,114 @@ class MeshScreenTest {
 
         rule.onNodeWithText("Rp-app").performClick()
         kotlin.test.assertTrue(clicked)
+    }
+
+    @Test
+    fun `four-agent rendered diagram at 411dp displays readable cards with width at least 140dp strictly below filters`() {
+        val orch =
+            MeshNode(
+                agentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "01a14fbb-2812-7332-aae5-d003f17b8fe7 · 4",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                gitBranch = "main",
+                activity = "Coordinando red",
+            )
+        val sub1 =
+            MeshNode(
+                agentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                name = "01a14fbb-44e3-765f-99e1-…",
+                role = "subordinate",
+                parentAgentId = orch.agentId,
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-relay",
+                gitBranch = "main",
+            )
+        val sub2 =
+            MeshNode(
+                agentId = "subagent-chat-01a14fbb-2812-7332",
+                machineId = "m-croma",
+                machineName = "Croma",
+                name = "subagent-chat-01a14fbb-2812-7332",
+                role = "subordinate",
+                parentAgentId = orch.agentId,
+                status = "idle",
+                online = true,
+                cwd = "/home/drift/Workspace/RP",
+                gitBranch = "feat/mesh",
+            )
+        val sub3 =
+            MeshNode(
+                agentId = "node-croma-plugin",
+                machineId = "m-croma",
+                machineName = "Croma",
+                name = "Worker Plugin",
+                role = "subordinate",
+                parentAgentId = orch.agentId,
+                status = "offline",
+                online = false,
+                cwd = "/home/drift/Workspace/RP/Rp-plugin",
+            )
+        val allNodes = listOf(orch, sub1, sub2, sub3)
+        val layout = MeshLayoutEngine().computeLayout(allNodes, emptyList(), width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes),
+                layoutResult = layout,
+                isListView = false,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 4),
+                        MeshMachineChip(machineId = "m-omarchy", name = "Omarchy", color = "#6750A4", agentCount = 2),
+                        MeshMachineChip(machineId = "m-croma", name = "Croma", color = "#7AA2F7", agentCount = 2),
+                    ),
+                groupChips =
+                    listOf(
+                        MeshGroupChip(groupId = "grp-1", label = "Rp-app", memberCount = 4),
+                    ),
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(
+                    uiState = uiState,
+                    onOpenChat = {},
+                )
+            }
+        }
+
+        // Verify human display name is visible and no raw UUIDs
+        rule.onNodeWithText("Rp-app").assertIsDisplayed()
+        rule.onNodeWithText("Rp-relay").assertIsDisplayed()
+        rule.onNodeWithText("RP").assertIsDisplayed()
+        rule.onNodeWithText("Worker Plugin").assertIsDisplayed()
+
+        // Filter chips bounding box
+        val machinesHeaderBounds = rule.onNodeWithText("Máquinas").fetchSemanticsNode().boundsInRoot
+        val groupsHeaderBounds = rule.onNodeWithText("Grupos").fetchSemanticsNode().boundsInRoot
+        val highestFilterBottom = maxOf(machinesHeaderBounds.bottom, groupsHeaderBounds.bottom)
+
+        // Verify all 4 cards have width >= 140dp in pixels and are strictly below filter chips
+        val minCardWidthPx = with(rule.density) { 140.dp.toPx() }
+        val orchBounds = rule.onNodeWithText("Rp-app").fetchSemanticsNode().boundsInRoot
+        val sub1Bounds = rule.onNodeWithText("Rp-relay").fetchSemanticsNode().boundsInRoot
+        val sub2Bounds = rule.onNodeWithText("RP").fetchSemanticsNode().boundsInRoot
+        val sub3Bounds = rule.onNodeWithText("Worker Plugin").fetchSemanticsNode().boundsInRoot
+
+        listOf(orchBounds, sub1Bounds, sub2Bounds, sub3Bounds).forEach { bounds ->
+            kotlin.test.assertTrue(bounds.width >= minCardWidthPx - 1f, "Card width ${bounds.width} < 140dp ($minCardWidthPx px)")
+            kotlin.test.assertTrue(bounds.top >= highestFilterBottom, "Card top ${bounds.top} intersects filter bottom $highestFilterBottom")
+        }
     }
 
     private fun node(
