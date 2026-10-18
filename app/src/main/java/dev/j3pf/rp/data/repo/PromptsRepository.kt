@@ -170,9 +170,7 @@ class PromptsRepository
                     enqueueAnswer(context, promptId, answer)
                 }
 
-                is AnswerOutcome.Failed -> {
-                    Unit
-                }
+                is AnswerOutcome.Failed -> {}
             }
             return result
         }

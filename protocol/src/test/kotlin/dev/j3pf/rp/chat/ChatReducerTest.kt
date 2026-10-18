@@ -97,7 +97,7 @@ class ChatReducerTest {
         assertNull(s.streaming)
         s = ChatReducer.reduce(s, ev(3, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"ok"}"""))
         assertEquals(1, s.streaming!!.blocks.size)
-        assertEquals(Block.Text("ok"), s.streaming!!.blocks[0])
+        assertEquals(Block.Text("ok"), s.streaming.blocks[0])
     }
 
     @Test

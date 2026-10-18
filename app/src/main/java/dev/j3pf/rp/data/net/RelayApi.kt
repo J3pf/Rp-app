@@ -68,7 +68,7 @@ sealed interface ApiResult<out T> {
     ) : ApiResult<Nothing>
 }
 
-inline fun <T> ApiResult<T>.getOrNull(): T? = (this as? ApiResult.Ok)?.value
+fun <T> ApiResult<T>.getOrNull(): T? = (this as? ApiResult.Ok)?.value
 
 inline fun <T, R> ApiResult<T>.map(transform: (T) -> R): ApiResult<R> =
     when (this) {
@@ -307,7 +307,7 @@ class RelayApi
                     return ApiResult.Network(e)
                 }
             return response.use { r ->
-                val text = r.body?.string().orEmpty()
+                val text = r.body.string()
                 if (!r.isSuccessful) return@use ApiResult.Http(r.code, text)
                 try {
                     ApiResult.Ok(json.decodeFromString(serializer, text.ifBlank { "{}" }))

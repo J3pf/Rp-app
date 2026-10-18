@@ -77,9 +77,9 @@ class MeshFixturesRelayTest {
         assertEquals(2, sub.turns)
         assertEquals(4, sub.toolCalls)
         assertNotNull(sub.tokens)
-        assertEquals(1200L, sub.tokens?.prompt)
-        assertEquals(350L, sub.tokens?.completion)
-        assertEquals(1550L, sub.tokens?.total)
+        assertEquals(1200L, sub.tokens.prompt)
+        assertEquals(350L, sub.tokens.completion)
+        assertEquals(1550L, sub.tokens.total)
         assertEquals(0.015, sub.cost)
         assertEquals(listOf("read", "bash"), sub.tools)
 

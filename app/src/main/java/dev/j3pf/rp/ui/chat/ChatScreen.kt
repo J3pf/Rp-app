@@ -328,9 +328,7 @@ fun ChatScreen(
                 busyPrompt = null
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 
@@ -344,9 +342,7 @@ fun ChatScreen(
                 if (vm.needsAuth()) {
                     if (activity == null) return@launch
                     when (vm.gate.authenticate(activity, "Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
-                        AuthResult.OK -> {
-                            Unit
-                        }
+                        AuthResult.OK -> {}
 
                         AuthResult.UNAVAILABLE -> {
                             snackbar.showSnackbar("Configura un bloqueo de pantalla para enviar como tecleado")
@@ -771,9 +767,7 @@ private fun AttachmentChip(
                     }
                 }
 
-                else -> {
-                    Unit
-                }
+                else -> {}
             }
         }
     }

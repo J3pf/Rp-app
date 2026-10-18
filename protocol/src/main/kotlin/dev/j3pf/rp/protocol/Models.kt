@@ -360,6 +360,7 @@ object AgentSubscribeSerializer : KSerializer<AgentSubscribe> {
             element<String?>("epoch")
         }
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     override fun serialize(
         encoder: Encoder,
         value: AgentSubscribe,
@@ -381,6 +382,7 @@ object AgentSubscribeSerializer : KSerializer<AgentSubscribe> {
         }
     }
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     override fun deserialize(decoder: Decoder): AgentSubscribe =
         if (decoder is JsonDecoder) {
             val element = decoder.decodeJsonElement().jsonObject

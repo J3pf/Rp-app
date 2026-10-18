@@ -246,7 +246,7 @@ class FixturesTest {
     fun `events stream es un array`() {
         val arr = RpJson.parseToJsonElement(fixture("events.stream.json"))
         assertTrue(arr is JsonArray)
-        arr.let { (it as JsonArray).forEach { e -> RpJson.decodeFromJsonElement(AgentEvent.serializer(), e) } }
-        arr.let { check((it as JsonArray)[0].jsonObject.containsKey("e")) }
+        arr.forEach { e -> RpJson.decodeFromJsonElement(AgentEvent.serializer(), e) }
+        check(arr[0].jsonObject.containsKey("e"))
     }
 }
