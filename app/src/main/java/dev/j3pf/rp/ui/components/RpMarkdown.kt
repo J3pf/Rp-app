@@ -1,26 +1,103 @@
 package dev.j3pf.rp.ui.components
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.compose.components.markdownComponents
-import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
-import com.mikepenz.markdown.compose.elements.highlightedCodeFence
+import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
+import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.model.rememberMarkdownState
+import dev.snipme.highlights.Highlights
+import dev.snipme.highlights.model.BoldHighlight
+import dev.snipme.highlights.model.ColorHighlight
+import dev.snipme.highlights.model.SyntaxLanguage
+import dev.snipme.highlights.model.SyntaxThemes
+
+@Composable
+fun SynchronousHighlightedCode(
+    code: String,
+    language: String?,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = isSystemInDarkTheme()
+    val annotatedString =
+        remember(code, language, isDark) {
+            val syntaxLanguage = language?.let { SyntaxLanguage.getByName(it) }
+            val highlights =
+                Highlights
+                    .Builder()
+                    .code(code)
+                    .theme(SyntaxThemes.default(darkMode = isDark))
+                    .apply { if (syntaxLanguage != null) language(syntaxLanguage) }
+                    .build()
+                    .getHighlights()
+
+            buildAnnotatedString {
+                append(code)
+                highlights.forEach { highlight ->
+                    when (highlight) {
+                        is ColorHighlight ->
+                            addStyle(
+                                SpanStyle(color = Color(highlight.rgb)),
+                                highlight.location.start,
+                                highlight.location.end,
+                            )
+
+                        is BoldHighlight ->
+                            addStyle(
+                                SpanStyle(fontWeight = FontWeight.Bold),
+                                highlight.location.start,
+                                highlight.location.end,
+                            )
+                    }
+                }
+            }
+        }
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = annotatedString,
+            style = style,
+            modifier = Modifier.padding(8.dp),
+        )
+    }
+}
 
 @Composable
 private fun rememberRpMarkdownComponents() =
     markdownComponents(
         codeBlock = { model ->
             Box(Modifier.horizontalEdgeFade(edgeColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                highlightedCodeBlock(model)
+                MarkdownCodeBlock(model.content, model.node) { code, language, style ->
+                    SynchronousHighlightedCode(code, language, style)
+                }
             }
         },
         codeFence = { model ->
             Box(Modifier.horizontalEdgeFade(edgeColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                highlightedCodeFence(model)
+                MarkdownCodeFence(model.content, model.node) { code, language, style ->
+                    SynchronousHighlightedCode(code, language, style)
+                }
             }
         },
     )
