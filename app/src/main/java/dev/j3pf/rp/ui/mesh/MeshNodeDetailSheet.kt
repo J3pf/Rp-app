@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.mesh
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,12 +20,20 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshNode
@@ -39,6 +49,10 @@ fun MeshNodeDetailSheet(
     onViewConversation: (String) -> Unit,
 ) {
     val node = detail.node
+    val displayName = formatMeshDisplayName(node)
+    val secondaryLine = formatMeshSecondaryLine(node)
+    var showTechnicalDetails by remember { mutableStateOf(false) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -52,17 +66,29 @@ fun MeshNodeDetailSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Header with Avatar, Display Name, Role Badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                AgentAvatar(
+                    displayName = displayName,
+                    machineColor = node.machineColor,
+                    online = node.online,
+                    modifier = Modifier.size(36.dp),
+                )
                 Column(Modifier.weight(1f)) {
-                    Text(node.name, style = MaterialTheme.typography.headlineSmall)
+                    Text(displayName, style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        "${formatMeshRole(node.role)} · ${formatMeshStatus(node.status)}",
+                        "$secondaryLine · ${formatMeshRole(node.role)} · ${formatMeshStatus(node.status)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 BadgeText(formatMeshRole(node.role), emphasized = true)
             }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BadgeText(node.machineName)
                 BadgeText(if (node.online) "En línea" else "Desconectado", emphasized = node.online)
@@ -71,10 +97,8 @@ fun MeshNodeDetailSheet(
 
             SectionTitle("Detalles")
             DetailLine("Máquina", node.machineName)
-            DetailLine("Directorio (cwd)", node.cwd ?: "No reportado")
             DetailLine("Rama git", node.gitBranch ?: "No reportado")
             DetailLine("Modelo", node.model ?: "No reportado")
-            DetailLine("Razonamiento", "No reportado")
 
             SectionTitle("TODOs")
             node.todos?.let { todos ->
@@ -129,7 +153,6 @@ fun MeshNodeDetailSheet(
                                 )
                                 BadgeText(formatMeshSubagentStatus(subagent.status), emphasized = subagent.status == "working")
                             }
-                            DetailLine("Tarea", subagent.taskId)
                             DetailLine("Agente", subagent.agent)
                             subagent.durationMs?.let { DetailLine("Duración", formatDuration(it)) }
                             subagent.tokens?.let { tokens ->
@@ -168,6 +191,44 @@ fun MeshNodeDetailSheet(
                 }
             }
 
+            // Collapsed Technical Details with Copy Action (Spec S1)
+            SectionTitle("Detalles técnicos")
+            Surface(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showTechnicalDetails = !showTechnicalDetails },
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (showTechnicalDetails) "Ocultar detalles técnicos" else "Mostrar detalles técnicos",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        if (showTechnicalDetails) "▲" else "▼",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            if (showTechnicalDetails) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TechnicalCopyRow(label = "ID de agente", value = node.agentId)
+                    TechnicalCopyRow(label = "ID de máquina", value = node.machineId)
+                    node.groupId?.let { TechnicalCopyRow(label = "ID de grupo", value = it) }
+                    node.parentAgentId?.let { TechnicalCopyRow(label = "ID de agente padre", value = it) }
+                    TechnicalCopyRow(label = "Directorio (cwd)", value = node.cwd ?: "No reportado")
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { onOpenChat(node.agentId) },
@@ -187,11 +248,63 @@ fun MeshNodeDetailSheet(
 }
 
 @Composable
+private fun TechnicalCopyRow(
+    label: String,
+    value: String,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var copied by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(
+                onClick = {
+                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(label, value))
+                    copied = true
+                },
+                modifier = Modifier.heightIn(min = 36.dp),
+            ) {
+                Text(
+                    text = if (copied) "Copiado" else "Copiar",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun RecentCommRow(
     node: MeshNode,
     comm: MeshComm,
 ) {
     val incoming = comm.toAgentId == node.agentId
+    val fromDisp = if (!isIdLooking(comm.fromName)) comm.fromName else "Agente"
+    val toDisp = if (!isIdLooking(comm.toName)) comm.toName else "Agente"
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -209,7 +322,7 @@ private fun RecentCommRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text("${comm.fromName} → ${comm.toName}", style = MaterialTheme.typography.labelMedium)
+            Text("$fromDisp → $toDisp", style = MaterialTheme.typography.labelMedium)
             Text(formatMeshCommText(comm.text), style = MaterialTheme.typography.bodyMedium)
         }
     }
@@ -270,7 +383,10 @@ private fun peerId(
 private fun peerName(
     node: MeshNode,
     comm: MeshComm,
-): String = if (comm.fromAgentId == node.agentId) comm.toName else comm.fromName
+): String {
+    val raw = if (comm.fromAgentId == node.agentId) comm.toName else comm.fromName
+    return if (!isIdLooking(raw)) raw else "Agente"
+}
 
 private fun formatDuration(durationMs: Long): String =
     when {
