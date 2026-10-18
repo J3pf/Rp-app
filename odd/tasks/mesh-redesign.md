@@ -47,6 +47,10 @@ English docs (CHANGELOG, docs/ section for the mesh screen with the display-name
 - [x] T21 (Q4): Clean suppressions & dead code (MeshRepository, PushRouter, NotificationFactory canNotify guards & unit test, BiometricGate justification) [gentle-ai-worker] [baa690b]
 - [x] T22 (Q1, Q2, Q3): Measured card heights, top-anchored viewport transform, landscape scale 1.0 with pan, and all-Text overflow tests [gentle-ai-worker] [9e53219]
 - [x] T23: Regenerate all 66 Roborazzi mesh screenshots, inspect all 11 scenarios personally, and rebuild signed release APK v0.4.0 [inline] [baa2b07, 3d35ba2]
+- [x] T24 (K1): Revert 686e42e production change; inject highlight dispatcher via LocalHighlightDispatcher (default Dispatchers.Default, Unconfined in tests); use MaterialTheme luminance for palette; add dark-app-on-light-system test; 5x Roborazzi run green [gentle-ai-worker] [91907ae]
+- [x] T25 (K2): SubcomposeLayout / measured card heights in MeshCanvas fed into MeshLayoutEngine; add fontScale 1.5 and 2.0 legibility/containment tests in MeshScreenTest [gentle-ai-worker] [161e8c4]
+- [x] T26 (K3): In compact height (landscape phone), collapse Máquinas and Grupos into one horizontal scrolling row so orchestrator and first row are visible initially [gentle-ai-worker] [161e8c4]
+- [x] T27: Re-record Roborazzi screenshots with landscape filter collapse, inspect all 11 scenarios, rebuild signed release APK v0.4.0 [inline] [27c6f89]
 
 ## Log
 L1: [ORCHESTRATOR → Rp-app] Feature: mesh-redesign ("Red de agentes" screen refactor). Use ODD: create odd/tasks/mesh-redesign.md (## Specs quoting the user verbatim, ## Tasks, ## Log with L1) + Engram mirror odd/mesh-redesign/tasks (project rp-app) BEFORE the first source write. Test-first (observe RED, then GREEN). Code/comments/docs in English; UI copy stays Spanish.
