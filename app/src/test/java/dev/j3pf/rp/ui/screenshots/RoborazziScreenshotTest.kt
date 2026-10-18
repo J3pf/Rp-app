@@ -383,85 +383,8 @@ class RoborazziScreenshotTest {
     // ───────────────────────────── 6. Mesh List View ─────────────────────────────
     @Test
     fun screenshotMesh() {
-        val nodes =
-            listOf(
-                MeshNode(
-                    agentId = "node-orch",
-                    machineId = "m-work",
-                    machineName = "PC Empresa",
-                    machineColor = "#7AA2F7",
-                    name = "Orquestador Principal",
-                    role = "orchestrator",
-                    status = "working",
-                    online = true,
-                    cwd = "/workspace/project",
-                    gitBranch = "main",
-                ),
-                MeshNode(
-                    agentId = "node-sub1",
-                    machineId = "m-work",
-                    machineName = "PC Empresa",
-                    machineColor = "#7AA2F7",
-                    name = "Worker UI",
-                    role = "subordinate",
-                    status = "working",
-                    online = true,
-                    cwd = "/workspace/ui",
-                    gitBranch = "feat/refresh",
-                ),
-                MeshNode(
-                    agentId = "node-sub2",
-                    machineId = "m-personal",
-                    machineName = "MacBook Pro",
-                    machineColor = "#D81B60",
-                    name = "Worker Protocol",
-                    role = "subordinate",
-                    status = "idle",
-                    online = true,
-                    cwd = "/workspace/protocol",
-                    gitBranch = "main",
-                ),
-            )
-
-        val groups =
-            listOf(
-                MeshGroup(
-                    groupId = "grp-1",
-                    label = "Orquestador",
-                    orchestratorAgentId = "node-orch",
-                    memberAgentIds = listOf("node-orch", "node-sub1", "node-sub2"),
-                ),
-            )
-
-        val snapshot = MeshSnapshot(groups = groups, nodes = nodes, edges = emptyList())
-
-        val meshUiState =
-            MeshUiState(
-                isLoading = false,
-                isConnected = true,
-                snapshot = snapshot,
-                isListView = true,
-                machineChips =
-                    listOf(
-                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 3),
-                        MeshMachineChip(machineId = "m-work", name = "PC Empresa", color = "#7AA2F7", agentCount = 2),
-                        MeshMachineChip(machineId = "m-personal", name = "MacBook Pro", color = "#D81B60", agentCount = 1),
-                    ),
-                groupChips =
-                    listOf(
-                        MeshGroupChip(groupId = "grp-1", label = "Orquestador", memberCount = 3),
-                    ),
-                liveComms =
-                    listOf(
-                        MeshComm(
-                            commKey = "comm-1",
-                            fromName = "Orquestador",
-                            toName = "Worker UI",
-                            action = CommAction.ASK,
-                            text = "Validando pruebas de UI",
-                        ),
-                    ),
-            )
+        val (_, meshUiState) = build4AgentsScenario()
+        val listState = meshUiState.copy(isListView = true)
 
         captureScreen("mesh") {
             Scaffold(
@@ -471,7 +394,7 @@ class RoborazziScreenshotTest {
             ) { padding: PaddingValues ->
                 Box(Modifier.padding(padding).fillMaxSize()) {
                     MeshScreenContent(
-                        uiState = meshUiState,
+                        uiState = listState,
                         onOpenChat = {},
                     )
                 }
@@ -482,111 +405,7 @@ class RoborazziScreenshotTest {
     // ───────────────────────────── 7. Mesh Diagram View ─────────────────────────────
     @Test
     fun screenshotMeshDiagram() {
-        val nodes =
-            listOf(
-                MeshNode(
-                    agentId = "node-orch",
-                    machineId = "m-work",
-                    machineName = "PC Empresa",
-                    machineColor = "#7AA2F7",
-                    name = "Orquestador Principal",
-                    role = "orchestrator",
-                    status = "working",
-                    online = true,
-                    cwd = "/workspace/project",
-                    gitBranch = "main",
-                ),
-                MeshNode(
-                    agentId = "node-sub1",
-                    machineId = "m-work",
-                    machineName = "PC Empresa",
-                    machineColor = "#7AA2F7",
-                    name = "Worker UI",
-                    role = "subordinate",
-                    status = "working",
-                    online = true,
-                    cwd = "/workspace/ui",
-                    gitBranch = "feat/refresh",
-                ),
-                MeshNode(
-                    agentId = "node-sub2",
-                    machineId = "m-personal",
-                    machineName = "MacBook Pro",
-                    machineColor = "#D81B60",
-                    name = "Worker Protocol",
-                    role = "subordinate",
-                    status = "idle",
-                    online = true,
-                    cwd = "/workspace/protocol",
-                    gitBranch = "main",
-                ),
-            )
-
-        val edges =
-            listOf(
-                MeshEdge(
-                    edgeId = "edge-1",
-                    a = "node-orch",
-                    b = "node-sub1",
-                    count = 12,
-                    active = true,
-                    lastAction = "ask",
-                    lastPreview = "Validando pruebas de UI",
-                ),
-                MeshEdge(
-                    edgeId = "edge-2",
-                    a = "node-orch",
-                    b = "node-sub2",
-                    count = 5,
-                    active = false,
-                    lastAction = "reply",
-                ),
-            )
-
-        val groups =
-            listOf(
-                MeshGroup(
-                    groupId = "grp-1",
-                    label = "Orquestador",
-                    orchestratorAgentId = "node-orch",
-                    memberAgentIds = listOf("node-orch", "node-sub1", "node-sub2"),
-                ),
-            )
-
-        val snapshot = MeshSnapshot(groups = groups, nodes = nodes, edges = edges)
-        val layout = MeshLayoutEngine().computeLayout(nodes, edges)
-
-        val comm =
-            MeshComm(
-                commKey = "comm-bubble-1",
-                fromAgentId = "node-orch",
-                toAgentId = "node-sub1",
-                fromName = "Orquestador",
-                toName = "Worker UI",
-                action = CommAction.ASK,
-                text = "Coordinando tareas de UI",
-            )
-
-        val meshUiState =
-            MeshUiState(
-                isLoading = false,
-                isConnected = true,
-                snapshot = snapshot,
-                layoutResult = layout,
-                isListView = false,
-                machineChips =
-                    listOf(
-                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 3),
-                        MeshMachineChip(machineId = "m-work", name = "PC Empresa", color = "#7AA2F7", agentCount = 2),
-                        MeshMachineChip(machineId = "m-personal", name = "MacBook Pro", color = "#D81B60", agentCount = 1),
-                    ),
-                groupChips =
-                    listOf(
-                        MeshGroupChip(groupId = "grp-1", label = "Orquestador", memberCount = 3),
-                    ),
-                liveComms = listOf(comm),
-                activeBubbles = listOf(LiveCommBubble(comm = comm, expiresAtMs = Long.MAX_VALUE)),
-            )
+        val (_, meshUiState) = build4AgentsScenario()
 
         captureScreen("mesh_diagram") {
             Scaffold(
@@ -602,6 +421,358 @@ class RoborazziScreenshotTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun screenshotMeshDiagram1Agent() {
+        val (_, meshUiState) = build1AgentScenario()
+
+        captureScreen("mesh_diagram_1agent") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 0)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun screenshotMeshDiagram12Agents() {
+        val (_, meshUiState) = build12AgentsScenario()
+
+        captureScreen("mesh_diagram_12agents") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 0)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-xhdpi")
+    fun screenshotMeshDiagram360dp() {
+        val (_, meshUiState) = build4AgentsScenario()
+
+        captureScreen("mesh_diagram_360dp") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h1280dp-xhdpi")
+    fun screenshotMeshDiagramTablet() {
+        val (_, meshUiState) = build4AgentsScenario()
+
+        captureScreen("mesh_diagram_tablet") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 2)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    private fun build4AgentsScenario(): Pair<MeshSnapshot, MeshUiState> {
+        val nodes =
+            listOf(
+                MeshNode(
+                    agentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    machineId = "m-omarchy",
+                    machineName = "Omarchy",
+                    machineColor = "#6750A4",
+                    name = "01a14fbb-2812-7332-aae5-d003f17b8fe7 · 4",
+                    role = "orchestrator",
+                    status = "working",
+                    online = true,
+                    cwd = "/home/drift/Workspace/RP/Rp-app",
+                    gitBranch = "main",
+                    activity = "Coordinando refactor de red",
+                    todos =
+                        dev.j3pf.rp.protocol
+                            .MeshTodos(total = 6, done = 3, inProgress = 1, blocked = 0, pending = 2),
+                    subagents =
+                        listOf(
+                            dev.j3pf.rp.protocol.MeshSubagent(
+                                taskId = "t1",
+                                agent = "Worker UI",
+                                label = "Pruebas UI",
+                                status = "working",
+                            ),
+                        ),
+                ),
+                MeshNode(
+                    agentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                    machineId = "m-omarchy",
+                    machineName = "Omarchy",
+                    machineColor = "#6750A4",
+                    name = "01a14fbb-44e3-765f-99e1-…",
+                    role = "subordinate",
+                    parentAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    status = "working",
+                    online = true,
+                    cwd = "/home/drift/Workspace/RP/Rp-relay",
+                    gitBranch = "main",
+                    activity = "Validando endpoints",
+                    todos =
+                        dev.j3pf.rp.protocol
+                            .MeshTodos(total = 4, done = 2, inProgress = 1, blocked = 0, pending = 1),
+                ),
+                MeshNode(
+                    agentId = "subagent-chat-01a14fbb-2812-7332",
+                    machineId = "m-croma",
+                    machineName = "Croma",
+                    machineColor = "#7AA2F7",
+                    name = "subagent-chat-01a14fbb-2812-7332",
+                    role = "subordinate",
+                    parentAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    status = "idle",
+                    online = true,
+                    cwd = "/home/drift/Workspace/RP",
+                    gitBranch = "feat/mesh",
+                ),
+                MeshNode(
+                    agentId = "node-croma-plugin",
+                    machineId = "m-croma",
+                    machineName = "Croma",
+                    machineColor = "#7AA2F7",
+                    name = "Worker Plugin",
+                    role = "subordinate",
+                    parentAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    status = "offline",
+                    online = false,
+                    cwd = "/home/drift/Workspace/RP/Rp-plugin",
+                    model = "sonnet",
+                ),
+            )
+
+        val edges =
+            listOf(
+                MeshEdge(
+                    edgeId = "edge-1",
+                    a = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    b = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                    count = 14,
+                    active = true,
+                    lastAction = "ask",
+                    lastPreview = "Coordinando tareas de UI",
+                ),
+                MeshEdge(
+                    edgeId = "edge-2",
+                    a = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    b = "subagent-chat-01a14fbb-2812-7332",
+                    count = 6,
+                    active = false,
+                    lastAction = "reply",
+                ),
+                MeshEdge(
+                    edgeId = "edge-3",
+                    a = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    b = "node-croma-plugin",
+                    count = 1,
+                    active = false,
+                ),
+            )
+
+        val groups =
+            listOf(
+                MeshGroup(
+                    groupId = "grp-1",
+                    label = "01a14fbb-2812-7332-aae5-d003f17b8fe7 · 4",
+                    orchestratorAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                    memberAgentIds =
+                        listOf(
+                            "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                            "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                            "subagent-chat-01a14fbb-2812-7332",
+                            "node-croma-plugin",
+                        ),
+                ),
+            )
+
+        val snapshot = MeshSnapshot(groups = groups, nodes = nodes, edges = edges)
+        val layout = MeshLayoutEngine().computeLayout(nodes, edges, width = 411f, height = 750f)
+
+        val comm =
+            MeshComm(
+                commKey = "comm-bubble-1",
+                fromAgentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                toAgentId = "01a14fbb-44e3-765f-99e1-970655bf47bf",
+                fromName = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                toName = "01a14fbb-44e3-765f-99e1-…",
+                action = CommAction.ASK,
+                text = "Coordinando refactor de UI",
+            )
+
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                layoutResult = layout,
+                isListView = false,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 4),
+                        MeshMachineChip(machineId = "m-omarchy", name = "Omarchy", color = "#6750A4", agentCount = 4),
+                        MeshMachineChip(machineId = "m-croma", name = "Croma", color = "#7AA2F7", agentCount = 3),
+                    ),
+                groupChips =
+                    listOf(
+                        MeshGroupChip(groupId = "grp-1", label = "Rp-app", memberCount = 4),
+                    ),
+                liveComms = listOf(comm),
+                activeBubbles = listOf(LiveCommBubble(comm = comm, expiresAtMs = Long.MAX_VALUE)),
+            )
+        return snapshot to uiState
+    }
+
+    private fun build1AgentScenario(): Pair<MeshSnapshot, MeshUiState> {
+        val node =
+            MeshNode(
+                agentId = "01a14fbb-solo",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Solo Worker",
+                role = "solo",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                gitBranch = "main",
+                activity = "Ejecutando tareas",
+                todos =
+                    dev.j3pf.rp.protocol
+                        .MeshTodos(total = 5, done = 2, inProgress = 1, blocked = 0, pending = 2),
+            )
+        val snapshot = MeshSnapshot(nodes = listOf(node))
+        val layout = MeshLayoutEngine().computeLayout(listOf(node), emptyList(), width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                layoutResult = layout,
+                isListView = false,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 1),
+                        MeshMachineChip(machineId = "m-omarchy", name = "Omarchy", color = "#6750A4", agentCount = 1),
+                    ),
+                groupChips =
+                    listOf(
+                        MeshGroupChip(groupId = "solo", label = "Sin grupo", isSolo = true, memberCount = 1),
+                    ),
+            )
+        return snapshot to uiState
+    }
+
+    private fun build12AgentsScenario(): Pair<MeshSnapshot, MeshUiState> {
+        val root =
+            MeshNode(
+                agentId = "orch-root",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Orquestador Maestro",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP",
+                gitBranch = "main",
+                activity = "Gestionando enjambre",
+                todos =
+                    dev.j3pf.rp.protocol
+                        .MeshTodos(total = 12, done = 7, inProgress = 1, blocked = 0, pending = 4),
+            )
+        val subordinates =
+            (1..11).map { i ->
+                val status =
+                    when (i % 3) {
+                        0 -> "working"
+                        1 -> "idle"
+                        else -> if (i == 11) "offline" else "working"
+                    }
+                MeshNode(
+                    agentId = "sub-$i",
+                    machineId = if (i % 2 == 0) "m-omarchy" else "m-croma",
+                    machineName = if (i % 2 == 0) "Omarchy" else "Croma",
+                    machineColor = if (i % 2 == 0) "#6750A4" else "#7AA2F7",
+                    name = "Worker-$i",
+                    role = "subordinate",
+                    parentAgentId = "orch-root",
+                    status = status,
+                    online = status != "offline",
+                    cwd = "/home/drift/Workspace/RP/sub-$i",
+                    gitBranch = "feat/sub-$i",
+                    activity = if (status == "working") "Tarea $i" else null,
+                )
+            }
+        val allNodes = listOf(root) + subordinates
+        val edges =
+            subordinates.mapIndexed { idx, sub ->
+                MeshEdge(
+                    edgeId = "edge-$idx",
+                    a = "orch-root",
+                    b = sub.agentId,
+                    count = idx + 1,
+                    active = sub.status == "working",
+                    lastAction = "send",
+                )
+            }
+        val snapshot = MeshSnapshot(nodes = allNodes, edges = edges)
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                layoutResult = layout,
+                isListView = false,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 12),
+                        MeshMachineChip(machineId = "m-omarchy", name = "Omarchy", color = "#6750A4", agentCount = 6),
+                        MeshMachineChip(machineId = "m-croma", name = "Croma", color = "#7AA2F7", agentCount = 6),
+                    ),
+                groupChips =
+                    listOf(
+                        MeshGroupChip(groupId = "grp-all", label = "Orquestador Maestro", memberCount = 12),
+                    ),
+            )
+        return snapshot to uiState
     }
 
     // ───────────────────────────── 8. Pending ─────────────────────────────
