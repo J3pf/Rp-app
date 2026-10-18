@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -107,132 +108,103 @@ internal fun MeshScreenContent(
     onLoadMoreConversation: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Red de agentes", style = MaterialTheme.typography.headlineSmall)
-            TextButton(
-                onClick = onToggleListView,
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) {
-                Text(if (uiState.isListView) "Vista de diagrama" else "Vista de lista")
-            }
-        }
-
-        if (!uiState.isConnected) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compactFilters = maxHeight < 500.dp
+        Column(Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    "Desconectado — mostrando datos locales",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reintentar") }
+                Text("Red de agentes", style = MaterialTheme.typography.headlineSmall)
+                TextButton(
+                    onClick = onToggleListView,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(if (uiState.isListView) "Vista de diagrama" else "Vista de lista")
+                }
             }
-        }
 
-        if (uiState.machineChips.isNotEmpty()) {
-            SelectorRow(label = "Máquinas") {
-                uiState.machineChips.forEach { machine ->
-                    FilterChip(
-                        selected = uiState.selectedMachineId == machine.machineId,
-                        onClick = { onSelectMachine(machine.machineId) },
-                        label = {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (machine.machineId != null && machine.color.isNotBlank()) {
-                                    Surface(Modifier.size(10.dp), shape = CircleShape, color = parseRelayColor(machine.color)) {}
-                                }
-                                Text(
-                                    if (machine.machineId == null) {
-                                        if (machine.agentCount > 0) "Todas · ${machine.agentCount}" else "Todas"
-                                    } else {
-                                        "${formatMeshMachineName(machine.name)} · ${machine.agentCount}"
-                                    },
-                                )
-                            }
-                        },
-                        modifier = Modifier.heightIn(min = 48.dp),
+            if (!uiState.isConnected) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "Desconectado — mostrando datos locales",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reintentar") }
+                }
+            }
+
+            if (compactFilters) {
+                CompactSelectorRow {
+                    if (uiState.machineChips.isNotEmpty()) {
+                        Text("Máquinas", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MachineFilterChips(uiState, onSelectMachine)
+                    }
+                    if (uiState.groupChips.isNotEmpty()) {
+                        Text("Grupos", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        GroupFilterChips(uiState, onSelectGroup)
+                    }
+                }
+            } else {
+                if (uiState.machineChips.isNotEmpty()) {
+                    SelectorRow(label = "Máquinas") {
+                        MachineFilterChips(uiState, onSelectMachine)
+                    }
+                }
+                if (uiState.groupChips.isNotEmpty()) {
+                    SelectorRow(label = "Grupos") {
+                        GroupFilterChips(uiState, onSelectGroup)
+                    }
+                }
+            }
+
+            when {
+                uiState.errorMessage != null -> {
+                    MeshErrorState(
+                        message = uiState.errorMessage,
+                        onRetry = onRetry,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
+
+                uiState.isLoading -> {
+                    LoadingSkeleton(Modifier.weight(1f).fillMaxWidth())
+                }
+
+                uiState.isEmpty || uiState.snapshot == null -> {
+                    EmptyMeshState(Modifier.weight(1f).fillMaxWidth())
+                }
+
+                uiState.isListView -> {
+                    MeshListView(
+                        snapshot = uiState.snapshot,
+                        layout = uiState.layoutResult,
+                        onNodeClick = onNodeClick,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
+
+                else -> {
+                    MeshCanvas(
+                        layout = uiState.layoutResult,
+                        activeBubbles = uiState.activeBubbles,
+                        onNodeClick = onNodeClick,
+                        onEdgeClick = onEdgeClick,
+                        onViewportSizeChanged = onViewportSizeChanged,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                 }
             }
+
+            LiveStrip(comms = uiState.liveComms, nodes = uiState.snapshot?.nodes.orEmpty())
         }
-
-        if (uiState.groupChips.isNotEmpty()) {
-            SelectorRow(label = "Grupos") {
-                uiState.groupChips.forEach { group ->
-                    val matchingGroup = uiState.snapshot?.groups?.firstOrNull { it.groupId == group.groupId }
-                    val orchestratorNode =
-                        matchingGroup?.orchestratorAgentId?.let { id ->
-                            uiState.snapshot.nodes.firstOrNull { it.agentId == id }
-                        }
-                    val groupLabel =
-                        if (group.isSolo) {
-                            "Sin grupo"
-                        } else if (matchingGroup != null) {
-                            formatMeshGroupChipLabel(matchingGroup, orchestratorNode, uiState.snapshot.nodes)
-                        } else {
-                            if (!isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
-                                group.label
-                            } else {
-                                "Grupo de agentes"
-                            }
-                        }
-                    FilterChip(
-                        selected = uiState.selectedGroupId == group.groupId,
-                        onClick = { onSelectGroup(group.groupId) },
-                        label = { Text("$groupLabel · ${group.memberCount}") },
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    )
-                }
-            }
-        }
-
-        when {
-            uiState.errorMessage != null -> {
-                MeshErrorState(
-                    message = uiState.errorMessage,
-                    onRetry = onRetry,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            }
-
-            uiState.isLoading -> {
-                LoadingSkeleton(Modifier.weight(1f).fillMaxWidth())
-            }
-
-            uiState.isEmpty || uiState.snapshot == null -> {
-                EmptyMeshState(Modifier.weight(1f).fillMaxWidth())
-            }
-
-            uiState.isListView -> {
-                MeshListView(
-                    snapshot = uiState.snapshot,
-                    layout = uiState.layoutResult,
-                    onNodeClick = onNodeClick,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            }
-
-            else -> {
-                MeshCanvas(
-                    layout = uiState.layoutResult,
-                    activeBubbles = uiState.activeBubbles,
-                    onNodeClick = onNodeClick,
-                    onEdgeClick = onEdgeClick,
-                    onViewportSizeChanged = onViewportSizeChanged,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            }
-        }
-
-        LiveStrip(comms = uiState.liveComms, nodes = uiState.snapshot?.nodes.orEmpty())
     }
 
     uiState.nodeDetail?.let { detail ->
@@ -249,6 +221,83 @@ internal fun MeshScreenContent(
             onDismiss = onDismissConversation,
             onLoadOlder = onLoadMoreConversation,
         )
+    }
+}
+
+@Composable
+private fun MachineFilterChips(
+    uiState: MeshUiState,
+    onSelectMachine: (String?) -> Unit,
+) {
+    uiState.machineChips.forEach { machine ->
+        FilterChip(
+            selected = uiState.selectedMachineId == machine.machineId,
+            onClick = { onSelectMachine(machine.machineId) },
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (machine.machineId != null && machine.color.isNotBlank()) {
+                        Surface(Modifier.size(10.dp), shape = CircleShape, color = parseRelayColor(machine.color)) {}
+                    }
+                    Text(
+                        if (machine.machineId == null) {
+                            if (machine.agentCount > 0) "Todas · ${machine.agentCount}" else "Todas"
+                        } else {
+                            "${formatMeshMachineName(machine.name)} · ${machine.agentCount}"
+                        },
+                    )
+                }
+            },
+            modifier = Modifier.heightIn(min = 48.dp),
+        )
+    }
+}
+
+@Composable
+private fun GroupFilterChips(
+    uiState: MeshUiState,
+    onSelectGroup: (String?) -> Unit,
+) {
+    uiState.groupChips.forEach { group ->
+        val matchingGroup = uiState.snapshot?.groups?.firstOrNull { it.groupId == group.groupId }
+        val nodes = uiState.snapshot?.nodes.orEmpty()
+        val orchestratorNode =
+            matchingGroup?.orchestratorAgentId?.let { id ->
+                nodes.firstOrNull { it.agentId == id }
+            }
+        val groupLabel =
+            if (group.isSolo) {
+                "Sin grupo"
+            } else if (matchingGroup != null) {
+                formatMeshGroupChipLabel(matchingGroup, orchestratorNode, nodes)
+            } else if (!isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
+                group.label
+            } else {
+                "Grupo de agentes"
+            }
+        FilterChip(
+            selected = uiState.selectedGroupId == group.groupId,
+            onClick = { onSelectGroup(group.groupId) },
+            label = { Text("$groupLabel · ${group.memberCount}") },
+            modifier = Modifier.heightIn(min = 48.dp),
+        )
+    }
+}
+
+@Composable
+private fun CompactSelectorRow(content: @Composable () -> Unit) {
+    val scrollState = rememberScrollState()
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .horizontalEdgeFade(scrollState, edgeColor = MaterialTheme.colorScheme.background)
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 12.dp)
+                .heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
     }
 }
 

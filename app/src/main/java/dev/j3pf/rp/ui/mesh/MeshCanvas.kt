@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -27,11 +28,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.withTranslation
 import dev.j3pf.rp.ui.mesh.layout.LayoutBounds
+import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
@@ -71,6 +74,7 @@ fun MeshCanvas(
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
     val frameTime = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var cardHeights by remember(layout?.nodes?.keys?.toList()) { mutableStateOf(emptyMap<String, Float>()) }
     val paint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val textPaint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val path = remember { AndroidPath() }
@@ -127,12 +131,24 @@ fun MeshCanvas(
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
         val widthDp = widthPx / density.density
         val heightDp = heightPx / density.density
+        val currentLayout =
+            remember(layout, widthDp, heightDp, cardHeights) {
+                layout?.let { inputLayout ->
+                    MeshLayoutEngine().computeLayout(
+                        nodes = inputLayout.nodes.values.map { it.node },
+                        edges = inputLayout.edges.map { it.edge },
+                        width = widthDp,
+                        height = heightDp,
+                        previousLayout = inputLayout,
+                        cardHeights = cardHeights,
+                    )
+                }
+            }
 
         LaunchedEffect(widthDp, heightDp) {
             onViewportSizeChanged(widthDp, heightDp)
         }
 
-        val currentLayout = layout
         val bounds = currentLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
 
         // Fit-to-content scaling in DP space
@@ -345,7 +361,12 @@ fun MeshCanvas(
                         .offset(cardLeftDp.dp, cardTopDp.dp)
                         .width(positioned.width.dp)
                         .wrapContentHeight()
-                        .graphicsLayer {
+                        .onSizeChanged { size ->
+                            val measuredHeight = size.height / density.density
+                            if (cardHeights[node.agentId] != measuredHeight) {
+                                cardHeights = cardHeights + (node.agentId to measuredHeight)
+                            }
+                        }.graphicsLayer {
                             scaleX = effectiveZoom
                             scaleY = effectiveZoom
                             transformOrigin = TransformOrigin(0f, 0f)

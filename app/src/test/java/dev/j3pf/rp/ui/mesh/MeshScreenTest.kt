@@ -1,8 +1,10 @@
 package dev.j3pf.rp.ui.mesh
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.MeshComm
@@ -758,6 +761,108 @@ class MeshScreenTest {
     }
 
     @Test
+    @Config(qualifiers = "w891dp-h411dp-xhdpi")
+    fun `compact landscape filters share a row while orchestrator and first subordinate row remain visible`() {
+        val (nodes, edges) = build4AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(nodes, edges, width = 891f, height = 411f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = nodes, edges = edges),
+                layoutResult = layout,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 4),
+                        MeshMachineChip(machineId = "m-omarchy", name = "Omarchy", color = "#6750A4", agentCount = 2),
+                        MeshMachineChip(machineId = "m-croma", name = "Croma", color = "#7AA2F7", agentCount = 2),
+                    ),
+                groupChips = listOf(MeshGroupChip(groupId = "grp-1", label = "Rp-app", memberCount = 4)),
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        val machineLabel =
+            rule
+                .onNodeWithText("Máquinas")
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val groupLabel =
+            rule
+                .onNodeWithText("Grupos")
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertEquals((machineLabel.top + machineLabel.bottom) / 2f, (groupLabel.top + groupLabel.bottom) / 2f, 1f)
+
+        val headerBottom =
+            rule
+                .onNodeWithText("Red de agentes")
+                .fetchSemanticsNode()
+                .boundsInRoot.bottom
+        val machineChip = rule.onNodeWithText("Todas · 4").fetchSemanticsNode().boundsInRoot
+        val groupChip = rule.onNodeWithText("Rp-app · 4").fetchSemanticsNode().boundsInRoot
+        val filtersBottom = maxOf(machineChip.bottom, groupChip.bottom)
+        kotlin.test.assertTrue(
+            filtersBottom - headerBottom <= with(rule.density) { 80.dp.toPx() },
+            "Compact filter area is taller than 80dp",
+        )
+
+        val cardBounds =
+            nodes.map { node ->
+                val description = formatMeshNodeContentDescription(node, nodes)
+                rule
+                    .onNodeWithContentDescription(description)
+                    .assertIsDisplayed()
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            }
+        val orchestrator =
+            rule
+                .onNodeWithContentDescription(
+                    formatMeshNodeContentDescription(nodes.first(), nodes),
+                ).fetchSemanticsNode()
+                .boundsInRoot
+        val firstSubordinate =
+            rule
+                .onNodeWithContentDescription(
+                    formatMeshNodeContentDescription(nodes[1], nodes),
+                ).fetchSemanticsNode()
+                .boundsInRoot
+        kotlin.test.assertTrue(orchestrator.bottom <= firstSubordinate.top + 1f, "First subordinate row overlaps the orchestrator")
+        kotlin.test.assertTrue(cardBounds.all { it.top >= filtersBottom }, "A card intersects the compact filter row")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `four-agent cards contain all text without overlap at font scale 1 point 5`() {
+        assertFontScaledCardContainment(1.5f, build4AgentsScenarioNodes().first)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `four-agent cards contain all text without overlap at font scale 2`() {
+        assertFontScaledCardContainment(2f, build4AgentsScenarioNodes().first)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `twelve-agent cards contain all text without overlap at font scale 1 point 5`() {
+        assertFontScaledCardContainment(1.5f, build12AgentsScenarioNodes().first)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `twelve-agent cards contain all text without overlap at font scale 2`() {
+        assertFontScaledCardContainment(2f, build12AgentsScenarioNodes().first)
+    }
+
+    @Test
     @Config(qualifiers = "w800dp-h1280dp-xhdpi")
     fun `diagram card legibility tablet`() {
         val (allNodes, edges) = build4AgentsScenarioNodes()
@@ -781,6 +886,106 @@ class MeshScreenTest {
             assertCardMeetsLegibility(name)
         }
         assertOrchestratorCardInsideViewport("Rp-app")
+    }
+
+    private fun assertFontScaledCardContainment(
+        fontScale: Float,
+        inputNodes: List<MeshNode>,
+    ) {
+        val nodes =
+            inputNodes.mapIndexed { index, node ->
+                node.copy(
+                    activity = "Implementando contenido accesible del agente ${index + 1}",
+                    todos = MeshTodos(total = 4, done = index % 4, inProgress = 1, pending = 3 - index % 4),
+                    subagents =
+                        if (index == 0) {
+                            listOf(
+                                dev.j3pf.rp.protocol.MeshSubagent(
+                                    taskId = "font-scale-task",
+                                    agent = "Font scale worker",
+                                    label = "Pruebas de escala",
+                                    status = "working",
+                                ),
+                            )
+                        } else {
+                            emptyList()
+                        },
+                )
+            }
+        val layout = MeshLayoutEngine().computeLayout(nodes, emptyList(), width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = nodes),
+                layoutResult = layout,
+            )
+
+        rule.setContent {
+            val baseDensity = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(baseDensity.density, fontScale)) {
+                RpTheme {
+                    MeshScreenContent(uiState = uiState, onOpenChat = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        val cards =
+            nodes.map { node ->
+                rule
+                    .onNodeWithContentDescription(formatMeshNodeContentDescription(node, nodes))
+                    .assertExists()
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            }
+        cards.forEachIndexed { index, card ->
+            cards.drop(index + 1).forEach { other ->
+                val separated =
+                    card.right <= other.left + 1f ||
+                        other.right <= card.left + 1f ||
+                        card.bottom <= other.top + 1f ||
+                        other.bottom <= card.top + 1f
+                kotlin.test.assertTrue(separated, "Cards at indices $index and ${cards.indexOf(other)} overlap at fontScale=$fontScale")
+            }
+        }
+
+        val textNodes =
+            rule
+                .onAllNodes(
+                    androidx.compose.ui.test
+                        .hasText("", substring = true),
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
+        cards.forEachIndexed { index, card ->
+            val textsInsideCard =
+                textNodes.filter { textNode ->
+                    val bounds = textNode.boundsInRoot
+                    val centerX = (bounds.left + bounds.right) / 2f
+                    val centerY = (bounds.top + bounds.bottom) / 2f
+                    centerX >= card.left && centerX <= card.right && centerY >= card.top && centerY <= card.bottom
+                }
+            kotlin.test.assertTrue(textsInsideCard.isNotEmpty(), "No Text nodes found inside card $index at fontScale=$fontScale")
+            textsInsideCard.forEach { textNode ->
+                val text =
+                    textNode.config
+                        .getOrNull(SemanticsProperties.Text)
+                        .orEmpty()
+                        .joinToString { it.text }
+                val results = mutableListOf<TextLayoutResult>()
+                textNode.config
+                    .getOrNull(SemanticsActions.GetTextLayoutResult)
+                    ?.action
+                    ?.invoke(results)
+                val textLayout = results.firstOrNull() ?: error("No TextLayoutResult for '$text' inside card $index")
+                kotlin.test.assertFalse(textLayout.didOverflowHeight, "Text '$text' overflows vertically at fontScale=$fontScale")
+                val textBounds = textNode.boundsInRoot
+                kotlin.test.assertTrue(textBounds.left >= card.left - 1f, "Text '$text' extends past card $index's left edge")
+                kotlin.test.assertTrue(textBounds.top >= card.top - 1f, "Text '$text' extends above card $index")
+                kotlin.test.assertTrue(textBounds.right <= card.right + 1f, "Text '$text' extends past card $index's right edge")
+                kotlin.test.assertTrue(textBounds.bottom <= card.bottom + 1f, "Text '$text' extends below card $index")
+            }
+        }
     }
 
     private fun assertCardMeetsLegibility(

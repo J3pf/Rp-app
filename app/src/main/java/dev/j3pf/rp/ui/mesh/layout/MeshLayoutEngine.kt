@@ -16,6 +16,7 @@ class MeshLayoutEngine(
         width: Float = 800f,
         height: Float = 800f,
         previousLayout: MeshLayoutResult? = null,
+        cardHeights: Map<String, Float> = emptyMap(),
     ): MeshLayoutResult {
         val orderedNodes =
             nodes
@@ -111,16 +112,22 @@ class MeshLayoutEngine(
                     sorted.chunked(maxColumns)
                 }
             }
-        val verticalSpacing = if (rows.size > 1) config.cardSpacingY.coerceAtLeast(48f) else 0f
+        val verticalSpacing =
+            if (rows.size > 1) {
+                val regularSpacing = config.cardSpacingY.coerceAtLeast(48f)
+                if (height < 500f) min(regularSpacing, 8f) else regularSpacing
+            } else {
+                0f
+            }
         val baseCardHeight = max(100f, max(config.cardHeight, config.minCardHeight))
         val nodeHeights =
             orderedNodes.associate { node ->
-                node.agentId to
-                    (
-                        baseCardHeight +
-                            (if (node.todos?.total?.let { it > 0 } == true) 26f else 0f) +
-                            (if (node.subagents.isNotEmpty()) 30f else 0f)
-                    )
+                val estimatedHeight =
+                    baseCardHeight +
+                        (if (node.todos?.total?.let { it > 0 } == true) 26f else 0f) +
+                        (if (node.subagents.isNotEmpty()) 30f else 0f)
+                val measuredHeight = cardHeights[node.agentId]?.takeIf { it.isFinite() && it > 0f }
+                node.agentId to (measuredHeight ?: estimatedHeight)
             }
         val rowHeights = rows.map { row -> row.maxOf { nodeHeights.getValue(it.agentId) } }
 

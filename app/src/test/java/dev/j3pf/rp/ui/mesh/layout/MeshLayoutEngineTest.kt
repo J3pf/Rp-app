@@ -149,6 +149,35 @@ class MeshLayoutEngineTest {
     }
 
     @Test
+    fun `measured card heights override estimates and determine each row height`() {
+        val nodes =
+            listOf(
+                node("root", role = "orchestrator"),
+                node("child-a", parent = "root", role = "subordinate"),
+                node("child-b", parent = "root", role = "subordinate"),
+            )
+        val result =
+            engine.computeLayout(
+                nodes,
+                emptyList(),
+                width = 411f,
+                height = 750f,
+                cardHeights = mapOf("root" to 184f, "child-a" to 172f, "child-b" to 236f),
+            )
+        val root = result.nodes.getValue("root")
+        val childA = result.nodes.getValue("child-a")
+        val childB = result.nodes.getValue("child-b")
+
+        assertEquals(184f, root.height)
+        assertEquals(172f, childA.height)
+        assertEquals(236f, childB.height)
+        assertEquals(childA.y, childB.y)
+        assertEquals(root.bottom + engine.config.cardSpacingY + childB.height / 2f, childB.y)
+        assertFalse(root.intersects(childA))
+        assertFalse(root.intersects(childB))
+    }
+
+    @Test
     fun `base card height never drops below one hundred and empty todos add no height`() {
         val lowHeightEngine = MeshLayoutEngine(LayoutConfig(cardHeight = 80f, minCardHeight = 76f))
         val nodes =
