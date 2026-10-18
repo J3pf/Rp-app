@@ -3,6 +3,7 @@ package dev.j3pf.rp.ui.mesh.layout
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSubagent
+import dev.j3pf.rp.protocol.MeshTodos
 import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -70,7 +71,7 @@ class MeshLayoutEngineTest {
     }
 
     @Test
-    fun `node bounds remain inside all supported viewports for one through twelve agents`() {
+    fun `node bounds remain horizontally contained for one through twelve agents`() {
         val viewports =
             listOf(
                 360f to 640f,
@@ -83,9 +84,7 @@ class MeshLayoutEngineTest {
                 val result = engine.computeLayout(hierarchy(count), emptyList(), width = width, height = height)
                 result.nodes.values.forEach { positioned ->
                     assertTrue(positioned.left >= 0f, "${positioned.node.agentId} left=${positioned.left} at ${width}x$height")
-                    assertTrue(positioned.top >= 0f, "${positioned.node.agentId} top=${positioned.top} at ${width}x$height")
                     assertTrue(positioned.right <= width, "${positioned.node.agentId} right=${positioned.right} at ${width}x$height")
-                    assertTrue(positioned.bottom <= height, "${positioned.node.agentId} bottom=${positioned.bottom} at ${width}x$height")
                 }
             }
         }
@@ -103,6 +102,85 @@ class MeshLayoutEngineTest {
 
         assertTrue(subordinateRows.size > 1)
         assertTrue(subordinateRows.all { orchestrator.y < it })
+    }
+
+    @Test
+    fun `phone columns preserve minimum readable width and tablet cards stay comfortably wide`() {
+        val phone = engine.computeLayout(hierarchy(4), emptyList(), width = 411f, height = 750f)
+        val phoneSubordinates = phone.nodes.values.filter { it.level == 1 }
+
+        assertEquals(2, phoneSubordinates.groupBy { it.y }.values.maxOf { row -> row.map { it.x }.distinct().size })
+        assertTrue(phone.nodes.values.all { it.width >= 180f })
+
+        val narrowPhone = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 640f)
+        assertTrue(narrowPhone.nodes.values.all { it.width >= 180f })
+        assertEquals(
+            1,
+            narrowPhone.nodes.values
+                .filter { it.level == 1 }
+                .map { it.x }
+                .distinct()
+                .size,
+        )
+
+        val tablet = engine.computeLayout(hierarchy(4), emptyList(), width = 800f, height = 1280f)
+        assertTrue(tablet.nodes.values.all { it.width <= 280f })
+        assertTrue(tablet.nodes.getValue("root").width >= 250f)
+    }
+
+    @Test
+    fun `card heights follow node content and row spacing uses the tallest card`() {
+        val nodes =
+            listOf(
+                node("root", role = "orchestrator").copy(todos = MeshTodos(total = 2, done = 1), subagents = listOf(subagent("root-task"))),
+                node("child-a", parent = "root", role = "subordinate").copy(todos = MeshTodos(total = 2, done = 0)),
+                node("child-b", parent = "root", role = "subordinate").copy(subagents = listOf(subagent("child-task"))),
+            )
+        val result = engine.computeLayout(nodes, emptyList(), width = 411f, height = 750f)
+        val root = result.nodes.getValue("root")
+        val childA = result.nodes.getValue("child-a")
+        val childB = result.nodes.getValue("child-b")
+
+        assertEquals(128f, root.height)
+        assertEquals(100f, childA.height)
+        assertEquals(104f, childB.height)
+        assertEquals(childA.y, childB.y)
+        assertEquals(root.bottom + 56f + childB.height / 2f, childB.y)
+    }
+
+    @Test
+    fun `hierarchy bus routes pass around intermediate cards`() {
+        val root = node("root", role = "orchestrator")
+        val middleA = node("middle-a", parent = "root", role = "subordinate")
+        val middleB = node("middle-b", parent = "root", role = "subordinate")
+        val target = node("target", parent = "middle-b", role = "subordinate")
+        val result =
+            engine.computeLayout(
+                listOf(root, middleA, middleB, target),
+                listOf(edge("long", "root", "target")),
+                width = 411f,
+                height = 750f,
+            )
+        val route = result.edges.single().routePoints
+        val endpoints = setOf("root", "target")
+
+        assertTrue(route.size >= 6, "Expected a bus route around intermediate rows, got $route")
+        result.nodes.values.filter { it.node.agentId !in endpoints }.forEach { card ->
+            route.zipWithNext().forEach { (from, to) ->
+                assertFalse(
+                    segmentCrossesCardInterior(from, to, card),
+                    "Edge route $from -> $to crosses ${card.node.agentId}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `tall layouts retain intrinsic card height and extend below the viewport for panning`() {
+        val result = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 300f)
+
+        assertTrue(result.nodes.values.all { it.height == 76f })
+        assertTrue(result.nodes.values.maxOf { it.bottom } > 300f)
     }
 
     @Test
@@ -313,8 +391,8 @@ class MeshLayoutEngineTest {
                 val result = engine.computeLayout(nodes, emptyList(), width = widthDp, height = heightDp)
                 result.nodes.values.forEach { node ->
                     assertTrue(
-                        node.width >= 140f - 0.01f,
-                        "Node ${node.node.agentId} has width ${node.width} < 140dp at count=$count, subs=$subagentCount",
+                        node.width >= 180f - 0.01f,
+                        "Node ${node.node.agentId} has width ${node.width} < 180dp at count=$count, subs=$subagentCount",
                     )
                     assertTrue(node.left >= 0f, "Node ${node.node.agentId} left < 0 at count=$count")
                     assertTrue(node.right <= widthDp + 0.01f, "Node ${node.node.agentId} right > widthDp at count=$count")
@@ -357,6 +435,21 @@ class MeshLayoutEngineTest {
         groupId = groupId,
         subagents = subagents,
     )
+
+    private fun segmentCrossesCardInterior(
+        from: EdgePoint,
+        to: EdgePoint,
+        card: PositionedNode,
+    ): Boolean =
+        if (from.x == to.x) {
+            from.x > card.left && from.x < card.right &&
+                maxOf(minOf(from.y, to.y), card.top) < minOf(maxOf(from.y, to.y), card.bottom)
+        } else if (from.y == to.y) {
+            from.y > card.top && from.y < card.bottom &&
+                maxOf(minOf(from.x, to.x), card.left) < minOf(maxOf(from.x, to.x), card.right)
+        } else {
+            false
+        }
 
     private fun edge(
         id: String,

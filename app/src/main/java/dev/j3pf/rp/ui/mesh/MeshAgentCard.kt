@@ -104,42 +104,32 @@ fun MeshAgentCard(
                     .alpha(if (isOffline) 0.65f else 1f),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Header Row: Avatar, Name/Secondary, Role Badge
+            // Header prioritizes the agent name; only the orchestrator spends width on its role badge.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(RpSpacing.sm),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // Avatar with machine color tint and project initial
                 AgentAvatar(
                     displayName = displayName,
                     machineColor = node.machineColor,
                     online = node.online,
                 )
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = secondaryLine,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (node.role == "orchestrator") {
+                    MeshRoleBadge(role = node.role)
                 }
-
-                // Role Badge
-                MeshRoleBadge(role = node.role)
             }
 
-            // Status and Activity row
+            // Status and current activity have priority over secondary machine/branch details.
             val activityText = node.activity?.takeIf { it.isNotBlank() } ?: node.todos?.current?.takeIf { it.isNotBlank() }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -167,6 +157,14 @@ fun MeshAgentCard(
                     )
                 }
             }
+
+            Text(
+                text = secondaryLine,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
 
             // TODO Progress Bar
             node.todos?.let { todos ->

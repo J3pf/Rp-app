@@ -8,9 +8,15 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.text.TextLayoutResult
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.MeshComm
+import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.protocol.MeshTodos
@@ -385,6 +391,31 @@ class MeshScreenTest {
     }
 
     @Test
+    fun `subordinate card gives its header width to the agent name instead of a role badge`() {
+        val subordinate = node("worker", "Long Subordinate Agent Name", "subordinate")
+
+        rule.setContent {
+            RpTheme {
+                MeshAgentCard(node = subordinate, allNodes = listOf(subordinate), onClick = {})
+            }
+        }
+
+        rule.onNodeWithText("Long Subordinate Agent Name").assertIsDisplayed()
+        kotlin.test.assertTrue(
+            rule.onAllNodes(androidx.compose.ui.test.hasText("Subordinado")).fetchSemanticsNodes().isEmpty(),
+        )
+    }
+
+    @Test
+    fun `communication bubble center stays 24dp clear of sender and receiver cards`() {
+        val centerY = safeCommBubbleCenterY(midpointY = 110f, senderBottom = 100f, receiverTop = 156f)
+
+        assertEquals(124f, centerY)
+        kotlin.test.assertTrue(centerY >= 100f + 24f)
+        kotlin.test.assertTrue(centerY <= 156f - 24f)
+    }
+
+    @Test
     fun `agent card displays display name, role, activity, todos, subagents, and responds to click`() {
         var clicked = false
         val subagents =
@@ -544,6 +575,298 @@ class MeshScreenTest {
                 "Card top ${bounds.top} intersects filter bottom $highestFilterBottom",
             )
         }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `diagram card legibility 1 agent`() {
+        val orch =
+            MeshNode(
+                agentId = "node-omarchy-app",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Orquestador Maestro",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+            )
+        val allNodes = listOf(orch)
+        val layout = MeshLayoutEngine().computeLayout(allNodes, emptyList(), width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        assertCardMeetsLegibility("Orquestador Maestro")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-xhdpi")
+    fun `diagram card legibility 4 agents 360dp`() {
+        val (allNodes, edges) = build4AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 360f, height = 500f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes, edges = edges),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
+            assertCardMeetsLegibility(name)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `diagram card legibility 4 agents 411dp`() {
+        val (allNodes, edges) = build4AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes, edges = edges),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
+            assertCardMeetsLegibility(name)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    fun `diagram card legibility 12 agents`() {
+        val (allNodes, edges) = build12AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes, edges = edges),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        assertCardMeetsLegibility("Orquestador Maestro")
+        (1..11).forEach { i ->
+            assertCardMeetsLegibility("Worker-$i")
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h480dp-xhdpi")
+    fun `diagram card legibility landscape`() {
+        val (allNodes, edges) = build4AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 800f, height = 480f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes, edges = edges),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
+            assertCardMeetsLegibility(name)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h1280dp-xhdpi")
+    fun `diagram card legibility tablet`() {
+        val (allNodes, edges) = build4AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 800f, height = 1280f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes, edges = edges),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
+            assertCardMeetsLegibility(name)
+        }
+    }
+
+    private fun assertCardMeetsLegibility(agentName: String) {
+        val nodeInteraction = rule.onNodeWithText(agentName)
+        nodeInteraction.assertIsDisplayed()
+
+        val textLayoutResults = mutableListOf<TextLayoutResult>()
+        val action = nodeInteraction.fetchSemanticsNode().config.getOrNull(SemanticsActions.GetTextLayoutResult)
+        action?.action?.invoke(textLayoutResults)
+        val textLayout = textLayoutResults.firstOrNull() ?: error("No TextLayoutResult for $agentName")
+
+        kotlin.test.assertFalse(textLayout.didOverflowHeight, "Name '$agentName' has height overflow")
+
+        val visibleLength =
+            if (textLayout.isLineEllipsized(0)) {
+                textLayout.getLineEnd(0, visibleEnd = true)
+            } else {
+                agentName.length
+            }
+        val minChars = minOf(6, agentName.length)
+        kotlin.test.assertTrue(
+            visibleLength >= minChars,
+            "Name '$agentName' displays only $visibleLength chars (expected at least $minChars)",
+        )
+
+        val cardBounds = nodeInteraction.fetchSemanticsNode().boundsInRoot
+        val machinesHeader = rule.onNodeWithText("Red de agentes").fetchSemanticsNode().boundsInRoot
+        kotlin.test.assertTrue(
+            cardBounds.top >= machinesHeader.bottom,
+            "Card '$agentName' top ${cardBounds.top} intersects header bottom ${machinesHeader.bottom}",
+        )
+        val liveStripBounds = rule.onNodeWithText("En vivo").fetchSemanticsNode().boundsInRoot
+        kotlin.test.assertTrue(
+            cardBounds.bottom <= liveStripBounds.top + 1f,
+            "Card '$agentName' bottom ${cardBounds.bottom} intersects LiveStrip top ${liveStripBounds.top}",
+        )
+    }
+
+    private fun build4AgentsScenarioNodes(): Pair<List<MeshNode>, List<MeshEdge>> {
+        val orch =
+            MeshNode(
+                agentId = "node-omarchy-app",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Rp-app",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+            )
+        val sub1 =
+            MeshNode(
+                agentId = "node-omarchy-relay",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Rp-relay",
+                role = "subordinate",
+                parentAgentId = orch.agentId,
+                status = "idle",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-relay",
+            )
+        val sub2 =
+            MeshNode(
+                agentId = "node-croma-rp",
+                machineId = "m-croma",
+                machineName = "Croma",
+                machineColor = "#7AA2F7",
+                name = "RP",
+                role = "subordinate",
+                parentAgentId = orch.agentId,
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/RP",
+            )
+        val sub3 =
+            MeshNode(
+                agentId = "node-croma-plugin",
+                machineId = "m-croma",
+                machineName = "Croma",
+                machineColor = "#7AA2F7",
+                name = "Worker Plugin",
+                role = "subordinate",
+                parentAgentId = orch.agentId,
+                status = "offline",
+                online = false,
+                cwd = "/home/drift/Workspace/RP/Rp-plugin",
+            )
+        val all = listOf(orch, sub1, sub2, sub3)
+        val edges =
+            listOf(
+                MeshEdge(edgeId = "e1", a = orch.agentId, b = sub1.agentId, count = 3, active = true, lastAction = "ask"),
+                MeshEdge(edgeId = "e2", a = orch.agentId, b = sub2.agentId, count = 1, active = false, lastAction = "reply"),
+                MeshEdge(edgeId = "e3", a = orch.agentId, b = sub3.agentId, count = 0, active = false, lastAction = "message"),
+            )
+        return all to edges
+    }
+
+    private fun build12AgentsScenarioNodes(): Pair<List<MeshNode>, List<MeshEdge>> {
+        val root =
+            MeshNode(
+                agentId = "orch-root",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Orquestador Maestro",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP",
+            )
+        val subordinates =
+            (1..11).map { i ->
+                MeshNode(
+                    agentId = "sub-$i",
+                    machineId = if (i % 2 == 0) "m-omarchy" else "m-croma",
+                    machineName = if (i % 2 == 0) "Omarchy" else "Croma",
+                    machineColor = if (i % 2 == 0) "#6750A4" else "#7AA2F7",
+                    name = "Worker-$i",
+                    role = "subordinate",
+                    parentAgentId = "orch-root",
+                    status = if (i % 2 == 0) "working" else "idle",
+                    online = true,
+                    cwd = "/home/drift/Workspace/RP/sub-$i",
+                )
+            }
+        val all = listOf(root) + subordinates
+        val edges = subordinates.mapIndexed { idx, s -> MeshEdge(edgeId = "e-$idx", a = "orch-root", b = s.agentId, count = idx, active = true, lastAction = "send") }
+        return all to edges
     }
 
     private fun node(

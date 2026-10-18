@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -40,13 +42,6 @@ import kotlin.math.hypot
 import kotlin.math.sin
 import android.graphics.Paint as AndroidPaint
 import android.graphics.Path as AndroidPath
-
-/**
- * Minimum auto-fit scale threshold (Spec S3, V2).
- * Beyond this threshold, scrolling and panning are favored over shrinking
- * to preserve card legibility. For <=6 agents on portrait phones, minimum scale is 1.0f.
- */
-const val MIN_AUTO_FIT_SCALE = 0.75f
 
 /**
  * Renders the agent mesh topology strictly within its viewport (Specs S2, S3).
@@ -141,16 +136,13 @@ fun MeshCanvas(
         val bounds = currentLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
 
         // Fit-to-content scaling in DP space
-        val contentWidth = maxOf(bounds.width + 24f, 100f)
-        val contentHeight = maxOf(bounds.height + 24f, 100f)
-        val naturalFitScale =
-            if (bounds.width > 0f && bounds.height > 0f) {
-                minOf(widthDp / contentWidth, heightDp / contentHeight)
-            } else {
-                1f
-            }
-        // Scale to fit viewport content (up to 1.0f), bounded by MIN_AUTO_FIT_SCALE (0.75f) to maintain text legibility
-        val autoFitScale = minOf(1.0f, naturalFitScale).coerceAtLeast(MIN_AUTO_FIT_SCALE)
+        val padding = 20f
+        val contentWidth = maxOf(bounds.width + 2f * padding, 100f)
+        val contentHeight = maxOf(bounds.height + 2f * padding, 100f)
+        val widthFitScale = if (bounds.width > 0f) widthDp / contentWidth else 1f
+        val heightFitScale = if (bounds.height > 0f) heightDp / contentHeight else 1f
+        val naturalFitScale = minOf(widthFitScale, heightFitScale)
+        val autoFitScale = minOf(1f, naturalFitScale).coerceAtLeast(0.65f)
         val effectiveZoom = zoom * autoFitScale
 
         val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthDp / 2f
@@ -230,13 +222,22 @@ fun MeshCanvas(
             activeLayout.edges.forEach { positioned ->
                 val edge = positioned.edge
                 path.reset()
-                path.moveTo(positioned.fromX - boundsCenterX, positioned.fromY - boundsCenterY)
-                path.quadTo(
-                    positioned.controlX - boundsCenterX,
-                    positioned.controlY - boundsCenterY,
-                    positioned.toX - boundsCenterX,
-                    positioned.toY - boundsCenterY,
-                )
+                if (positioned.routePoints.size >= 2) {
+                    val firstPoint = positioned.routePoints.first()
+                    path.moveTo(firstPoint.x - boundsCenterX, firstPoint.y - boundsCenterY)
+                    for (index in 1 until positioned.routePoints.size) {
+                        val point = positioned.routePoints[index]
+                        path.lineTo(point.x - boundsCenterX, point.y - boundsCenterY)
+                    }
+                } else {
+                    path.moveTo(positioned.fromX - boundsCenterX, positioned.fromY - boundsCenterY)
+                    path.quadTo(
+                        positioned.controlX - boundsCenterX,
+                        positioned.controlY - boundsCenterY,
+                        positioned.toX - boundsCenterX,
+                        positioned.toY - boundsCenterY,
+                    )
+                }
                 val age = edge.lastAt?.let { currentTimeMs - it }
                 val active = age?.let { it in 0..ACTIVE_EDGE_MS } ?: edge.active
                 val edgeTint = if (edge.pendingAsk) scheme.tertiary else scheme.outlineVariant
@@ -268,7 +269,7 @@ fun MeshCanvas(
 
             // In-flight comms and speech bubbles
             bubblesByEdge.values.forEach { edgeBubbles ->
-                val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(2)
+                val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(1)
                 val firstComm = visibleBubbles.first().comm
                 val firstSender = firstComm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEach
                 val firstReceiver = firstComm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEach
@@ -282,52 +283,37 @@ fun MeshCanvas(
                 val edgeFromY = firstEdge?.fromY ?: firstSender.bottom
                 val edgeToX = firstEdge?.toX ?: firstReceiver.x
                 val edgeToY = firstEdge?.toY ?: firstReceiver.top
-                val controlX = firstEdge?.controlX ?: ((edgeFromX + edgeToX) / 2f)
-                val controlY = firstEdge?.controlY ?: ((edgeFromY + edgeToY) / 2f)
+                val midpoint =
+                    firstEdge?.let { pointAlongEdge(it, 0.5f) }
+                        ?: Offset((edgeFromX + edgeToX) / 2f, (edgeFromY + edgeToY) / 2f)
+                val midpointX = midpoint.x
+                val safeMidpointY = safeCommBubbleCenterY(midpoint.y, firstSender.bottom, firstReceiver.top)
 
-                val midpointX = 0.25f * edgeFromX + 0.5f * controlX + 0.25f * edgeToX
-                val midpointY = 0.25f * edgeFromY + 0.5f * controlY + 0.25f * edgeToY
-
-                // Ensure bubble is placed cleanly in the gap between cards, never overlapping either card
-                val safeMidpointY =
-                    when {
-                        firstSender.bottom + 12f <= firstReceiver.top - 12f -> {
-                            midpointY.coerceIn(firstSender.bottom + 12f, firstReceiver.top - 12f)
-                        }
-
-                        firstReceiver.bottom + 12f <= firstSender.top - 12f -> {
-                            midpointY.coerceIn(firstReceiver.bottom + 12f, firstSender.top - 12f)
-                        }
-
-                        else -> {
-                            midpointY
-                        }
-                    }
-
-                visibleBubbles.forEachIndexed { index, bubble ->
+                visibleBubbles.forEach bubbleLoop@{ bubble ->
                     val comm = bubble.comm
-                    val sender = comm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEachIndexed
-                    val receiver = comm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEachIndexed
+                    val sender = comm.fromAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
+                    val receiver = comm.toAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
                     val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
                     val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
 
                     // Travelling comm particle
                     if (!reducedMotion) {
-                        val inverse = 1f - progress
-                        val px =
-                            inverse * inverse * edgeFromX + 2f * inverse * progress * controlX + progress * progress * edgeToX
-                        val py =
-                            inverse * inverse * edgeFromY + 2f * inverse * progress * controlY + progress * progress * edgeToY
+                        val point =
+                            firstEdge?.let { pointAlongEdge(it, progress) }
+                                ?: Offset(
+                                    edgeFromX + (edgeToX - edgeFromX) * progress,
+                                    edgeFromY + (edgeToY - edgeFromY) * progress,
+                                )
                         paint.reset()
                         paint.isAntiAlias = true
                         paint.color = scheme.primary.copy(alpha = 0.25f).toArgb()
-                        nativeCanvas.drawCircle(px - boundsCenterX, py - boundsCenterY, 5f, paint)
+                        nativeCanvas.drawCircle(point.x - boundsCenterX, point.y - boundsCenterY, 5f, paint)
                         paint.color = scheme.primary.toArgb()
-                        nativeCanvas.drawCircle(px - boundsCenterX, py - boundsCenterY, 2.5f, paint)
+                        nativeCanvas.drawCircle(point.x - boundsCenterX, point.y - boundsCenterY, 2.5f, paint)
                     }
 
                     // Speech bubble with message preview positioned in the clear connector gap
-                    val bubbleOffsetY = safeMidpointY - boundsCenterY - (index * 24f)
+                    val bubbleOffsetY = safeMidpointY - boundsCenterY
                     drawSpeechBubble(
                         nativeCanvas,
                         midpointX - boundsCenterX,
@@ -349,17 +335,20 @@ fun MeshCanvas(
             val node = positioned.node
             val cardLeftDp = centerDpX + panX + (positioned.x - boundsCenterX - positioned.width / 2f) * effectiveZoom
             val cardTopDp = centerDpY + panY + (positioned.y - boundsCenterY - positioned.height / 2f) * effectiveZoom
-            val cardWDp = positioned.width * effectiveZoom
-            val cardHDp = positioned.height * effectiveZoom
-
             Box(
                 modifier =
                     Modifier
                         .offset(cardLeftDp.dp, cardTopDp.dp)
-                        .size(cardWDp.dp, cardHDp.dp),
+                        .size(positioned.width.dp, positioned.height.dp)
+                        .graphicsLayer {
+                            scaleX = effectiveZoom
+                            scaleY = effectiveZoom
+                            transformOrigin = TransformOrigin(0f, 0f)
+                        },
             ) {
                 MeshAgentCard(
                     node = node,
+                    modifier = Modifier.fillMaxSize(),
                     allNodes = currentLayout.nodes.values.map { it.node },
                     onClick = { onNodeClick(node.agentId) },
                     reducedMotion = reducedMotion,
@@ -367,6 +356,50 @@ fun MeshCanvas(
             }
         }
     }
+}
+
+internal fun safeCommBubbleCenterY(
+    midpointY: Float,
+    senderBottom: Float,
+    receiverTop: Float,
+): Float {
+    val minimumY = senderBottom + 24f
+    val maximumY = receiverTop - 24f
+    return if (minimumY <= maximumY) midpointY.coerceIn(minimumY, maximumY) else maxOf(midpointY, minimumY)
+}
+
+private fun pointAlongEdge(
+    edge: PositionedEdge,
+    progress: Float,
+): Offset {
+    val route = edge.routePoints
+    if (route.size < 2) {
+        val inverse = 1f - progress
+        return Offset(
+            inverse * inverse * edge.fromX + 2f * inverse * progress * edge.controlX + progress * progress * edge.toX,
+            inverse * inverse * edge.fromY + 2f * inverse * progress * edge.controlY + progress * progress * edge.toY,
+        )
+    }
+
+    var totalLength = 0f
+    for (index in 0 until route.lastIndex) {
+        val from = route[index]
+        val to = route[index + 1]
+        totalLength += hypot((to.x - from.x).toDouble(), (to.y - from.y).toDouble()).toFloat()
+    }
+    var remaining = progress.coerceIn(0f, 1f) * totalLength
+    for (index in 0 until route.lastIndex) {
+        val from = route[index]
+        val to = route[index + 1]
+        val segmentLength = hypot((to.x - from.x).toDouble(), (to.y - from.y).toDouble()).toFloat()
+        if (remaining <= segmentLength || segmentLength == 0f) {
+            val fraction = if (segmentLength == 0f) 0f else remaining / segmentLength
+            return Offset(from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction)
+        }
+        remaining -= segmentLength
+    }
+    val last = route.last()
+    return Offset(last.x, last.y)
 }
 
 private fun drawSpeechBubble(
@@ -399,6 +432,15 @@ private fun distanceToCurve(
     point: Offset,
     edge: PositionedEdge,
 ): Float {
+    if (edge.routePoints.size >= 2) {
+        var best = Float.POSITIVE_INFINITY
+        for (index in 0 until edge.routePoints.lastIndex) {
+            val from = edge.routePoints[index]
+            val to = edge.routePoints[index + 1]
+            best = minOf(best, distanceToSegment(point.x, point.y, from.x, from.y, to.x, to.y))
+        }
+        return best
+    }
     var best = Float.POSITIVE_INFINITY
     var previousX = edge.fromX
     var previousY = edge.fromY

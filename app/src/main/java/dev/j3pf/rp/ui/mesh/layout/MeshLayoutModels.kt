@@ -43,7 +43,13 @@ data class PositionedSatellite(
     fun calculatePosition(): Pair<Float, Float> = offsetX to offsetY
 }
 
-/** An edge represented by a quadratic Bezier curve. */
+/** A point in the layout coordinate space used by orthogonal edge routes. */
+data class EdgePoint(
+    val x: Float,
+    val y: Float,
+)
+
+/** An edge represented by a curve or an orthogonal bus route. */
 data class PositionedEdge(
     val edge: MeshEdge,
     val fromX: Float,
@@ -53,6 +59,7 @@ data class PositionedEdge(
     val controlX: Float,
     val controlY: Float,
     val curvature: Float,
+    val routePoints: List<EdgePoint> = emptyList(),
 )
 
 data class MeshLayoutResult(
@@ -74,12 +81,13 @@ data class LayoutBounds(
 
 data class LayoutConfig(
     val edgeCurveOffset: Float = 24f,
-    val cardWidth: Float = 200f,
-    val cardHeight: Float = 96f,
-    val minCardWidth: Float = 140f,
-    val minCardHeight: Float = 72f,
+    val cardWidth: Float = 280f,
+    val cardHeight: Float = 76f,
+    val minCardWidth: Float = 180f,
+    val minCardHeight: Float = 76f,
     val cardSpacingX: Float = 12f,
-    val cardSpacingY: Float = 20f,
+    val cardSpacingY: Float = 56f,
     val viewportPaddingX: Float = 12f,
     val viewportPaddingY: Float = 16f,
+    val edgeRoutingMargin: Float = 16f,
 )

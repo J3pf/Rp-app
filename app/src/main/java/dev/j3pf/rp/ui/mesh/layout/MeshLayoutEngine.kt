@@ -85,14 +85,12 @@ class MeshLayoutEngine(
         val horizontalPadding = config.viewportPaddingX.coerceAtLeast(0f)
         val verticalPadding = config.viewportPaddingY.coerceAtLeast(0f)
         val availableWidth = (width - 2f * horizontalPadding).coerceAtLeast(0f)
-        val availableHeight = (height - 2f * verticalPadding).coerceAtLeast(0f)
         val horizontalSpacing = config.cardSpacingX.coerceAtLeast(4f)
+        val minimumCardWidth = config.minCardWidth.coerceAtLeast(1f)
         val maxColumns =
-            when {
-                availableWidth >= 800f -> 4
-                availableWidth >= 520f -> 3
-                else -> 2
-            }
+            ((availableWidth + horizontalSpacing) / (minimumCardWidth + horizontalSpacing))
+                .toInt()
+                .coerceIn(1, 4)
 
         val previousNodes = previousLayout?.nodes.orEmpty()
         // Group each level into balanced rows that fill available width
@@ -113,56 +111,50 @@ class MeshLayoutEngine(
                     sorted.chunked(maxColumns)
                 }
             }
-        val rowCount = rows.size.coerceAtLeast(1)
-
-        val requestedVerticalSpacing = config.cardSpacingY.coerceAtLeast(6f)
-        val preferredHeight = config.cardHeight.coerceAtLeast(config.minCardHeight)
-        val verticalSpacing =
-            if (rowCount > 1) {
-                min(requestedVerticalSpacing, ((availableHeight - rowCount * config.minCardHeight) / (rowCount - 1)).coerceAtLeast(4f))
-            } else {
-                0f
+        val verticalSpacing = if (rows.size > 1) config.cardSpacingY.coerceAtLeast(48f) else 0f
+        val baseCardHeight = max(config.cardHeight, config.minCardHeight)
+        val nodeHeights =
+            orderedNodes.associate { node ->
+                node.agentId to (baseCardHeight + (if (node.todos != null) 24f else 0f) + (if (node.subagents.isNotEmpty()) 28f else 0f))
             }
-        val cardHeight =
-            min(
-                preferredHeight,
-                ((availableHeight - verticalSpacing * (rowCount - 1)) / rowCount).coerceAtLeast(config.minCardHeight),
-            )
+        val rowHeights = rows.map { row -> row.maxOf { nodeHeights.getValue(it.agentId) } }
 
         val positions = mutableMapOf<String, Pair<Float, Float>>()
         val nodeWidths = mutableMapOf<String, Float>()
+        var rowTop = verticalPadding
 
         rows.forEachIndexed { rowIndex, rowNodes ->
             val cols = rowNodes.size
-            // Sizing: single card fills up to 360dp, multi-cards fill available width nicely
             val rowCardWidth =
-                if (cols == 1) {
-                    min(360f, availableWidth)
-                } else {
-                    min(220f, (availableWidth - (cols - 1) * horizontalSpacing) / cols)
-                }
+                min(
+                    config.cardWidth.coerceAtLeast(minimumCardWidth),
+                    (availableWidth - (cols - 1) * horizontalSpacing) / cols,
+                )
             val rowWidth = cols * rowCardWidth + (cols - 1) * horizontalSpacing
             val firstCenterX = width / 2f - rowWidth / 2f + rowCardWidth / 2f
-            val centerY = verticalPadding + cardHeight / 2f + rowIndex * (cardHeight + verticalSpacing)
+            val rowHeight = rowHeights[rowIndex]
+            val rowCenterY = rowTop + rowHeight / 2f
 
             rowNodes.forEachIndexed { columnIndex, node ->
-                positions[node.agentId] = firstCenterX + columnIndex * (rowCardWidth + horizontalSpacing) to centerY
+                positions[node.agentId] = firstCenterX + columnIndex * (rowCardWidth + horizontalSpacing) to rowCenterY
                 nodeWidths[node.agentId] = rowCardWidth
             }
+            rowTop += rowHeight + verticalSpacing
         }
 
         val positionedNodes = linkedMapOf<String, PositionedNode>()
         orderedNodes.forEach { node ->
             val (x, y) = positions.getValue(node.agentId)
             val nodeWidth = nodeWidths.getValue(node.agentId)
-            val satellites = positionSatellites(node, nodeWidth, cardHeight)
+            val nodeHeight = nodeHeights.getValue(node.agentId)
+            val satellites = positionSatellites(node, nodeWidth, nodeHeight)
             positionedNodes[node.agentId] =
                 PositionedNode(
                     node = node,
                     x = x,
                     y = y,
                     width = nodeWidth,
-                    height = cardHeight,
+                    height = nodeHeight,
                     level = levels.getValue(node.agentId),
                     satellites = satellites,
                 )
@@ -234,10 +226,23 @@ class MeshLayoutEngine(
                 a.y < b.y -> EdgeEndpoints(a.x, a.bottom, b.x, b.top)
                 else -> EdgeEndpoints(b.x, b.bottom, a.x, a.top)
             }
-        val fromX = endpoints.fromX
-        val fromY = endpoints.fromY
-        val toX = endpoints.toX
-        val toY = endpoints.toY
+        val parentAndChild =
+            when {
+                aIsParent -> a to b
+                bIsParent -> b to a
+                else -> null
+            }
+        val routePoints = parentAndChild?.let { (parent, child) ->
+            orthogonalRoute(parent, child, nodes)
+        }.orEmpty()
+        val routedEndpoints =
+            parentAndChild?.let { (parent, child) ->
+                EdgeEndpoints(parent.x, parent.bottom, child.x, child.top)
+            } ?: endpoints
+        val fromX = routedEndpoints.fromX
+        val fromY = routedEndpoints.fromY
+        val toX = routedEndpoints.toX
+        val toY = routedEndpoints.toY
         val low = if (edge.a <= edge.b) a else b
         val high = if (edge.a <= edge.b) b else a
         val dx = high.x - low.x
@@ -257,7 +262,45 @@ class MeshLayoutEngine(
             controlX = midpointX + normalX * curvature,
             controlY = midpointY + normalY * curvature,
             curvature = curvature,
+            routePoints = routePoints,
         )
+    }
+
+    private fun orthogonalRoute(
+        parent: PositionedNode,
+        child: PositionedNode,
+        nodes: Map<String, PositionedNode>,
+    ): List<EdgePoint> {
+        val rows = nodes.values.groupBy { it.y }.toSortedMap()
+        val rowCenters = rows.keys.toList()
+        val parentRowIndex = rowCenters.indexOf(parent.y)
+        val childRowIndex = rowCenters.indexOf(child.y)
+        if (parentRowIndex < 0 || childRowIndex <= parentRowIndex) return emptyList()
+
+        val parentRow = rows.getValue(parent.y)
+        val childRow = rows.getValue(child.y)
+        val nextRow = rows.getValue(rowCenters[parentRowIndex + 1])
+        val previousRow = rows.getValue(rowCenters[childRowIndex - 1])
+        val sourceChannelY = (parentRow.maxOf { it.bottom } + nextRow.minOf { it.top }) / 2f
+        val targetChannelY = (previousRow.maxOf { it.bottom } + childRow.minOf { it.top }) / 2f
+        val points = mutableListOf(EdgePoint(parent.x, parent.bottom))
+
+        fun append(x: Float, y: Float) {
+            val point = EdgePoint(x, y)
+            if (points.last() != point) points += point
+        }
+
+        append(parent.x, sourceChannelY)
+        if (childRowIndex == parentRowIndex + 1) {
+            append(child.x, sourceChannelY)
+        } else {
+            val channelX = nodes.values.minOf { it.left } - config.edgeRoutingMargin.coerceAtLeast(4f)
+            append(channelX, sourceChannelY)
+            append(channelX, targetChannelY)
+            append(child.x, targetChannelY)
+        }
+        append(child.x, child.top)
+        return points
     }
 
     private data class EdgeEndpoints(
@@ -298,10 +341,13 @@ class MeshLayoutEngine(
             }
         }
         edges.forEach { edge ->
-            minX = min(minX, edge.controlX)
-            minY = min(minY, edge.controlY)
-            maxX = max(maxX, edge.controlX)
-            maxY = max(maxY, edge.controlY)
+            val points = edge.routePoints.ifEmpty { listOf(EdgePoint(edge.controlX, edge.controlY)) }
+            points.forEach { point ->
+                minX = min(minX, point.x)
+                minY = min(minY, point.y)
+                maxX = max(maxX, point.x)
+                maxY = max(maxY, point.y)
+            }
         }
         if (minX == Float.POSITIVE_INFINITY) return LayoutBounds(0f, 0f, 0f, 0f)
         return LayoutBounds(minX, minY, maxX, maxY)
