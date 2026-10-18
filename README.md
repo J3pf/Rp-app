@@ -18,6 +18,13 @@ y **Agent Mesh** (topología animada y diagrama de comunicaciones en tiempo real
 
 ## Características principales
 
+- **Rediseño Integral de Red de Agentes (Agent Mesh v0.4.0)**:
+  - **Tarjetas de Agentes Interactivas (S2)**: Reemplazo total de los círculos planos por tarjetas con avatar teñido por el color de la máquina, nombre humano legible, línea secundaria (`máquina · rama/modelo`), insignia de rol (`Orquestador`, `Subordinado`, `Subagente`), estado, actividad en curso en una línea, barra de progreso de TODOs y chips de subagentes adjuntos con spinners de ejecución.
+  - **Disposición Jerárquica Top-Down (S2, S3)**: Motor de diseño radial reemplazado por distribución jerárquica de arriba hacia abajo (orquestador arriba, subordinados abajo) con prevención estricta de colisiones de cajas delimitadoras para 1..12 agentes.
+  - **Contención en Viewport y Auto-Fit (S3)**: El lienzo vive estrictamente debajo de los botones y filtros superiores, con auto-fit zoom por defecto y gestos fluidos de pellizco y desplazamiento (pan/zoom) con doble toque para centrar.
+  - **Sistema de Movimiento en Tiempo Real (S2)**: Borde brillante/shimmer y puntos de actividad en agentes trabajando, animación de partículas en comunicaciones en vuelo y reposo total en estado inactivo sin redibujo innecesario. Respeto estricto a reducción de movimiento.
+  - **Formateo y Sanitización de Identificadores (S1)**: Ocultación absoluta de UUIDs crudos y hashes en la interfaz; resolución limpia a nombre humano, `basename(cwd)` o `"Agente"`. Sección colapsable «Detalles técnicos» en la hoja de detalle con copiado de IDs con un toque.
+  - **Documentación y Arquitectura ([docs/MESH.md](docs/MESH.md))**: Especificación completa de reglas de resolución de nombres, leyenda de movimiento y motor de diseño.
 - **Soporte de Comandos `/model` y `/thinking` (v0.3.4)**:
   - Sugerencia y autocompletado contextual de comandos slash en el compositor de chat, incorporando `"/thinking"` a la lista principal de comandos (`/clear`, `/compact`, `/model`, `/thinking`, `/quit`, `/undo`, `/sdd-status`, `/help`).
   - Chips interactivos con niveles de thinking soportados (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) al escribir `"/thinking "` o cuando el comando activo es `"/thinking"`.
