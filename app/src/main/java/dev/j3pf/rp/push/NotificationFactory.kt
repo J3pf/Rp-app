@@ -101,19 +101,26 @@ class NotificationFactory
 
             // Acciones
             when {
-                p.kind == PromptKind.QUESTIONNAIRE -> builder.addAction(openAction(R.string.action_open, open))
+                p.kind == PromptKind.QUESTIONNAIRE -> {
+                    builder.addAction(openAction(R.string.action_open, open))
+                }
+
                 p.kind == PromptKind.CONFIRM && p.options.isEmpty() -> {
                     builder.addAction(
                         answerAction(R.string.action_allow, p, id, PromptActionReceiver.ANSWER_CONFIRM_YES, null, authRequired),
                     )
                     builder.addAction(answerAction(R.string.action_deny, p, id, PromptActionReceiver.ANSWER_CONFIRM_NO, null, authRequired))
                 }
+
                 p.options.isNotEmpty() && p.options.size <= 3 && !(p.kind == PromptKind.INPUT) -> {
                     p.options.forEachIndexed { i, opt ->
                         builder.addAction(answerActionRaw(opt.label, p, id, PromptActionReceiver.ANSWER_OPTION, opt.id, authRequired, i))
                     }
                 }
-                else -> builder.addAction(openAction(R.string.action_open, open))
+
+                else -> {
+                    builder.addAction(openAction(R.string.action_open, open))
+                }
             }
             if ((p.kind == PromptKind.INPUT || p.allowFreeText) && p.kind != PromptKind.QUESTIONNAIRE) {
                 builder.addAction(replyAction(p, id, authRequired))
