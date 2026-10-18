@@ -44,6 +44,9 @@ English docs (CHANGELOG, docs/ section for the mesh screen with the display-name
 - [x] T18 (H1): Eliminate all 17 compiler warnings (w:) across protocol, app, and test sources [gentle-ai-worker] [52d785c]
 - [x] T19 (H2): Resolve 31 Android lint warnings (ModifierParameter, UseKtx, AutoboxingStateCreation, targeted suppressions) [gentle-ai-worker] [84065e1]
 - [x] T20 (H3): Add ktlint Gradle plugin (latest stable), format code across all source sets, document in README, verify ktlintCheck [gentle-ai-worker] [5db5ac2]
+- [x] T21 (Q4): Clean suppressions & dead code (MeshRepository, PushRouter, NotificationFactory canNotify guards & unit test, BiometricGate justification) [gentle-ai-worker] [baa690b]
+- [x] T22 (Q1, Q2, Q3): Measured card heights, top-anchored viewport transform, landscape scale 1.0 with pan, and all-Text overflow tests [gentle-ai-worker] [9e53219]
+- [x] T23: Regenerate all 66 Roborazzi mesh screenshots, inspect all 11 scenarios personally, and rebuild signed release APK v0.4.0 [inline] [baa2b07, 3d35ba2]
 
 ## Log
 L1: [ORCHESTRATOR → Rp-app] Feature: mesh-redesign ("Red de agentes" screen refactor). Use ODD: create odd/tasks/mesh-redesign.md (## Specs quoting the user verbatim, ## Tasks, ## Log with L1) + Engram mirror odd/mesh-redesign/tasks (project rp-app) BEFORE the first source write. Test-first (observe RED, then GREEN). Code/comments/docs in English; UI copy stays Spanish.
