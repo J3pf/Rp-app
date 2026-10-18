@@ -81,7 +81,7 @@ class MeshViewModelTest {
             bus = MessageBus()
             connection = RelayConnection(context, secrets, bus, testClient(), scope)
             val api = RelayApi(testClient(), secrets)
-            repository = MeshRepository(connection, bus, api, secrets, scope)
+            repository = MeshRepository(connection, bus, api, scope)
             db = inMemoryDb(context)
             machines = MachinesRepository(db.machines(), secrets, bus, api, NotificationChannels(context), scope)
             val testDataStore =

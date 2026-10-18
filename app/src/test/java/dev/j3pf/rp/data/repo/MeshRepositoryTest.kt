@@ -58,7 +58,7 @@ class MeshRepositoryTest {
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         bus = MessageBus()
         connection = RelayConnection(context, secrets, bus, testClient(), scope)
-        repository = MeshRepository(connection, bus, RelayApi(testClient(), secrets), secrets, scope)
+        repository = MeshRepository(connection, bus, RelayApi(testClient(), secrets), scope)
     }
 
     @After

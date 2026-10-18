@@ -52,7 +52,7 @@ class NotificationFactory
 
         // ───────────────────────────── Prompt ─────────────────────────────
 
-        @SuppressLint("MissingPermission")
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         suspend fun showPrompt(p: PushPromptBody) {
             if (!canNotify()) return
             val s = settings.settings.first()
@@ -197,7 +197,7 @@ class NotificationFactory
         // ───────────────────────────── Otros tipos ─────────────────────────────
 
         /** `k=settled`: el agente terminó; acción "Responder" (RemoteInput → `POST /v1/agents/{id}/messages`). */
-        @SuppressLint("MissingPermission")
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         suspend fun showSettled(s: PushSettledBody) {
             if (!canNotify()) return
             val machineId = s.machineId.ifEmpty { "default" }
@@ -236,7 +236,7 @@ class NotificationFactory
         }
 
         /** `k=error` y `k=terminal_wait`: aviso simple que abre el chat del agente. */
-        @SuppressLint("MissingPermission")
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         suspend fun showSimple(
             kind: String,
             body: JsonObject,
@@ -271,7 +271,7 @@ class NotificationFactory
         // ───────────────────────────── Estado desde el receiver ─────────────────────────────
 
         /** Feedback inmediato tras pulsar una acción: "Enviando…" sin botones. */
-        @SuppressLint("MissingPermission")
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         fun showSending(
             notifId: Int,
             agentLabel: String,
@@ -291,7 +291,7 @@ class NotificationFactory
             )
         }
 
-        @SuppressLint("MissingPermission")
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         fun showRetrying(
             notifId: Int,
             agentLabel: String,
@@ -354,12 +354,13 @@ class NotificationFactory
 
         // ───────────────────────────── Utilidades ─────────────────────────────
 
-        @SuppressLint("MissingPermission")
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         private fun postAgentSummary(
             agentId: String,
             channel: String,
             label: String,
         ) {
+            if (!canNotify()) return
             val summary =
                 NotificationCompat
                     .Builder(context, channel)

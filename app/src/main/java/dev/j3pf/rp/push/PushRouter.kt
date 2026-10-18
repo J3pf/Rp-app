@@ -9,7 +9,6 @@ import dev.j3pf.rp.protocol.PushKind
 import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.PushSettledBody
 import dev.j3pf.rp.protocol.RpJson
-import dev.j3pf.rp.protocol.obj
 import dev.j3pf.rp.protocol.str
 import kotlinx.serialization.json.JsonObject
 import javax.inject.Inject
@@ -60,11 +59,13 @@ class PushRouter
                     factory.showPrompt(p)
                     true
                 }
+
                 PushKind.CANCEL -> {
                     val c = decode(PushCancelBody.serializer(), body) ?: return false
                     factory.cancelPrompt(c.promptId)
                     true
                 }
+
                 PushKind.SETTLED -> {
                     val s = decode(PushSettledBody.serializer(), body) ?: return false
                     // pushId o agentId+preview: un mismo "terminó" sólo se avisa una vez.
@@ -74,6 +75,7 @@ class PushRouter
                     factory.showSettled(s)
                     true
                 }
+
                 PushKind.ERROR, PushKind.TERMINAL_WAIT -> {
                     val agentId = body.str("agentId") ?: return false
                     val key = "$k:${pushId ?: (agentId + ":" + (body.str("title") ?: body.str("message") ?: "").hashCode())}"
@@ -82,7 +84,10 @@ class PushRouter
                     factory.showSimple(k, body)
                     true
                 }
-                else -> false
+
+                else -> {
+                    false
+                }
             }
         }
 
@@ -90,7 +95,4 @@ class PushRouter
             s: kotlinx.serialization.KSerializer<T>,
             body: JsonObject,
         ): T? = runCatching { RpJson.decodeFromJsonElement(s, body) }.getOrNull()
-
-        @Suppress("unused")
-        private fun JsonObject.nested(key: String) = this[key].obj()
     }

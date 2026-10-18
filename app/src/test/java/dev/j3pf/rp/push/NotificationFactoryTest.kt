@@ -182,6 +182,17 @@ class NotificationFactoryTest {
     }
 
     @Test
+    fun `sin permiso showSending y showRetrying no publican notificaciones`() {
+        shadowOf(ctx).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+
+        factory.showSending(101, "api-gateway")
+        assertTrue(shadowOf(nm).allNotifications.isEmpty())
+
+        factory.showRetrying(102, "api-gateway")
+        assertTrue(shadowOf(nm).allNotifications.isEmpty())
+    }
+
+    @Test
     fun `sin permiso no se publica nada`() {
         runBlocking {
             shadowOf(ctx).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)

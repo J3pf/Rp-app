@@ -5,7 +5,6 @@ import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
-import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorBody
@@ -37,7 +36,6 @@ class MeshRepository
         private val connection: RelayConnection,
         private val bus: MessageBus,
         private val api: RelayApi,
-        @Suppress("unused") private val secrets: SecretStore,
         @AppScope private val scope: CoroutineScope,
     ) {
         private val _snapshot = MutableStateFlow<MeshSnapshot?>(null)
