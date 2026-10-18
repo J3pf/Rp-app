@@ -87,6 +87,7 @@ class RoborazziScreenshotTest {
         java.util.Locale.setDefault(java.util.Locale.forLanguageTag("es-ES"))
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
     }
+
     private val themes =
         listOf(
             "cute" to RpThemeChoice.GENTLE_CUTE,

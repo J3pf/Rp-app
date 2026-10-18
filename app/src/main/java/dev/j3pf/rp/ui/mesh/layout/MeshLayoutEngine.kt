@@ -232,9 +232,11 @@ class MeshLayoutEngine(
                 bIsParent -> b to a
                 else -> null
             }
-        val routePoints = parentAndChild?.let { (parent, child) ->
-            orthogonalRoute(parent, child, nodes)
-        }.orEmpty()
+        val routePoints =
+            parentAndChild
+                ?.let { (parent, child) ->
+                    orthogonalRoute(parent, child, nodes)
+                }.orEmpty()
         val routedEndpoints =
             parentAndChild?.let { (parent, child) ->
                 EdgeEndpoints(parent.x, parent.bottom, child.x, child.top)
@@ -285,7 +287,10 @@ class MeshLayoutEngine(
         val targetChannelY = (previousRow.maxOf { it.bottom } + childRow.minOf { it.top }) / 2f
         val points = mutableListOf(EdgePoint(parent.x, parent.bottom))
 
-        fun append(x: Float, y: Float) {
+        fun append(
+            x: Float,
+            y: Float,
+        ) {
             val point = EdgePoint(x, y)
             if (points.last() != point) points += point
         }

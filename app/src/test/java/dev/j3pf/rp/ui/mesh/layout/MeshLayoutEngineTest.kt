@@ -442,10 +442,12 @@ class MeshLayoutEngineTest {
         card: PositionedNode,
     ): Boolean =
         if (from.x == to.x) {
-            from.x > card.left && from.x < card.right &&
+            from.x > card.left &&
+                from.x < card.right &&
                 maxOf(minOf(from.y, to.y), card.top) < minOf(maxOf(from.y, to.y), card.bottom)
         } else if (from.y == to.y) {
-            from.y > card.top && from.y < card.bottom &&
+            from.y > card.top &&
+                from.y < card.bottom &&
                 maxOf(minOf(from.x, to.x), card.left) < minOf(maxOf(from.x, to.x), card.right)
         } else {
             false

@@ -3,17 +3,15 @@ package dev.j3pf.rp.ui.mesh
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshEdge
@@ -402,7 +400,12 @@ class MeshScreenTest {
 
         rule.onNodeWithText("Long Subordinate Agent Name").assertIsDisplayed()
         kotlin.test.assertTrue(
-            rule.onAllNodes(androidx.compose.ui.test.hasText("Subordinado")).fetchSemanticsNodes().isEmpty(),
+            rule
+                .onAllNodes(
+                    androidx.compose.ui.test
+                        .hasText("Subordinado"),
+                ).fetchSemanticsNodes()
+                .isEmpty(),
         )
     }
 
@@ -865,7 +868,13 @@ class MeshScreenTest {
                 )
             }
         val all = listOf(root) + subordinates
-        val edges = subordinates.mapIndexed { idx, s -> MeshEdge(edgeId = "e-$idx", a = "orch-root", b = s.agentId, count = idx, active = true, lastAction = "send") }
+        val edges =
+            subordinates.mapIndexed {
+                idx,
+                s,
+                ->
+                MeshEdge(edgeId = "e-$idx", a = "orch-root", b = s.agentId, count = idx, active = true, lastAction = "send")
+            }
         return all to edges
     }
 
