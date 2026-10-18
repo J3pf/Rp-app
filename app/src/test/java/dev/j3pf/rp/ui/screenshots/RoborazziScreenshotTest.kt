@@ -80,8 +80,13 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = [34], qualifiers = "es-rES-w411dp-h891dp-xxhdpi")
 class RoborazziScreenshotTest {
+    @org.junit.Before
+    fun setUpLocale() {
+        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("es-ES"))
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+    }
     private val themes =
         listOf(
             "cute" to RpThemeChoice.GENTLE_CUTE,
@@ -463,7 +468,7 @@ class RoborazziScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w360dp-h640dp-xhdpi")
+    @Config(qualifiers = "es-rES-w360dp-h640dp-xhdpi")
     fun screenshotMeshDiagram360dp() {
         val (snapshot, meshUiState) = build4AgentsScenario()
         val layout360 = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 360f, height = 640f)
@@ -486,10 +491,10 @@ class RoborazziScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w800dp-h480dp-xhdpi")
+    @Config(qualifiers = "es-rES-w800dp-h480dp-xhdpi")
     fun screenshotMeshDiagramLandscape() {
         val (snapshot, meshUiState) = build4AgentsScenario()
-        val landscapeLayout = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 800f, height = 480f)
+        val landscapeLayout = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 800f, height = 240f)
         val landscapeState = meshUiState.copy(layoutResult = landscapeLayout)
 
         captureScreen("mesh_diagram_landscape") {
@@ -509,7 +514,7 @@ class RoborazziScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w800dp-h1280dp-xhdpi")
+    @Config(qualifiers = "es-rES-w800dp-h1280dp-xhdpi")
     fun screenshotMeshDiagramTablet() {
         val (snapshot, meshUiState) = build4AgentsScenario()
         val tabletLayout = MeshLayoutEngine().computeLayout(snapshot.nodes, snapshot.edges, width = 800f, height = 1280f)
