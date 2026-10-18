@@ -106,6 +106,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatContent(
     ui: ChatUiState,
+    modifier: Modifier = Modifier,
     text: String = "",
     onText: (String) -> Unit = {},
     onBack: () -> Unit = {},
@@ -128,7 +129,6 @@ fun ChatContent(
         androidx.compose.foundation.lazy
             .rememberLazyListState(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
-    modifier: Modifier = Modifier,
 ) {
     val agent = ui.agent
     val working = agent?.status == "working" || ui.chat.working

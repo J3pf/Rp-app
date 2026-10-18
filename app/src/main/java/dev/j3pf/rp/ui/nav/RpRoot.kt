@@ -250,9 +250,9 @@ enum class AppTab(
 @Composable
 fun AppBottomBar(
     selectedTab: AppTab,
+    modifier: Modifier = Modifier,
     pending: Int = 0,
     onSelectTab: (AppTab) -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier,

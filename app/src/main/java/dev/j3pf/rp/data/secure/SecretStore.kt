@@ -3,6 +3,7 @@ package dev.j3pf.rp.data.secure
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import androidx.core.content.edit
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.aead.AeadConfig
@@ -64,20 +65,19 @@ open class SecretStore
         open fun current(): Session? = _session.value
 
         fun save(session: Session) {
-            prefs
-                .edit()
-                .putString(K_RELAY_ID, encryptField(K_RELAY_ID, session.relayId))
-                .putString(K_URL, encryptField(K_URL, session.relayUrl))
-                .putString(K_NAME, encryptField(K_NAME, session.relayName))
-                .putString(K_DEVICE_ID, encryptField(K_DEVICE_ID, session.deviceId))
-                .putString(K_TOKEN, encryptField(K_TOKEN, session.deviceToken))
-                .putString(K_PUSH_KEY, encryptField(K_PUSH_KEY, session.pushKey))
-                .apply()
+            prefs.edit {
+                putString(K_RELAY_ID, encryptField(K_RELAY_ID, session.relayId))
+                putString(K_URL, encryptField(K_URL, session.relayUrl))
+                putString(K_NAME, encryptField(K_NAME, session.relayName))
+                putString(K_DEVICE_ID, encryptField(K_DEVICE_ID, session.deviceId))
+                putString(K_TOKEN, encryptField(K_TOKEN, session.deviceToken))
+                putString(K_PUSH_KEY, encryptField(K_PUSH_KEY, session.pushKey))
+            }
             _session.value = session
         }
 
         fun clear() {
-            prefs.edit().clear().apply()
+            prefs.edit { clear() }
             _session.value = null
         }
 

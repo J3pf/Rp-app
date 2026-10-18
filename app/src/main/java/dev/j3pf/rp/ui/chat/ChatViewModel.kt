@@ -355,6 +355,5 @@ class ChatViewModel
         override fun onCleared() {
             local.values.forEach(attachmentsRepo::discard)
             chats.release(agentId)
-            super.onCleared()
         }
     }

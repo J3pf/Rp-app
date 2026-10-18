@@ -88,10 +88,18 @@ import dev.j3pf.rp.util.relativeTime
 @Composable
 fun ColorDot(
     color: Color,
-    size: Int = 10,
     modifier: Modifier = Modifier,
+    size: Int = 10,
 ) {
     Box(modifier.size(size.dp).clip(CircleShape).background(color))
+}
+
+@Composable
+fun ColorDot(
+    color: Color,
+    size: Int,
+) {
+    ColorDot(color = color, modifier = Modifier, size = size)
 }
 
 /**
@@ -680,8 +688,8 @@ fun StatusChip(
 @Composable
 fun TagChip(
     text: String,
-    color: Color = MaterialTheme.colorScheme.secondary,
     modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.secondary,
 ) {
     Surface(
         modifier = modifier,
@@ -698,6 +706,14 @@ fun TagChip(
             maxLines = 1,
         )
     }
+}
+
+@Composable
+fun TagChip(
+    text: String,
+    color: Color,
+) {
+    TagChip(text = text, modifier = Modifier, color = color)
 }
 
 /**
@@ -790,8 +806,8 @@ fun AgentCardSkeleton(modifier: Modifier = Modifier) {
 
 @Composable
 fun AgentSkeletonList(
-    count: Int = 3,
     modifier: Modifier = Modifier,
+    count: Int = 3,
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(count) {
@@ -806,11 +822,11 @@ fun AgentSkeletonList(
 @Composable
 fun EmptyState(
     title: String,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     icon: @Composable (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier =

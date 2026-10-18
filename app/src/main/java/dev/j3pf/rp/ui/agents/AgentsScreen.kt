@@ -154,6 +154,7 @@ fun AgentsHeroStats(
 fun AgentsContent(
     state: AgentsUiState,
     conn: dev.j3pf.rp.data.net.ConnState,
+    modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     bottomBar: @Composable () -> Unit = {
         QuotaDynamicIsland(
@@ -169,7 +170,6 @@ fun AgentsContent(
     onResume: (AgentSummary, String) -> Unit,
     onForget: (String) -> Unit,
     listState: LazyListState = rememberLazyListState(),
-    modifier: Modifier = Modifier,
 ) {
     val isFabExpanded by remember {
         derivedStateOf { listState.firstVisibleItemIndex == 0 }
@@ -336,7 +336,7 @@ private fun MachineHeader(m: MachineSummary) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            ColorDot(parseColor(m.color), 12)
+            ColorDot(parseColor(m.color), size = 12)
             Text(
                 text = m.name,
                 style = MaterialTheme.typography.titleSmall,
@@ -438,7 +438,7 @@ fun AgentCard(
                             },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        ColorDot(parseColor(a.machineColor), 8)
+                        ColorDot(parseColor(a.machineColor), size = 8)
                     }
                 }
 

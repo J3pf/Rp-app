@@ -106,6 +106,8 @@ android {
 
     lint {
         abortOnError = false
+        disable += "OldTargetApi" // targetSdk 36 kept deliberately to avoid Android 17 behavior changes
+        disable += "ObsoleteSdkInt" // mipmap-anydpi-v26 required by AGP for adaptive icon packaging
     }
 }
 

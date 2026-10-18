@@ -60,9 +60,9 @@ import dev.j3pf.rp.ui.theme.RpSpacing
 @Composable
 fun MeshAgentCard(
     node: MeshNode,
+    modifier: Modifier = Modifier,
     allNodes: List<MeshNode> = emptyList(),
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
     reducedMotion: Boolean = LocalReducedMotion.current,
 ) {
     val displayName = formatMeshDisplayName(node, allNodes)

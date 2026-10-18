@@ -1,6 +1,7 @@
 package dev.j3pf.rp.util
 
 import androidx.compose.ui.graphics.Color
+import androidx.core.graphics.toColorInt
 
 /** Último segmento de una ruta (acepta `/` y `\`). */
 fun lastSegment(path: String?): String {
@@ -36,7 +37,7 @@ fun parseColor(
     fallback: Color = Color(0xFF6750A4),
 ): Color =
     runCatching {
-        Color(android.graphics.Color.parseColor("#" + (hex ?: return fallback).trim().removePrefix("#")))
+        Color(("#" + (hex ?: return fallback).trim().removePrefix("#")).toColorInt())
     }.getOrDefault(fallback)
 
 fun contextLabel(context: String): String =

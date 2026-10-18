@@ -68,8 +68,8 @@ fun MeshNodeDetailContent(
     onDismiss: () -> Unit,
     onOpenChat: (String) -> Unit,
     onViewConversation: (String) -> Unit,
-    initiallyExpandedTechnicalDetails: Boolean = false,
     modifier: Modifier = Modifier,
+    initiallyExpandedTechnicalDetails: Boolean = false,
 ) {
     val node = detail.node
     val displayName = formatMeshDisplayName(node)

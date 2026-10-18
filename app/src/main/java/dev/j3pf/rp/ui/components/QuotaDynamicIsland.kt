@@ -53,8 +53,8 @@ import kotlin.math.roundToInt
 @Composable
 fun QuotaDynamicIsland(
     machines: List<MachineSummary>,
-    selectedMachineId: String? = null,
     modifier: Modifier = Modifier,
+    selectedMachineId: String? = null,
 ) {
     val machinesWithQuotas =
         remember(machines) {

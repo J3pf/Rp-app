@@ -2,6 +2,7 @@ package dev.j3pf.rp.data.repo
 
 import android.content.Context
 import android.os.Build
+import androidx.core.net.toUri
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.data.db.DedupDao
@@ -171,7 +172,7 @@ class SessionRepository
             fun parsePairingUri(text: String): Pair<String, String>? {
                 val t = text.trim()
                 if (!t.startsWith("rp://pair")) return null
-                val uri = android.net.Uri.parse(t)
+                val uri = t.toUri()
                 val u = uri.getQueryParameter("u") ?: return null
                 val c = uri.getQueryParameter("c") ?: return null
                 return u to c

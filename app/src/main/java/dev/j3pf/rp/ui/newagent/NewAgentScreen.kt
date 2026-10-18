@@ -69,9 +69,9 @@ fun NewAgentContent(
     onSetName: (String) -> Unit,
     onSetPrompt: (String) -> Unit,
     onCreate: () -> Unit,
+    modifier: Modifier = Modifier,
     herdrSection: @Composable () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
-    modifier: Modifier = Modifier,
 ) {
     val f = ui.form
     val context = LocalContext.current

@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.mesh
 
+import androidx.core.graphics.toColorInt
 import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
 import java.time.Instant
@@ -112,7 +113,7 @@ fun formatMeshGroupChipLabel(
 fun parseRelayColor(raw: String): androidx.compose.ui.graphics.Color =
     runCatching {
         androidx.compose.ui.graphics
-            .Color(android.graphics.Color.parseColor(raw))
+            .Color(raw.toColorInt())
     }.getOrElse { androidx.compose.material3.MaterialTheme.colorScheme.primary }
 
 fun formatMeshRole(role: String): String =

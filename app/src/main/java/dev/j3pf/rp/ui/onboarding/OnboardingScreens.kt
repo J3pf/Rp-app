@@ -2,13 +2,13 @@ package dev.j3pf.rp.ui.onboarding
 
 import android.Manifest
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
+import android.annotation.SuppressLint
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -292,6 +293,7 @@ fun ScanScreen(
 }
 
 /** Permiso de notificaciones (Android 13+) y exclusión de optimización de batería. */
+@SuppressLint("BatteryLife") // Persistent relay WebSocket connection requires foreground battery optimization exemption.
 @Composable
 fun PermissionsScreen(
     onDone: () -> Unit,
@@ -337,7 +339,7 @@ fun PermissionsScreen(
         Button(
             onClick = {
                 batteryLauncher.launch(
-                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${context.packageName}".toUri()),
                 )
             },
             enabled = !batteryOk,

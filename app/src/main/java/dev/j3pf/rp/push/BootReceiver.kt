@@ -18,7 +18,7 @@ class BootReceiver : BroadcastReceiver() {
 
     @Inject lateinit var settings: SettingsRepository
 
-    @Inject @field:AppScope
+    @Inject @AppScope
     lateinit var scope: CoroutineScope
 
     override fun onReceive(

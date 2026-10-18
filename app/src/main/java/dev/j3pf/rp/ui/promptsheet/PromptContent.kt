@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,7 +85,7 @@ private fun PromptHeader(p: Prompt) {
                 PromptCategory.QUESTION -> "Pregunta" to MaterialTheme.colorScheme.primary
                 else -> "Diálogo" to MaterialTheme.colorScheme.secondary
             }
-        TagChip(label, color)
+        TagChip(label, color = color)
         if (p.source?.subagent == true) TagChip("❀ subagente", MaterialTheme.colorScheme.tertiary)
         when (p.danger) {
             Danger.HIGH -> TagChip("Peligro alto", RpColors.danger)
@@ -288,7 +289,7 @@ private fun QuestionnaireBody(
     onAnswer: (Answer) -> Unit,
 ) {
     if (questions.isEmpty()) return
-    var page by rememberSaveable(promptId, questions.size) { mutableStateOf(0) }
+    var page by rememberSaveable(promptId, questions.size) { mutableIntStateOf(0) }
     val selected = remember(promptId, questions) { mutableStateMapOf<Int, List<String>>() }
     val texts = remember(promptId, questions) { mutableStateMapOf<Int, String>() }
     var focused by remember(promptId, questions) { mutableStateOf<PromptOption?>(null) }

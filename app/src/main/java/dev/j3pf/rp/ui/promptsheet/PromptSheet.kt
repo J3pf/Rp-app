@@ -78,9 +78,7 @@ fun PromptSheet(
                 onDismiss()
             }
 
-            else -> {
-                Unit
-            }
+            else -> {}
         }
     }
 

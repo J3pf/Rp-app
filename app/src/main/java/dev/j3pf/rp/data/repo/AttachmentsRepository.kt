@@ -1,5 +1,8 @@
+@file:SuppressLint("ExifInterface") // android.media.ExifInterface is sufficient for local image orientation on minSdk 29+
+
 package dev.j3pf.rp.data.repo
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -158,6 +161,7 @@ class AttachmentsRepository
 
         private fun sanitize(name: String) = name.replace(UNSAFE_FILENAME_REGEX, "_").take(120).ifEmpty { "archivo" }
 
+        @SuppressLint("ExifInterface") // android.media.ExifInterface is sufficient for local image orientation on minSdk 29+
         private fun compress(src: File): File? =
             runCatching {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

@@ -4,8 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -376,9 +377,9 @@ private fun SubScreen(
 fun DevicesContent(
     devices: List<DeviceInfo>,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
     onRevoke: (String) -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
-    modifier: Modifier = Modifier,
 ) {
     var toRevoke by remember { mutableStateOf<String?>(null) }
     Scaffold(
@@ -458,7 +459,7 @@ fun MachinesScreen(
         if (st.machines.isEmpty()) Text("Aún no hay PCs emparejadas", Modifier.padding(16.dp))
         st.machines.forEach { m ->
             ListItem(
-                leadingContent = { ColorDot(parseColor(m.color), 14) },
+                leadingContent = { ColorDot(parseColor(m.color), size = 14) },
                 headlineContent = { Text("${contextEmoji(m.context)} ${m.name}") },
                 supportingContent = {
                     Text(
@@ -696,7 +697,7 @@ private fun MachinePrefsCard(
     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ColorDot(parseColor(m.color), 12)
+                ColorDot(parseColor(m.color), size = 12)
                 Text("  ${contextEmoji(m.context)} ${m.name}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 Text("Silenciar")
                 Switch(p?.mute ?: false, { vm.setMachineMute(m.machineId, it) })
@@ -776,6 +777,7 @@ fun SecuritySettingsScreen(
 
 // ───────────────────────────── Batería ─────────────────────────────
 
+@SuppressLint("BatteryLife") // Persistent relay WebSocket connection requires foreground battery optimization exemption.
 @Composable
 fun BatteryScreen(
     onBack: () -> Unit,
@@ -800,7 +802,7 @@ fun BatteryScreen(
             )
             Button(onClick = {
                 context.startActivity(
-                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${context.packageName}".toUri()),
                 )
             }, enabled = !st.health.batteryExcluded) { Text("Excluir RP de la optimización") }
             OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }) {

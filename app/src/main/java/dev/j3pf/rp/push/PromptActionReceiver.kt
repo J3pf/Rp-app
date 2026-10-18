@@ -32,7 +32,7 @@ import javax.inject.Inject
 class PromptActionReceiver : BroadcastReceiver() {
     @Inject lateinit var handler: PromptActionHandler
 
-    @Inject @field:AppScope
+    @Inject @AppScope
     lateinit var scope: CoroutineScope
 
     override fun onReceive(

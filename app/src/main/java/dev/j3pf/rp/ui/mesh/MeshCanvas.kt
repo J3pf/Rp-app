@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.withTranslation
 import dev.j3pf.rp.ui.mesh.layout.LayoutBounds
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
@@ -55,11 +56,11 @@ const val MIN_AUTO_FIT_SCALE = 0.75f
 @Composable
 fun MeshCanvas(
     layout: MeshLayoutResult?,
+    modifier: Modifier = Modifier,
     activeBubbles: List<LiveCommBubble> = emptyList(),
     onNodeClick: (String) -> Unit,
     onEdgeClick: (String) -> Unit,
     onViewportSizeChanged: (Float, Float) -> Unit = { _, _ -> },
-    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -216,12 +217,11 @@ fun MeshCanvas(
             val nativeCanvas = drawContext.canvas.nativeCanvas
             val currentTimeMs = frameTime.longValue
 
-            nativeCanvas.save()
-            nativeCanvas.translate(
+            nativeCanvas.withTranslation(
                 (centerDpX + panX) * density.density,
                 (centerDpY + panY) * density.density,
-            )
-            nativeCanvas.scale(
+            ) {
+                nativeCanvas.scale(
                 effectiveZoom * density.density,
                 effectiveZoom * density.density,
             )
@@ -341,7 +341,7 @@ fun MeshCanvas(
                 }
             }
 
-            nativeCanvas.restore()
+            }
         }
 
         // Render interactive Agent Cards in DP space with full legibility
