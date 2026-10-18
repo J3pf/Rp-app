@@ -236,4 +236,60 @@ class MeshFormattersTest {
             )
         assertEquals("Rp-app", formatMeshGroupChipLabel(group, orchNode, allNodes))
     }
+
+    @Test
+    fun `formatMeshDisplayName and group chip handle relay 0_5_3 sentinels and existing numbered suffixes`() {
+        val agentSentinelNodeWithCwd =
+            MeshNode(
+                agentId = "node-1",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Agent",
+                cwd = "/home/drift/Workspace/RP/Rp-plugin",
+                status = "idle",
+            )
+        assertEquals("Rp-plugin", formatMeshDisplayName(agentSentinelNodeWithCwd))
+
+        val agentSentinelNodeWithoutCwd =
+            MeshNode(
+                agentId = "node-2",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Agent",
+                cwd = null,
+                status = "idle",
+            )
+        assertEquals("Agente", formatMeshDisplayName(agentSentinelNodeWithoutCwd))
+
+        val alreadyNumbered1 =
+            MeshNode(
+                agentId = "node-3",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Rp-app (1)",
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                status = "idle",
+            )
+        val alreadyNumbered2 =
+            MeshNode(
+                agentId = "node-4",
+                machineId = "m2",
+                machineName = "Mac",
+                name = "Rp-app (2)",
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                status = "idle",
+            )
+        val all = listOf(alreadyNumbered1, alreadyNumbered2)
+        assertEquals("Rp-app (1)", formatMeshDisplayName(alreadyNumbered1, all))
+        assertEquals("Rp-app (2)", formatMeshDisplayName(alreadyNumbered2, all))
+
+        val groupSentinel =
+            dev.j3pf.rp.protocol.MeshGroup(
+                groupId = "grp-1",
+                label = "Mesh Group",
+                orchestratorAgentId = null,
+                memberAgentIds = listOf("node-1"),
+            )
+        assertEquals("Grupo de agentes", formatMeshGroupChipLabel(groupSentinel, null, emptyList()))
+    }
 }

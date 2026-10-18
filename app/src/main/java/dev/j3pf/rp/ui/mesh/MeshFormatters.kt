@@ -24,12 +24,14 @@ fun isIdLooking(text: String?): Boolean {
     return false
 }
 
+private val NUMBERED_SUFFIX_REGEX = Regex(".*\\(\\d+\\)$")
+
 fun extractCwdBasename(cwd: String?): String? {
     if (cwd.isNullOrBlank()) return null
     val clean = cwd.replace('\\', '/').trimEnd('/')
     val lastSlash = clean.lastIndexOf('/')
     val name = if (lastSlash >= 0) clean.substring(lastSlash + 1) else clean
-    return name.takeIf { it.isNotBlank() && it != "/" && !isIdLooking(it) }
+    return name.takeIf { it.isNotBlank() && it != "/" && !isIdLooking(it) && !it.equals("Agent", ignoreCase = true) }
 }
 
 fun formatMeshDisplayName(
@@ -37,7 +39,7 @@ fun formatMeshDisplayName(
     allNodes: List<MeshNode> = emptyList(),
 ): String {
     val baseName = resolveBaseDisplayName(node)
-    if (allNodes.size <= 1) return baseName
+    if (allNodes.size <= 1 || NUMBERED_SUFFIX_REGEX.matches(baseName)) return baseName
 
     val duplicates = allNodes.filter { resolveBaseDisplayName(it) == baseName }
     if (duplicates.size <= 1) return baseName
@@ -55,7 +57,13 @@ fun formatMeshDisplayName(
 
 private fun resolveBaseDisplayName(node: MeshNode): String {
     val candidate = node.name.trim()
-    if (candidate.isNotBlank() && !isIdLooking(candidate) && candidate != node.agentId && candidate != node.machineId) {
+    if (
+        candidate.isNotBlank() &&
+        !isIdLooking(candidate) &&
+        !candidate.equals("Agent", ignoreCase = true) &&
+        candidate != node.agentId &&
+        candidate != node.machineId
+    ) {
         return candidate
     }
     val fromCwd = extractCwdBasename(node.cwd)
@@ -81,7 +89,7 @@ fun formatMeshGroupChipLabel(
     if (orchestratorNode != null) {
         return formatMeshDisplayName(orchestratorNode, allNodes)
     }
-    if (group.label.isNotBlank() && !isIdLooking(group.label)) {
+    if (group.label.isNotBlank() && !isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
         return group.label
     }
     return "Grupo de agentes"

@@ -2,15 +2,13 @@ package dev.j3pf.rp.ui.mesh.layout
 
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
-import kotlin.math.PI
-import kotlin.math.atan2
-import kotlin.math.cos
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Pure Kotlin radial-hierarchical layout for agent mesh snapshots. */
+/** Pure Kotlin hierarchical top-down layout for agent mesh snapshots. */
 class MeshLayoutEngine(
     val config: LayoutConfig = LayoutConfig(),
 ) {
@@ -43,28 +41,24 @@ class MeshLayoutEngine(
         }
 
         val nodesById = orderedNodes.associateBy { it.agentId }
-        val orchestrator = orderedNodes.firstOrNull { it.role == "orchestrator" }
-        val hierarchyRoot =
-            orderedNodes.firstOrNull {
-                it.role != "solo" && (it.parentAgentId == null || it.parentAgentId !in nodesById)
-            }
-        val cyclicRoot = orderedNodes.firstOrNull { it.role != "solo" }
-        val centerNode = orchestrator ?: hierarchyRoot ?: cyclicRoot
-        val centerNodeId = centerNode?.agentId
-        val centerX = width / 2f
-        val centerY = height / 2f
-        val levels = mutableMapOf<String, Int>()
+        val root =
+            orderedNodes.firstOrNull { it.role == "orchestrator" }
+                ?: orderedNodes.firstOrNull {
+                    it.role != "solo" && (it.parentAgentId == null || it.parentAgentId !in nodesById)
+                }
+                ?: orderedNodes.first()
         val childrenByParent =
             orderedNodes
                 .filter { it.parentAgentId != null && it.parentAgentId in nodesById }
                 .groupBy { it.parentAgentId!! }
                 .mapValues { (_, children) -> children.sortedBy { it.agentId } }
+        val levels = mutableMapOf(root.agentId to 0)
 
         fun attachDescendants(
             parentId: String,
             parentLevel: Int,
         ) {
-            for (child in childrenByParent[parentId].orEmpty()) {
+            childrenByParent[parentId].orEmpty().forEach { child ->
                 if (child.agentId !in levels) {
                     val childLevel = parentLevel + 1
                     levels[child.agentId] = childLevel
@@ -73,100 +67,106 @@ class MeshLayoutEngine(
             }
         }
 
-        if (centerNode != null) {
-            levels[centerNode.agentId] = 0
-            attachDescendants(centerNode.agentId, 0)
-
-            // Group membership supplies a direct-ring relationship where the snapshot has no parent link.
-            val centerGroupId = centerNode.groupId
-            if (centerGroupId != null) {
-                for (member in orderedNodes) {
-                    if (member.groupId == centerGroupId && member.agentId !in levels) {
-                        levels[member.agentId] = 1
-                        attachDescendants(member.agentId, 1)
-                    }
+        attachDescendants(root.agentId, 0)
+        root.groupId?.let { groupId ->
+            orderedNodes
+                .filter { it.groupId == groupId && it.agentId !in levels }
+                .forEach { member ->
+                    levels[member.agentId] = 1
+                    attachDescendants(member.agentId, 1)
                 }
-            }
         }
-
-        // Keep disconnected components visible, and seed malformed/cyclic components exactly once.
-        for (node in orderedNodes) {
+        orderedNodes.forEach { node ->
             if (node.agentId !in levels) {
                 levels[node.agentId] = 1
                 attachDescendants(node.agentId, 1)
             }
         }
 
-        val nodeRadii =
-            orderedNodes.associate { node ->
-                node.agentId to
-                    when (node.role) {
-                        "orchestrator" -> config.orchestratorRadius
-                        "subordinate" -> config.subordinateRadius
-                        else -> config.soloRadius
-                    }.coerceAtLeast(0f)
+        val nodesByLevel = orderedNodes.groupBy { levels.getValue(it.agentId) }.toSortedMap()
+        val largestLevel = nodesByLevel.values.maxOf { it.size }
+        val horizontalPadding = config.viewportPaddingX.coerceAtLeast(0f)
+        val verticalPadding = config.viewportPaddingY.coerceAtLeast(0f)
+        val availableWidth = (width - 2f * horizontalPadding).coerceAtLeast(0f)
+        val availableHeight = (height - 2f * verticalPadding).coerceAtLeast(0f)
+        val horizontalSpacing = config.cardSpacingX.coerceAtLeast(2f)
+        val minimumWidth = config.minCardWidth.coerceAtLeast(1f)
+        val preferredWidth = config.cardWidth.coerceAtLeast(minimumWidth)
+        val widthCapacity =
+            floor((availableWidth + horizontalSpacing) / (minimumWidth + horizontalSpacing))
+                .toInt()
+                .coerceAtLeast(1)
+        val preferredColumns =
+            floor((availableWidth + horizontalSpacing) / (preferredWidth + horizontalSpacing))
+                .toInt()
+                .coerceAtLeast(1)
+        val aspectColumns =
+            if (availableHeight > 0f && availableWidth > 0f) {
+                ceil(sqrt(largestLevel * availableWidth / availableHeight)).toInt().coerceAtLeast(1)
+            } else {
+                largestLevel
             }
-        val levelGroups = orderedNodes.groupBy { levels.getValue(it.agentId) }
+        val columnCount =
+            max(preferredColumns, aspectColumns)
+                .coerceAtMost(widthCapacity)
+                .coerceAtMost(largestLevel)
+                .coerceAtLeast(1)
+        val cardWidth =
+            min(
+                preferredWidth,
+                ((availableWidth - (columnCount - 1) * horizontalSpacing) / columnCount).coerceAtLeast(0f),
+            )
+
+        val previousNodes = previousLayout?.nodes.orEmpty()
+        val rows =
+            nodesByLevel.values.flatMap { levelNodes ->
+                levelNodes
+                    .sortedWith(
+                        compareBy<MeshNode>(
+                            { previousNodes[it.agentId]?.y ?: Float.POSITIVE_INFINITY },
+                            { previousNodes[it.agentId]?.x ?: Float.POSITIVE_INFINITY },
+                            { it.agentId },
+                        ),
+                    ).chunked(columnCount)
+            }
+        val rowCount = rows.size
+        val minimumHeight = config.minCardHeight.coerceAtLeast(0f)
+        val preferredHeight = config.cardHeight.coerceAtLeast(minimumHeight)
+        val requestedVerticalSpacing = config.cardSpacingY.coerceAtLeast(2f)
+        val verticalSpacing =
+            if (rowCount > 1) {
+                val spacingThatPreservesMinimumCards =
+                    ((availableHeight - rowCount * minimumHeight) / (rowCount - 1)).coerceAtLeast(2f)
+                min(requestedVerticalSpacing, spacingThatPreservesMinimumCards)
+            } else {
+                0f
+            }
+        val cardHeight =
+            min(
+                preferredHeight,
+                ((availableHeight - verticalSpacing * (rowCount - 1)) / rowCount).coerceAtLeast(0f),
+            )
         val positions = mutableMapOf<String, Pair<Float, Float>>()
-        if (centerNode != null) positions[centerNode.agentId] = centerX to centerY
-
-        val priorRings = mutableListOf<Pair<Float, Float>>() // ring radius, largest node radius on that ring
-        val collisionMargin = COLLISION_MARGIN
-        for ((level, ringNodes) in levelGroups.toSortedMap()) {
-            if (level == 0) continue
-            val maxNodeRadius = ringNodes.maxOf { nodeRadii.getValue(it.agentId) }
-            val baseRadius = (config.baseRingRadius + (level - 1) * config.levelRingStep).coerceAtLeast(0f)
-            val count = ringNodes.size
-            val minimumSpacing = max(config.minNodeSpacing.coerceAtLeast(0f), maxNodeRadius * 2f + collisionMargin)
-            val circumferenceRadius = count * config.minNodeSpacing.coerceAtLeast(0f) / (2f * PI.toFloat())
-            val chordRadius =
-                if (count > 1) {
-                    minimumSpacing / (2f * sin(PI.toFloat() / count))
-                } else {
-                    0f
-                }
-            var ringRadius = max(baseRadius, max(circumferenceRadius, chordRadius))
-
-            if (level == 1 && centerNode != null) {
-                ringRadius = max(ringRadius, nodeRadii.getValue(centerNode.agentId) + maxNodeRadius + collisionMargin)
+        rows.forEachIndexed { rowIndex, rowNodes ->
+            val rowWidth = rowNodes.size * cardWidth + (rowNodes.size - 1) * horizontalSpacing
+            val firstCenterX = width / 2f - rowWidth / 2f + cardWidth / 2f
+            val centerY = verticalPadding + cardHeight / 2f + rowIndex * (cardHeight + verticalSpacing)
+            rowNodes.forEachIndexed { columnIndex, node ->
+                positions[node.agentId] = firstCenterX + columnIndex * (cardWidth + horizontalSpacing) to centerY
             }
-            for ((previousRadius, previousMaxNodeRadius) in priorRings) {
-                ringRadius = max(ringRadius, previousRadius + previousMaxNodeRadius + maxNodeRadius + collisionMargin)
-            }
-
-            val ringOrder = orderRing(ringNodes, previousLayout, centerX, centerY)
-            val angleStep = 2f * PI.toFloat() / ringOrder.size
-            val startAngle = ringStartAngle(ringOrder, previousLayout, centerX, centerY, angleStep)
-            ringOrder.forEachIndexed { index, node ->
-                val angle = startAngle + index * angleStep
-                positions[node.agentId] =
-                    (centerX + cos(angle) * ringRadius) to (centerY + sin(angle) * ringRadius)
-            }
-            priorRings += ringRadius to maxNodeRadius
         }
 
         val positionedNodes = linkedMapOf<String, PositionedNode>()
-        for (node in orderedNodes) {
+        orderedNodes.forEach { node ->
             val (x, y) = positions.getValue(node.agentId)
-            val satellites =
-                node.subagents
-                    .sortedBy { it.taskId }
-                    .mapIndexed { index, subagent ->
-                        val angle = if (node.subagents.isEmpty()) 0f else 2f * PI.toFloat() * index / node.subagents.size
-                        PositionedSatellite(
-                            subagent = subagent,
-                            parentAgentId = node.agentId,
-                            orbitRadius = config.satelliteOrbitRadius.coerceAtLeast(0f),
-                            baseAngleRad = angle,
-                            radius = config.satelliteRadius.coerceAtLeast(0f),
-                        )
-                    }
+            val satellites = positionSatellites(node, cardWidth, cardHeight)
             positionedNodes[node.agentId] =
                 PositionedNode(
                     node = node,
                     x = x,
                     y = y,
-                    radius = nodeRadii.getValue(node.agentId),
+                    width = cardWidth,
+                    height = cardHeight,
                     level = levels.getValue(node.agentId),
                     satellites = satellites,
                 )
@@ -180,86 +180,99 @@ class MeshLayoutEngine(
             nodes = positionedNodes,
             edges = positionedEdges,
             bounds = calculateBounds(positionedNodes, positionedEdges),
-            centerNodeId = centerNodeId,
+            centerNodeId = root.agentId,
         )
     }
 
-    private fun orderRing(
-        ringNodes: List<MeshNode>,
-        previousLayout: MeshLayoutResult?,
-        centerX: Float,
-        centerY: Float,
-    ): List<MeshNode> {
-        val previousNodes = previousLayout?.nodes.orEmpty()
-        val existing =
-            ringNodes
-                .filter { it.agentId in previousNodes }
-                .sortedWith(
-                    compareBy<MeshNode>(
-                        { angleOf(previousNodes.getValue(it.agentId), centerX, centerY) },
-                        { it.agentId },
-                    ),
-                )
-        val newNodes = ringNodes.filter { it.agentId !in previousNodes }.sortedBy { it.agentId }
-        return existing + newNodes
+    private fun positionSatellites(
+        node: MeshNode,
+        cardWidth: Float,
+        cardHeight: Float,
+    ): List<PositionedSatellite> {
+        val subagents = node.subagents.sortedBy { it.taskId }
+        if (subagents.isEmpty()) return emptyList()
+        val satelliteWidth = min(88f, cardWidth / 2f)
+        val satelliteHeight = min(22f, cardHeight / 2f)
+        val horizontalOffset = cardWidth / 4f
+        val verticalOffset = cardHeight / 4f
+        return subagents.mapIndexed { index, subagent ->
+            val column = index % 2
+            val row = index / 2
+            val offsetX =
+                when {
+                    subagents.size == 1 -> 0f
+                    column == 0 -> -horizontalOffset
+                    else -> horizontalOffset
+                }
+            val offsetY =
+                when {
+                    subagents.size <= 2 -> 0f
+                    row == 0 -> -verticalOffset
+                    else -> verticalOffset
+                }
+            PositionedSatellite(
+                subagent = subagent,
+                parentAgentId = node.agentId,
+                orbitRadius = 0f,
+                baseAngleRad = 0f,
+                radius = config.satelliteRadius.coerceAtLeast(0f),
+                offsetX = offsetX,
+                offsetY = offsetY,
+                width = satelliteWidth,
+                height = satelliteHeight,
+            )
+        }
     }
-
-    private fun ringStartAngle(
-        ringNodes: List<MeshNode>,
-        previousLayout: MeshLayoutResult?,
-        centerX: Float,
-        centerY: Float,
-        angleStep: Float,
-    ): Float {
-        if (previousLayout == null || ringNodes.isEmpty()) return DEFAULT_START_ANGLE
-        val priorNodes = previousLayout.nodes
-        val deltas =
-            ringNodes.mapIndexedNotNull { index, node ->
-                priorNodes[node.agentId]?.let { angleOf(it, centerX, centerY) - index * angleStep }
-            }
-        if (deltas.isEmpty()) return DEFAULT_START_ANGLE
-        val sinSum = deltas.sumOf { sin(it.toDouble()) }
-        val cosSum = deltas.sumOf { cos(it.toDouble()) }
-        if (sinSum * sinSum + cosSum * cosSum < ANGLE_EPSILON) return DEFAULT_START_ANGLE
-        return atan2(sinSum, cosSum).toFloat()
-    }
-
-    private fun angleOf(
-        node: PositionedNode,
-        centerX: Float,
-        centerY: Float,
-    ): Float = atan2(node.y - centerY, node.x - centerX)
 
     private fun positionEdge(
         edge: MeshEdge,
         nodes: Map<String, PositionedNode>,
     ): PositionedEdge? {
-        val from = nodes[edge.a] ?: return null
-        val to = nodes[edge.b] ?: return null
-        val lowId = minOf(edge.a, edge.b)
-        val highId = maxOf(edge.a, edge.b)
-        val low = nodes.getValue(lowId)
-        val high = nodes.getValue(highId)
+        val a = nodes[edge.a] ?: return null
+        val b = nodes[edge.b] ?: return null
+        val aIsParent = b.node.parentAgentId == a.node.agentId || a.level < b.level
+        val bIsParent = a.node.parentAgentId == b.node.agentId || b.level < a.level
+        val endpoints =
+            when {
+                aIsParent -> EdgeEndpoints(a.x, a.bottom, b.x, b.top)
+                bIsParent -> EdgeEndpoints(b.x, b.bottom, a.x, a.top)
+                a.y == b.y && a.x <= b.x -> EdgeEndpoints(a.right, a.y, b.left, b.y)
+                a.y == b.y -> EdgeEndpoints(a.left, a.y, b.right, b.y)
+                a.y < b.y -> EdgeEndpoints(a.x, a.bottom, b.x, b.top)
+                else -> EdgeEndpoints(b.x, b.bottom, a.x, a.top)
+            }
+        val fromX = endpoints.fromX
+        val fromY = endpoints.fromY
+        val toX = endpoints.toX
+        val toY = endpoints.toY
+        val low = if (edge.a <= edge.b) a else b
+        val high = if (edge.a <= edge.b) b else a
         val dx = high.x - low.x
         val dy = high.y - low.y
         val length = sqrt(dx * dx + dy * dy)
         val normalX = if (length > 0f) -dy / length else 0f
         val normalY = if (length > 0f) dx / length else 1f
-        val direction = if (edge.a <= edge.b) 1f else -1f
-        val curvature = config.edgeCurveOffset.coerceAtLeast(0f) * direction
-        val midpointX = (from.x + to.x) / 2f
-        val midpointY = (from.y + to.y) / 2f
+        val curvature = config.edgeCurveOffset.coerceAtLeast(0f) * if (edge.a <= edge.b) 1f else -1f
+        val midpointX = (fromX + toX) / 2f
+        val midpointY = (fromY + toY) / 2f
         return PositionedEdge(
             edge = edge,
-            fromX = from.x,
-            fromY = from.y,
-            toX = to.x,
-            toY = to.y,
+            fromX = fromX,
+            fromY = fromY,
+            toX = toX,
+            toY = toY,
             controlX = midpointX + normalX * curvature,
             controlY = midpointY + normalY * curvature,
             curvature = curvature,
         )
     }
+
+    private data class EdgeEndpoints(
+        val fromX: Float,
+        val fromY: Float,
+        val toX: Float,
+        val toY: Float,
+    )
 
     private fun calculateBounds(
         nodes: Map<String, PositionedNode>,
@@ -270,31 +283,34 @@ class MeshLayoutEngine(
         var maxX = Float.NEGATIVE_INFINITY
         var maxY = Float.NEGATIVE_INFINITY
 
-        fun include(
-            x: Float,
-            y: Float,
-            radius: Float = 0f,
-        ) {
-            minX = min(minX, x - radius)
-            minY = min(minY, y - radius)
-            maxX = max(maxX, x + radius)
-            maxY = max(maxY, y + radius)
+        fun include(bounds: LayoutBounds) {
+            minX = min(minX, bounds.minX)
+            minY = min(minY, bounds.minY)
+            maxX = max(maxX, bounds.maxX)
+            maxY = max(maxY, bounds.maxY)
         }
 
         for (node in nodes.values) {
-            include(node.x, node.y, node.radius)
-            for (satellite in node.satellites) {
+            include(node.bounds())
+            node.satellites.forEach { satellite ->
                 val (offsetX, offsetY) = satellite.calculatePosition()
-                include(node.x + offsetX, node.y + offsetY, satellite.radius)
+                include(
+                    LayoutBounds(
+                        node.x + offsetX - satellite.width / 2f,
+                        node.y + offsetY - satellite.height / 2f,
+                        node.x + offsetX + satellite.width / 2f,
+                        node.y + offsetY + satellite.height / 2f,
+                    ),
+                )
             }
         }
-        for (edge in edges) include(edge.controlX, edge.controlY)
+        edges.forEach { edge ->
+            minX = min(minX, edge.controlX)
+            minY = min(minY, edge.controlY)
+            maxX = max(maxX, edge.controlX)
+            maxY = max(maxY, edge.controlY)
+        }
+        if (minX == Float.POSITIVE_INFINITY) return LayoutBounds(0f, 0f, 0f, 0f)
         return LayoutBounds(minX, minY, maxX, maxY)
-    }
-
-    private companion object {
-        const val COLLISION_MARGIN = 8f
-        const val ANGLE_EPSILON = 1e-12
-        val DEFAULT_START_ANGLE = -PI.toFloat() / 2f
     }
 }
