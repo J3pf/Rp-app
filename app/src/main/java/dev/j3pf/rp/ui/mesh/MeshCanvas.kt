@@ -90,10 +90,11 @@ fun MeshCanvas(
                     ?.takeIf { it > nowMs }
             }.minOrNull()
     val hasMovingContent =
-        !reducedMotion && (
-            layout?.edges?.any { it.edge.pendingAsk } == true ||
-                activeBubbles.any { it.expiresAtMs > nowMs }
-        )
+        !reducedMotion &&
+            (
+                layout?.edges?.any { it.edge.pendingAsk } == true ||
+                    activeBubbles.any { it.expiresAtMs > nowMs }
+            )
 
     LaunchedEffect(hasMovingContent, activeEdgeExpiresAt) {
         frameTime.longValue = System.currentTimeMillis()
@@ -192,8 +193,10 @@ fun MeshCanvas(
                             // Check if tap hit any node card
                             val hitNode =
                                 activeLayout.nodes.values.firstOrNull { node ->
-                                    localTap.x >= node.left && localTap.x <= node.right &&
-                                        localTap.y >= node.top && localTap.y <= node.bottom
+                                    localTap.x >= node.left &&
+                                        localTap.x <= node.right &&
+                                        localTap.y >= node.top &&
+                                        localTap.y <= node.bottom
                                 }
                             if (hitNode != null) {
                                 onNodeClick(hitNode.node.agentId)
@@ -291,10 +294,14 @@ fun MeshCanvas(
                         firstSender.bottom + 12f <= firstReceiver.top - 12f -> {
                             midpointY.coerceIn(firstSender.bottom + 12f, firstReceiver.top - 12f)
                         }
+
                         firstReceiver.bottom + 12f <= firstSender.top - 12f -> {
                             midpointY.coerceIn(firstReceiver.bottom + 12f, firstSender.top - 12f)
                         }
-                        else -> midpointY
+
+                        else -> {
+                            midpointY
+                        }
                     }
 
                 visibleBubbles.forEachIndexed { index, bubble ->

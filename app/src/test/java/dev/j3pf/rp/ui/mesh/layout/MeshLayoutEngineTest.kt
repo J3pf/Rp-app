@@ -3,8 +3,6 @@ package dev.j3pf.rp.ui.mesh.layout
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSubagent
-import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals

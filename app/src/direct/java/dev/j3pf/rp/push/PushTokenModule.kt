@@ -12,7 +12,8 @@ import javax.inject.Singleton
 object PushTokenModule {
     @Provides
     @Singleton
-    fun tokenProvider(): PushTokenProvider = object : PushTokenProvider {
-        override suspend fun currentToken(): String? = null
-    }
+    fun tokenProvider(): PushTokenProvider =
+        object : PushTokenProvider {
+            override suspend fun currentToken(): String? = null
+        }
 }

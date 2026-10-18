@@ -1,7 +1,6 @@
 package dev.j3pf.rp.ui.pending
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -90,7 +89,8 @@ class PendingViewModel
                 val byId = ags.associateBy { a: AgentSummary -> a.agentId }
                 val items =
                     ps.map { p: Prompt -> PendingItem(p, byId[p.agentId]) }.filter { item: PendingItem ->
-                        st.selectedContext == AppSettings.ALL || item.agent?.machineContext == st.selectedContext ||
+                        st.selectedContext == AppSettings.ALL ||
+                            item.agent?.machineContext == st.selectedContext ||
                             item.agent?.machineId == st.selectedContext
                     }
                 // Orden: por peligro y antigüedad (el DAO ya ordena; se mantiene estable aquí).

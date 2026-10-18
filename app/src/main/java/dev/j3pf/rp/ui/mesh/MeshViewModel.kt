@@ -10,12 +10,9 @@ import dev.j3pf.rp.data.repo.MeshRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.MeshComm
-import dev.j3pf.rp.protocol.MeshEdge
-import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
-import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow

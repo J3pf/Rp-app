@@ -5,10 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshNode
@@ -539,7 +539,10 @@ class MeshScreenTest {
 
         listOf(orchBounds, sub1Bounds, sub2Bounds, sub3Bounds).forEach { bounds ->
             kotlin.test.assertTrue(bounds.width >= minCardWidthPx - 1f, "Card width ${bounds.width} < 140dp ($minCardWidthPx px)")
-            kotlin.test.assertTrue(bounds.top >= highestFilterBottom, "Card top ${bounds.top} intersects filter bottom $highestFilterBottom")
+            kotlin.test.assertTrue(
+                bounds.top >= highestFilterBottom,
+                "Card top ${bounds.top} intersects filter bottom $highestFilterBottom",
+            )
         }
     }
 

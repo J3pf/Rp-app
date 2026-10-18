@@ -74,7 +74,10 @@ fun MeshNodeDetailContent(
     val node = detail.node
     val displayName = formatMeshDisplayName(node)
     val headerSubtitle =
-        node.gitBranch?.takeIf { it.isNotBlank() }?.let { "Rama $it · " }.orEmpty() + formatMeshStatus(node.status)
+        node.gitBranch
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "Rama $it · " }
+            .orEmpty() + formatMeshStatus(node.status)
     var showTechnicalDetails by remember { mutableStateOf(initiallyExpandedTechnicalDetails) }
 
     Column(

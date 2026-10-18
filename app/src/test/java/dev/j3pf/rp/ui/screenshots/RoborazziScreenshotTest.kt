@@ -8,12 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -50,7 +48,6 @@ import dev.j3pf.rp.ui.agents.MachineGroup
 import dev.j3pf.rp.ui.agents.sortAgentsWithinGroup
 import dev.j3pf.rp.ui.chat.ChatContent
 import dev.j3pf.rp.ui.chat.ChatUiState
-import dev.j3pf.rp.ui.chat.MessageList
 import dev.j3pf.rp.ui.components.QuotaDynamicIsland
 import dev.j3pf.rp.ui.mesh.LiveCommBubble
 import dev.j3pf.rp.ui.mesh.MeshGroupChip
@@ -131,7 +128,7 @@ class RoborazziScreenshotTest {
             hostOnline = true,
         )
 
-    private val FIXED_TEST_TIMESTAMP = 1776510000000L
+    private val fixedTestTimestamp = 1776510000000L
 
     private val agentWorking =
         AgentSummary(
@@ -573,7 +570,7 @@ class RoborazziScreenshotTest {
                             toName = "Rp-relay",
                             action = CommAction.ASK,
                             text = "Validando endpoints de red",
-                            at = FIXED_TEST_TIMESTAMP - 30_000L,
+                            at = fixedTestTimestamp - 30_000L,
                         ),
                     ),
             )
@@ -614,7 +611,7 @@ class RoborazziScreenshotTest {
                             toName = "Rp-relay",
                             action = CommAction.ASK,
                             text = "Validando endpoints de red",
-                            at = FIXED_TEST_TIMESTAMP - 30_000L,
+                            at = fixedTestTimestamp - 30_000L,
                         ),
                     ),
             )
@@ -656,7 +653,7 @@ class RoborazziScreenshotTest {
                             toName = "Rp-relay",
                             action = CommAction.ASK,
                             text = "Iniciando refactor de la red de agentes",
-                            at = FIXED_TEST_TIMESTAMP - 60_000L,
+                            at = fixedTestTimestamp - 60_000L,
                         ),
                         MeshComm(
                             commKey = "c2",
@@ -666,7 +663,7 @@ class RoborazziScreenshotTest {
                             toName = "Rp-app",
                             action = CommAction.REPLY,
                             text = "Contrato de red validado y listo",
-                            at = FIXED_TEST_TIMESTAMP - 30_000L,
+                            at = fixedTestTimestamp - 30_000L,
                         ),
                     ),
             )

@@ -21,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 
 /** CompositionLocal para propagar si el usuario tiene activado "reducir movimiento". */
 val LocalReducedMotion = compositionLocalOf { false }

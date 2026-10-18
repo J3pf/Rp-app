@@ -216,7 +216,9 @@ class RelayConnectionTest {
     @Test
     fun `HostRepository ignora hosts update malformado y limpia con clear`() {
         runBlocking {
-            val hostRepo = dev.j3pf.rp.data.repo.HostRepository(conn, bus, scope)
+            val hostRepo =
+                dev.j3pf.rp.data.repo
+                    .HostRepository(conn, bus, scope)
             hostRepo.start()
             kotlinx.coroutines.delay(50)
             bus.publish(Envelope(t = MsgType.HOSTS_UPDATE, d = kotlinx.serialization.json.JsonPrimitive("malformed")))
@@ -224,7 +226,11 @@ class RelayConnectionTest {
                 Envelope.of(
                     MsgType.HOSTS_UPDATE,
                     dev.j3pf.rp.protocol.HostsUpdate(
-                        upsert = listOf(dev.j3pf.rp.protocol.HostInfo(machineId = "M1", roots = listOf("/home"))),
+                        upsert =
+                            listOf(
+                                dev.j3pf.rp.protocol
+                                    .HostInfo(machineId = "M1", roots = listOf("/home")),
+                            ),
                     ),
                 ),
             )
@@ -241,15 +247,23 @@ class RelayConnectionTest {
             val ctx = ApplicationProvider.getApplicationContext<android.app.Application>()
             val db = dev.j3pf.rp.inMemoryDb(ctx)
             val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
-            val api = dev.j3pf.rp.data.net.RelayApi(testClient(), secrets)
+            val api =
+                dev.j3pf.rp.data.net
+                    .RelayApi(testClient(), secrets)
             val notifFactory =
                 dev.j3pf.rp.push.NotificationFactory(
                     ctx,
-                    dev.j3pf.rp.push.NotificationChannels(ctx),
-                    dev.j3pf.rp.data.repo.SettingsRepository(ctx),
+                    dev.j3pf.rp.push
+                        .NotificationChannels(ctx),
+                    dev.j3pf.rp.data.repo
+                        .SettingsRepository(ctx),
                 )
-            val promptsRepo = dev.j3pf.rp.data.repo.PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, notifFactory, scope)
-            val chatRepo = dev.j3pf.rp.data.repo.ChatRepository(ctx, db.chat(), db.outbox(), conn, bus, secrets, promptsRepo, api, scope)
+            val promptsRepo =
+                dev.j3pf.rp.data.repo
+                    .PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, notifFactory, scope)
+            val chatRepo =
+                dev.j3pf.rp.data.repo
+                    .ChatRepository(ctx, db.chat(), db.outbox(), conn, bus, secrets, promptsRepo, api, scope)
 
             val s1 = chatRepo.open("m:a")
             val s2 = chatRepo.open("m:a")

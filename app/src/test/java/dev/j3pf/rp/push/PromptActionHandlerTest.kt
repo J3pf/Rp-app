@@ -147,7 +147,11 @@ class PromptActionHandlerTest {
                 }
             val results = android.os.Bundle().apply { putCharSequence(PromptActionReceiver.KEY_TEXT, "hola desde notif") }
             androidx.core.app.RemoteInput.addResultsToIntent(
-                arrayOf(androidx.core.app.RemoteInput.Builder(PromptActionReceiver.KEY_TEXT).build()),
+                arrayOf(
+                    androidx.core.app.RemoteInput
+                        .Builder(PromptActionReceiver.KEY_TEXT)
+                        .build(),
+                ),
                 replyIntent,
                 results,
             )

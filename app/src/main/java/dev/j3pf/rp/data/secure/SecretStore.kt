@@ -56,8 +56,9 @@ open class SecretStore
 
         private val rng = SecureRandom()
 
-        protected val _session: MutableStateFlow<Session?> = MutableStateFlow(load())
+        private val _session: MutableStateFlow<Session?> = MutableStateFlow(load())
         val session: StateFlow<Session?> = _session.asStateFlow()
+        protected val sessionState: MutableStateFlow<Session?> get() = _session
 
         /** Lectura síncrona (receivers y servicios). */
         open fun current(): Session? = _session.value

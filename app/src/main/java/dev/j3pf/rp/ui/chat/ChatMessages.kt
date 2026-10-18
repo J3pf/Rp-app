@@ -17,8 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +42,6 @@ import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatItem
 import dev.j3pf.rp.chat.DiffKind
-import dev.j3pf.rp.chat.NoteKind
 import dev.j3pf.rp.chat.PromptCard
 import dev.j3pf.rp.chat.SubagentCardItem
 import dev.j3pf.rp.chat.SystemNote
@@ -64,7 +61,6 @@ import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.promptsheet.PromptContent
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
-import dev.j3pf.rp.ui.theme.RpSpacing
 
 @Composable
 fun ChatItemView(

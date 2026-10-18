@@ -95,7 +95,12 @@ class PromptsRepository
                     when (env.t) {
                         MsgType.APP_WELCOME -> {
                             val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
-                            dao.syncWelcome(relayId, w.openPrompts.map { it.toEntity(relayId, now) }, w.openPrompts.map { it.promptId }.ifEmpty { listOf("") }, now)
+                            dao.syncWelcome(
+                                relayId,
+                                w.openPrompts.map { it.toEntity(relayId, now) },
+                                w.openPrompts.map { it.promptId }.ifEmpty { listOf("") },
+                                now,
+                            )
                         }
 
                         MsgType.PROMPT_OPENED -> {
@@ -119,7 +124,12 @@ class PromptsRepository
             val res = api.openPrompts()
             if (res is ApiResult.Ok) {
                 val now = System.currentTimeMillis()
-                dao.syncWelcome(relayId, res.value.map { it.toEntity(relayId, now) }, res.value.map { it.promptId }.ifEmpty { listOf("") }, now)
+                dao.syncWelcome(
+                    relayId,
+                    res.value.map { it.toEntity(relayId, now) },
+                    res.value.map { it.promptId }.ifEmpty { listOf("") },
+                    now,
+                )
             }
         }
 

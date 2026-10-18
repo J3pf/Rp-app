@@ -638,7 +638,8 @@ object ChatReducer {
     ): ChatState {
         val (text, images) = userContent(msg["content"])
         val mobile =
-            msg.bool("rp") == true || msg.str("origin") in setOf("rp", "mobile") ||
+            msg.bool("rp") == true ||
+                msg.str("origin") in setOf("rp", "mobile") ||
                 s.localSent.contains(text.trim())
         val item =
             UserMsg(

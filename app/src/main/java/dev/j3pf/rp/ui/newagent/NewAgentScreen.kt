@@ -1,5 +1,7 @@
 package dev.j3pf.rp.ui.newagent
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,8 +42,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import android.content.ClipData
-import android.content.ClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -51,7 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.SectionTitle
 import dev.j3pf.rp.ui.theme.RpShapes
-import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.parseColor
 import kotlinx.coroutines.launch
 

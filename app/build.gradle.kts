@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.roborazzi)
+    alias(libs.plugins.ktlint)
+}
+
+ktlint {
+    android = true
 }
 
 // google-services.json NO se versiona (PLAN-APP §10): sin él, el sabor `fcm` compila pero FCM queda inerte.

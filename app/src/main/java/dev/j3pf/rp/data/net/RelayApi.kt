@@ -25,7 +25,6 @@ import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.UserMessage
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback

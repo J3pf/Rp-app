@@ -97,6 +97,10 @@ Puedes instalar la aplicación directamente en tu dispositivo sin necesidad de c
 4. **Guía completa y Troubleshooting:**
    - Consulta **[docs/INSTALACION.md](docs/INSTALACION.md)** para la guía paso a paso y la resolución detallada de problemas (permisos en Android 13+, optimización de batería, certificados TLS/HTTP en red local y códigos expirados).
 
+## Kotlin code formatting
+
+Run `./gradlew ktlintCheck` to verify Kotlin formatting, or `./gradlew ktlintFormat` to apply ktlint formatting.
+
 ## Compilar desde código fuente
 
 **Rápido (APK para tu teléfono):** `scripts/build-apk.sh` — instala el SDK si falta, compila y deja el APK en `dist/rp-direct-debug.apk`

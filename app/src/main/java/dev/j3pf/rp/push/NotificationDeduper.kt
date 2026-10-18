@@ -9,10 +9,17 @@ import javax.inject.Singleton
  * (Room, ventana de 24 h). Ambos canales pasan por [PushRouter] → [NotificationFactory].
  */
 @Singleton
-class NotificationDeduper @Inject constructor(private val dao: DedupDao) {
-    /** `true` si es la primera vez que se ve [key]. */
-    suspend fun firstSeen(key: String, now: Long = System.currentTimeMillis()): Boolean = dao.firstSeen(key, now)
+class NotificationDeduper
+    @Inject
+    constructor(
+        private val dao: DedupDao,
+    ) {
+        /** `true` si es la primera vez que se ve [key]. */
+        suspend fun firstSeen(
+            key: String,
+            now: Long = System.currentTimeMillis(),
+        ): Boolean = dao.firstSeen(key, now)
 
-    /** Olvida la clave (p. ej. al cancelar un prompt, por si se reabre con el mismo id). */
-    suspend fun forget(key: String) = dao.remove(key)
-}
+        /** Olvida la clave (p. ej. al cancelar un prompt, por si se reabre con el mismo id). */
+        suspend fun forget(key: String) = dao.remove(key)
+    }

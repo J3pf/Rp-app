@@ -7,12 +7,18 @@ import kotlinx.serialization.json.JsonElement
 /** Resumen de una llamada a herramienta para la tarjeta plegada (bash → comando, edit/read/write → ruta). */
 fun ToolRun.summary(maxLen: Int = 120): String {
     val a = args.obj()
-    val raw = when (name.lowercase()) {
-        "bash" -> a?.str("command")
-        "read", "write", "edit", "ls" -> a?.str("path") ?: a?.str("file_path") ?: a?.str("filePath")
-        "grep", "find" -> a?.str("pattern")
-        else -> a?.entries?.firstOrNull { it.value.str() != null }?.value.str()
-    } ?: ""
+    val raw =
+        when (name.lowercase()) {
+            "bash" -> a?.str("command")
+            "read", "write", "edit", "ls" -> a?.str("path") ?: a?.str("file_path") ?: a?.str("filePath")
+            "grep", "find" -> a?.str("pattern")
+            else ->
+                a
+                    ?.entries
+                    ?.firstOrNull { it.value.str() != null }
+                    ?.value
+                    .str()
+        } ?: ""
     val one = raw.replace('\n', ' ').trim()
     return if (one.length > maxLen) one.take(maxLen - 1) + "…" else one
 }
@@ -31,7 +37,10 @@ fun ToolRun.editDiff(): Pair<String, String>? {
 }
 
 /** Diff lineal sencillo: líneas quitadas con '-' y añadidas con '+'. */
-fun simpleDiff(old: String, new: String): List<DiffLine> {
+fun simpleDiff(
+    old: String,
+    new: String,
+): List<DiffLine> {
     val o = old.lines()
     val n = new.lines()
     var prefix = 0
@@ -47,7 +56,11 @@ fun simpleDiff(old: String, new: String): List<DiffLine> {
 }
 
 enum class DiffKind { SAME, ADDED, REMOVED }
-data class DiffLine(val kind: DiffKind, val text: String)
+
+data class DiffLine(
+    val kind: DiffKind,
+    val text: String,
+)
 
 /** Texto del argumento completo para el diálogo de permisos (bash muestra el comando entero). */
 fun prettyArgs(args: JsonElement?): String {

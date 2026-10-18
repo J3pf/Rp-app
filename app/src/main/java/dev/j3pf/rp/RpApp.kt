@@ -14,14 +14,23 @@ import dev.j3pf.rp.push.NotificationChannels
 import javax.inject.Inject
 
 @HiltAndroidApp
-class RpApp : Application(), Configuration.Provider {
+class RpApp :
+    Application(),
+    Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
+
     @Inject lateinit var connection: RelayConnection
+
     @Inject lateinit var machines: MachinesRepository
+
     @Inject lateinit var agents: AgentsRepository
+
     @Inject lateinit var prompts: PromptsRepository
+
     @Inject lateinit var hosts: HostRepository
+
     @Inject lateinit var attachments: AttachmentsRepository
+
     @Inject lateinit var channels: NotificationChannels
 
     override val workManagerConfiguration: Configuration

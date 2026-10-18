@@ -19,13 +19,23 @@ interface MachineDao {
     suspend fun upsert(items: List<MachineEntity>)
 
     @Query("DELETE FROM machines WHERE relayId = :relayId AND machineId IN (:ids)")
-    suspend fun delete(relayId: String, ids: List<String>)
+    suspend fun delete(
+        relayId: String,
+        ids: List<String>,
+    )
 
     @Query("DELETE FROM machines WHERE relayId = :relayId AND machineId NOT IN (:keep)")
-    suspend fun deleteNotIn(relayId: String, keep: List<String>)
+    suspend fun deleteNotIn(
+        relayId: String,
+        keep: List<String>,
+    )
 
     @Transaction
-    suspend fun syncWelcome(relayId: String, items: List<MachineEntity>, keep: List<String>) {
+    suspend fun syncWelcome(
+        relayId: String,
+        items: List<MachineEntity>,
+        keep: List<String>,
+    ) {
         upsert(items)
         deleteNotIn(relayId, keep)
     }
@@ -47,22 +57,38 @@ interface AgentDao {
         """SELECT a.*, (SELECT COUNT(*) FROM prompts p WHERE p.relayId = a.relayId AND p.agentId = a.agentId AND p.state = 'open') AS openPrompts
            FROM agents a WHERE a.relayId = :relayId AND a.agentId = :agentId""",
     )
-    fun observeOne(relayId: String, agentId: String): Flow<AgentWithCounts?>
+    fun observeOne(
+        relayId: String,
+        agentId: String,
+    ): Flow<AgentWithCounts?>
 
     @Query("SELECT * FROM agents WHERE relayId = :relayId AND agentId = :agentId")
-    suspend fun get(relayId: String, agentId: String): AgentEntity?
+    suspend fun get(
+        relayId: String,
+        agentId: String,
+    ): AgentEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(items: List<AgentEntity>)
 
     @Query("DELETE FROM agents WHERE relayId = :relayId AND agentId IN (:ids)")
-    suspend fun delete(relayId: String, ids: List<String>)
+    suspend fun delete(
+        relayId: String,
+        ids: List<String>,
+    )
 
     @Query("DELETE FROM agents WHERE relayId = :relayId AND agentId NOT IN (:keep)")
-    suspend fun deleteNotIn(relayId: String, keep: List<String>)
+    suspend fun deleteNotIn(
+        relayId: String,
+        keep: List<String>,
+    )
 
     @Transaction
-    suspend fun syncWelcome(relayId: String, items: List<AgentEntity>, keep: List<String>) {
+    suspend fun syncWelcome(
+        relayId: String,
+        items: List<AgentEntity>,
+        keep: List<String>,
+    ) {
         upsert(items)
         deleteNotIn(relayId, keep)
     }
@@ -77,26 +103,51 @@ interface PromptDao {
     fun observeOpen(relayId: String): Flow<List<PromptEntity>>
 
     @Query("SELECT * FROM prompts WHERE relayId = :relayId AND agentId = :agentId AND state = 'open' ORDER BY openedAt ASC")
-    fun observeOpenFor(relayId: String, agentId: String): Flow<List<PromptEntity>>
+    fun observeOpenFor(
+        relayId: String,
+        agentId: String,
+    ): Flow<List<PromptEntity>>
 
     @Query("SELECT * FROM prompts WHERE relayId = :relayId AND promptId = :promptId")
-    suspend fun get(relayId: String, promptId: String): PromptEntity?
+    suspend fun get(
+        relayId: String,
+        promptId: String,
+    ): PromptEntity?
 
     @Query("SELECT * FROM prompts WHERE relayId = :relayId AND promptId = :promptId")
-    fun observeOne(relayId: String, promptId: String): Flow<PromptEntity?>
+    fun observeOne(
+        relayId: String,
+        promptId: String,
+    ): Flow<PromptEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(items: List<PromptEntity>)
 
     @Query("UPDATE prompts SET state = 'resolved', resolvedBy = :by, resolvedAt = :at WHERE relayId = :relayId AND promptId = :promptId")
-    suspend fun markResolved(relayId: String, promptId: String, by: String?, at: Long)
+    suspend fun markResolved(
+        relayId: String,
+        promptId: String,
+        by: String?,
+        at: Long,
+    )
 
     /** Tras `app.welcome`: lo que el relay ya no considera abierto se cierra localmente. */
-    @Query("UPDATE prompts SET state = 'resolved', resolvedBy = 'cancelled', resolvedAt = :at WHERE relayId = :relayId AND state = 'open' AND promptId NOT IN (:openIds)")
-    suspend fun resolveMissing(relayId: String, openIds: List<String>, at: Long)
+    @Query(
+        "UPDATE prompts SET state = 'resolved', resolvedBy = 'cancelled', resolvedAt = :at WHERE relayId = :relayId AND state = 'open' AND promptId NOT IN (:openIds)",
+    )
+    suspend fun resolveMissing(
+        relayId: String,
+        openIds: List<String>,
+        at: Long,
+    )
 
     @Transaction
-    suspend fun syncWelcome(relayId: String, items: List<PromptEntity>, openIds: List<String>, now: Long) {
+    suspend fun syncWelcome(
+        relayId: String,
+        items: List<PromptEntity>,
+        openIds: List<String>,
+        now: Long,
+    ) {
         upsert(items)
         resolveMissing(relayId, openIds, now)
     }
@@ -111,29 +162,53 @@ interface PromptDao {
 @Dao
 interface ChatDao {
     @Query("SELECT * FROM chat_records WHERE relayId = :relayId AND agentId = :agentId ORDER BY kind ASC, seq ASC, id ASC")
-    suspend fun records(relayId: String, agentId: String): List<ChatRecordEntity>
+    suspend fun records(
+        relayId: String,
+        agentId: String,
+    ): List<ChatRecordEntity>
 
     @Insert
     suspend fun insert(items: List<ChatRecordEntity>)
 
     @Query("DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId AND kind = :kind")
-    suspend fun deleteKind(relayId: String, agentId: String, kind: String)
+    suspend fun deleteKind(
+        relayId: String,
+        agentId: String,
+        kind: String,
+    )
 
-    @Query("DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId AND kind = 'event' AND (epoch IS NOT :epoch OR seq < :beforeSeq)")
-    suspend fun deleteEventsBefore(relayId: String, agentId: String, epoch: String?, beforeSeq: Long)
+    @Query(
+        "DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId AND kind = 'event' AND (epoch IS NOT :epoch OR seq < :beforeSeq)",
+    )
+    suspend fun deleteEventsBefore(
+        relayId: String,
+        agentId: String,
+        epoch: String?,
+        beforeSeq: Long,
+    )
 
     @Query("DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId")
-    suspend fun clearAgent(relayId: String, agentId: String)
+    suspend fun clearAgent(
+        relayId: String,
+        agentId: String,
+    )
 
     @Query("SELECT COUNT(*) FROM chat_records WHERE relayId = :relayId AND agentId = :agentId")
-    suspend fun count(relayId: String, agentId: String): Int
+    suspend fun count(
+        relayId: String,
+        agentId: String,
+    ): Int
 
     /** Conserva sólo los `keep` registros más recientes de un agente. */
     @Query(
         """DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId AND id NOT IN
            (SELECT id FROM chat_records WHERE relayId = :relayId AND agentId = :agentId ORDER BY id DESC LIMIT :keep)""",
     )
-    suspend fun trim(relayId: String, agentId: String, keep: Int)
+    suspend fun trim(
+        relayId: String,
+        agentId: String,
+        keep: Int,
+    )
 
     @Query("DELETE FROM chat_records WHERE relayId = :relayId")
     suspend fun clear(relayId: String)
@@ -175,7 +250,10 @@ abstract class DedupDao {
     abstract suspend fun clear()
 
     @Transaction
-    open suspend fun firstSeen(key: String, now: Long): Boolean {
+    open suspend fun firstSeen(
+        key: String,
+        now: Long,
+    ): Boolean {
         purge(now - 24 * 3600 * 1000L)
         return insert(DedupEntity(key, now)) != -1L
     }

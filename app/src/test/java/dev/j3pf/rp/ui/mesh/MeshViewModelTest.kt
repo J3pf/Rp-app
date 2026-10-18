@@ -10,7 +10,6 @@ import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.MeshRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
-import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MeshComm
@@ -254,7 +253,8 @@ class MeshViewModelTest {
             viewModel.selectGroup("g1")
             withTimeout(3_000) {
                 viewModel.uiState.first {
-                    it.selectedMachineId == "m1" && it.selectedGroupId == "g1" &&
+                    it.selectedMachineId == "m1" &&
+                        it.selectedGroupId == "g1" &&
                         it.layoutResult?.nodes?.keys == setOf("a", "b")
                 }
             }
@@ -275,7 +275,8 @@ class MeshViewModelTest {
             viewModel.selectGroup(MeshViewModel.SOLO_GROUP_ID)
             withTimeout(3_000) {
                 viewModel.uiState.first {
-                    it.selectedMachineId == null && it.selectedGroupId == MeshViewModel.SOLO_GROUP_ID &&
+                    it.selectedMachineId == null &&
+                        it.selectedGroupId == MeshViewModel.SOLO_GROUP_ID &&
                         it.layoutResult?.nodes?.keys == setOf("solo")
                 }
             }
@@ -404,13 +405,29 @@ class MeshViewModelTest {
 
             viewModel.onOpenConversation("a", "solo")
             withTimeout(5_000) { viewModel.uiState.first { it.conversationDetail?.isLoading == false } }
-            assertEquals("a", viewModel.uiState.value.conversationDetail?.agentA)
-            assertEquals("solo", viewModel.uiState.value.conversationDetail?.agentB)
-            assertEquals(50L, viewModel.uiState.value.conversationDetail?.nextBefore)
+            assertEquals(
+                "a",
+                viewModel.uiState.value.conversationDetail
+                    ?.agentA,
+            )
+            assertEquals(
+                "solo",
+                viewModel.uiState.value.conversationDetail
+                    ?.agentB,
+            )
+            assertEquals(
+                50L,
+                viewModel.uiState.value.conversationDetail
+                    ?.nextBefore,
+            )
 
             viewModel.loadMoreConversation()
             withTimeout(5_000) { viewModel.uiState.first { it.conversationDetail?.isLoadingMore == false } }
-            assertEquals(50L, viewModel.uiState.value.conversationDetail?.nextBefore)
+            assertEquals(
+                50L,
+                viewModel.uiState.value.conversationDetail
+                    ?.nextBefore,
+            )
         }
     }
 }

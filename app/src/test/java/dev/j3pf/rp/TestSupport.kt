@@ -14,13 +14,13 @@ class FakeSecretStore(
     initialSession: Session?,
 ) : SecretStore(context) {
     init {
-        _session.value = initialSession
+        sessionState.value = initialSession
     }
 
-    override fun current(): Session? = _session.value
+    override fun current(): Session? = sessionState.value
 
     fun set(s: Session?) {
-        _session.value = s
+        sessionState.value = s
     }
 }
 

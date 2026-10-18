@@ -26,19 +26,28 @@ object PushCrypto {
     }
 
     /** Devuelve el JSON en claro o `null` si la clave, el nonce o la autenticación no son válidos. */
-    fun decrypt(pushKeyB64: String, nonceB64: String, cipherB64: String): String? = runCatching {
-        val spec = keySpec(pushKeyB64)
-        val nonce = Base64.getDecoder().decode(nonceB64)
-        require(nonce.size == 12)
-        val data = Base64.getDecoder().decode(cipherB64)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, spec, GCMParameterSpec(TAG_BITS, nonce))
-        cipher.updateAAD(AAD)
-        String(cipher.doFinal(data), Charsets.UTF_8)
-    }.getOrNull()
+    fun decrypt(
+        pushKeyB64: String,
+        nonceB64: String,
+        cipherB64: String,
+    ): String? =
+        runCatching {
+            val spec = keySpec(pushKeyB64)
+            val nonce = Base64.getDecoder().decode(nonceB64)
+            require(nonce.size == 12)
+            val data = Base64.getDecoder().decode(cipherB64)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, spec, GCMParameterSpec(TAG_BITS, nonce))
+            cipher.updateAAD(AAD)
+            String(cipher.doFinal(data), Charsets.UTF_8)
+        }.getOrNull()
 
     /** Cifrado (usado por los tests y por la notificación de prueba local). */
-    fun encrypt(pushKeyB64: String, nonce: ByteArray, plaintext: String): String {
+    fun encrypt(
+        pushKeyB64: String,
+        nonce: ByteArray,
+        plaintext: String,
+    ): String {
         val spec = keySpec(pushKeyB64)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, spec, GCMParameterSpec(TAG_BITS, nonce))

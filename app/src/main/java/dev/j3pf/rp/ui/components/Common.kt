@@ -12,7 +12,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -82,7 +81,6 @@ import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpMotion
 import dev.j3pf.rp.ui.theme.rpSkeleton
-import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.contextLabel
 import dev.j3pf.rp.util.parseColor
 import dev.j3pf.rp.util.relativeTime
