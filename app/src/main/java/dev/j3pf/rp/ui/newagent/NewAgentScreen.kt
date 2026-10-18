@@ -40,12 +40,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import android.content.ClipData
+import android.content.ClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.SectionTitle
@@ -74,7 +75,7 @@ fun NewAgentContent(
     modifier: Modifier = Modifier,
 ) {
     val f = ui.form
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -113,7 +114,8 @@ fun NewAgentContent(
                         Card(
                             modifier =
                                 Modifier.fillMaxWidth().clickable {
-                                    clipboard.setText(AnnotatedString("npx @j3pf/pi-rp rp-host run"))
+                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                    clipboard?.setPrimaryClip(ClipData.newPlainText("command", "npx @j3pf/pi-rp rp-host run"))
                                     scope.launch { snackbarHostState.showSnackbar("Comando copiado al portapapeles") }
                                 },
                         ) {

@@ -45,7 +45,7 @@ object AppModule {
         Room
             .databaseBuilder(ctx, RpDatabase::class.java, "rp.db")
             .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3)
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides fun machineDao(db: RpDatabase) = db.machines()

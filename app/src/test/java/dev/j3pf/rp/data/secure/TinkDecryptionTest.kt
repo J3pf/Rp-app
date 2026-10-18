@@ -19,8 +19,9 @@ class TinkDecryptionTest {
 
     @Test
     fun `existing stored secrets encrypted with previous Tink format still decrypt after upgrade`() {
-        val keysetHandle = KeysetHandle.generateNew(PredefinedAeadParameters.AES256_GCM)
-        val serializedKeyset = TinkJsonProtoKeysetFormat.serializeKeyset(keysetHandle, InsecureSecretKeyAccess.get())
+        val keysetHandle = KeysetHandle.generateNew(PredefinedAeadParameters.AES256_GCM, RegistryConfiguration.get())
+        val serializedKeyset =
+            TinkJsonProtoKeysetFormat.serializeKeyset(keysetHandle, RegistryConfiguration.get(), InsecureSecretKeyAccess.get())
 
         val aead = keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
 
@@ -29,7 +30,8 @@ class TinkDecryptionTest {
         val ciphertext = aead.encrypt(plaintext.toByteArray(Charsets.UTF_8), associatedData)
 
         // Simular lectura del keyset almacenado y descifrado del secreto persistido
-        val parsedHandle = TinkJsonProtoKeysetFormat.parseKeyset(serializedKeyset, InsecureSecretKeyAccess.get())
+        val parsedHandle =
+            TinkJsonProtoKeysetFormat.parseKeyset(serializedKeyset, RegistryConfiguration.get(), InsecureSecretKeyAccess.get())
         val decryptAead = parsedHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
         val decrypted = String(decryptAead.decrypt(ciphertext, associatedData), Charsets.UTF_8)
 
