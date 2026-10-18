@@ -95,6 +95,13 @@ fun formatMeshGroupChipLabel(
     return "Grupo de agentes"
 }
 
+@androidx.compose.runtime.Composable
+fun parseRelayColor(raw: String): androidx.compose.ui.graphics.Color =
+    runCatching {
+        androidx.compose.ui.graphics
+            .Color(android.graphics.Color.parseColor(raw))
+    }.getOrElse { androidx.compose.material3.MaterialTheme.colorScheme.primary }
+
 fun formatMeshRole(role: String): String =
     when (role.lowercase()) {
         "orchestrator" -> "Orquestador"

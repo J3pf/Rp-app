@@ -385,10 +385,3 @@ private fun LiveStrip(
         }
     }
 }
-
-@Composable
-private fun parseRelayColor(raw: String) =
-    runCatching {
-        androidx.compose.ui.graphics
-            .Color(android.graphics.Color.parseColor(raw))
-    }.getOrElse { MaterialTheme.colorScheme.primary }

@@ -372,6 +372,57 @@ class MeshScreenTest {
         rule.onNodeWithText("Agente Principal").assertIsDisplayed()
     }
 
+    @Test
+    fun `agent card displays display name, role, activity, todos, subagents, and responds to click`() {
+        var clicked = false
+        val subagents =
+            listOf(
+                dev.j3pf.rp.protocol.MeshSubagent(
+                    taskId = "task-1",
+                    agent = "Worker UI",
+                    label = "Pruebas UI",
+                    status = "working",
+                ),
+            )
+        val cardNode =
+            MeshNode(
+                agentId = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                machineId = "m1",
+                machineName = "Omarchy",
+                name = "01a14fbb-2812-7332-aae5-d003f17b8fe7",
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                gitBranch = "main",
+                status = "working",
+                role = "orchestrator",
+                activity = "Refactorizando UI",
+                online = true,
+                todos = MeshTodos(total = 5, done = 3, inProgress = 1, blocked = 0, pending = 1),
+                subagents = subagents,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshAgentCard(
+                    node = cardNode,
+                    allNodes = listOf(cardNode),
+                    onClick = { clicked = true },
+                )
+            }
+        }
+
+        // Display name must be "Rp-app", not the raw UUID!
+        rule.onNodeWithText("Rp-app").assertIsDisplayed()
+        rule.onNodeWithText("Omarchy · main").assertIsDisplayed()
+        rule.onNodeWithText("Orquestador").assertIsDisplayed()
+        rule.onNodeWithText("Trabajando").assertIsDisplayed()
+        rule.onNodeWithText("· Refactorizando UI", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("3/5").assertIsDisplayed()
+        rule.onNodeWithText("Pruebas UI").assertIsDisplayed()
+
+        rule.onNodeWithText("Rp-app").performClick()
+        kotlin.test.assertTrue(clicked)
+    }
+
     private fun node(
         id: String,
         name: String,
