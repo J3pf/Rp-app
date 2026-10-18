@@ -1,6 +1,6 @@
 # Task: mesh-redesign ("Red de agentes" screen refactor)
 Feature: mesh-redesign
-Status: Ready for Review
+Status: In Progress (Addressing Orchestrator Review Findings V1-V6)
 
 ## Specs
 S1: (point 1, "el usuario jamas va a entender esos ids")
@@ -30,8 +30,16 @@ English docs (CHANGELOG, docs/ section for the mesh screen with the display-name
 - [x] T4 (S1, S2, S4): Node detail technical section with copy action, list view parity & theme tokens across dialogs [inline] [7fa37d4]
 - [x] T5 (S5): Roborazzi screenshot test suite (1, 4, 12 agents, 360dp/tablet, all themes/modes) & regression verification [inline] [60e3c84]
 - [x] T6 (S6): Version bump v0.4.0, documentation (CHANGELOG, docs/MESH.md, docs/QA.md), signed APK build & drafted release notes [inline] [15f1edd]
+- [x] T7 (B1, V1, V2, V3): End-to-end DP layout, card sizing >= 140dp, density test (1080x1800), non-clipped badge & density-aware canvas [inline] [a0e37dd]
+- [x] T8 (B2, W1, W2, W3, W3b, S1): Support Subagente role, anchor hex regex, sanitize machine chips/secondary line, compare comm IDs, route all names [inline] [a0e37dd]
+- [x] T9 (W4, W5, W6, W7, S4): Perf drawWithCache, precomputed bubble groupings, canvas idle loop stop, connector-riding particles, dead model cleanup, 48dp copy target [inline] [a0e37dd]
+- [x] T10 (S5, V5, V6): Add Compose UI bounding-box test, landscape, 411dp, 12-agents comm, reduced-motion, sheets screenshots & regenerate all goldens [inline] [a0e37dd]
+- [x] T11 (S6): Translate QA.md & README mesh section to English, ensure doc-code accuracy, rebuild signed v0.4.0 APK [inline] [a0e37dd]
+- [x] T12 (G2): Migrate off deprecated APIs across app and tests (0 deprecations) [inline] [8e19baf]
 
 ## Log
 L1: [ORCHESTRATOR → Rp-app] Feature: mesh-redesign ("Red de agentes" screen refactor). Use ODD: create odd/tasks/mesh-redesign.md (## Specs quoting the user verbatim, ## Tasks, ## Log with L1) + Engram mirror odd/mesh-redesign/tasks (project rp-app) BEFORE the first source write. Test-first (observe RED, then GREEN). Code/comments/docs in English; UI copy stays Spanish.
 User verbatim: "necesito que orquestes un refactor a la parte de red de agentes, colo veras en las Imágenes necesita un refactor grande 1) el usuario jamas va a entender esos ids, debemos darle una UX/UI cómoda 2) esos círculos no me gustan, me gustaría algo como mas bonito, algo con movimiento si el orquestador o el subordinado o los sub agentes de cualquiera estan trabajando y que se vea visualmente realmente que esta pasando en el flujo 3) como ves los círculos se pueden sobre poner a los botones de arriba y se ve horrible"
 Evidence from user phone (main 95ec7ba): node labels and group chip show raw UUIDs ("01a14fbb-2812-7332-aae5-d003f17b8fe7 · 4", "01a14fbb-44e3-765f-99e1-…"); nodes are plain empty circles with "ORQUESTADOR/SUBORDINADO" tags; with "Omarchy" filter a SUBORDINADO circle and ORQUESTADOR circle are drawn ON TOP of "Croma · 3" chip and group chip.
+L2: [ORCHESTRATOR review 5878471] NOT approved. V1: diagram cards render as tiny pills with only the initial. V2: fit to content scales down too small, must use available width (min legible scale 1.0 for <=6 agents). V3: role badges clipped on 360dp ("Or qu", "Su bo"). V4: comm bubble overlaps card. V5: screenshot count was 36, missing 411dp + landscape. V6: add Compose UI test for card bounds >= 140dp and no intersection with filters.
+L3: [ORCHESTRATOR review second & third batch] B1: layout in DP end to end with density 2.625 test. B2: support Subagente role and remove dead satellite orbit model. W1-W3b: sanitize machine chips, anchor hex regex, route all names, compare IDs in conversation. W4-W7: drawWithCache border, precomputed bubbles, stop idle loop, connector-riding particles. G1: fix screenshot determinism with frozen timestamps. G2: migrate all 31 deprecations to 0 deprecations. All verified green.
