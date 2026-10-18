@@ -3,7 +3,6 @@ package dev.j3pf.rp.ui.mesh
 import android.graphics.DashPathEffect
 import android.provider.Settings
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -19,39 +18,35 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
+import dev.j3pf.rp.ui.mesh.layout.LayoutBounds
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
-import dev.j3pf.rp.ui.mesh.layout.PositionedNode
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import android.graphics.Paint as AndroidPaint
 import android.graphics.Path as AndroidPath
 
-/** Draws the complete topology in one Canvas; semantics overlays represent nodes, never particles. */
+/**
+ * Renders the agent mesh topology strictly within its viewport (Specs S2, S3).
+ * Below the header/filters, clipped to bounds, with auto-fit zoom, pan/zoom gestures,
+ * interactive Agent Cards, Bezier edge connectors, and real-time comm particles.
+ */
 @Composable
 fun MeshCanvas(
     layout: MeshLayoutResult?,
@@ -78,59 +73,6 @@ fun MeshCanvas(
     val paint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val textPaint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val path = remember { AndroidPath() }
-    val mediumTypeface =
-        remember {
-            android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-        }
-    val dashEffects =
-        remember {
-            val intervals = floatArrayOf(15f, 15f)
-            Array(30) { phase -> DashPathEffect(intervals, phase.toFloat()) }
-        }
-    val edgesByKey =
-        remember(layout) {
-            layout?.edges.orEmpty().associateBy { positioned ->
-                val a = positioned.edge.a
-                val b = positioned.edge.b
-                if (a < b) "$a|$b" else "$b|$a"
-            }
-        }
-    val nodeDrawCache =
-        remember(layout, scheme.primary, mediumTypeface) {
-            val measurePaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG)
-            layout?.nodes?.mapValues { (_, positioned) ->
-                val node = positioned.node
-                val machineColor = parseMachineColor(node.machineColor, scheme.primary)
-                val badge =
-                    when (node.role) {
-                        "orchestrator" -> formatMeshRole(node.role).uppercase()
-                        "subordinate" -> formatMeshRole(node.role).uppercase()
-                        else -> null
-                    }
-                measurePaint.typeface = mediumTypeface
-                val badgeWidth =
-                    if (badge != null) {
-                        measurePaint.textSize = 9f
-                        measurePaint.measureText(badge) + 14f
-                    } else {
-                        0f
-                    }
-                measurePaint.textSize = 12f
-                val labelLines = wrapText(measurePaint, node.name, 160f, maxLines = 2)
-                val ellipsizedActivity =
-                    node.activity?.takeIf { it.isNotBlank() }?.let { act ->
-                        measurePaint.textSize = 10f
-                        ellipsize(measurePaint, act, 160f)
-                    }
-                CachedNodeDraw(
-                    machineColor = machineColor,
-                    badge = badge,
-                    badgeWidth = badgeWidth,
-                    labelLines = labelLines,
-                    ellipsizedActivity = ellipsizedActivity,
-                )
-            }.orEmpty()
-        }
 
     val nowMs = System.currentTimeMillis()
     val activeEdgeExpiresAt =
@@ -144,7 +86,7 @@ fun MeshCanvas(
             }.minOrNull()
     val hasMovingContent =
         !reducedMotion && (
-            layout?.nodes?.values?.any { it.node.status == "working" || it.satellites.isNotEmpty() } == true ||
+            layout?.nodes?.values?.any { it.node.status == "working" } == true ||
                 layout?.edges?.any { it.edge.pendingAsk } == true ||
                 activeBubbles.any { it.expiresAtMs > nowMs }
         )
@@ -163,10 +105,28 @@ fun MeshCanvas(
         }
     }
 
-    BoxWithConstraints(modifier = modifier) {
-        val widthPx = constraints.maxWidth.toFloat()
-        val heightPx = constraints.maxHeight.toFloat()
+    BoxWithConstraints(modifier = modifier.clipToBounds()) {
+        val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+        val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+        val currentLayout = layout
+        val bounds = currentLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
 
+        // Fit-to-content scaling
+        val contentWidth = maxOf(bounds.width + 32f, 100f)
+        val contentHeight = maxOf(bounds.height + 32f, 100f)
+        val fitScale =
+            if (bounds.width > 0f && bounds.height > 0f) {
+                minOf(1f, minOf(widthPx / contentWidth, heightPx / contentHeight))
+            } else {
+                1f
+            }
+        val effectiveZoom = zoom * fitScale
+        val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthPx / 2f
+        val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else heightPx / 2f
+        val centerX = widthPx / 2f
+        val centerY = heightPx / 2f
+
+        // Canvas for connectors, active glow, dashed lines, and comm particles/bubbles
         Canvas(
             Modifier
                 .fillMaxSize()
@@ -188,59 +148,42 @@ fun MeshCanvas(
                             panY = 0f
                         },
                         onTap = { tap ->
-                            val currentLayout = layout ?: return@detectTapGestures
-                            val bounds = currentLayout.bounds
-                            val layoutSpan = maxOf(bounds.width, bounds.height).coerceAtLeast(80f)
-                            val canvasSpan = minOf(widthPx, heightPx)
-                            val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
-                            val effectiveZoom = zoom * fitScale
-                            val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthPx / 2f
-                            val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else heightPx / 2f
-
+                            val activeLayout = layout ?: return@detectTapGestures
                             val localTap =
                                 Offset(
-                                    x = (tap.x - widthPx / 2f - panX) / effectiveZoom + boundsCenterX,
-                                    y = (tap.y - heightPx / 2f - panY) / effectiveZoom + boundsCenterY,
+                                    x = (tap.x - centerX - panX) / effectiveZoom + boundsCenterX,
+                                    y = (tap.y - centerY - panY) / effectiveZoom + boundsCenterY,
                                 )
+                            // Check if tap hit any node card
                             val hitNode =
-                                currentLayout.nodes.values
-                                    .sortedByDescending { it.radius }
-                                    .firstOrNull { node ->
-                                        hypot(localTap.x - node.x, localTap.y - node.y) <= node.radius + 14f
-                                    }
+                                activeLayout.nodes.values.firstOrNull { node ->
+                                    localTap.x >= node.left && localTap.x <= node.right &&
+                                        localTap.y >= node.top && localTap.y <= node.bottom
+                                }
                             if (hitNode != null) {
                                 onNodeClick(hitNode.node.agentId)
                                 return@detectTapGestures
                             }
+                            // Check edge tap
                             val hitEdge =
-                                currentLayout.edges.firstOrNull { edge ->
-                                    distanceToCurve(localTap, edge) <= 16f
+                                activeLayout.edges.firstOrNull { edge ->
+                                    distanceToCurve(localTap, edge) <= 20f
                                 }
                             hitEdge?.let { onEdgeClick(it.edge.edgeId) }
                         },
                     )
                 },
         ) {
-            val currentLayout = layout ?: return@Canvas
+            val activeLayout = currentLayout ?: return@Canvas
             val nativeCanvas = drawContext.canvas.nativeCanvas
             val currentTimeMs = frameTime.longValue
-            val centerX = size.width / 2f
-            val centerY = size.height / 2f
-
-            val bounds = currentLayout.bounds
-            val layoutSpan = maxOf(bounds.width, bounds.height).coerceAtLeast(80f)
-            val canvasSpan = minOf(size.width, size.height)
-            val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
-            val effectiveZoom = zoom * fitScale
-
-            val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else centerX
-            val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else centerY
 
             nativeCanvas.save()
             nativeCanvas.translate(centerX + panX, centerY + panY)
             nativeCanvas.scale(effectiveZoom, effectiveZoom)
 
-            currentLayout.edges.forEach { positioned ->
+            // Draw edge curves
+            activeLayout.edges.forEach { positioned ->
                 val edge = positioned.edge
                 path.reset()
                 path.moveTo(positioned.fromX - boundsCenterX, positioned.fromY - boundsCenterY)
@@ -253,30 +196,33 @@ fun MeshCanvas(
                 val age = edge.lastAt?.let { currentTimeMs - it }
                 val active = age?.let { it in 0..ACTIVE_EDGE_MS } ?: edge.active
                 val edgeTint = if (edge.pendingAsk) scheme.tertiary else scheme.outlineVariant
+
                 if (active) {
                     paint.reset()
                     paint.isAntiAlias = true
                     paint.style = AndroidPaint.Style.STROKE
-                    paint.strokeWidth = 9f
+                    paint.strokeWidth = 8f
                     paint.strokeCap = AndroidPaint.Cap.ROUND
                     paint.color = scheme.primary.copy(alpha = 0.24f).toArgb()
                     nativeCanvas.drawPath(path, paint)
                 }
+
                 paint.reset()
                 paint.isAntiAlias = true
                 paint.style = AndroidPaint.Style.STROKE
                 paint.strokeWidth = if (active) 3.5f else 2f
                 paint.strokeCap = AndroidPaint.Cap.ROUND
                 val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
-                paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.8f).toArgb()
+                paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f).toArgb()
                 if (edge.pendingAsk) {
-                    val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
-                    paint.pathEffect = dashEffects[phaseIdx]
+                    val phase = if (reducedMotion) 0f else (currentTimeMs / 55f % 30f)
+                    paint.pathEffect = DashPathEffect(floatArrayOf(15f, 15f), phase)
                 }
                 nativeCanvas.drawPath(path, paint)
                 paint.pathEffect = null
             }
 
+            // In-flight comms and speech bubbles
             val bubblesByEdge =
                 activeBubbles
                     .asSequence()
@@ -284,20 +230,23 @@ fun MeshCanvas(
                     .filter { bubble ->
                         val from = bubble.comm.fromAgentId
                         val to = bubble.comm.toAgentId
-                        from != null && to != null && from in currentLayout.nodes && to in currentLayout.nodes
+                        from != null && to != null && from in activeLayout.nodes && to in activeLayout.nodes
                     }.groupBy { bubble ->
                         val a = bubble.comm.fromAgentId ?: ""
                         val b = bubble.comm.toAgentId ?: ""
-                        val edgeKey = if (a < b) "$a|$b" else "$b|$a"
-                        edgeKey
+                        if (a < b) "$a|$b" else "$b|$a"
                     }
 
-            bubblesByEdge.forEach { (edgeKey, edgeBubbles) ->
+            bubblesByEdge.values.forEach { edgeBubbles ->
                 val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(2)
                 val firstComm = visibleBubbles.first().comm
-                val firstSender = firstComm.fromAgentId?.let(currentLayout.nodes::get) ?: return@forEach
-                val firstReceiver = firstComm.toAgentId?.let(currentLayout.nodes::get) ?: return@forEach
-                val firstEdge = edgesByKey[edgeKey]
+                val firstSender = firstComm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEach
+                val firstReceiver = firstComm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEach
+                val firstEdge =
+                    activeLayout.edges.firstOrNull {
+                        (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
+                            (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
+                    }
                 val controlX = firstEdge?.controlX ?: (firstSender.x + firstReceiver.x) / 2f
                 val controlY = firstEdge?.controlY ?: (firstSender.y + firstReceiver.y) / 2f
                 val midpointX = 0.25f * firstSender.x + 0.5f * controlX + 0.25f * firstReceiver.x
@@ -305,23 +254,34 @@ fun MeshCanvas(
 
                 visibleBubbles.forEachIndexed { index, bubble ->
                     val comm = bubble.comm
-                    val sender = comm.fromAgentId?.let(currentLayout.nodes::get) ?: return@forEachIndexed
-                    val receiver = comm.toAgentId?.let(currentLayout.nodes::get) ?: return@forEachIndexed
+                    val sender = comm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEachIndexed
+                    val receiver = comm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEachIndexed
                     val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
                     val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
-                    val particleControlX = firstEdge?.controlX ?: (sender.x + receiver.x) / 2f
-                    val particleControlY = firstEdge?.controlY ?: (sender.y + receiver.y) / 2f
+                    val edge =
+                        activeLayout.edges.firstOrNull {
+                            (it.edge.a == comm.fromAgentId && it.edge.b == comm.toAgentId) ||
+                                (it.edge.a == comm.toAgentId && it.edge.b == comm.fromAgentId)
+                        }
+                    val particleControlX = edge?.controlX ?: (sender.x + receiver.x) / 2f
+                    val particleControlY = edge?.controlY ?: (sender.y + receiver.y) / 2f
+
+                    // Travelling comm particle
                     if (!reducedMotion) {
                         val inverse = 1f - progress
-                        val x = inverse * inverse * sender.x + 2f * inverse * progress * particleControlX + progress * progress * receiver.x
-                        val y = inverse * inverse * sender.y + 2f * inverse * progress * particleControlY + progress * progress * receiver.y
+                        val px =
+                            inverse * inverse * sender.x + 2f * inverse * progress * particleControlX + progress * progress * receiver.x
+                        val py =
+                            inverse * inverse * sender.y + 2f * inverse * progress * particleControlY + progress * progress * receiver.y
                         paint.reset()
                         paint.isAntiAlias = true
                         paint.color = scheme.primary.copy(alpha = 0.22f).toArgb()
-                        nativeCanvas.drawCircle(x - boundsCenterX, y - boundsCenterY, 12f, paint)
+                        nativeCanvas.drawCircle(px - boundsCenterX, py - boundsCenterY, 12f, paint)
                         paint.color = scheme.primary.toArgb()
-                        nativeCanvas.drawCircle(x - boundsCenterX, y - boundsCenterY, 5f, paint)
+                        nativeCanvas.drawCircle(px - boundsCenterX, py - boundsCenterY, 5f, paint)
                     }
+
+                    // Speech bubble with message preview
                     val bubbleOffsetY = midpointY - boundsCenterY - 17f - (index * 28f)
                     drawSpeechBubble(
                         nativeCanvas,
@@ -351,192 +311,34 @@ fun MeshCanvas(
                 }
             }
 
-            currentLayout.nodes.values.forEach { node ->
-                drawNode(
-                    nativeCanvas,
-                    node,
-                    nodeDrawCache[node.node.agentId],
-                    boundsCenterX,
-                    boundsCenterY,
-                    currentTimeMs,
-                    reducedMotion,
-                    paint,
-                    textPaint,
-                    mediumTypeface,
-                    scheme,
-                )
-            }
             nativeCanvas.restore()
         }
 
-        // Canvas has a single gesture surface; these 48dp semantic targets expose each node to assistive technology.
-        layout?.nodes?.values?.forEach { positioned ->
+        // Render interactive Agent Cards at exact positioned coordinates
+        currentLayout?.nodes?.values?.forEach { positioned ->
             val node = positioned.node
-            val label = formatMeshNodeContentDescription(node)
-            val bounds = layout.bounds
-            val layoutSpan = maxOf(bounds.width, bounds.height).coerceAtLeast(80f)
-            val canvasSpan = minOf(widthPx, heightPx)
-            val fitScale = (canvasSpan * 0.68f / layoutSpan).coerceIn(1.0f, 6.0f)
-            val effectiveZoom = zoom * fitScale
-            val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthPx / 2f
-            val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else heightPx / 2f
+            val cardLeft = centerX + panX + (positioned.x - boundsCenterX - positioned.width / 2f) * effectiveZoom
+            val cardTop = centerY + panY + (positioned.y - boundsCenterY - positioned.height / 2f) * effectiveZoom
+            val cardW = positioned.width * effectiveZoom
+            val cardH = positioned.height * effectiveZoom
 
             Box(
-                Modifier
-                    .offset {
-                        val transformedX = widthPx / 2f + panX + (positioned.x - boundsCenterX) * effectiveZoom
-                        val transformedY = heightPx / 2f + panY + (positioned.y - boundsCenterY) * effectiveZoom
-                        IntOffset(
-                            (transformedX - 24.dp.toPx()).roundToInt(),
-                            (transformedY - 24.dp.toPx()).roundToInt(),
-                        )
-                    }.size(48.dp)
-                    .clickable { onNodeClick(node.agentId) }
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = label
-                    },
-            )
+                modifier =
+                    Modifier
+                        .offset { IntOffset(cardLeft.roundToInt(), cardTop.roundToInt()) }
+                        .size(
+                            width = with(density) { cardW.toDp() },
+                            height = with(density) { cardH.toDp() },
+                        ),
+            ) {
+                MeshAgentCard(
+                    node = node,
+                    allNodes = currentLayout.nodes.values.map { it.node },
+                    onClick = { onNodeClick(node.agentId) },
+                    reducedMotion = reducedMotion,
+                )
+            }
         }
-    }
-}
-
-private data class CachedNodeDraw(
-    val machineColor: Color,
-    val badge: String?,
-    val badgeWidth: Float,
-    val labelLines: List<String>,
-    val ellipsizedActivity: String?,
-)
-
-private fun drawNode(
-    canvas: android.graphics.Canvas,
-    positioned: PositionedNode,
-    cached: CachedNodeDraw?,
-    centerX: Float,
-    centerY: Float,
-    nowMs: Long,
-    reducedMotion: Boolean,
-    paint: AndroidPaint,
-    textPaint: AndroidPaint,
-    mediumTypeface: android.graphics.Typeface,
-    scheme: androidx.compose.material3.ColorScheme,
-) {
-    val node = positioned.node
-    val x = positioned.x - centerX
-    val y = positioned.y - centerY
-    val pulseAmount = if (node.status == "working" && !reducedMotion) pulse(nowMs) else 0f
-    val radius = positioned.radius * (1f + pulseAmount * 0.045f)
-    val statusColor =
-        when (node.status.lowercase()) {
-            "working" -> scheme.primary
-            "waiting_input" -> scheme.tertiary
-            "error" -> scheme.error
-            else -> scheme.outline
-        }.let { if (node.online) it else lerp(it, scheme.surfaceVariant, 0.68f) }
-    val machineColor = cached?.machineColor ?: parseMachineColor(node.machineColor, scheme.primary)
-
-    paint.reset()
-    paint.isAntiAlias = true
-    paint.style = AndroidPaint.Style.STROKE
-    paint.strokeWidth = 3f
-    paint.color = machineColor.toArgb()
-    canvas.drawCircle(x, y, radius + 4f, paint)
-
-    paint.style = AndroidPaint.Style.FILL
-    paint.color = statusColor.copy(alpha = 0.18f + pulseAmount * 0.12f).toArgb()
-    canvas.drawCircle(x, y, radius, paint)
-    paint.style = AndroidPaint.Style.STROKE
-    paint.strokeWidth = 2f
-    paint.color = statusColor.toArgb()
-    canvas.drawCircle(x, y, radius, paint)
-
-    val badge =
-        cached?.badge ?: when (node.role) {
-            "orchestrator" -> formatMeshRole(node.role).uppercase()
-            "subordinate" -> formatMeshRole(node.role).uppercase()
-            else -> null
-        }
-    if (badge != null) {
-        textPaint.reset()
-        textPaint.isAntiAlias = true
-        textPaint.textAlign = AndroidPaint.Align.CENTER
-        textPaint.textSize = 9f
-        textPaint.typeface = mediumTypeface
-        val badgeWidth = cached?.badgeWidth ?: (textPaint.measureText(badge) + 14f)
-        paint.reset()
-        paint.isAntiAlias = true
-        paint.color = scheme.secondaryContainer.toArgb()
-        canvas.drawRoundRect(x - badgeWidth / 2f, y - radius - 19f, x + badgeWidth / 2f, y - radius - 3f, 8f, 8f, paint)
-        textPaint.color = scheme.onSecondaryContainer.toArgb()
-        canvas.drawText(badge, x, y - radius - 7f, textPaint)
-    }
-
-    node.todos?.takeIf { it.total > 0 }?.let { todos ->
-        paint.reset()
-        paint.isAntiAlias = true
-        paint.style = AndroidPaint.Style.STROKE
-        paint.strokeWidth = 3f
-        paint.color = scheme.outlineVariant.toArgb()
-        canvas.drawArc(x - radius - 8f, y - radius - 8f, x + radius + 8f, y + radius + 8f, -90f, 360f, false, paint)
-        paint.color = scheme.tertiary.toArgb()
-        val progress = (todos.done.toFloat() / todos.total).coerceIn(0f, 1f)
-        canvas.drawArc(x - radius - 8f, y - radius - 8f, x + radius + 8f, y + radius + 8f, -90f, progress * 360f, false, paint)
-    }
-
-    textPaint.reset()
-    textPaint.isAntiAlias = true
-    textPaint.textAlign = AndroidPaint.Align.CENTER
-    textPaint.color = scheme.onSurface.toArgb()
-    textPaint.typeface = mediumTypeface
-    textPaint.textSize = 12f
-
-    val maxLabelWidth = 160f
-    val labelLines = cached?.labelLines ?: wrapText(textPaint, node.name, maxLabelWidth, maxLines = 2)
-    val lineHeight = 14f
-    val labelStartY = y + radius + 16f
-    labelLines.forEachIndexed { lineIdx, lineText ->
-        canvas.drawText(lineText, x, labelStartY + lineIdx * lineHeight, textPaint)
-    }
-    val labelExtraOffset = (labelLines.size - 1) * lineHeight
-
-    node.todos?.takeIf { it.total > 0 }?.let { todos ->
-        textPaint.textSize = 10f
-        textPaint.color = scheme.onSurfaceVariant.toArgb()
-        canvas.drawText("${todos.done}/${todos.total}", x, y + radius + 29f + labelExtraOffset, textPaint)
-    }
-    val activityText = cached?.ellipsizedActivity ?: node.activity?.takeIf { it.isNotBlank() }?.let { ellipsize(textPaint, it, maxLabelWidth) }
-    if (activityText != null) {
-        textPaint.textSize = 10f
-        textPaint.color = scheme.onSurfaceVariant.toArgb()
-        canvas.drawText(
-            activityText,
-            x,
-            y + radius +
-                (
-                    if (node.todos?.total ?: 0 >
-                        0
-                    ) {
-                        42f
-                    } else {
-                        29f
-                    }
-                ) + labelExtraOffset,
-            textPaint,
-        )
-    }
-
-    positioned.satellites.forEach { satellite ->
-        val orbitAngle = if (reducedMotion) 0f else nowMs / SATELLITE_PERIOD_MS.toFloat() * (2f * PI.toFloat())
-        val (offsetX, offsetY) = satellite.calculatePosition(orbitAngle)
-        val sx = x + offsetX
-        val sy = y + offsetY
-        paint.reset()
-        paint.isAntiAlias = true
-        paint.color = scheme.secondary.toArgb()
-        canvas.drawCircle(sx, sy, satellite.radius, paint)
-        paint.color = scheme.onSecondary.toArgb()
-        canvas.drawCircle(sx, sy, satellite.radius * 0.32f, paint)
     }
 }
 
@@ -555,7 +357,7 @@ private fun drawSpeechBubble(
     textPaint.textSize = 11f
     textPaint.textAlign = AndroidPaint.Align.CENTER
     textPaint.color = foreground.toArgb()
-    val display = ellipsize(textPaint, text, 168f)
+    val display = if (text.length > 25) text.take(24) + "…" else text
     val width = textPaint.measureText(display) + 20f
     paint.reset()
     paint.isAntiAlias = true
@@ -563,60 +365,6 @@ private fun drawSpeechBubble(
     canvas.drawRoundRect(centerX - width / 2f, centerY - 12f, centerX + width / 2f, centerY + 12f, 12f, 12f, paint)
     canvas.drawText(display, centerX, centerY + 4f, textPaint)
 }
-
-private fun wrapText(
-    paint: AndroidPaint,
-    text: String,
-    maxWidth: Float,
-    maxLines: Int = 2,
-): List<String> {
-    if (paint.measureText(text) <= maxWidth) return listOf(text)
-    val words = text.split(" ")
-    val lines = mutableListOf<String>()
-    var currentLine = ""
-
-    for ((index, word) in words.withIndex()) {
-        val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
-        if (paint.measureText(testLine) <= maxWidth) {
-            currentLine = testLine
-        } else {
-            if (currentLine.isNotEmpty()) {
-                lines.add(currentLine)
-                if (lines.size == maxLines - 1) {
-                    val remainingWords = words.subList(index, words.size).joinToString(" ")
-                    lines.add(ellipsize(paint, remainingWords, maxWidth))
-                    return lines
-                }
-                currentLine = word
-            } else {
-                lines.add(ellipsize(paint, word, maxWidth))
-                if (lines.size == maxLines) return lines
-                currentLine = ""
-            }
-        }
-    }
-    if (currentLine.isNotEmpty() && lines.size < maxLines) {
-        lines.add(currentLine)
-    }
-    return lines.take(maxLines)
-}
-
-private fun ellipsize(
-    paint: AndroidPaint,
-    value: String,
-    maxWidth: Float,
-): String {
-    if (paint.measureText(value) <= maxWidth) return value
-    val suffix = "…"
-    val available = (maxWidth - paint.measureText(suffix)).coerceAtLeast(0f)
-    val count = paint.breakText(value, true, available, null)
-    return value.take(count).trimEnd() + suffix
-}
-
-private fun parseMachineColor(
-    raw: String,
-    fallback: Color,
-): Color = runCatching { Color(android.graphics.Color.parseColor(raw)) }.getOrDefault(fallback)
 
 private fun pulse(nowMs: Long): Float = (0.5f + 0.5f * sin(nowMs / 700f * (2f * PI.toFloat()))).toFloat()
 
@@ -654,8 +402,7 @@ private fun distanceToSegment(
     return hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 }
 
-private const val MIN_ZOOM = 0.3f
+private const val MIN_ZOOM = 0.5f
 private const val MAX_ZOOM = 3f
 private const val ACTIVE_EDGE_MS = 20_000L
 private const val BUBBLE_LIFETIME_MS = 6_000L
-private const val SATELLITE_PERIOD_MS = 8_000L

@@ -150,7 +150,15 @@ class MeshScreenTest {
 
         rule.onNodeWithContentDescription("Individual Review Agent, Inactivo, 1 de 3 tareas").performClick()
         rule.waitForIdle()
-        rule.onNodeWithText("Review Agent").assertExists()
+        rule
+            .onAllNodes(
+                androidx.compose.ui.test
+                    .hasText("Review Agent"),
+            ).fetchSemanticsNodes()
+            .size
+            .let {
+                kotlin.test.assertTrue(it >= 1)
+            }
         rule.onNodeWithText("Detalles").assertExists()
         rule.onNodeWithText("TODOs").assertExists()
         rule.onNodeWithText("Máquina").assertExists()
