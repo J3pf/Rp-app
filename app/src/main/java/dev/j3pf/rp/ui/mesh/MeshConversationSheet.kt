@@ -20,8 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MeshComm
-import java.text.DateFormat
-import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,7 +143,7 @@ private fun ConversationBubble(
                     color = if (isFromA) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
-                    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(comm.at)),
+                    formatMeshDateTime(comm.at),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isFromA) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.align(Alignment.End),

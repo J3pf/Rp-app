@@ -3,10 +3,38 @@ package dev.j3pf.rp.ui.mesh
 import dev.j3pf.rp.protocol.CommAction
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshTodos
+import java.time.Instant
+import java.time.ZoneId
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class MeshFormattersTest {
+    @Test
+    fun `formatMeshDateTime follows US localized date and time conventions`() {
+        val at = Instant.parse("2026-04-18T05:59:00Z").toEpochMilli()
+
+        assertEquals("4/18/26, 5:59 AM", formatMeshDateTime(at, Locale.US, ZoneId.of("UTC")).replace('\u202f', ' '))
+    }
+
+    @Test
+    fun `formatMeshDateTime follows Spanish day-first date and 24-hour time conventions`() {
+        val at = Instant.parse("2026-04-18T05:59:00Z").toEpochMilli()
+
+        val formatted = formatMeshDateTime(at, Locale.forLanguageTag("es-ES"), ZoneId.of("UTC"))
+        assertEquals("18/4/26, 5:59", formatted)
+        assertFalse(formatted.startsWith("4/18/26"))
+    }
+
+    @Test
+    fun `formatMeshTime follows localized short time conventions`() {
+        val at = Instant.parse("2026-04-18T05:59:00Z").toEpochMilli()
+
+        assertEquals("5:59 AM", formatMeshTime(at, Locale.US, ZoneId.of("UTC")).replace('\u202f', ' '))
+        assertEquals("5:59", formatMeshTime(at, Locale.forLanguageTag("es-ES"), ZoneId.of("UTC")))
+    }
+
     @Test
     fun `formatMeshRole translates roles to Spanish`() {
         assertEquals("Orquestador", formatMeshRole("orchestrator"))

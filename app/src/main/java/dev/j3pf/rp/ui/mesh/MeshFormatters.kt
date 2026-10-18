@@ -2,6 +2,11 @@ package dev.j3pf.rp.ui.mesh
 
 import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 private val UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}.*")
 private val TRUNCATED_UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{3,}.*")
@@ -164,3 +169,25 @@ fun formatMeshNodeContentDescription(
 ): String =
     "${formatMeshRole(node.role)} ${formatMeshDisplayName(node, allNodes)}, ${formatMeshStatus(node.status)}" +
         (node.todos?.let { ", ${formatMeshTodos(it.done, it.total)}" } ?: "")
+
+fun formatMeshDateTime(
+    at: Long,
+    locale: Locale = Locale.getDefault(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): String =
+    DateTimeFormatter
+        .ofLocalizedDateTime(FormatStyle.SHORT)
+        .withLocale(locale)
+        .withZone(zoneId)
+        .format(Instant.ofEpochMilli(at))
+
+fun formatMeshTime(
+    at: Long,
+    locale: Locale = Locale.getDefault(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): String =
+    DateTimeFormatter
+        .ofLocalizedTime(FormatStyle.SHORT)
+        .withLocale(locale)
+        .withZone(zoneId)
+        .format(Instant.ofEpochMilli(at))
