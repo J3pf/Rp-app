@@ -112,10 +112,15 @@ class MeshLayoutEngine(
                 }
             }
         val verticalSpacing = if (rows.size > 1) config.cardSpacingY.coerceAtLeast(48f) else 0f
-        val baseCardHeight = max(config.cardHeight, config.minCardHeight)
+        val baseCardHeight = max(100f, max(config.cardHeight, config.minCardHeight))
         val nodeHeights =
             orderedNodes.associate { node ->
-                node.agentId to (baseCardHeight + (if (node.todos != null) 24f else 0f) + (if (node.subagents.isNotEmpty()) 28f else 0f))
+                node.agentId to
+                    (
+                        baseCardHeight +
+                            (if (node.todos?.total?.let { it > 0 } == true) 26f else 0f) +
+                            (if (node.subagents.isNotEmpty()) 30f else 0f)
+                    )
             }
         val rowHeights = rows.map { row -> row.maxOf { nodeHeights.getValue(it.agentId) } }
 

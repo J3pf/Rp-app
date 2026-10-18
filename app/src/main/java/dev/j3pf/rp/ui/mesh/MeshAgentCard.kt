@@ -82,7 +82,6 @@ fun MeshAgentCard(
         modifier =
             modifier
                 .fillMaxWidth()
-                .heightIn(min = 72.dp)
                 .clip(RpShapes.medium)
                 .clickable(role = Role.Button, onClick = onClick)
                 .semantics(mergeDescendants = true) {
@@ -102,7 +101,7 @@ fun MeshAgentCard(
                 Modifier
                     .padding(horizontal = RpSpacing.md, vertical = RpSpacing.sm)
                     .alpha(if (isOffline) 0.65f else 1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Header prioritizes the agent name; only the orchestrator spends width on its role badge.
             Row(
@@ -134,7 +133,7 @@ fun MeshAgentCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 20.dp),
             ) {
                 StatusDot(status = node.status, online = node.online)
                 Text(
@@ -173,7 +172,7 @@ fun MeshAgentCard(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
                     ) {
                         LinearProgressIndicator(
                             progress = { progress },
@@ -195,7 +194,7 @@ fun MeshAgentCard(
             if (node.subagents.isNotEmpty()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     node.subagents.take(3).forEach { subagent ->
                         MeshSubagentChip(
@@ -238,7 +237,7 @@ fun AgentAvatar(
     val initial = displayName.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "A"
     val accentColor = parseRelayColor(machineColor)
     Surface(
-        modifier = modifier.size(28.dp),
+        modifier = modifier.size(32.dp),
         shape = CircleShape,
         color = accentColor.copy(alpha = if (online) 0.22f else 0.10f),
         border = BorderStroke(1.dp, accentColor.copy(alpha = if (online) 0.80f else 0.40f)),

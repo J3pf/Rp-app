@@ -141,11 +141,25 @@ class MeshLayoutEngineTest {
         val childA = result.nodes.getValue("child-a")
         val childB = result.nodes.getValue("child-b")
 
-        assertEquals(128f, root.height)
-        assertEquals(100f, childA.height)
-        assertEquals(104f, childB.height)
+        assertEquals(156f, root.height)
+        assertEquals(126f, childA.height)
+        assertEquals(130f, childB.height)
         assertEquals(childA.y, childB.y)
         assertEquals(root.bottom + 56f + childB.height / 2f, childB.y)
+    }
+
+    @Test
+    fun `base card height never drops below one hundred and empty todos add no height`() {
+        val lowHeightEngine = MeshLayoutEngine(LayoutConfig(cardHeight = 80f, minCardHeight = 76f))
+        val nodes =
+            listOf(
+                node("plain", role = "orchestrator"),
+                node("empty-todos", parent = "plain", role = "subordinate").copy(todos = MeshTodos(total = 0, done = 0)),
+            )
+        val result = lowHeightEngine.computeLayout(nodes, emptyList())
+
+        assertEquals(100f, result.nodes.getValue("plain").height)
+        assertEquals(100f, result.nodes.getValue("empty-todos").height)
     }
 
     @Test
@@ -179,7 +193,7 @@ class MeshLayoutEngineTest {
     fun `tall layouts retain intrinsic card height and extend below the viewport for panning`() {
         val result = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 300f)
 
-        assertTrue(result.nodes.values.all { it.height == 76f })
+        assertTrue(result.nodes.values.all { it.height == 100f })
         assertTrue(result.nodes.values.maxOf { it.bottom } > 300f)
     }
 
@@ -189,8 +203,8 @@ class MeshLayoutEngineTest {
         val adjacent = PositionedNode(node("right"), x = 251f, y = 50f, width = 200f, height = 90f, level = 0, satellites = emptyList())
 
         assertEquals(200f, left.width)
-        assertEquals(96f, left.height)
-        assertEquals(LayoutBounds(-50f, 2f, 150f, 98f), left.bounds())
+        assertEquals(100f, left.height)
+        assertEquals(LayoutBounds(-50f, 0f, 150f, 100f), left.bounds())
         assertFalse(left.intersects(adjacent))
         assertTrue(left.intersects(adjacent, margin = 2f))
     }

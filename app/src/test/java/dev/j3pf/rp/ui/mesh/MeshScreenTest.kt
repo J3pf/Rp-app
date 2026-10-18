@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -578,6 +579,17 @@ class MeshScreenTest {
                 "Card top ${bounds.top} intersects filter bottom $highestFilterBottom",
             )
         }
+        val machineChipBottom =
+            rule
+                .onNodeWithText("Omarchy · 2")
+                .fetchSemanticsNode()
+                .boundsInRoot.bottom
+        val groupChipBottom =
+            rule
+                .onNodeWithText("Rp-app · 4")
+                .fetchSemanticsNode()
+                .boundsInRoot.bottom
+        assertOrchestratorCardInsideViewport("Rp-app", maxOf(machineChipBottom, groupChipBottom))
     }
 
     @Test
@@ -613,6 +625,7 @@ class MeshScreenTest {
         }
 
         assertCardMeetsLegibility("Orquestador Maestro")
+        assertOrchestratorCardInsideViewport("Orquestador Maestro")
     }
 
     @Test
@@ -638,6 +651,7 @@ class MeshScreenTest {
         listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
             assertCardMeetsLegibility(name)
         }
+        assertOrchestratorCardInsideViewport("Rp-app")
     }
 
     @Test
@@ -663,6 +677,7 @@ class MeshScreenTest {
         listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
             assertCardMeetsLegibility(name)
         }
+        assertOrchestratorCardInsideViewport("Rp-app")
     }
 
     @Test
@@ -689,6 +704,31 @@ class MeshScreenTest {
         (1..11).forEach { i ->
             assertCardMeetsLegibility("Worker-$i")
         }
+        assertOrchestratorCardInsideViewport("Orquestador Maestro")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-xhdpi")
+    fun `diagram card legibility 12 agents in short phone viewport anchors orchestrator at top`() {
+        val (allNodes, edges) = build12AgentsScenarioNodes()
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 360f, height = 520f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = MeshSnapshot(nodes = allNodes, edges = edges),
+                layoutResult = layout,
+                isListView = false,
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = uiState, onOpenChat = {})
+            }
+        }
+
+        assertCardMeetsLegibility("Orquestador Maestro")
+        assertOrchestratorCardInsideViewport("Orquestador Maestro", expectedTopOffset = with(rule.density) { 16.dp.toPx() })
     }
 
     @Test
@@ -714,6 +754,7 @@ class MeshScreenTest {
         listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
             assertCardMeetsLegibility(name)
         }
+        assertOrchestratorCardInsideViewport("Rp-app")
     }
 
     @Test
@@ -739,11 +780,15 @@ class MeshScreenTest {
         listOf("Rp-app", "Rp-relay", "RP", "Worker Plugin").forEach { name ->
             assertCardMeetsLegibility(name)
         }
+        assertOrchestratorCardInsideViewport("Rp-app")
     }
 
-    private fun assertCardMeetsLegibility(agentName: String) {
+    private fun assertCardMeetsLegibility(
+        agentName: String,
+        requireViewportContainment: Boolean = true,
+    ) {
         val nodeInteraction = rule.onNodeWithText(agentName)
-        nodeInteraction.assertIsDisplayed()
+        if (requireViewportContainment) nodeInteraction.assertIsDisplayed()
 
         val textLayoutResults = mutableListOf<TextLayoutResult>()
         val action = nodeInteraction.fetchSemanticsNode().config.getOrNull(SemanticsActions.GetTextLayoutResult)
@@ -751,6 +796,43 @@ class MeshScreenTest {
         val textLayout = textLayoutResults.firstOrNull() ?: error("No TextLayoutResult for $agentName")
 
         kotlin.test.assertFalse(textLayout.didOverflowHeight, "Name '$agentName' has height overflow")
+
+        val cardBounds = nodeInteraction.fetchSemanticsNode().boundsInRoot
+        val textNodes =
+            rule
+                .onAllNodes(
+                    androidx.compose.ui.test
+                        .hasText("", substring = true),
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
+        val cardTextNodes =
+            textNodes.filter { textNode ->
+                val bounds = textNode.boundsInRoot
+                bounds.left < cardBounds.right &&
+                    bounds.right > cardBounds.left &&
+                    bounds.top < cardBounds.bottom &&
+                    bounds.bottom > cardBounds.top
+            }
+        kotlin.test.assertTrue(cardTextNodes.isNotEmpty(), "No Text nodes found inside card '$agentName'")
+        cardTextNodes.forEach { textNode ->
+            val text =
+                textNode.config
+                    .getOrNull(SemanticsProperties.Text)
+                    .orEmpty()
+                    .joinToString { it.text }
+            val results = mutableListOf<TextLayoutResult>()
+            textNode.config
+                .getOrNull(SemanticsActions.GetTextLayoutResult)
+                ?.action
+                ?.invoke(results)
+            val result = results.firstOrNull() ?: error("No TextLayoutResult for '$text' in card '$agentName'")
+            kotlin.test.assertFalse(result.didOverflowHeight, "Text '$text' in card '$agentName' has height overflow")
+            val textBounds = textNode.boundsInRoot
+            kotlin.test.assertTrue(textBounds.left >= cardBounds.left - 1f, "Text '$text' extends past the left of card '$agentName'")
+            kotlin.test.assertTrue(textBounds.top >= cardBounds.top - 1f, "Text '$text' extends above card '$agentName'")
+            kotlin.test.assertTrue(textBounds.right <= cardBounds.right + 1f, "Text '$text' extends past the right of card '$agentName'")
+            kotlin.test.assertTrue(textBounds.bottom <= cardBounds.bottom + 1f, "Text '$text' extends below card '$agentName'")
+        }
 
         val visibleLength =
             if (textLayout.isLineEllipsized(0)) {
@@ -764,17 +846,45 @@ class MeshScreenTest {
             "Name '$agentName' displays only $visibleLength chars (expected at least $minChars)",
         )
 
-        val cardBounds = nodeInteraction.fetchSemanticsNode().boundsInRoot
-        val machinesHeader = rule.onNodeWithText("Red de agentes").fetchSemanticsNode().boundsInRoot
+        if (requireViewportContainment) {
+            val machinesHeader = rule.onNodeWithText("Red de agentes").fetchSemanticsNode().boundsInRoot
+            kotlin.test.assertTrue(
+                cardBounds.top >= machinesHeader.bottom,
+                "Card '$agentName' top ${cardBounds.top} intersects header bottom ${machinesHeader.bottom}",
+            )
+            val liveStripBounds = rule.onNodeWithText("En vivo").fetchSemanticsNode().boundsInRoot
+            kotlin.test.assertTrue(
+                cardBounds.bottom <= liveStripBounds.top + 1f,
+                "Card '$agentName' bottom ${cardBounds.bottom} intersects LiveStrip top ${liveStripBounds.top}",
+            )
+        }
+    }
+
+    private fun assertOrchestratorCardInsideViewport(
+        agentName: String,
+        viewportTop: Float? = null,
+        expectedTopOffset: Float? = null,
+    ) {
+        val cardBounds = rule.onNodeWithText(agentName).fetchSemanticsNode().boundsInRoot
+        val titleBottom =
+            rule
+                .onNodeWithText("Red de agentes")
+                .fetchSemanticsNode()
+                .boundsInRoot.bottom
+        val top = viewportTop ?: titleBottom + with(rule.density) { 16.dp.toPx() }
+        val liveStripTop =
+            rule
+                .onNodeWithText("En vivo")
+                .fetchSemanticsNode()
+                .boundsInRoot.top
+        kotlin.test.assertTrue(cardBounds.top >= top - 1f, "Orchestrator '$agentName' begins above viewport top $top: ${cardBounds.top}")
         kotlin.test.assertTrue(
-            cardBounds.top >= machinesHeader.bottom,
-            "Card '$agentName' top ${cardBounds.top} intersects header bottom ${machinesHeader.bottom}",
+            cardBounds.bottom <= liveStripTop + 1f,
+            "Orchestrator '$agentName' ends below viewport bottom $liveStripTop: ${cardBounds.bottom}",
         )
-        val liveStripBounds = rule.onNodeWithText("En vivo").fetchSemanticsNode().boundsInRoot
-        kotlin.test.assertTrue(
-            cardBounds.bottom <= liveStripBounds.top + 1f,
-            "Card '$agentName' bottom ${cardBounds.bottom} intersects LiveStrip top ${liveStripBounds.top}",
-        )
+        expectedTopOffset?.let { expected ->
+            assertEquals(expected, cardBounds.top - top, 1f, "Orchestrator '$agentName' should start at the top padding")
+        }
     }
 
     private fun build4AgentsScenarioNodes(): Pair<List<MeshNode>, List<MeshEdge>> {

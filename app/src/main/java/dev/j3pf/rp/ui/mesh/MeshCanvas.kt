@@ -5,11 +5,11 @@ import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -142,32 +142,37 @@ fun MeshCanvas(
         val widthFitScale = if (bounds.width > 0f) widthDp / contentWidth else 1f
         val heightFitScale = if (bounds.height > 0f) heightDp / contentHeight else 1f
         val naturalFitScale = minOf(widthFitScale, heightFitScale)
-        val autoFitScale = minOf(1f, naturalFitScale).coerceAtLeast(0.65f)
+        val isLandscape = widthDp > heightDp && widthDp >= 600f
+        val autoFitScale = if (isLandscape) 1f else minOf(1f, naturalFitScale).coerceAtLeast(0.65f)
         val effectiveZoom = zoom * autoFitScale
-
-        val boundsCenterX = if (bounds.width > 0f) (bounds.minX + bounds.maxX) / 2f else widthDp / 2f
-        val boundsCenterY = if (bounds.height > 0f) (bounds.minY + bounds.maxY) / 2f else heightDp / 2f
-        val centerDpX = widthDp / 2f
-        val centerDpY = heightDp / 2f
+        val topPaddingDp = 16f
+        val contentOffsetX = meshContentOffsetX(bounds, widthDp, effectiveZoom)
+        val contentOffsetY = meshContentOffsetY(bounds, heightDp, effectiveZoom, topPaddingDp)
 
         // Canvas for connectors, active glow, dashed lines, and comm particles/bubbles
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(widthDp, heightDp) {
+                .pointerInput(widthDp, heightDp, bounds, autoFitScale) {
                     detectTransformGestures { centroid, pan, zoomChange, _ ->
                         val oldZoom = zoom
                         val newZoom = (oldZoom * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
-                        val zoomRatio = newZoom / oldZoom
+                        val oldEffectiveZoom = oldZoom * autoFitScale
+                        val newEffectiveZoom = newZoom * autoFitScale
+                        val zoomRatio = newEffectiveZoom / oldEffectiveZoom
                         val panDpX = pan.x / density.density
                         val panDpY = pan.y / density.density
                         val centroidDpX = centroid.x / density.density
                         val centroidDpY = centroid.y / density.density
-                        panX = centroidDpX - centerDpX - (centroidDpX - centerDpX - panX) * zoomRatio + panDpX
-                        panY = centroidDpY - centerDpY - (centroidDpY - centerDpY - panY) * zoomRatio + panDpY
+                        val oldOffsetX = meshContentOffsetX(bounds, widthDp, oldEffectiveZoom)
+                        val oldOffsetY = meshContentOffsetY(bounds, heightDp, oldEffectiveZoom, topPaddingDp)
+                        val newOffsetX = meshContentOffsetX(bounds, widthDp, newEffectiveZoom)
+                        val newOffsetY = meshContentOffsetY(bounds, heightDp, newEffectiveZoom, topPaddingDp)
+                        panX = centroidDpX + panDpX - newOffsetX - (centroidDpX - oldOffsetX - panX) * zoomRatio
+                        panY = centroidDpY + panDpY - newOffsetY - (centroidDpY - oldOffsetY - panY) * zoomRatio
                         zoom = newZoom
                     }
-                }.pointerInput(layout, widthDp, heightDp) {
+                }.pointerInput(layout, widthDp, heightDp, bounds, autoFitScale) {
                     detectTapGestures(
                         onDoubleTap = {
                             zoom = 1f
@@ -180,8 +185,8 @@ fun MeshCanvas(
                             val tapDpY = tap.y / density.density
                             val localTap =
                                 Offset(
-                                    x = (tapDpX - centerDpX - panX) / effectiveZoom + boundsCenterX,
-                                    y = (tapDpY - centerDpY - panY) / effectiveZoom + boundsCenterY,
+                                    x = (tapDpX - contentOffsetX - panX) / effectiveZoom,
+                                    y = (tapDpY - contentOffsetY - panY) / effectiveZoom,
                                 )
                             // Check if tap hit any node card
                             val hitNode =
@@ -210,8 +215,8 @@ fun MeshCanvas(
             val currentTimeMs = frameTime.longValue
 
             nativeCanvas.withTranslation(
-                (centerDpX + panX) * density.density,
-                (centerDpY + panY) * density.density,
+                (contentOffsetX + panX) * density.density,
+                (contentOffsetY + panY) * density.density,
             ) {
                 nativeCanvas.scale(
                     effectiveZoom * density.density,
@@ -224,18 +229,18 @@ fun MeshCanvas(
                     path.reset()
                     if (positioned.routePoints.size >= 2) {
                         val firstPoint = positioned.routePoints.first()
-                        path.moveTo(firstPoint.x - boundsCenterX, firstPoint.y - boundsCenterY)
+                        path.moveTo(firstPoint.x, firstPoint.y)
                         for (index in 1 until positioned.routePoints.size) {
                             val point = positioned.routePoints[index]
-                            path.lineTo(point.x - boundsCenterX, point.y - boundsCenterY)
+                            path.lineTo(point.x, point.y)
                         }
                     } else {
-                        path.moveTo(positioned.fromX - boundsCenterX, positioned.fromY - boundsCenterY)
+                        path.moveTo(positioned.fromX, positioned.fromY)
                         path.quadTo(
-                            positioned.controlX - boundsCenterX,
-                            positioned.controlY - boundsCenterY,
-                            positioned.toX - boundsCenterX,
-                            positioned.toY - boundsCenterY,
+                            positioned.controlX,
+                            positioned.controlY,
+                            positioned.toX,
+                            positioned.toY,
                         )
                     }
                     val age = edge.lastAt?.let { currentTimeMs - it }
@@ -307,17 +312,16 @@ fun MeshCanvas(
                             paint.reset()
                             paint.isAntiAlias = true
                             paint.color = scheme.primary.copy(alpha = 0.25f).toArgb()
-                            nativeCanvas.drawCircle(point.x - boundsCenterX, point.y - boundsCenterY, 5f, paint)
+                            nativeCanvas.drawCircle(point.x, point.y, 5f, paint)
                             paint.color = scheme.primary.toArgb()
-                            nativeCanvas.drawCircle(point.x - boundsCenterX, point.y - boundsCenterY, 2.5f, paint)
+                            nativeCanvas.drawCircle(point.x, point.y, 2.5f, paint)
                         }
 
                         // Speech bubble with message preview positioned in the clear connector gap
-                        val bubbleOffsetY = safeMidpointY - boundsCenterY
                         drawSpeechBubble(
                             nativeCanvas,
-                            midpointX - boundsCenterX,
-                            bubbleOffsetY,
+                            midpointX,
+                            safeMidpointY,
                             formatMeshCommText(comm.text),
                             paint,
                             textPaint,
@@ -332,30 +336,45 @@ fun MeshCanvas(
         // Render interactive Agent Cards in DP space with full legibility
         currentLayout?.nodes?.values?.forEach { positioned ->
             val node = positioned.node
-            val cardLeftDp = centerDpX + panX + (positioned.x - boundsCenterX - positioned.width / 2f) * effectiveZoom
-            val cardTopDp = centerDpY + panY + (positioned.y - boundsCenterY - positioned.height / 2f) * effectiveZoom
-            Box(
+            val cardLeftDp = contentOffsetX + panX + positioned.left * effectiveZoom
+            val cardTopDp = contentOffsetY + panY + positioned.top * effectiveZoom
+            MeshAgentCard(
+                node = node,
                 modifier =
                     Modifier
                         .offset(cardLeftDp.dp, cardTopDp.dp)
-                        .size(positioned.width.dp, positioned.height.dp)
+                        .width(positioned.width.dp)
+                        .wrapContentHeight()
                         .graphicsLayer {
                             scaleX = effectiveZoom
                             scaleY = effectiveZoom
                             transformOrigin = TransformOrigin(0f, 0f)
                         },
-            ) {
-                MeshAgentCard(
-                    node = node,
-                    modifier = Modifier.fillMaxSize(),
-                    allNodes = currentLayout.nodes.values.map { it.node },
-                    onClick = { onNodeClick(node.agentId) },
-                    reducedMotion = reducedMotion,
-                )
-            }
+                allNodes = currentLayout.nodes.values.map { it.node },
+                onClick = { onNodeClick(node.agentId) },
+                reducedMotion = reducedMotion,
+            )
         }
     }
 }
+
+private fun meshContentOffsetX(
+    bounds: LayoutBounds,
+    widthDp: Float,
+    zoom: Float,
+): Float = (widthDp - bounds.width * zoom) / 2f - bounds.minX * zoom
+
+private fun meshContentOffsetY(
+    bounds: LayoutBounds,
+    heightDp: Float,
+    zoom: Float,
+    topPaddingDp: Float,
+): Float =
+    if (bounds.height * zoom > heightDp - topPaddingDp) {
+        topPaddingDp - bounds.minY * zoom
+    } else {
+        (heightDp - bounds.height * zoom) / 2f - bounds.minY * zoom
+    }
 
 internal fun safeCommBubbleCenterY(
     midpointY: Float,

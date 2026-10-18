@@ -10,7 +10,7 @@ data class PositionedNode(
     val x: Float,
     val y: Float,
     val width: Float = 200f,
-    val height: Float = 96f,
+    val height: Float = 100f,
     val level: Int,
     val satellites: List<PositionedSatellite>,
 ) {
@@ -82,9 +82,9 @@ data class LayoutBounds(
 data class LayoutConfig(
     val edgeCurveOffset: Float = 24f,
     val cardWidth: Float = 280f,
-    val cardHeight: Float = 76f,
+    val cardHeight: Float = 100f,
     val minCardWidth: Float = 180f,
-    val minCardHeight: Float = 76f,
+    val minCardHeight: Float = 100f,
     val cardSpacingX: Float = 12f,
     val cardSpacingY: Float = 56f,
     val viewportPaddingX: Float = 12f,
