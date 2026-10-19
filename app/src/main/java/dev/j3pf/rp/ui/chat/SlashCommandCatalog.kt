@@ -115,19 +115,26 @@ object SlashCommandCatalogs {
             launcherLabel = "Codex",
             commands =
                 listOf(
-                    "/compact",
-                    "/clear",
                     "/review",
                     "/model",
+                    "/diff",
+                    "/approvals",
+                    "/mcp",
+                    "/compact",
+                    "/undo",
+                    "/fork",
+                    "/resume",
+                    "/clear",
                     "/status",
                     "/help",
                     "/quit",
                 ),
-            quickShortcuts = listOf("/review", "/status", "/compact", "/model", "/help"),
+            quickShortcuts = listOf("/review", "/model", "/diff", "/compact", "/status", "/help"),
             subSuggestions =
                 mapOf(
                     "/review" to listOf("uncommitted", "branch", "staged"),
-                    "/model" to listOf("o3", "o1", "gpt-4o"),
+                    "/model" to listOf("o3", "o3-mini", "o1", "gpt-4o"),
+                    "/approvals" to listOf("on-request", "never"),
                 ),
         )
 
