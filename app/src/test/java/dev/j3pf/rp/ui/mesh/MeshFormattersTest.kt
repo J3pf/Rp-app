@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.mesh
 
 import dev.j3pf.rp.protocol.CommAction
+import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshTodos
 import java.time.Instant
@@ -245,6 +246,46 @@ class MeshFormattersTest {
     }
 
     @Test
+    fun `formatMeshGroupChipLabel keeps solo and Sin grupo sentinels`() {
+        val orchestrator = groupLabelTestNode()
+
+        assertEquals("Sin grupo", formatMeshGroupChipLabel(groupLabelTestGroup("RP", groupId = "solo"), orchestrator))
+        assertEquals("Sin grupo", formatMeshGroupChipLabel(groupLabelTestGroup("Sin grupo"), orchestrator))
+    }
+
+    @Test
+    fun `formatMeshGroupChipLabel prefers human relay group label`() {
+        val orchestrator = groupLabelTestNode()
+        val group = groupLabelTestGroup("RP")
+
+        assertEquals("RP", formatMeshGroupChipLabel(group, orchestrator, listOf(orchestrator)))
+    }
+
+    @Test
+    fun `formatMeshGroupChipLabel falls back to orchestrator for UUID labels`() {
+        val orchestrator = groupLabelTestNode()
+        val group = groupLabelTestGroup("01a14fbb-2812-7332-aae5-d003f17b8fe7")
+
+        assertEquals("Orchestrator", formatMeshGroupChipLabel(group, orchestrator, listOf(orchestrator)))
+    }
+
+    @Test
+    fun `formatMeshGroupChipLabel falls back to orchestrator for Mesh Group sentinel`() {
+        val orchestrator = groupLabelTestNode()
+        val group = groupLabelTestGroup("Mesh Group")
+
+        assertEquals("Orchestrator", formatMeshGroupChipLabel(group, orchestrator, listOf(orchestrator)))
+    }
+
+    @Test
+    fun `formatMeshGroupChipLabel falls back to orchestrator for blank labels`() {
+        val orchestrator = groupLabelTestNode()
+        val group = groupLabelTestGroup("  ")
+
+        assertEquals("Orchestrator", formatMeshGroupChipLabel(group, orchestrator, listOf(orchestrator)))
+    }
+
+    @Test
     fun `formatMeshGroupChipLabel uses orchestrator display name and filters raw IDs`() {
         val orchNode =
             MeshNode(
@@ -265,6 +306,25 @@ class MeshFormattersTest {
             )
         assertEquals("Rp-app", formatMeshGroupChipLabel(group, orchNode, allNodes))
     }
+
+    private fun groupLabelTestNode() =
+        MeshNode(
+            agentId = "agent-orchestrator",
+            machineId = "machine-1",
+            machineName = "Omarchy",
+            name = "Orchestrator",
+            status = "working",
+        )
+
+    private fun groupLabelTestGroup(
+        label: String,
+        groupId: String = "group-1",
+    ) = MeshGroup(
+        groupId = groupId,
+        label = label,
+        orchestratorAgentId = "agent-orchestrator",
+        memberAgentIds = listOf("agent-orchestrator"),
+    )
 
     @Test
     fun `formatMeshDisplayName and group chip handle relay 0_5_3 sentinels and existing numbered suffixes`() {

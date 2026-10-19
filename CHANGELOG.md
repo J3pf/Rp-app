@@ -34,6 +34,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
   - Treats raw UUIDs, truncated UUIDs with ellipsis, and `subagent-chat-<hex>` identifiers as missing in UI views.
   - Disambiguates duplicate agent names with machine names or sequential numbering.
   - Sanitizes group chips, machine chips, live strip, conversation headers, and accessibility descriptions.
+  - Mesh group filter chips prefer human relay group labels with orchestrator fallback and precomputed label lookups (contributed by Luis Eduardo Chacón Wilches).
   - Added collapsed "Detalles técnicos" section in node detail bottom sheet with one-tap copy action for raw agent, machine, group, and parent IDs.
 - **Comprehensive Visual & Functional Tests (Spec S5)**:
   - Roborazzi screenshots covering 1 agent, 4 agents (Omarchy + Croma scenario), and 12 agents across themes (Cute, Sexy, Omarchy × Light/Dark) on 360dp, 411dp, and tablet viewports.

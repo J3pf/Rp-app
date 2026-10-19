@@ -100,11 +100,11 @@ fun formatMeshGroupChipLabel(
     allNodes: List<MeshNode> = emptyList(),
 ): String {
     if (group.groupId == "solo" || group.label == "Sin grupo") return "Sin grupo"
-    if (orchestratorNode != null) {
-        return formatMeshDisplayName(orchestratorNode, allNodes)
-    }
     if (group.label.isNotBlank() && !isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
         return group.label
+    }
+    if (orchestratorNode != null) {
+        return formatMeshDisplayName(orchestratorNode, allNodes)
     }
     return "Grupo de agentes"
 }

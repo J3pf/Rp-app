@@ -42,6 +42,7 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 - Zero raw UUIDs or hex hashes appear on the graph, machine chips, group chips, sheets, or list view.
 - Centralized display name formatter with pure fallbacks (`node.name` → `basename(cwd)` → `"Agente"`), handling English sentinels (`"Agent"`, `"Mesh Group"`) and preserving `(n)` duplicate suffixes. Machine names sanitized with fallback `"Máquina"`.
 - Collapsed **"Detalles técnicos"** section in the node detail sheet provides one-tap clipboard copy for agent IDs, machine IDs, group IDs, parent agent IDs, and full directory paths with 48dp touch targets.
+- Mesh group filter chips prefer human relay group labels with orchestrator fallback and precomputed label lookups (contributed by Luis Eduardo Chacón Wilches).
 
 #### 6. Comprehensive Test Coverage & Parity
 - **Roborazzi Screenshot Tests**: 66 mesh screenshots (126 total in repository) covering 11 scenarios across Cute, Sexy, and Omarchy themes in light & dark modes: 411dp portrait default, 1 agent solo, 12 agents with in-flight comms, 360dp phone width, landscape (800dp width), tablet (800dp width), reduced motion, collapsed detail sheet, expanded detail sheet, and conversation sheet.

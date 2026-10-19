@@ -257,22 +257,31 @@ private fun GroupFilterChips(
     uiState: MeshUiState,
     onSelectGroup: (String?) -> Unit,
 ) {
-    uiState.groupChips.forEach { group ->
-        val matchingGroup = uiState.snapshot?.groups?.firstOrNull { it.groupId == group.groupId }
-        val nodes = uiState.snapshot?.nodes.orEmpty()
-        val orchestratorNode =
-            matchingGroup?.orchestratorAgentId?.let { id ->
-                nodes.firstOrNull { it.agentId == id }
+    val groupLabels =
+        remember(uiState.snapshot) {
+            val snapshot = uiState.snapshot
+            if (snapshot == null) {
+                emptyMap()
+            } else {
+                val nodesById = snapshot.nodes.associateBy { it.agentId }
+                snapshot.groups.associate { group ->
+                    val orchestratorNode = group.orchestratorAgentId?.let { nodesById[it] }
+                    group.groupId to formatMeshGroupChipLabel(group, orchestratorNode, snapshot.nodes)
+                }
             }
+        }
+
+    uiState.groupChips.forEach { group ->
         val groupLabel =
             if (group.isSolo) {
                 "Sin grupo"
-            } else if (matchingGroup != null) {
-                formatMeshGroupChipLabel(matchingGroup, orchestratorNode, nodes)
-            } else if (!isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
-                group.label
             } else {
-                "Grupo de agentes"
+                groupLabels[group.groupId]
+                    ?: if (!isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
+                        group.label
+                    } else {
+                        "Grupo de agentes"
+                    }
             }
         FilterChip(
             selected = uiState.selectedGroupId == group.groupId,
