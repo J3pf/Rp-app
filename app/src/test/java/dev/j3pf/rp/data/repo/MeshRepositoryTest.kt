@@ -16,11 +16,13 @@ import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withTimeout
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -39,10 +41,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MeshRepositoryTest {
     private lateinit var server: MockWebServer
+    private lateinit var testScheduler: TestCoroutineScheduler
     private lateinit var scope: CoroutineScope
     private lateinit var bus: MessageBus
     private lateinit var connection: RelayConnection
@@ -53,7 +57,8 @@ class MeshRepositoryTest {
     @Before
     fun setUp() {
         server = MockWebServer().also { it.start() }
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        testScheduler = TestCoroutineScheduler()
+        scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         bus = MessageBus()

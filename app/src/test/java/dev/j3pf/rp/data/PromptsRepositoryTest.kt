@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.AnswerOutcome
+import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
@@ -25,12 +26,14 @@ import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okhttp3.mockwebserver.MockResponse
@@ -45,10 +48,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PromptsRepositoryTest {
     private lateinit var server: MockWebServer
+    private lateinit var testScheduler: TestCoroutineScheduler
     private lateinit var scope: CoroutineScope
     private lateinit var bus: MessageBus
     private lateinit var conn: RelayConnection
@@ -67,7 +72,8 @@ class PromptsRepositoryTest {
         val ctx = ApplicationProvider.getApplicationContext<Application>()
         WorkManagerTestInitHelper.initializeTestWorkManager(ctx, Configuration.Builder().build())
         server = MockWebServer().also { it.start() }
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        testScheduler = TestCoroutineScheduler()
+        scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         bus = MessageBus()
         val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
         val api = RelayApi(testClient(), secrets)
@@ -87,12 +93,12 @@ class PromptsRepositoryTest {
 
     private suspend fun publishOpened() {
         bus.publish(Envelope.of(MsgType.PROMPT_OPENED, prompt))
-        withTimeout(5000) { while (repo.open.first().isEmpty()) delay(20) }
+        repo.open.first { it.isNotEmpty() }
     }
 
     @Test
     fun `prompt abierto llega al bandeja y se cierra con prompt resolved`() {
-        runBlocking {
+        runTest(testScheduler) {
             publishOpened()
             assertEquals(
                 "01PROMPT",
@@ -108,25 +114,25 @@ class PromptsRepositoryTest {
                         .PromptResolved("01PROMPT", "local"),
                 ),
             )
-            withTimeout(5000) { while (repo.open.first().isNotEmpty()) delay(20) }
+            repo.open.first { it.isEmpty() }
         }
     }
 
     @Test
     fun `sin websocket responde por HTTP y 409 se trata como ya respondido`() {
-        runBlocking {
+        runTest(testScheduler) {
             publishOpened()
             server.enqueue(MockResponse().setResponseCode(409))
             val r = repo.answer("01PROMPT", Answer.option("0"))
             assertEquals(AnswerOutcome.AlreadyResolved, r)
             assertEquals("/v1/prompts/01PROMPT/answer", server.takeRequest().path)
-            assertTrue(repo.open.first().isEmpty()) // se retira de la bandeja
+            assertTrue(repo.open.first { it.isEmpty() }.isEmpty()) // se retira de la bandeja
         }
     }
 
     @Test
     fun `sin red se encola el reintento`() {
-        runBlocking {
+        runTest(testScheduler) {
             publishOpened()
             server.shutdown()
             assertEquals(AnswerOutcome.Queued, repo.answer("01PROMPT", Answer.option("0")))
@@ -142,7 +148,7 @@ class PromptsRepositoryTest {
 
     @Test
     fun `con websocket responde por WS`() {
-        runBlocking {
+        runTest(testScheduler) {
             server.enqueue(
                 MockResponse().withWebSocketUpgrade(
                     object : WebSocketListener() {
@@ -169,9 +175,12 @@ class PromptsRepositoryTest {
                 ),
             )
             conn.start()
-            withTimeout(5000) { while (!conn.isConnected) delay(20) }
+            conn.state.first { it == ConnState.Connected }
             publishOpened()
-            assertEquals(AnswerOutcome.Sent, repo.answer("01PROMPT", Answer.option("0")))
+            assertEquals(
+                AnswerOutcome.Sent,
+                withContext(Dispatchers.IO) { repo.answer("01PROMPT", Answer.option("0")) },
+            )
             assertEquals(1, server.requestCount) // sólo el upgrade, ninguna petición HTTP
             assertNotNull(repo.get("01PROMPT"))
         }
