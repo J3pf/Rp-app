@@ -571,9 +571,15 @@ internal fun MessageList(
 
     val reversedItems = remember(items) { items.asReversed() }
 
+    val streamingMsg = ui.chat.streaming
+    val isAgentWorking =
+        (ui.sending || ui.agent?.status == "working" || ui.chat.working) &&
+            (streamingMsg == null || streamingMsg.blocks.isEmpty())
+
     val isScrolledUp by remember {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 20
+            val maxBottomIndex = if (isAgentWorking) 1 else 0
+            listState.firstVisibleItemIndex > maxBottomIndex
         }
     }
 
@@ -599,15 +605,22 @@ internal fun MessageList(
         }
     }
 
-    val streamingMsg = ui.chat.streaming
-    val isAgentWorking =
-        (ui.sending || ui.agent?.status == "working" || ui.chat.working) &&
-            (streamingMsg == null || streamingMsg.blocks.isEmpty())
+    val lastItem = items.lastOrNull()
+    val lastItemKey = lastItem?.key
+    val streamingTextLength = (lastItem as? dev.j3pf.rp.chat.AssistantMsg)?.plainText?.length ?: 0
 
-    val lastItemKey = items.lastOrNull()?.key
-    LaunchedEffect(lastItemKey) {
+    var prevItemsSize by remember { mutableIntStateOf(items.size) }
+
+    LaunchedEffect(lastItemKey, items.size, streamingTextLength) {
+        val isNewItem = items.size != prevItemsSize || lastItemKey?.startsWith("local:") == true
+        prevItemsSize = items.size
+
         if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
-            listState.animateScrollToItem(0)
+            if (isNewItem) {
+                listState.animateScrollToItem(0)
+            } else {
+                listState.scrollToItem(0)
+            }
         }
     }
 
