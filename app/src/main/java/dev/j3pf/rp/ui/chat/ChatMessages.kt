@@ -235,9 +235,9 @@ private fun ThinkingBlock(
     var open by rememberSaveable(key) { mutableStateOf(false) }
     val hPad =
         when (spacingMode) {
-            "compact" -> 10.dp
+            "compact" -> 8.dp
             "spacious" -> 14.dp
-            else -> 12.dp
+            else -> 10.dp
         }
     val vPad =
         when (spacingMode) {
@@ -245,23 +245,48 @@ private fun ThinkingBlock(
             "spacious" -> 8.dp
             else -> 6.dp
         }
+    val labelStyle =
+        when (spacingMode) {
+            "compact" -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+            "spacious" -> MaterialTheme.typography.labelLarge
+            else -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+        }
+
     Surface(
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RpShapes.medium,
         tonalElevation = 0.dp,
         onClick = { open = !open },
     ) {
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
-            Text(
-                if (open) "Razonamiento ▾" else "Razonamiento ▸",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.outline,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("🧠", fontSize = 12.sp)
+                    Text(
+                        "Razonamiento",
+                        style = labelStyle,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+                Text(
+                    if (open) "▾" else "▸",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
             AnimatedVisibility(open) {
                 Text(
                     text,
-                    Modifier.padding(top = 4.dp),
+                    Modifier.padding(top = 6.dp),
                     fontStyle = FontStyle.Italic,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -282,9 +307,9 @@ fun ToolCard(
     val summary = remember(run.name, run.args) { run.summary() }
     val hPad =
         when (spacingMode) {
-            "compact" -> 10.dp
+            "compact" -> 8.dp
             "spacious" -> 14.dp
-            else -> 12.dp
+            else -> 10.dp
         }
     val vPad =
         when (spacingMode) {
@@ -292,7 +317,21 @@ fun ToolCard(
             "spacious" -> 8.dp
             else -> 6.dp
         }
+    val nameStyle =
+        when (spacingMode) {
+            "compact" -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            "spacious" -> MaterialTheme.typography.labelLarge
+            else -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+        }
+    val summarySize =
+        when (spacingMode) {
+            "compact" -> 11.sp
+            "spacious" -> 12.sp
+            else -> 11.5.sp
+        }
+
     SurfaceCard(
+        modifier = Modifier.fillMaxWidth(),
         onClick = { setOpen(!open) },
         shape = RpShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -301,16 +340,16 @@ fun ToolCard(
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (run.status) {
-                    ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    ToolStatus.OK -> Text("✓", color = RpColors.success)
-                    ToolStatus.ERROR -> Text("✕", color = RpColors.danger)
+                    ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
+                    ToolStatus.OK -> Text("✓", color = RpColors.success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    ToolStatus.ERROR -> Text("✕", color = RpColors.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
-                Text(run.name, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(run.name, style = nameStyle, color = MaterialTheme.colorScheme.primary)
                 Text(
                     summary,
                     Modifier.weight(1f),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
+                    fontSize = summarySize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
