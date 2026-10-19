@@ -253,4 +253,34 @@ class SlashCommandSuggestionsTest {
 
         assertEquals("/review ", currentText)
     }
+
+    @Test
+    fun `codex launcher suggests review and model commands and displays Codex label`() {
+        var currentText by mutableStateOf("/rev")
+        val codexAgent = AgentSummary(agentId = "a3", machineId = "m1", launcher = "codex")
+
+        rule.setContent {
+            RpTheme {
+                Composer(
+                    ui = ChatUiState(agent = codexAgent),
+                    working = false,
+                    text = currentText,
+                    onText = { currentText = it },
+                    onChoice = {},
+                    onWorkingDelivery = {},
+                    onPicked = {},
+                    onRemoveAttachment = {},
+                    newCameraTarget = { Uri.EMPTY },
+                    onSend = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("⚡ Comando Codex (/)").assertIsDisplayed()
+        rule.onNodeWithText("/review").assertIsDisplayed()
+        rule.onNodeWithText("/review").performClick()
+        rule.waitForIdle()
+
+        assertEquals("/review ", currentText)
+    }
 }

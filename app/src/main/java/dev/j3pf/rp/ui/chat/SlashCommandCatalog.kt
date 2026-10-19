@@ -109,6 +109,28 @@ object SlashCommandCatalogs {
                 ),
         )
 
+    val CODEX =
+        SlashCommandCatalog(
+            launcherKey = "codex",
+            launcherLabel = "Codex",
+            commands =
+                listOf(
+                    "/compact",
+                    "/clear",
+                    "/review",
+                    "/model",
+                    "/status",
+                    "/help",
+                    "/quit",
+                ),
+            quickShortcuts = listOf("/review", "/status", "/compact", "/model", "/help"),
+            subSuggestions =
+                mapOf(
+                    "/review" to listOf("uncommitted", "branch", "staged"),
+                    "/model" to listOf("o3", "o1", "gpt-4o"),
+                ),
+        )
+
     val TERMINAL =
         SlashCommandCatalog(
             launcherKey = "terminal",
@@ -135,6 +157,7 @@ object SlashCommandCatalogs {
         return when {
             launcher == "agy" || launcher == "antigravity" || modelId == "antigravity" -> ANTIGRAVITY
             launcher == "claude" || provider == "anthropic" || modelId?.contains("claude") == true -> CLAUDE
+            launcher == "codex" || provider == "openai" || modelId?.contains("codex") == true -> CODEX
             launcher == "gentle-shell" || launcher == "opencode" -> GENTLE_SHELL
             launcher == "bash" || launcher == "zsh" || launcher == "sh" || launcher == "tmux" || launcher == "terminal" -> TERMINAL
             launcher == "pi" -> PI

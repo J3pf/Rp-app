@@ -900,54 +900,73 @@ internal fun Composer(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    AssistChip(
-                        onClick = { choiceMenu = true },
-                        shape = RoundedCornerShape(999.dp),
-                        colors =
-                            if (isSlashText) {
-                                AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                )
-                            } else {
-                                AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                val isHerdrAgent = ui.agent?.herdr != null || (ui.agent != null && ui.agent.launcher != "pi")
+                if (!isHerdrAgent) {
+                    Column {
+                        AssistChip(
+                            onClick = { choiceMenu = true },
+                            shape = RoundedCornerShape(999.dp),
+                            colors =
+                                if (isSlashText) {
+                                    AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    )
+                                } else {
+                                    AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                    )
+                                },
+                            label = {
+                                Text(
+                                    text = if (isSlashText) "⚡ Comando ${catalog.launcherLabel} (/)" else "Entrega: ${ui.choice.label}",
+                                    style = MaterialTheme.typography.labelSmall,
                                 )
                             },
+                        )
+                        DropdownMenu(choiceMenu, { choiceMenu = false }) {
+                            DeliveryChoice.entries.forEach { c ->
+                                val enabled = c != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
+                                DropdownMenuItem(
+                                    text = { Text(c.label) },
+                                    enabled = enabled,
+                                    onClick = {
+                                        choiceMenu = false
+                                        onChoice(c)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (working) {
+                        FilterChip(
+                            selected = ui.workingDelivery == Delivery.FOLLOW_UP,
+                            onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
+                            shape = RoundedCornerShape(999.dp),
+                            label = { Text("Encolar (follow‑up)", style = MaterialTheme.typography.labelSmall) },
+                        )
+                        FilterChip(
+                            selected = ui.workingDelivery == Delivery.STEER,
+                            onClick = { onWorkingDelivery(Delivery.STEER) },
+                            shape = RoundedCornerShape(999.dp),
+                            label = { Text("Interrumpir y dirigir (steer)", style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                } else if (isSlashText) {
+                    AssistChip(
+                        onClick = {},
+                        shape = RoundedCornerShape(999.dp),
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            ),
                         label = {
                             Text(
-                                text = if (isSlashText) "⚡ Comando ${catalog.launcherLabel} (/)" else "Entrega: ${ui.choice.label}",
+                                text = "⚡ Comando ${catalog.launcherLabel} (/)",
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         },
-                    )
-                    DropdownMenu(choiceMenu, { choiceMenu = false }) {
-                        DeliveryChoice.entries.forEach { c ->
-                            val enabled = c != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
-                            DropdownMenuItem(
-                                text = { Text(c.label) },
-                                enabled = enabled,
-                                onClick = {
-                                    choiceMenu = false
-                                    onChoice(c)
-                                },
-                            )
-                        }
-                    }
-                }
-                if (working) {
-                    FilterChip(
-                        selected = ui.workingDelivery == Delivery.FOLLOW_UP,
-                        onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
-                        shape = RoundedCornerShape(999.dp),
-                        label = { Text("Encolar (follow‑up)", style = MaterialTheme.typography.labelSmall) },
-                    )
-                    FilterChip(
-                        selected = ui.workingDelivery == Delivery.STEER,
-                        onClick = { onWorkingDelivery(Delivery.STEER) },
-                        shape = RoundedCornerShape(999.dp),
-                        label = { Text("Interrumpir y dirigir (steer)", style = MaterialTheme.typography.labelSmall) },
                     )
                 }
                 if (text.isEmpty() && ui.attachments.isEmpty()) {
