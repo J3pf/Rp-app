@@ -1,8 +1,11 @@
 package dev.j3pf.rp.ui.components
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,6 +17,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -41,6 +45,7 @@ fun HighlightedCode(
     language: String?,
     style: TextStyle,
     modifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val dispatcher = LocalHighlightDispatcher.current
@@ -89,15 +94,18 @@ fun HighlightedCode(
                 }
         }
 
+    val displayedCode = if (annotatedString.text == code) annotatedString else AnnotatedString(code)
+
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = modifier.fillMaxWidth(),
     ) {
         Text(
-            text = annotatedString,
+            text = displayedCode,
             style = style,
-            modifier = Modifier.padding(8.dp),
+            softWrap = false,
+            modifier = Modifier.horizontalScroll(scrollState).padding(8.dp),
         )
     }
 }
@@ -106,16 +114,28 @@ fun HighlightedCode(
 private fun rememberRpMarkdownComponents() =
     markdownComponents(
         codeBlock = { model ->
-            Box(Modifier.horizontalEdgeFade(edgeColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            val scrollState = rememberScrollState()
+            Box(
+                Modifier.horizontalEdgeFade(
+                    scrollState,
+                    edgeColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
                 MarkdownCodeBlock(model.content, model.node) { code, language, style ->
-                    HighlightedCode(code, language, style)
+                    HighlightedCode(code, language, style, scrollState = scrollState)
                 }
             }
         },
         codeFence = { model ->
-            Box(Modifier.horizontalEdgeFade(edgeColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            val scrollState = rememberScrollState()
+            Box(
+                Modifier.horizontalEdgeFade(
+                    scrollState,
+                    edgeColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
                 MarkdownCodeFence(model.content, model.node) { code, language, style ->
-                    HighlightedCode(code, language, style)
+                    HighlightedCode(code, language, style, scrollState = scrollState)
                 }
             }
         },

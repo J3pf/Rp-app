@@ -77,7 +77,7 @@ class BiometricGate
                             if (Build.VERSION.SDK_INT >= 30) {
                                 setAllowedAuthenticators(authenticators)
                             } else {
-                                // setDeviceCredentialAllowed is required for device credential fallback on API 29 (minSdk)
+                                // Deprecated on newer Android, but required for API 29 device-credential fallback.
                                 @Suppress("DEPRECATION")
                                 setDeviceCredentialAllowed(true)
                             }

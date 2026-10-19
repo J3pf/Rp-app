@@ -4,6 +4,7 @@ import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSubagent
 import dev.j3pf.rp.protocol.MeshTodos
+import dev.j3pf.rp.ui.mesh.safeCommBubbleCenterY
 import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -227,39 +228,38 @@ class MeshLayoutEngineTest {
     }
 
     @Test
+    fun `communication bubble clears cards beyond its sender and receiver`() {
+        val blockingCards =
+            listOf(
+                LayoutBounds(80f, 90f, 120f, 150f),
+                LayoutBounds(90f, 170f, 110f, 210f),
+            )
+        val centerY =
+            safeCommBubbleCenterY(
+                midpointY = 110f,
+                senderBottom = 100f,
+                receiverTop = 156f,
+                otherCards = blockingCards,
+                bubbleCenterX = 100f,
+                bubbleHalfWidth = 20f,
+            )
+
+        assertEquals(234f, centerY)
+        blockingCards.forEach { card ->
+            assertTrue(centerY <= card.minY - 24f || centerY >= card.maxY + 24f)
+        }
+    }
+
+    @Test
     fun `node bounds and intersection helper use card dimensions and margin`() {
-        val left = PositionedNode(node("left"), x = 50f, y = 50f, level = 0, satellites = emptyList())
-        val adjacent = PositionedNode(node("right"), x = 251f, y = 50f, width = 200f, height = 90f, level = 0, satellites = emptyList())
+        val left = PositionedNode(node("left"), x = 50f, y = 50f, level = 0)
+        val adjacent = PositionedNode(node("right"), x = 251f, y = 50f, width = 200f, height = 90f, level = 0)
 
         assertEquals(200f, left.width)
         assertEquals(100f, left.height)
         assertEquals(LayoutBounds(-50f, 0f, 150f, 100f), left.bounds())
         assertFalse(left.intersects(adjacent))
         assertTrue(left.intersects(adjacent, margin = 2f))
-    }
-
-    @Test
-    fun `subagents have static offsets attached within the parent card`() {
-        val subagents = (1..4).map { subagent("task-$it") }
-        val parent =
-            engine
-                .computeLayout(
-                    listOf(node("root", role = "orchestrator", subagents = subagents)),
-                    emptyList(),
-                ).nodes
-                .getValue("root")
-
-        assertEquals(4, parent.satellites.size)
-        parent.satellites.forEach { satellite ->
-            assertEquals("root", satellite.parentAgentId)
-            val (offsetX, offsetY) = satellite.calculatePosition()
-            assertEquals(satellite.offsetX, offsetX)
-            assertEquals(satellite.offsetY, offsetY)
-            assertTrue(offsetX - satellite.width / 2f >= -parent.width / 2f)
-            assertTrue(offsetX + satellite.width / 2f <= parent.width / 2f)
-            assertTrue(offsetY - satellite.height / 2f >= -parent.height / 2f)
-            assertTrue(offsetY + satellite.height / 2f <= parent.height / 2f)
-        }
     }
 
     @Test

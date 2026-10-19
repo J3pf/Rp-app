@@ -2,7 +2,6 @@ package dev.j3pf.rp.ui.mesh.layout
 
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
-import dev.j3pf.rp.protocol.MeshSubagent
 
 /** A mesh node positioned in layout coordinates. */
 data class PositionedNode(
@@ -12,7 +11,6 @@ data class PositionedNode(
     val width: Float = 200f,
     val height: Float = 100f,
     val level: Int,
-    val satellites: List<PositionedSatellite>,
 ) {
     val left: Float get() = x - width / 2f
     val top: Float get() = y - height / 2f
@@ -29,18 +27,6 @@ data class PositionedNode(
             right > other.left - margin &&
             top < other.bottom + margin &&
             bottom > other.top - margin
-}
-
-/** An attached subagent chip positioned relative to its parent node. */
-data class PositionedSatellite(
-    val subagent: MeshSubagent,
-    val parentAgentId: String,
-    val offsetX: Float = 0f,
-    val offsetY: Float = 0f,
-    val width: Float = 88f,
-    val height: Float = 22f,
-) {
-    fun calculatePosition(): Pair<Float, Float> = offsetX to offsetY
 }
 
 /** A point in the layout coordinate space used by orthogonal edge routes. */

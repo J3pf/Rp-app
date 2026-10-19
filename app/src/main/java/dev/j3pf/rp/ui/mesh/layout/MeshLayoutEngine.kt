@@ -159,7 +159,6 @@ class MeshLayoutEngine(
             val (x, y) = positions.getValue(node.agentId)
             val nodeWidth = nodeWidths.getValue(node.agentId)
             val nodeHeight = nodeHeights.getValue(node.agentId)
-            val satellites = positionSatellites(node, nodeWidth, nodeHeight)
             positionedNodes[node.agentId] =
                 PositionedNode(
                     node = node,
@@ -168,7 +167,6 @@ class MeshLayoutEngine(
                     width = nodeWidth,
                     height = nodeHeight,
                     level = levels.getValue(node.agentId),
-                    satellites = satellites,
                 )
         }
 
@@ -182,43 +180,6 @@ class MeshLayoutEngine(
             bounds = calculateBounds(positionedNodes, positionedEdges),
             centerNodeId = root.agentId,
         )
-    }
-
-    private fun positionSatellites(
-        node: MeshNode,
-        cardWidth: Float,
-        cardHeight: Float,
-    ): List<PositionedSatellite> {
-        val subagents = node.subagents.sortedBy { it.taskId }
-        if (subagents.isEmpty()) return emptyList()
-        val satelliteWidth = min(88f, cardWidth / 2f)
-        val satelliteHeight = min(22f, cardHeight / 2f)
-        val horizontalOffset = cardWidth / 4f
-        val verticalOffset = cardHeight / 4f
-        return subagents.mapIndexed { index, subagent ->
-            val column = index % 2
-            val row = index / 2
-            val offsetX =
-                when {
-                    subagents.size == 1 -> 0f
-                    column == 0 -> -horizontalOffset
-                    else -> horizontalOffset
-                }
-            val offsetY =
-                when {
-                    subagents.size <= 2 -> 0f
-                    row == 0 -> -verticalOffset
-                    else -> verticalOffset
-                }
-            PositionedSatellite(
-                subagent = subagent,
-                parentAgentId = node.agentId,
-                offsetX = offsetX,
-                offsetY = offsetY,
-                width = satelliteWidth,
-                height = satelliteHeight,
-            )
-        }
     }
 
     private fun positionEdge(
@@ -345,17 +306,6 @@ class MeshLayoutEngine(
 
         for (node in nodes.values) {
             include(node.bounds())
-            node.satellites.forEach { satellite ->
-                val (offsetX, offsetY) = satellite.calculatePosition()
-                include(
-                    LayoutBounds(
-                        node.x + offsetX - satellite.width / 2f,
-                        node.y + offsetY - satellite.height / 2f,
-                        node.x + offsetX + satellite.width / 2f,
-                        node.y + offsetY + satellite.height / 2f,
-                    ),
-                )
-            }
         }
         edges.forEach { edge ->
             val points = edge.routePoints.ifEmpty { listOf(EdgePoint(edge.controlX, edge.controlY)) }
