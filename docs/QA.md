@@ -1,138 +1,137 @@
-# QA manual (E2E) — rp-app
+# Manual QA (E2E) — rp-app
 
-Pruebas que no se pueden automatizar del todo: requieren un teléfono real, un relay y un agente Pi con el plugin `rp`.
-Marca cada caso con ✅/❌ y anota el dispositivo (modelo, versión de Android) y el sabor de build (`direct` / `fcm`).
+These tests cannot be fully automated: they require a real phone, a relay, and a Pi agent with the `rp` plugin. Mark each case ✅/❌ and record the device (model and Android version) and build flavor (`direct` / `fcm`).
 
-**Preparación**
-1. Relay en marcha (`/healthz` responde) y un agente Pi con `rp-plugin` emparejado (`/rp pair …`).
-2. Instalar el APK (`app-direct-debug` o `app-fcm-debug`), emparejar con el QR (`rp-relay pair device`).
-3. Conceder notificaciones y (recomendado) excluir RP de la optimización de batería.
-4. Para el agente: un comando que dispare una autorización, p. ej. pedir a Pi que ejecute `rm -rf build/`.
+**Setup**
+1. Start the relay (verify that `/healthz` responds) and pair a Pi agent with `rp-plugin` (`/rp pair …`).
+2. Install the APK (`app-direct-debug` or `app-fcm-debug`) and pair it using the QR code (`rp-relay pair device`).
+3. Grant notification permission and, if possible, exclude RP from battery optimization.
+4. For the agent, use a command that triggers an authorization prompt, for example, ask Pi to run `rm -rf build/`.
 
-## 1. Notificaciones (requisito central)
+## 1. Notifications (core requirement)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected result |
 |---|---|---|---|
-| N1 | Autorización con la app **cerrada** y pantalla **bloqueada** | Cierra la app (deslizar en recientes), bloquea el teléfono, provoca una autorización en el agente | Llega la notificación heads‑up con título "🏢 PC · agente" y botones **[Permitir] [Denegar]**; pulsar **Permitir** desbloquea al agente en < 2 s sin abrir la app; la notificación pasa a "Enviando…" y desaparece |
-| N2 | Responder en la **terminal** | Provoca una autorización y respóndela en la terminal del agente | La notificación del teléfono desaparece sola (push `cancel` / `prompt.resolved`) |
-| N3 | Responder en **otro dispositivo** | Con dos teléfonos emparejados, responde en uno | En el otro la notificación se retira; si se pulsa a tiempo, 409 → se quita igualmente |
-| N4 | **Modo avión** | Activa modo avión, provoca/recibe la notificación (o deja una abierta), pulsa **Permitir** | Muestra "Sin conexión · se reintentará"; al desactivar el modo avión la respuesta sale sola (WorkManager) y la notificación se retira |
-| N5 | Pregunta con opciones (≤ 3) | `ask_user` con 3 opciones | Un botón por opción |
-| N6 | Pregunta con > 3 opciones o cuestionario | `ask_user_question` (gentle‑pi) con 2 preguntas | Notificación con **[Abrir]**; la hoja muestra páginas con progreso y envía al final |
-| N7 | Texto libre | Pregunta de tipo `input` | Acción **Responder** con campo inline (RemoteInput); el texto llega al agente |
-| N8 | Agente terminó | Deja que un agente termine un turno | Notificación en el canal "Agente terminó" con **Responder** (RemoteInput) que envía un mensaje |
-| N9 | Desbloqueo para aprobar | Ajustes → Seguridad → "Requerir desbloqueo para aprobar" | Los botones de la notificación piden desbloqueo (Android 12+); la hoja pide biometría en autorizaciones críticas |
-| N10 | Dos canales sin duplicados | Sabor `fcm` con canal directo activo | Una única notificación por `promptId` |
-| N11 | Reinicio | Reinicia el teléfono con el canal directo activo | El servicio "RP conectado · N PCs" vuelve a arrancar y las notificaciones siguen llegando |
-| N12 | Doze | Pantalla apagada y quieto 1 h (spike A0) | La notificación llega (directo y FCM) y se mide el consumo de batería del canal directo |
-| N13 | Grupos por PC | Ajustes del sistema → RP → Notificaciones | Un grupo por PC ("🏠 …", "🏢 …") con 5 canales; silenciar uno no afecta al otro |
+| N1 | Authorization with the app **closed** and screen **locked** | Swipe the app away from Recents, lock the phone, and trigger an authorization prompt in the agent | A heads-up notification appears with title `🏢 PC · agente` and **[Permitir] [Denegar]** buttons. Tapping **Permitir** unlocks the agent in under 2 seconds without opening the app; the notification changes to `Enviando…` and disappears |
+| N2 | Reply in the **terminal** | Trigger an authorization prompt and answer it in the agent's terminal | The phone notification disappears automatically (`cancel` push / `prompt.resolved`) |
+| N3 | Reply on **another device** | Pair two phones and answer the prompt on one | The notification is removed from the other phone; if tapped in time, a 409 response still removes it |
+| N4 | **Airplane mode** | Enable airplane mode, trigger or receive a notification (or leave one open), then tap **Permitir** | Shows `Sin conexión · se reintentará`; after airplane mode is disabled, WorkManager sends the queued reply automatically and removes the notification |
+| N5 | Question with up to 3 options | Use `ask_user` with 3 options | A notification action appears for each option |
+| N6 | Question with more than 3 options or a questionnaire | Use `ask_user_question` (gentle-pi) with 2 questions | Notification shows **[Abrir]**; the sheet presents pages with progress and submits after the final page |
+| N7 | Free text | Trigger an `input` prompt | **Responder** action includes an inline `RemoteInput` field; the text reaches the agent |
+| N8 | Agent finished | Let an agent finish a turn | The `Agente terminó` notification channel shows **Responder** (`RemoteInput`), which sends a message |
+| N9 | Unlock to approve | Settings → Security → `Requerir desbloqueo para aprobar` | Notification actions request unlock (Android 12+); the sheet requests biometrics for critical authorizations |
+| N10 | Two channels without duplicates | Use the `fcm` flavor with the direct channel active | Only one notification is shown per `promptId` |
+| N11 | Reboot | Reboot the phone with the direct channel active | `RP conectado · N PCs` service starts again and notifications continue to arrive |
+| N12 | Doze | Turn the screen off and leave the phone idle for 1 hour (A0 spike) | Notification arrives through direct and FCM channels; record direct-channel battery use |
+| N13 | Groups by PC | System settings → RP → Notifications | One group per PC (`🏠 …`, `🏢 …`) with 5 channels; muting one group does not affect the other |
+| N14 | Notification permission guard | On Android 13+, deny `POST_NOTIFICATIONS` and trigger a notification, then grant permission and retry | No notification is posted and the app does not crash while permission is denied; after granting permission, notifications can be posted |
 
 ## 2. Chat
 
-| # | Caso | Resultado esperado |
+| # | Case | Expected result |
 |---|---|---|
-| C1 | Abrir un agente | Historial reciente + streaming en vivo (texto, razonamiento plegable, herramientas con estado) |
-| C2 | Bash / edit | El bash muestra el comando; el edit, el diff; resultado truncado con "ver más" |
-| C3 | Enviar mensaje (agente ocioso) | Burbuja con 📱 y respuesta en streaming |
-| C4 | Agente trabajando | Aparecen **Encolar (follow‑up)** / **Interrumpir y dirigir (steer)**; ⏹ interrumpe |
-| C5 | Modo AUTO de gentle‑pi | Chip "AUTO · tus mensajes se envían como tecleados 🔒"; enviar pide biometría (válida 5 min) y el mensaje cuenta como tecleado |
-| C6 | Sin entrega interactiva | Banner "En Auto este mensaje no autoriza acciones" con **[Pasar a Normal]** (envía `/gentle:mode normal`) |
-| C7 | Comando `/…` | Con texto que empieza por `/` se habilita "Comando /…" |
-| C8 | Diálogo no remoto | Aparece el banner "Esperando en la terminal (diálogo no remoto)" |
-| C9 | Reconexión | Corta la red 30 s y recupérala: el chat reanuda con `sinceSeq` sin duplicados |
+| C1 | Open an agent | Recent history and live streaming (text, collapsed reasoning, and tools with status) |
+| C2 | Bash / edit | Bash displays the command; edit displays the diff; long output is truncated with `ver más` |
+| C3 | Send a message (idle agent) | Message bubble shows 📱 and the response streams in |
+| C4 | Agent working | **Encolar (follow-up)** / **Interrumpir y dirigir (steer)** appear; ⏹ interrupts the agent |
+| C5 | gentle-pi AUTO mode | Chip reads `AUTO · tus mensajes se envían como tecleados 🔒`; sending requests biometrics (valid for 5 minutes) and the message counts as typed input |
+| C6 | No interactive delivery | Banner reads `En Auto este mensaje no autoriza acciones` with **[Pasar a Normal]** (sends `/gentle:mode normal`) |
+| C7 | `/…` command | Typing text beginning with `/` enables `Comando /…` |
+| C8 | Non-remote dialog | Banner reads `Esperando en la terminal (diálogo no remoto)` |
+| C9 | Reconnect | Disconnect the network for 30 seconds and restore it; chat resumes with `sinceSeq` and no duplicates |
+| C10 | Code highlighting and streaming | Stream a message containing fenced code blocks while the app theme differs from the system theme | Code highlighting does not block the main thread; the syntax palette follows app-surface luminance, including a dark app theme on a light system theme |
 
-## 3. Adjuntos
+## 3. Attachments
 
-| # | Caso | Resultado esperado |
+| # | Case | Expected result |
 |---|---|---|
-| A1 | Foto de la galería / cámara | Se comprime (JPEG 85 %, 2048 px), sube con progreso y el agente la recibe como imagen |
-| A2 | PDF / archivo | Sube con progreso; el agente recibe `[Archivo adjunto: /ruta (mime, tamaño)]` |
-| A3 | > 25 MB | Error "Supera 25 MB" en el adjunto |
-| A4 | Sin red al enviar | "Se enviará al volver la red"; llega una sola vez (idempotencia por `clientMsgId`) |
+| A1 | Gallery or camera photo | Compressed to JPEG (85%, 2048px), uploaded with progress, and received by the agent as an image |
+| A2 | PDF / file | Uploaded with progress; agent receives `[Archivo adjunto: /ruta (mime, tamaño)]` |
+| A3 | Over 25 MB | Attachment displays `Supera 25 MB` error |
+| A4 | Offline while sending | Displays `Se enviará al volver la red`; delivered exactly once (idempotency by `clientMsgId`) |
 
-## 4. PCs, agentes y ajustes
+## 4. PCs, agents, and settings
 
-| # | Caso | Resultado esperado |
+| # | Case | Expected result |
 |---|---|---|
-| P1 | Selector de PC | Chips Todas / Personal / Empresa con color y contadores 🔔; filtra Agentes y Pendientes |
-| P2 | Editar PC | Cambiar nombre/contexto/color se refleja en cabeceras, chips y grupos de canales |
-| P3 | Nuevo agente | PC con rp‑host → carpeta → lanzador → herdr (workspace/pestaña/panel) o tmux/Windows Terminal → aparece en la lista |
-| P4 | Añadir máquina | Ajustes → "Añadir máquina" muestra `/rp pair URL CÓDIGO` copiable |
-| P5 | Revocar dispositivo/PC | Desaparece y deja de conectar |
-| P6 | Horas silenciosas | Configuradas por PC; las autorizaciones críticas "siempre" las ignoran si el ajuste está activo |
-| P7 | Bloqueo de la app / FLAG_SECURE | Pide biometría al abrir; capturas bloqueadas |
-| P8 | Cerrar sesión | Borra credenciales, base de datos y canales; vuelve al onboarding |
-| P9 | Notificación de prueba | Ajustes → Notificaciones → "Enviar notificación de prueba" |
+| P1 | PC selector | Chips for Todas / Personal / Empresa show color and 🔔 counts; filter Agents and Pending |
+| P2 | Edit PC | Changes to name/context/color appear in headers, chips, and channel groups |
+| P3 | New agent | On a PC with `rp-host`, select folder → launcher → `herdr` (workspace/tab/panel) or tmux/Windows Terminal; agent appears in the list |
+| P4 | Add machine | Settings → `Añadir máquina` displays a copyable `/rp pair URL CÓDIGO` command |
+| P5 | Revoke device/PC | It disappears and no longer connects |
+| P6 | Quiet hours | Configured per PC; critical authorizations always bypass them when that setting is enabled |
+| P7 | App lock / `FLAG_SECURE` | Requests biometrics on open; screenshots are blocked |
+| P8 | Sign out | Clears credentials, database, and channels; returns to onboarding |
+| P9 | Test notification | Settings → Notifications → `Enviar notificación de prueba` |
 
 ## 5. Agent Mesh (Animated Topology & Real-Time Communications — v0.4.0)
 
-| # | Case | Steps | Expected Result |
+| # | Case | Steps | Expected result |
 | --- | --- | --- | --- |
-| M1 | Access & Navigation | Open bottom navigation bar and tap **Mesh** tab | Opens `MeshScreen` cleanly; bottom tab highlights; displays diagram or list view |
-| M2 | Hierarchical Top-Down Cards | Observe screen with agents | Orchestrator is positioned top-center with machine-tinted avatar; subordinates arranged in rows below; subagents shown as attached chips with their own execution state |
-| M3 | Viewport Containment & Clipping | Observe canvas with filters and live strip | Graph is contained strictly below top chips and above live strip (`clipToBounds()`); never overlaps buttons or filter chips |
-| M4 | Connector Edges & Activity | Trigger recent communication or pending ask | Active edges (last 20s) glow with accent border; `pendingAsk` edges pulse with dashed line; glow turns off after 20s |
-| M5 | Comm Particles & Speech Bubbles | Send inter-agent comm (`mesh.comm`) | Particle travels along the drawn Bezier connector; speech bubble preview appears in the connector gap without covering cards |
-| M6 | Pan & Zoom Gestures | Pinch-to-zoom, drag with one finger, double-tap | Zoom scales smoothly (0.5x to 3.0x) with auto-fit default; double-tap resets zoom and centers view |
-| M7 | Machine & Group Selectors | Tap top machine and group chips | Filters visible nodes and edges; chips display clean human names without raw UUIDs; selection persists |
-| M8 | Node Detail & Technical Section | Tap card in diagram or list view | Opens `ModalBottomSheet` with avatar, clean display name, role badge, machine, git branch, model, status, activity, TODOs, and subagents; raw IDs are located strictly in collapsed "Detalles técnicos" with one-tap copy buttons |
-| M9 | Agent Conversation History | Tap edge connector between agents | Opens `ModalBottomSheet` with message history ordered by direction with clean names, action badges, timestamps, and "Cargar mensajes anteriores" pagination |
-| M10 | Live Strip | Receive live comms | Collapsible bottom strip shows latest messages (`Sender → Receiver: text`) using clean human names |
-| M11 | Disconnected State | Disconnect relay or enable airplane mode on Mesh | Shows top banner "Desconectado — mostrando datos locales" while keeping topology visible with "Reintentar" button |
-| M12 | Accessibility & List View | Tap "Vista de lista" button | Switches to accessible list view sharing identical cards, >=48dp touch targets, and full semantic descriptions |
-| M13 | Reduced Motion | Enable system `ANIMATOR_DURATION_SCALE=0` | Travelling particles, shimmer border, and pulse dots stop; renders static indicators without continuous redraw |
-| M14 | Background Lifecycle | Minimize app or switch apps | Cancels websocket subscription (`mesh.unsubscribe`); resubscribes automatically on resume (ON_START) |
+| M1 | Access & Navigation | Open the bottom navigation bar and tap **Mesh** | Opens `MeshScreen` cleanly; Mesh tab is highlighted; diagram or list view appears |
+| M2 | Hierarchical Top-Down Cards | Observe the screen with agents | Orchestrator is positioned top-center with a machine-tinted avatar and is the only card displaying a role badge; subordinate and solo-agent cards have no role badge. `Subagente` is a role label, and subagents render as attached chips with their own execution state |
+| M3 | Viewport Containment & Clipping | Observe the canvas with filters and live strip | Graph is clipped below the header and filters and above the live strip; auto-fit uses scale 1.0 in landscape at widths >=600dp, otherwise fits when possible down to 0.65. If content still does not fit, it starts at the top with 16dp padding and can be reached by panning; cards remain at least 180dp wide and use measured runtime heights with an estimate fallback |
+| M4 | Connector Edges & Activity | Trigger recent communication or a pending ask | Active edges glow with an accent border for up to 20s; `pendingAsk` edges pulse with a dashed line; glow turns off after 20s |
+| M5 | Comm Particles & Speech Bubbles | Send inter-agent comm (`mesh.comm`) between hierarchical agents | Orthogonal bus connectors route through row gaps; a particle travels along the connector, and the speech bubble preview appears in the connector gap without covering cards |
+| M6 | Pan & Zoom Gestures | Pinch-to-zoom, drag with one finger, and double-tap | Zoom scales smoothly (0.5x to 3.0x) with auto-fit as the default; double-tap resets zoom and centers the view |
+| M7 | Machine & Group Selectors | Tap the top machine and group chips | Filters visible nodes and edges; chips display clean human names without raw UUIDs; selection persists |
+| M8 | Node Detail & Technical Section | Tap a card in diagram or list view | Opens `ModalBottomSheet` with avatar, clean display name, role label, machine, git branch, model, status, activity, TODOs, and subagents; the role badge appears only on the orchestrator card in the graph, while subagents render as attached chips. Raw IDs are located only in collapsed `Detalles técnicos`, with one-tap copy buttons |
+| M9 | Agent Conversation History | Tap an edge connector between agents | Opens `ModalBottomSheet` with message history ordered by direction, clean names, action badges, timestamps, and `Cargar mensajes anteriores` pagination |
+| M10 | Live Strip | Receive live comms | Collapsible bottom strip shows the latest messages (`Sender → Receiver: text`) using clean human names |
+| M11 | Disconnected State | Disconnect the relay or enable airplane mode on Mesh | Shows `Desconectado — mostrando datos locales` at the top while keeping the topology visible, with a `Reintentar` button |
+| M12 | Accessibility & List View | Tap `Vista de lista` | Switches to an accessible list view using the same cards, >=48dp touch targets, and full semantic descriptions |
+| M13 | Reduced Motion | Set system `ANIMATOR_DURATION_SCALE=0` | Travelling particles, shimmer border, and pulse dots stop; static indicators appear without continuous redraw |
+| M14 | Background Lifecycle | Minimize the app or switch apps | Cancels websocket subscription (`mesh.unsubscribe`); automatically resubscribes on resume (`ON_START`) |
+| M15 | Compact Landscape Filters | Open Mesh in landscape with available height below 500dp and enough machines/groups to overflow the row | `Máquinas` and `Grupos` filters appear in one horizontal scrolling row; scrolling reaches every filter while the graph remains clipped below the row |
+| M16 | Device-Locale Timestamps | Open a Mesh conversation on devices set to Spanish and to another locale | Message date/time formatting follows the device locale and time zone (for example, Spanish formatting on a Spanish device) |
 
-## 6. UI Refresh y Experiencia Visual Moderna (v0.3.0)
+## 6. UI Refresh and Modern Visual Experience (v0.3.0)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected result |
 |---|---|---|---|
-| U1 | Preservación de temas y selector | Cambiar entre Gentle-Cute, Gentle-Sexy, Omarchy y Sistema en Ajustes | Cada pantalla adopta de inmediato los colores exactos de la paleta seleccionada; los valores primarios, fondos y superficies se mantienen fieles a las especificaciones originales |
-| U2 | Anclaje inferior del chat | Abrir un chat con mensajes y recibir respuestas o texto en streaming | La pantalla aterriza siempre en el contenido más reciente con el fondo del mensaje visible, sin necesidad de desplazamiento manual por parte del usuario |
-| U3 | Botón flotante «Más recientes» | En el chat, desplazarse hacia arriba para leer mensajes anteriores mientras llegan nuevos mensajes | El usuario no es interrumpido ni desplazado bruscamente; aparece un botón animado «Más recientes (N)» que al pulsarse realiza scroll suave hasta el fondo |
-| U4 | Tarjeta de agente de un vistazo | Observar la pantalla principal de agentes | Toda la información relevante (estado, tarea activa con indicador, progreso de tareas/TODOs, tiempo relativo de actividad y vista previa) es legible inmediatamente sin necesidad de scroll horizontal |
-| U5 | Orden prioritario de agentes | Comprobar el orden de agentes en cada grupo de máquina | Primero se listan los agentes con preguntas/autorizaciones pendientes, luego los agentes en ejecución («Trabajando»), y por último los ordenados por última actividad reciente |
-| U6 | Micro-interacciones y movimiento | Interactuar con tarjetas, botones y observar agentes en ejecución | Efecto de pulso vivo en agentes trabajando, respuesta táctil elástica (press-scale) en tarjetas y botones, y transiciones fluidas de pantalla con física de resortes (`Spring`) |
-| U7 | Reducción de movimiento del sistema | Activar `ANIMATOR_DURATION_SCALE=0` en el dispositivo | Todas las animaciones continuas (pulso de trabajo, brillo shimmer de esqueletos) pasan a estados estáticos y las transiciones se vuelven instantáneas |
-| U8 | Accesibilidad integral | Navegar por la app con TalkBack activo | Todos los elementos interactivos cuentan con `contentDescription` descriptivo en español y áreas táctiles de al menos 48 × 48 dp |
+| U1 | Theme preservation and selector | In Settings, switch among Gentle-Cute, Gentle-Sexy, Omarchy, and System | Every screen immediately adopts the selected palette, with primary colors, backgrounds, and surfaces matching the theme specification |
+| U2 | Chat bottom anchoring | Open a chat with messages and receive responses or streamed text | Screen stays at the newest content with the streaming response visible; the user does not need to scroll manually |
+| U3 | Floating “More recent” button | Scroll up in chat to read earlier messages while new messages arrive | Reading position is preserved; an animated `Más recientes (N)` button appears and smoothly scrolls to the bottom when tapped |
+| U4 | At-a-glance agent card | Observe the main Agents screen | Relevant information (status, active task and indicator, TODO progress, relative activity time, and preview) is immediately readable without horizontal scrolling |
+| U5 | Agent priority order | Check agent ordering within each machine group | Agents with pending questions/authorizations appear first, working agents next, followed by agents ordered by most recent activity |
+| U6 | Micro-interactions and motion | Interact with cards/buttons and observe working agents | Working-agent pulse, elastic press-scale feedback on cards and buttons, and spring-based (`Spring`) screen transitions appear |
+| U7 | System reduced motion | Set device `ANIMATOR_DURATION_SCALE=0` | Continuous animations (working pulse, skeleton shimmer) become static and transitions become instantaneous |
+| U8 | Accessibility | Navigate with TalkBack enabled | Interactive elements have descriptive Spanish `contentDescription` values and touch targets of at least 48 × 48dp |
 
-## 7. Correcciones v0.3.1 (Protocolo, Carga de Red y Filtros de Máquinas)
+## 7. v0.3.1 Fixes (Protocol, Network Loading, and Machine Filters)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected result |
 |---|---|---|---|
-| F1.1 | Carga de dispositivos emparejados | Ajustes → Dispositivos emparejados | Carga la lista completa de dispositivos sin error (desenvuelve `devices` del objeto devuelto por el relay); marca el dispositivo actual con «(este)» y permite revocar otros dispositivos |
-| F1.2 | Filtrado de dispositivos revocados | Revocar un dispositivo o abrir con dispositivos revocados en el relay | Los dispositivos marcados con `revoked: true` se filtran automáticamente y no aparecen en la lista activa |
-| F1.3 | Carga de máquinas y prompts abiertos | Abrir la pantalla de Agentes y Pendientes tras reiniciar la app | Las máquinas y prompts abiertos cargan inmediatamente sin fallos de deserialización HTTP (desenvuelve `machines` y `prompts`) |
-| F2.1 | Carga de red para «Todas las máquinas» | Pestaña Mesh → Chip «Todas las máquinas» | `MeshSubscribe` envía `{"machineId":null}`; el relay 0.5.0 devuelve el snapshot de toda la red sin quedarse en «Cargando red de agentes…» |
-| F2.2 | Tiempo de espera y fallback HTTP en Mesh | Provocar retardo o corte en WebSocket en la pantalla de Mesh (10 s) | Tras 10 s sin snapshot por WS, la app realiza un fallback a `GET /v1/mesh`; si el relay responde, el mapa carga; si el relay devuelve 404, muestra «Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior.» con botón **[Reintentar]** |
-| F2.3 | Propiedad de suscripción ref-counted | Navegar rápidamente entre Mesh y otras pestañas, o abrir hojas de detalle y volver | La suscripción a Mesh no se cancela prematuramente por el desecho de ViewModels anteriores; el mapa permanece vivo |
-| F3.1 | Limpieza de filtros en Agentes | Abrir la pantalla principal de Agentes con múltiples máquinas o contextos | No aparece la fila redundante de chips («Todas / Empresa / Personal») debajo del selector; todos los contextos y máquinas permanecen accesibles exclusivamente desde el desplegable `MachineHeroDropdown` («Todas las máquinas», contextos y máquinas individuales) |
+| F1.1 | Load paired devices | Settings → Paired devices | Full list loads without errors (unwraps `devices` from the relay response); current device is marked `(este)` and other devices can be revoked |
+| F1.2 | Filter revoked devices | Revoke a device or open the app while the relay has revoked devices | Entries with `revoked: true` are filtered out of the active list |
+| F1.3 | Load machines and open prompts | After restarting the app, open Agents and Pending | Machines and open prompts load without HTTP deserialization errors (unwraps `machines` and `prompts`) |
+| F2.1 | Load all machines in Mesh | Mesh tab → `Todas las máquinas` chip | `MeshSubscribe` sends `{"machineId":null}`; relay 0.5.0 returns the full network snapshot instead of leaving `Cargando red de agentes…` on screen |
+| F2.2 | Mesh timeout and HTTP fallback | Delay or interrupt the Mesh websocket for 10 seconds | After 10 seconds without a websocket snapshot, app falls back to `GET /v1/mesh`. A successful relay response loads the map; a 404 shows `Tu relay no soporta la Red de agentes. Actualiza Rp-relay a la versión 0.5.0 o superior.` with **[Reintentar]** |
+| F2.3 | Reference-counted subscription ownership | Quickly switch between Mesh and other tabs, or open and dismiss detail sheets | Mesh subscription is not canceled prematurely when an older ViewModel is disposed; the map remains active |
+| F3.1 | Clean up Agents filters | Open the main Agents screen with multiple machines or contexts | No redundant `Todas / Empresa / Personal` chip row appears below the selector; contexts and machines remain accessible through `MachineHeroDropdown` (`Todas las máquinas`, contexts, and individual machines) |
 
-## 8. Correcciones v0.3.2 (Decodificación Tolerante de Red y Números Decimales)
+## 8. v0.3.2 Consolidation (Tolerant Network Decoding and Decimal Numbers)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected result |
 |---|---|---|---|
-| F4.1 | Subagente con timestamps decimales o tokens numéricos | Ejecutar subagentes en Pi cuyo plugin reporte `startedAt` con microsegundos (ej. `47725510.340108`) o tokens como número simple | El snapshot de la red decodifica sin errores; la pantalla de Mesh muestra el nodo y subagentes sin caer en pantalla de error |
-| F4.2 | Tolerancia ante subagente o nodo malformado | Enviar un snapshot con un subagente o nodo corrupto (ej. tipo inesperado en `turns`) junto a otros nodos válidos | La app omite únicamente el elemento corrupto registrando advertencia en log y renderiza los restantes nodos y subagentes válidos |
-| F4.3 | Manejo de snapshot raíz ilegible | Provocar payload no decodificable en el nivel superior (no es un objeto JSON) | La app transiciona limpiamente a `MeshErrorState` y permite reintentar |
+| F4.1 | Subagent decimal timestamps or numeric tokens | Run Pi subagents whose plugin reports `startedAt` with microseconds (for example, `47725510.340108`) or numeric tokens | Network snapshot decodes without errors; Mesh displays the node and subagents without entering an error screen |
+| F4.2 | Malformed subagent or node | Send a snapshot containing a corrupted subagent or node (for example, an unexpected type in `turns`) alongside valid nodes | Only the malformed item is skipped and logged as a warning; remaining valid nodes and subagents render |
+| F4.3 | Unreadable root snapshot | Supply an undecodable top-level payload (not a JSON object) | App transitions cleanly to `MeshErrorState` and allows retry |
 
-## 9. Consolidación v0.3.3 (Persistencia Room v3, Conversaciones y Grupos)
+## 9. v0.3.3 Consolidation (Room v3 Persistence, Conversations, and Groups)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected result |
 |---|---|---|---|
-| F5.1 | Migración Room 2→3 | Actualizar app desde v0.3.2 a v0.3.3 con agentes guardados en base de datos local | Los agentes conservan todos sus campos; las nuevas columnas (`theme`, `todoCompleted`, `todoTotal`, `activeTask`) se inicializan con valores por defecto sin pérdida de datos |
-| F5.2 | Apertura de conversación entre pares sin arista previa | En la pantalla Mesh, abrir la hoja de detalle de un nodo y pulsar «Ver conversación con X» | Se abre directamente la conversación entre ambos agentes sin requerir que exista una arista previa en el snapshot |
-| F5.3 | Filtrado de grupos por máquina | En la pantalla Mesh, seleccionar una máquina específica | La barra de chips de grupo muestra únicamente los grupos con miembros en esa máquina, seleccionando automáticamente el más activo |
+| F5.1 | Room 2→3 migration | Upgrade from v0.3.2 to v0.3.3 with saved agents | Agent fields are preserved; new columns (`theme`, `todoCompleted`, `todoTotal`, `activeTask`) receive defaults without data loss |
+| F5.2 | Open peer conversation without an existing edge | In Mesh, open a node detail sheet and tap `Ver conversación con X` | Opens the conversation directly between both agents without requiring an edge in the snapshot |
+| F5.3 | Filter groups by machine | Select a specific machine in Mesh | Group-chip row shows only groups with members on that machine and automatically selects the most active one |
 
-## 10. Soporte de Comandos /model y /thinking (v0.3.4)
+## 10. `/model` and `/thinking` Command Support (v0.3.4)
 
-| # | Caso | Pasos | Resultado esperado |
+| # | Case | Steps | Expected result |
 |---|---|---|---|
-| F6.1 | Sugerencia de comando `/thinking` | Escribir `/th` en el campo de texto del chat | Aparece el chip de sugerencia `/thinking`. Al pulsarlo, el texto se completa a `/thinking ` con espacio al final |
-| F6.2 | Chips de niveles de thinking | Escribir `/thinking ` o `/thinking` en el compositor | Se despliegan chips interactivos con todos los niveles soportados (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
-| F6.3 | Selección y filtrado de nivel de thinking | Pulsar el chip de un nivel (ej. `medium`) o escribir un prefijo (ej. `/thinking mi`) | El texto se reemplaza limpiamente por `/thinking medium` o se filtra a `minimal` respectivamente; las sugerencias se ocultan al completar el nivel |
-| F6.4 | Ejecución interactiva sin argumentos | Enviar `/model` o `/thinking` sin argumentos al agente | Rp-plugin dispara un diálogo interactivo de selección (`select`), que se despliega en la hoja inferior de prompts (`PromptBottomSheet`) permitiendo elegir opción de forma visual |
-
-
-
-
+| F6.1 | `/thinking` command suggestion | Type `/th` in the chat input | `/thinking` suggestion chip appears; tapping it completes the text to `/thinking ` with a trailing space |
+| F6.2 | Thinking-level chips | Type `/thinking ` or `/thinking` in the composer | Interactive chips appear for every supported level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
+| F6.3 | Select and filter a thinking level | Tap a level chip (for example, `medium`) or type a prefix (for example, `/thinking mi`) | Text is replaced with `/thinking medium` or suggestions filter to `minimal`; suggestions disappear after completing the level |
+| F6.4 | Interactive command without arguments | Send `/model` or `/thinking` without arguments | Rp-plugin opens an interactive `select` dialog in `PromptBottomSheet`, allowing visual selection |

@@ -51,7 +51,8 @@ import android.graphics.Path as AndroidPath
 /**
  * Renders the agent mesh topology strictly within its viewport (Specs S2, S3).
  * Below the header/filters, clipped to bounds, with auto-fit zoom, pan/zoom gestures,
- * interactive Agent Cards, Bezier edge connectors, and real-time comm particles.
+ * interactive Agent Cards, orthogonal bus connectors routed through row gaps,
+ * and particles that travel along the connector.
  */
 @Composable
 fun MeshCanvas(
@@ -80,7 +81,14 @@ fun MeshCanvas(
     val paint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val textPaint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val path = remember { AndroidPath() }
-    val allNodes = remember(layout) { layout?.nodes?.values?.map { it.node }.orEmpty() }
+    val allNodes =
+        remember(layout) {
+            layout
+                ?.nodes
+                ?.values
+                ?.map { it.node }
+                .orEmpty()
+        }
 
     val nowMs = System.currentTimeMillis()
     val activeEdgeExpiresAt =
@@ -153,7 +161,14 @@ fun MeshCanvas(
         }
 
         val bounds = currentLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
-        val canvasCardBounds = remember(currentLayout) { currentLayout?.nodes?.values?.map { it.bounds() }.orEmpty() }
+        val canvasCardBounds =
+            remember(currentLayout) {
+                currentLayout
+                    ?.nodes
+                    ?.values
+                    ?.map { it.bounds() }
+                    .orEmpty()
+            }
 
         // Fit-to-content scaling in DP space
         val padding = 20f

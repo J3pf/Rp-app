@@ -7,9 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
 
 ### Added
 - **Modern Agent Cards (Spec S2)**: Replaced bare circle nodes with rich agent cards featuring:
-  - Project initial avatar tinted with machine color.
+  - Avatar showing the first alphanumeric character of the display name in uppercase (or `A` if none), tinted with machine color.
   - Human display names and secondary context line (`machine · branch/model`).
-  - Role pill badges (`Orquestador`, `Subordinado`, `Subagente`, `Individual`).
+  - A role badge on the orchestrator card only; subordinate and solo-agent cards have no role badge. `Subagente` is a role label, and subagents render as attached chips on their parent card.
   - Status dot with live state label (`Trabajando`, `Inactivo`, `Desconectado`, etc.).
   - Single-line current activity preview (`node.activity` or `node.todos.current`).
   - TODO progress indicator showing completed and total tasks.
@@ -18,11 +18,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
   - Redesigned `MeshLayoutEngine` from radial rings to top-down hierarchical flow: Orchestrators at top, subordinates below.
   - Strict bounding-box collision avoidance ensuring cards never overlap for 1..12 agents.
   - Viewport-aware layout adapting dynamically to measured viewport width and height across 360dp, 411dp, landscape, and tablet screens.
-  - Viewport containment and clipping strictly below filters and above the live strip.
+  - Cards have a minimum readable width of 180dp; heights are measured at runtime with an estimate fallback.
+  - Auto-fit uses scale 1.0 in landscape viewports at least 600dp wide, otherwise fits when possible with a 0.65 scale floor. If the graph still exceeds the viewport, it is top-anchored with 16dp padding and can be reached by pan/zoom.
+  - In landscape layouts below 500dp height, `Máquinas` and `Grupos` filters share one horizontally scrolling row.
+  - Viewport clipping keeps the canvas below filters and above the live strip.
 - **Real-State Motion System (Spec S2)**:
   - Shimmering border glow and typing activity dots on working agents.
   - Animated spinners on running subagents.
-  - Comm particles and dashed Bezier curves for in-flight communications.
+  - Orthogonal bus connectors routed through row gaps; particles travel along the connector for in-flight communications, with dashed styling for pending asks. A quadratic curve is used only as a fallback for non-hierarchical edges.
   - Quiet idle state with no redundant frame redraw loops when no agents are active.
   - Full respect for `LocalReducedMotion` and system `ANIMATOR_DURATION_SCALE == 0`.
 - **Display Name Formatting & ID Sanitization (Spec S1)**:
@@ -34,6 +37,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
 - **Comprehensive Visual & Functional Tests (Spec S5)**:
   - Roborazzi screenshots covering 1 agent, 4 agents (Omarchy + Croma scenario), and 12 agents across themes (Cute, Sexy, Omarchy × Light/Dark) on 360dp, 411dp, and tablet viewports.
   - Pure layout engine unit tests asserting zero bounding-box overlaps and viewport containment.
+- **Localized Mesh Timestamps**: Conversation date/time formatting follows the device locale and time zone (for example, Spanish formatting on Spanish-language devices).
+- **Chat Code Highlighting**: Syntax highlighting runs asynchronously off the main thread and selects its dark-mode palette from the app theme surface luminance.
+- **Kotlin Formatting**: Added the ktlint Gradle plugin 14.2.0; `./gradlew ktlintCheck` verifies formatting.
+- **Deprecated API Migrations**: Migrated deprecated API usages across app and test code, including legacy `PaddingValues` and Accompanist APIs.
+- **Lint Configuration**: `OldTargetApi` is disabled because target SDK 36 is intentionally retained to avoid Android 17 behavior changes; `ObsoleteSdkInt` is disabled because `mipmap-anydpi-v26` is required by AGP for adaptive icon packaging.
+- **Notification Permission Guards**: `NotificationFactory.canNotify()` checks the Android 13+ notification permission and whether notifications are enabled before posting.
 
 ### Removed
 - Dead legacy circle drawing code in `MeshCanvas.kt` (`drawNode`, `drawTodos`, `wrapText`, `ellipsize`).

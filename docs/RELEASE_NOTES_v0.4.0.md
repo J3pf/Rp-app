@@ -7,10 +7,10 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 
 #### 1. Modern Agent Cards (Replacing Bare Circles)
 - Bare empty circles are replaced with comprehensive, interactive **Agent Cards**:
-  - **Project Initial Avatar**: Colored surface tinted with the machine's accent color.
+  - **Project Initial Avatar**: Colored surface tinted with the machine's accent color, showing the first alphanumeric character of the display name in uppercase (or `A` if there is none).
   - **Clean Display Name**: Human-friendly project or directory name without raw UUIDs or hashes.
   - **Secondary Context**: Machine name paired with the git branch or active model (e.g. `Omarchy · main` or `Croma · sonnet-3.5`).
-  - **Role Badge**: High-contrast pill labeling `Orquestador`, `Subordinado`, `Subagente`, or `Individual`.
+  - **Role Badge**: Only the orchestrator card displays a role badge. Subordinate and solo-agent cards have none; `Subagente` is a role label, and subagents render as attached chips on their parent card.
   - **Status & Real Activity**: Live status badge with typing indicator dots when working, plus single-line activity preview (`node.activity` or current TODO).
   - **TODO Progress Indicator**: Compact linear progress bar tracking completed vs total tasks.
   - **Attached Subagents**: Subagents shown as attached chips directly on their parent card with active execution spinners.
@@ -24,14 +24,15 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 
 #### 3. Viewport Containment & Auto-Fit Navigation
 - Canvas viewport is strictly contained and clipped below header controls and filter chips (`clipToBounds()`), eliminating any overlap with top buttons or bottom strips.
-- Default **fit-to-content** auto-scaling ensures the entire network fits on screen.
-- Smooth pinch-to-zoom (0.5x – 3.0x) and pan gestures allow effortless navigation, with double-tap to reset.
+- Auto-fit shows the complete network when possible: the scale is at least 0.65, and is 1.0 in landscape viewports at least 600dp wide. When the whole graph cannot fit at that scale, it is top-anchored with 16dp of padding; pan and zoom reach the rest.
+- Cards have a minimum readable width of 180dp. Their heights are measured at runtime, with an estimate used until measurement is available.
+- Smooth pinch-to-zoom (0.5x–3.0x) and pan gestures allow navigation, with double-tap to reset.
 
 #### 4. Real-State Motion System
 - Animations reflect **real state only**:
   - Working agent: animated border shimmer + typing activity indicator dots (rendered on render thread with zero recompositions).
   - Running subagent: active circular progress spinner.
-  - Comm in flight: particles riding along the exact drawn Bezier connector curves from border to border, accompanied by speech preview bubbles placed cleanly in the connector gap without covering cards.
+  - Comm in flight: orthogonal bus connectors routed through row gaps; particles travel along the connector from sender to receiver, accompanied by speech preview bubbles placed in the connector gap without covering cards. A quadratic curve is used only as a fallback for non-hierarchical edges.
   - Idle state: calm, static outline; canvas frame ticker stopped completely when no active comms or pending asks exist to preserve CPU and battery.
   - Offline state: muted, desaturated surface.
   - Full respect for system `ANIMATOR_DURATION_SCALE == 0` and `LocalReducedMotion`.
@@ -47,6 +48,15 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 
 ---
 
+## Additional v0.4.0 Improvements
+- In landscape layouts below 500dp height, the `Máquinas` and `Grupos` filters share one horizontally scrolling row.
+- Mesh conversation timestamps follow the device locale and time zone (for example, Spanish formatting on Spanish-language devices).
+- Chat code highlighting runs asynchronously off the main thread. Dark-mode syntax colors are selected from the app theme surface luminance, not the system theme.
+- Added the ktlint Gradle plugin 14.2.0; run `./gradlew ktlintCheck` to check formatting.
+- Migrated deprecated APIs across app and test code, including legacy `PaddingValues` and Accompanist API usages.
+- Lint disables `OldTargetApi` because target SDK 36 is intentionally retained to avoid Android 17 behavior changes, and `ObsoleteSdkInt` because `mipmap-anydpi-v26` is required by AGP for adaptive icon packaging.
+- `NotificationFactory.canNotify()` guards notification posting by checking the Android 13+ notification permission and whether notifications are enabled.
+
 ## Compatibility
 - Android 10+ (API 29+).
-- Fully compatible with Rp-relay >= 0.5.0, with forward compatibility for Rp-relay 0.5.3 display name sentinels.
+- Works with older relays (raw ids and the `Agent`/`Mesh Group` sentinels are sanitized client-side); best experience with Rp-relay v0.5.3.
