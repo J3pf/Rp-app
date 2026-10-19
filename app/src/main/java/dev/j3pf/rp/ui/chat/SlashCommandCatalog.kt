@@ -45,6 +45,7 @@ object SlashCommandCatalogs {
             launcherLabel = "Antigravity",
             commands =
                 listOf(
+                    "/usage",
                     "/goal",
                     "/plan",
                     "/compact",
@@ -54,12 +55,13 @@ object SlashCommandCatalogs {
                     "/teamwork-preview",
                     "/learn",
                     "/boost",
+                    "/statusline",
+                    "/model",
                     "/clear",
-                    "/status",
                     "/help",
                     "/quit",
                 ),
-            quickShortcuts = listOf("/goal", "/plan", "/compact", "/browser", "/schedule", "/status"),
+            quickShortcuts = listOf("/usage", "/goal", "/plan", "/compact", "/browser", "/schedule"),
             subSuggestions =
                 mapOf(
                     "/schedule" to listOf("timer", "cron", "cancel", "status"),

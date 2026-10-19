@@ -225,6 +225,36 @@ class SlashCommandSuggestionsTest {
     }
 
     @Test
+    fun `antigravity launcher suggests usage command and displays Antigravity label`() {
+        var currentText by mutableStateOf("/us")
+        val agyAgent = AgentSummary(agentId = "a1", machineId = "m1", launcher = "agy")
+
+        rule.setContent {
+            RpTheme {
+                Composer(
+                    ui = ChatUiState(agent = agyAgent),
+                    working = false,
+                    text = currentText,
+                    onText = { currentText = it },
+                    onChoice = {},
+                    onWorkingDelivery = {},
+                    onPicked = {},
+                    onRemoveAttachment = {},
+                    newCameraTarget = { Uri.EMPTY },
+                    onSend = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("⚡ Comando Antigravity (/)").assertIsDisplayed()
+        rule.onNodeWithText("/usage").assertIsDisplayed()
+        rule.onNodeWithText("/usage").performClick()
+        rule.waitForIdle()
+
+        assertEquals("/usage ", currentText)
+    }
+
+    @Test
     fun `claude launcher suggests review and compact commands`() {
         var currentText by mutableStateOf("/rev")
         val claudeAgent = AgentSummary(agentId = "a2", machineId = "m1", launcher = "claude")
