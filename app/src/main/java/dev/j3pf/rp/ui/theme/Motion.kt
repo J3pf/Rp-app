@@ -103,28 +103,28 @@ object RpMotion {
     // Transición para entrar en pantallas de detalle (Chat, Máquinas, Ajustes, etc.)
     val detailEnter: EnterTransition =
         slideInHorizontally(
-            initialOffsetX = { fullWidth -> (fullWidth * 0.28f).toInt() },
-            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-        ) + fadeIn(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            initialOffsetX = { fullWidth -> fullWidth },
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        )
 
     val detailExit: ExitTransition =
         slideOutHorizontally(
-            targetOffsetX = { fullWidth -> -(fullWidth * 0.12f).toInt() },
-            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-        ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing))
+            targetOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() },
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        )
 
     val detailPopEnter: EnterTransition =
         slideInHorizontally(
-            initialOffsetX = { fullWidth -> -(fullWidth * 0.12f).toInt() },
-            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-        ) + fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+            initialOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() },
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        )
 
-    // Al volver atrás, la pantalla actual se desliza por completo hacia la derecha de forma fluida
+    // Al volver atrás, la pantalla actual se desliza por completo hacia la derecha manteniendo opacidad física
     val detailPopExit: ExitTransition =
         slideOutHorizontally(
             targetOffsetX = { fullWidth -> fullWidth },
-            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-        ) + fadeOut(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        )
 
     // Aliases retrocompatibles
     val navEnter: EnterTransition = detailEnter

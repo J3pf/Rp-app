@@ -1,7 +1,14 @@
 package dev.j3pf.rp.ui.nav
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -169,7 +176,23 @@ fun RpRoot(
 
     CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
         Scaffold(
-            bottomBar = { if (showBar) BottomBar(nav, pendingCount) },
+            bottomBar = {
+                AnimatedVisibility(
+                    visible = showBar,
+                    enter =
+                        slideInVertically(
+                            initialOffsetY = { it },
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+                    exit =
+                        slideOutVertically(
+                            targetOffsetY = { it },
+                            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        ) + fadeOut(animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing)),
+                ) {
+                    BottomBar(nav, pendingCount)
+                }
+            },
         ) { padding ->
             NavHost(
                 navController = nav,
