@@ -75,7 +75,9 @@ fun HighlightedCode(
                             when (highlight) {
                                 is ColorHighlight -> {
                                     addStyle(
-                                        SpanStyle(color = Color(highlight.rgb)),
+                                        SpanStyle(
+                                            color = Color(0xFF000000.toInt() or (highlight.rgb and 0x00FFFFFF)),
+                                        ),
                                         highlight.location.start,
                                         highlight.location.end,
                                     )

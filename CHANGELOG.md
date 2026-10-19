@@ -40,7 +40,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
 - **Localized Mesh Timestamps**: Conversation date/time formatting follows the device locale and time zone (for example, Spanish formatting on Spanish-language devices).
 - **Chat Code Highlighting**: Syntax highlighting runs asynchronously off the main thread and selects its dark-mode palette from the app theme surface luminance.
 - **Kotlin Formatting**: Added the ktlint Gradle plugin 14.2.0; `./gradlew ktlintCheck` verifies formatting.
-- **Deprecated API Migrations**: Migrated deprecated API usages across app and test code, including legacy `PaddingValues` and Accompanist APIs.
+- **Deprecated API Migrations**: Migrated deprecated APIs across app and test code:
+  - `hiltViewModel()` to `androidx.hilt.lifecycle.viewmodel.compose`.
+  - `LocalClipboardManager` to `LocalClipboard`.
+  - Room `fallbackToDestructiveMigration(dropAllTables = true)`.
+  - Compose tests from `createComposeRule()` to `junit4.v2`.
+  - Tink keyset serialization/parsing from `CleartextKeysetHandle.read` to `TinkJsonProtoKeysetFormat.parseKeyset`.
 - **Lint Configuration**: `OldTargetApi` is disabled because target SDK 36 is intentionally retained to avoid Android 17 behavior changes; `ObsoleteSdkInt` is disabled because `mipmap-anydpi-v26` is required by AGP for adaptive icon packaging.
 - **Notification Permission Guards**: `NotificationFactory.canNotify()` checks the Android 13+ notification permission and whether notifications are enabled before posting.
 

@@ -69,6 +69,64 @@ class RpMarkdownTest {
     }
 
     @Test
+    fun `highlighted annotated string uses opaque colors for every colored span`() {
+        val code = "suspend fun answer() { return 42 }"
+        rule.setContent {
+            CompositionLocalProvider(LocalHighlightDispatcher provides Dispatchers.Unconfined) {
+                RpTheme {
+                    HighlightedCode(code, "kotlin", TextStyle.Default)
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        val annotatedCode =
+            rule
+                .onNodeWithText(code, substring = true)
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.Text]
+                .single()
+        val coloredSpans = annotatedCode.spanStyles.filter { it.item.color != Color.Unspecified }
+
+        assertTrue("Expected Kotlin syntax-highlighted spans", coloredSpans.isNotEmpty())
+        coloredSpans.forEach { span ->
+            assertEquals("Span ${span.start}..${span.end} should be opaque", 1f, span.item.color.alpha, 0f)
+        }
+    }
+
+    @Test
+    fun `Kotlin keywords render with opaque syntax colors in markdown`() {
+        val code = "suspend fun answer() {\n    return 42\n}"
+        rule.setContent {
+            CompositionLocalProvider(LocalHighlightDispatcher provides Dispatchers.Unconfined) {
+                RpTheme {
+                    RpMarkdown("```kotlin\n$code\n```")
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        val renderedCode =
+            rule
+                .onNodeWithText("suspend", substring = true)
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.Text]
+                .single()
+        listOf("suspend", "fun", "return").forEach { keyword ->
+            val keywordSpans =
+                renderedCode.spanStyles.filter { span ->
+                    renderedCode.text.substring(span.start, span.end) == keyword &&
+                        span.item.color != Color.Unspecified
+                }
+            assertTrue("Expected a colored span for '$keyword'", keywordSpans.isNotEmpty())
+            keywordSpans.forEach { span ->
+                assertEquals("'$keyword' should have an opaque color", 1f, span.item.color.alpha, 0f)
+                assertNotEquals("'$keyword' should not be transparent", Color.Transparent, span.item.color)
+            }
+        }
+    }
+
+    @Test
     fun `latest streamed code is displayed while its highlight work is pending`() {
         val currentCode = mutableStateOf("previous code")
         val latestCode = "latest streamed code"
@@ -142,6 +200,8 @@ class RpMarkdownTest {
                 .language(SyntaxLanguage.KOTLIN)
                 .build()
                 .getHighlights()
-        return highlights.filterIsInstance<ColorHighlight>().map { Color(it.rgb) }
+        return highlights
+            .filterIsInstance<ColorHighlight>()
+            .map { Color(0xFF000000.toInt() or (it.rgb and 0x00FFFFFF)) }
     }
 }

@@ -53,7 +53,12 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 - Mesh conversation timestamps follow the device locale and time zone (for example, Spanish formatting on Spanish-language devices).
 - Chat code highlighting runs asynchronously off the main thread. Dark-mode syntax colors are selected from the app theme surface luminance, not the system theme.
 - Added the ktlint Gradle plugin 14.2.0; run `./gradlew ktlintCheck` to check formatting.
-- Migrated deprecated APIs across app and test code, including legacy `PaddingValues` and Accompanist API usages.
+- Migrated deprecated APIs across app and test code:
+  - `hiltViewModel()` to `androidx.hilt.lifecycle.viewmodel.compose`.
+  - `LocalClipboardManager` to `LocalClipboard`.
+  - Room `fallbackToDestructiveMigration(dropAllTables = true)`.
+  - Compose tests from `createComposeRule()` to `junit4.v2`.
+  - Tink keyset serialization/parsing from `CleartextKeysetHandle.read` to `TinkJsonProtoKeysetFormat.parseKeyset`.
 - Lint disables `OldTargetApi` because target SDK 36 is intentionally retained to avoid Android 17 behavior changes, and `ObsoleteSdkInt` because `mipmap-anydpi-v26` is required by AGP for adaptive icon packaging.
 - `NotificationFactory.canNotify()` guards notification posting by checking the Android 13+ notification permission and whether notifications are enabled.
 
