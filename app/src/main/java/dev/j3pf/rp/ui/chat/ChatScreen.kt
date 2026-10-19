@@ -635,15 +635,15 @@ internal fun MessageList(
 
     val itemSpacing =
         when (ui.chatMessageSpacing) {
-            "compact" -> 4.dp
-            "spacious" -> 20.dp
-            else -> 10.dp
+            "compact" -> 2.dp
+            "spacious" -> 10.dp
+            else -> 4.dp
         }
     val verticalListPadding =
         when (ui.chatMessageSpacing) {
-            "compact" -> 6.dp
-            "spacious" -> 18.dp
-            else -> 10.dp
+            "compact" -> 3.dp
+            "spacious" -> 10.dp
+            else -> 6.dp
         }
 
     Box(modifier = modifier.fillMaxWidth()) {

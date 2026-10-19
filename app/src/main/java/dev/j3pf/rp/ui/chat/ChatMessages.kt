@@ -3,6 +3,7 @@ package dev.j3pf.rp.ui.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -74,7 +76,7 @@ fun ChatItemView(
         is UserMsg -> UserBubble(item, spacingMode)
         is AssistantMsg -> AssistantBubble(item, tools, spacingMode)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
-        is SystemNote -> SystemNoteView(item)
+        is SystemNote -> SystemNoteView(item, spacingMode)
         is SubagentCardItem -> SubagentCard(item.info)
     }
 }
@@ -86,21 +88,21 @@ private fun UserBubble(
 ) {
     val hPad =
         when (spacingMode) {
-            "compact" -> 10.dp
-            "spacious" -> 18.dp
-            else -> 14.dp
+            "compact" -> 8.dp
+            "spacious" -> 14.dp
+            else -> 10.dp
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 6.dp
-            "spacious" -> 14.dp
-            else -> 9.dp
+            "compact" -> 4.dp
+            "spacious" -> 9.dp
+            else -> 6.dp
         }
     val textLineHeight =
         when (spacingMode) {
-            "compact" -> 19.sp
-            "spacious" -> 24.sp
-            else -> 21.sp
+            "compact" -> 17.sp
+            "spacious" -> 21.sp
+            else -> 19.sp
         }
     Row(Modifier.fillMaxWidth().padding(start = 40.dp), horizontalArrangement = Arrangement.End) {
         Surface(
@@ -157,21 +159,21 @@ private fun AssistantBubble(
 ) {
     val blockSpacing =
         when (spacingMode) {
-            "compact" -> 4.dp
-            "spacious" -> 14.dp
-            else -> 8.dp
+            "compact" -> 2.dp
+            "spacious" -> 8.dp
+            else -> 4.dp
         }
     val hPad =
         when (spacingMode) {
-            "compact" -> 10.dp
-            "spacious" -> 18.dp
-            else -> 14.dp
+            "compact" -> 8.dp
+            "spacious" -> 14.dp
+            else -> 10.dp
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 6.dp
-            "spacious" -> 14.dp
-            else -> 9.dp
+            "compact" -> 4.dp
+            "spacious" -> 9.dp
+            else -> 6.dp
         }
     Column(Modifier.fillMaxWidth().padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
         m.blocks.forEachIndexed { i, b ->
@@ -191,7 +193,7 @@ private fun AssistantBubble(
                 }
 
                 is Block.Thinking -> {
-                    if (b.text.isNotBlank()) ThinkingBlock(b.text, key = "${m.key}-$i")
+                    if (b.text.isNotBlank()) ThinkingBlock(b.text, key = "${m.key}-$i", spacingMode = spacingMode)
                 }
 
                 is Block.ToolCall -> {
@@ -207,7 +209,7 @@ private fun AssistantBubble(
                     if (sub != null) {
                         SubagentCard(sub)
                     } else {
-                        ToolCard(run)
+                        ToolCard(run, spacingMode = spacingMode)
                     }
                 }
             }
@@ -228,17 +230,36 @@ private fun AssistantBubble(
 private fun ThinkingBlock(
     text: String,
     key: String,
+    spacingMode: String = "normal",
 ) {
     var open by rememberSaveable(key) { mutableStateOf(false) }
+    val minH =
+        when (spacingMode) {
+            "compact" -> 28.dp
+            "spacious" -> 44.dp
+            else -> 36.dp
+        }
+    val hPad =
+        when (spacingMode) {
+            "compact" -> 10.dp
+            "spacious" -> 14.dp
+            else -> 12.dp
+        }
+    val vPad =
+        when (spacingMode) {
+            "compact" -> 5.dp
+            "spacious" -> 10.dp
+            else -> 7.dp
+        }
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RpShapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         tonalElevation = 1.dp,
-        modifier = Modifier.heightIn(min = 48.dp),
+        modifier = Modifier.heightIn(min = minH),
         onClick = { open = !open },
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
             Text(
                 if (open) "Razonamiento ▾" else "Razonamiento ▸",
                 style = MaterialTheme.typography.labelMedium,
@@ -260,17 +281,32 @@ private fun ThinkingBlock(
 
 /** Llamada a herramienta plegable: bash muestra el comando, edit muestra el diff, resultado truncado con "ver más". */
 @Composable
-fun ToolCard(run: ToolRun) {
+fun ToolCard(
+    run: ToolRun,
+    spacingMode: String = "normal",
+) {
     val (open, setOpen) = rememberSaveable(run.toolCallId) { mutableStateOf(false) }
     val (more, setMore) = rememberSaveable(run.toolCallId + "m") { mutableStateOf(false) }
     val summary = remember(run.name, run.args) { run.summary() }
+    val hPad =
+        when (spacingMode) {
+            "compact" -> 10.dp
+            "spacious" -> 14.dp
+            else -> 12.dp
+        }
+    val vPad =
+        when (spacingMode) {
+            "compact" -> 5.dp
+            "spacious" -> 10.dp
+            else -> 7.dp
+        }
     SurfaceCard(
         onClick = { setOpen(!open) },
         shape = RpShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (run.status) {
                     ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -415,14 +451,43 @@ private fun PromptCardView(
 }
 
 @Composable
-private fun SystemNoteView(n: SystemNote) {
-    var open by rememberSaveable(n.key) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        TextButton(onClick = { if (n.detail != null) open = !open }, enabled = n.detail != null) {
-            Text("• ${n.text}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+private fun SystemNoteView(
+    n: SystemNote,
+    spacingMode: String = "normal",
+) {
+    val vPad =
+        when (spacingMode) {
+            "compact" -> 1.dp
+            "spacious" -> 4.dp
+            else -> 2.dp
         }
-        AnimatedVisibility(open && n.detail != null) {
-            Mono(n.detail.orEmpty(), maxHeight = 240)
+    var open by rememberSaveable(n.key) { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = vPad),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (n.detail != null) {
+            Surface(
+                color = Color.Transparent,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { open = !open },
+            ) {
+                Text(
+                    "• ${n.text}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+            AnimatedVisibility(open) {
+                Mono(n.detail.orEmpty(), maxHeight = 240)
+            }
+        } else {
+            Text(
+                "• ${n.text}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            )
         }
     }
 }

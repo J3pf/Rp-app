@@ -162,28 +162,28 @@ fun RpMarkdown(
         )
     val bodyLineHeight =
         when (spacingMode) {
-            "compact" -> 19.sp
-            "spacious" -> 24.sp
-            else -> 21.sp
+            "compact" -> 17.sp
+            "spacious" -> 21.sp
+            else -> 19.sp
         }
     val baseBody = MaterialTheme.typography.bodyMedium.copy(lineHeight = bodyLineHeight)
     val blockPadding =
         when (spacingMode) {
-            "compact" -> 2.dp
-            "spacious" -> 6.dp
-            else -> 3.dp
+            "compact" -> 0.5.dp
+            "spacious" -> 3.dp
+            else -> 2.dp
         }
     val listPadding =
         when (spacingMode) {
-            "compact" -> 1.dp
-            "spacious" -> 4.dp
-            else -> 2.dp
+            "compact" -> 0.dp
+            "spacious" -> 2.dp
+            else -> 1.dp
         }
     val listItemPadding =
         when (spacingMode) {
-            "compact" -> 1.dp
-            "spacious" -> 3.dp
-            else -> 1.5.dp
+            "compact" -> 0.dp
+            "spacious" -> 1.5.dp
+            else -> 1.dp
         }
 
     Markdown(
@@ -203,15 +203,15 @@ fun RpMarkdown(
                         fontWeight = FontWeight.Bold,
                         fontSize =
                             when (spacingMode) {
-                                "compact" -> 17.sp
-                                "spacious" -> 19.sp
-                                else -> 18.sp
+                                "compact" -> 15.sp
+                                "spacious" -> 18.sp
+                                else -> 17.sp
                             },
                         lineHeight =
                             when (spacingMode) {
-                                "compact" -> 21.sp
-                                "spacious" -> 24.sp
-                                else -> 22.sp
+                                "compact" -> 18.sp
+                                "spacious" -> 22.sp
+                                else -> 21.sp
                             },
                     ),
                 h2 =
@@ -219,15 +219,15 @@ fun RpMarkdown(
                         fontWeight = FontWeight.Bold,
                         fontSize =
                             when (spacingMode) {
-                                "compact" -> 16.sp
-                                "spacious" -> 17.sp
-                                else -> 16.sp
+                                "compact" -> 14.sp
+                                "spacious" -> 16.sp
+                                else -> 15.5.sp
                             },
                         lineHeight =
                             when (spacingMode) {
-                                "compact" -> 20.sp
-                                "spacious" -> 22.sp
-                                else -> 20.sp
+                                "compact" -> 17.sp
+                                "spacious" -> 20.sp
+                                else -> 19.sp
                             },
                     ),
                 h3 =
@@ -235,26 +235,26 @@ fun RpMarkdown(
                         fontWeight = FontWeight.SemiBold,
                         fontSize =
                             when (spacingMode) {
-                                "compact" -> 15.sp
-                                "spacious" -> 16.sp
-                                else -> 15.sp
+                                "compact" -> 13.5.sp
+                                "spacious" -> 15.sp
+                                else -> 14.5.sp
                             },
                         lineHeight =
                             when (spacingMode) {
-                                "compact" -> 19.sp
-                                "spacious" -> 21.sp
-                                else -> 19.sp
+                                "compact" -> 16.sp
+                                "spacious" -> 19.sp
+                                else -> 18.sp
                             },
                     ),
                 h4 =
                     MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         lineHeight =
                             when (spacingMode) {
-                                "compact" -> 18.sp
-                                "spacious" -> 20.sp
-                                else -> 18.sp
+                                "compact" -> 15.sp
+                                "spacious" -> 18.sp
+                                else -> 17.sp
                             },
                     ),
                 h5 =
