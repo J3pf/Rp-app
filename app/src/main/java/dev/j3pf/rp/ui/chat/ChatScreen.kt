@@ -437,11 +437,28 @@ internal fun MessageList(
     if (items.isEmpty()) {
         Column(
             modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Sin mensajes todavía", style = MaterialTheme.typography.titleMedium)
-            Text("Escribe abajo para hablar con este agente.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (
+                ui.syncingHistory ||
+                ui.refreshing ||
+                ui.conn is dev.j3pf.rp.data.net.ConnState.Connecting
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    strokeWidth = 3.dp,
+                )
+                Text("Sincronizando historial…", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Descargando los mensajes recientes de la sesión.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                Text("Sin mensajes todavía", style = MaterialTheme.typography.titleMedium)
+                Text("Escribe abajo para hablar con este agente.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         return
     }

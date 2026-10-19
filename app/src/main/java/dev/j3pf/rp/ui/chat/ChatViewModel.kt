@@ -55,6 +55,7 @@ data class ChatUiState(
     val workingDelivery: String = Delivery.FOLLOW_UP,
     val sending: Boolean = false,
     val refreshing: Boolean = false,
+    val syncingHistory: Boolean = false,
     /** Notificaciones de este agente silenciadas (preferencia local). */
     val muted: Boolean = false,
     /** Última entrega interactiva falló por indisponibilidad → ofrecer "Pasar a Normal". */
@@ -87,12 +88,20 @@ class ChatViewModel
 
         val state: StateFlow<ChatUiState> =
             combine(
-                session.state,
+                combine(session.state, session.syncing, ::Pair),
                 agentsRepo.observe(agentId),
                 connection.state,
                 extra,
                 settingsRepo.settings,
-            ) { chat, agent, conn, e, st -> e.copy(chat = chat, agent = agent, conn = conn, muted = agentId in st.mutedAgents) }
+            ) { (chat, syncing), agent, conn, e, st ->
+                e.copy(
+                    chat = chat,
+                    syncingHistory = syncing,
+                    agent = agent,
+                    conn = conn,
+                    muted = agentId in st.mutedAgents,
+                )
+            }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
         fun setChoice(c: DeliveryChoice) = extra.update { it.copy(choice = c) }

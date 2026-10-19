@@ -566,7 +566,12 @@ fun AgentCard(
                         color = if (a.todoCompleted == a.todoTotal) RpColors.success else MaterialTheme.colorScheme.primary,
                     )
                 }
-                a.launcher?.let { TagChip(it) }
+                a.launcher?.let { launcher ->
+                    TagChip(
+                        text = if (launcher == "agy") "✦ agy" else launcher,
+                        color = if (launcher == "agy") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+                    )
+                }
                 a.herdr?.let { h ->
                     val loc =
                         listOfNotNull(

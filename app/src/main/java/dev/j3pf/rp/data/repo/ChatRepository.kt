@@ -141,6 +141,8 @@ class ChatRepository
         ) {
             private val _state = MutableStateFlow(ChatState())
             val state: StateFlow<ChatState> = _state.asStateFlow()
+            private val _syncing = MutableStateFlow(true)
+            val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
             private var job: Job? = null
             private var persisted = 0
 
@@ -183,11 +185,13 @@ class ChatRepository
                 }
                 // Los deltas no se persisten, así que los huecos de seq son esperables aquí.
                 _state.value = s.copy(needsResync = false, working = false, streaming = null)
+                if (s.items.isNotEmpty()) _syncing.value = false
             }
 
             /** `agent.subscribe{sinceSeq, epoch}`: el relay responde con `agent.history` y sigue con eventos en vivo. */
             suspend fun subscribe() {
                 val st = _state.value
+                if (st.items.isEmpty()) _syncing.value = true
                 val req =
                     Envelope.of(
                         MsgType.AGENT_SUBSCRIBE,
@@ -197,14 +201,24 @@ class ChatRepository
                 var attempts = 0
                 while (attempts < 3) {
                     when (connection.request(req)) {
-                        is WsReply.Ok -> return
-                        is WsReply.Error -> return // p. ej. not_found: nada que reintentar
+                        is WsReply.Ok -> {
+                            scope.launch {
+                                delay(6_000L)
+                                _syncing.value = false
+                            }
+                            return
+                        }
+                        is WsReply.Error -> {
+                            _syncing.value = false
+                            return // p. ej. not_found: nada que reintentar
+                        }
                         else -> {
                             attempts++
                             delay(1500L * attempts)
                         }
                     }
                 }
+                _syncing.value = false
             }
 
             private suspend fun onMessage(env: Envelope) {
@@ -214,6 +228,7 @@ class ChatRepository
                         val h = runCatching { env.body<AgentHistory>() }.getOrNull() ?: return
                         val epochChanged = h.epoch != null && h.epoch != _state.value.epoch
                         _state.update { ChatReducer.applyHistory(it, h, System.currentTimeMillis()) }
+                        _syncing.value = false
                         persistHistory(h, epochChanged)
                     }
                     MsgType.AGENT_EVENT -> {
@@ -222,6 +237,7 @@ class ChatRepository
                         val before = _state.value
                         val after = ChatReducer.reduce(before, ev, System.currentTimeMillis())
                         _state.value = after
+                        if (after.items.isNotEmpty()) _syncing.value = false
                         if (after.lastSeq != before.lastSeq && ev.e.str("type") in PERSISTED_EVENTS) persistEvent(ev)
                         if (after.needsResync && !before.needsResync) scope.launch { subscribe() }
                     }
