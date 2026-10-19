@@ -18,6 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
   - Redesigned `MeshLayoutEngine` from radial rings to top-down hierarchical flow: Orchestrators at top, subordinates below.
   - Strict bounding-box collision avoidance ensuring cards never overlap for 1..12 agents.
   - Viewport-aware layout adapting dynamically to measured viewport width and height across 360dp, 411dp, landscape, and tablet screens.
+  - Mesh viewport recomputation is skipped when the size is unchanged (contributed by Luis Eduardo Chacón Wilches); changed measured card heights still trigger recomputation.
   - Cards have a minimum readable width of 180dp; heights are measured at runtime with an estimate fallback.
   - Auto-fit uses scale 1.0 in landscape viewports at least 600dp wide, otherwise fits when possible with a 0.65 scale floor. If the graph still exceeds the viewport, it is top-anchored with 16dp padding and can be reached by pan/zoom.
   - In landscape layouts below 500dp height, `Máquinas` and `Grupos` filters share one horizontally scrolling row.

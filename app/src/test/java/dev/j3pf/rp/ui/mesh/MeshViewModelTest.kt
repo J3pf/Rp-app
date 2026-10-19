@@ -50,6 +50,8 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -224,6 +226,28 @@ class MeshViewModelTest {
             assertEquals("", state.groupChips.last().label)
             assertEquals("g2", state.selectedGroupId)
             assertTrue(state.groupChips.last().isSolo)
+        }
+    }
+
+    @Test
+    fun `measured card height changes recompute layout when viewport is unchanged`() {
+        runBlocking {
+            publish()
+            val width = 411f
+            val height = 750f
+            viewModel.onViewportSizeChanged(width, height)
+            val initialLayout = assertNotNull(viewModel.uiState.value.layoutResult)
+
+            val cardHeights = mapOf("c" to 180f, "d" to 220f)
+            viewModel.onViewportSizeChanged(width, height, cardHeights)
+
+            val updatedLayout = assertNotNull(viewModel.uiState.value.layoutResult)
+            assertNotSame(initialLayout, updatedLayout)
+            assertEquals(180f, updatedLayout.nodes.getValue("c").height)
+            assertEquals(220f, updatedLayout.nodes.getValue("d").height)
+
+            viewModel.onViewportSizeChanged(width, height, cardHeights)
+            assertSame(updatedLayout, viewModel.uiState.value.layoutResult)
         }
     }
 

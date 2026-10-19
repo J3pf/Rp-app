@@ -43,6 +43,7 @@ class MeshViewModel
         private var lastSubscribedMachineId: String? = null
         private var viewportWidth = DEFAULT_VIEWPORT_SIZE
         private var viewportHeight = DEFAULT_VIEWPORT_SIZE
+        private var measuredCardHeights: Map<String, Float> = emptyMap()
         private var nodeCommsJob: Job? = null
         private var conversationJob: Job? = null
 
@@ -223,12 +224,29 @@ class MeshViewModel
             width: Float,
             height: Float,
         ) {
+            onViewportSizeChanged(width, height, measuredCardHeights)
+        }
+
+        fun onViewportSizeChanged(
+            width: Float,
+            height: Float,
+            cardHeights: Map<String, Float>,
+        ) {
             val newWidth = width.coerceAtLeast(1f)
             val newHeight = height.coerceAtLeast(1f)
-            if (newWidth == viewportWidth && newHeight == viewportHeight && _uiState.value.layoutResult != null) return
+            val newCardHeights = cardHeights.toMap()
+            val viewportUnchanged = newWidth == viewportWidth && newHeight == viewportHeight
+            val cardHeightsUnchanged = newCardHeights == measuredCardHeights
+            if (viewportUnchanged && cardHeightsUnchanged && _uiState.value.layoutResult != null) return
+
             viewportWidth = newWidth
             viewportHeight = newHeight
-            _uiState.update { it.withLayout(layoutEngine, viewportWidth, viewportHeight) }
+            measuredCardHeights = newCardHeights
+            _uiState.update { it.withLayout(layoutEngine, viewportWidth, viewportHeight, measuredCardHeights) }
+        }
+
+        fun onCardHeightsChanged(heights: Map<String, Float>) {
+            onViewportSizeChanged(viewportWidth, viewportHeight, heights)
         }
 
         private fun applyInputs(inputs: Inputs) {
@@ -463,6 +481,7 @@ class MeshViewModel
             layoutEngine: MeshLayoutEngine,
             width: Float,
             height: Float,
+            cardHeights: Map<String, Float> = measuredCardHeights,
         ): MeshUiState {
             val mesh = snapshot ?: return copy(layoutResult = null)
             val selectedGroupMembers =
@@ -488,7 +507,15 @@ class MeshViewModel
                 }
             val visibleIds = filteredNodes.mapTo(mutableSetOf()) { it.agentId }
             val filteredEdges = mesh.edges.filter { it.a in visibleIds && it.b in visibleIds }
-            val layout = layoutEngine.computeLayout(filteredNodes, filteredEdges, width, height, layoutResult)
+            val layout =
+                layoutEngine.computeLayout(
+                    filteredNodes,
+                    filteredEdges,
+                    width,
+                    height,
+                    layoutResult,
+                    cardHeights,
+                )
             return copy(layoutResult = layout)
         }
 

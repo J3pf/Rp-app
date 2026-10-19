@@ -21,6 +21,7 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
   - Subordinates are arranged in balanced horizontal rows below their orchestrator.
   - Mathematical bounding-box collision avoidance guarantees zero overlaps for 1..12 agents.
   - Viewport-aware layout adapts dynamically to measured viewport width and height across 360dp, 411dp, landscape, and tablet screens.
+- Mesh viewport recomputation is skipped when the size is unchanged (contributed by Luis Eduardo Chacón Wilches); changed measured card heights still trigger recomputation.
 
 #### 3. Viewport Containment & Auto-Fit Navigation
 - Canvas viewport is strictly contained and clipped below header controls and filter chips (`clipToBounds()`), eliminating any overlap with top buttons or bottom strips.

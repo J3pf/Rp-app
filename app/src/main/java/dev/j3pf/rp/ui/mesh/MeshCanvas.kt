@@ -121,7 +121,11 @@ fun MeshCanvas(
         }
     }
 
-    val dashIntervals = remember { floatArrayOf(6f, 6f) }
+    val dashEffects =
+        remember {
+            val intervals = floatArrayOf(15f, 15f)
+            Array(30) { phase -> DashPathEffect(intervals, phase.toFloat()) }
+        }
     val bubblesByEdge =
         remember(activeBubbles, layout) {
             val nodes = layout?.nodes.orEmpty()
@@ -305,8 +309,8 @@ fun MeshCanvas(
                     val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
                     paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f).toArgb()
                     if (edge.pendingAsk) {
-                        val phase = if (reducedMotion) 0f else (currentTimeMs / 55f % 30f)
-                        paint.pathEffect = DashPathEffect(dashIntervals, phase)
+                        val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
+                        paint.pathEffect = dashEffects[phaseIdx]
                     }
                     nativeCanvas.drawPath(path, paint)
                     paint.pathEffect = null
