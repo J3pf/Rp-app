@@ -659,8 +659,20 @@ internal fun MessageList(
             ) {
                 if (isAgentWorking) {
                     item(key = "working-indicator", contentType = "WorkingIndicator") {
+                        val indHPad =
+                            when (ui.chatMessageSpacing) {
+                                "compact" -> 8.dp
+                                "spacious" -> 14.dp
+                                else -> 10.dp
+                            }
+                        val indVPad =
+                            when (ui.chatMessageSpacing) {
+                                "compact" -> 4.dp
+                                "spacious" -> 9.dp
+                                else -> 6.dp
+                            }
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -670,9 +682,9 @@ internal fun MessageList(
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = indHPad, vertical = indVPad),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),

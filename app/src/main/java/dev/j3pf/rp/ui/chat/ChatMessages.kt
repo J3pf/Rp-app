@@ -233,12 +233,6 @@ private fun ThinkingBlock(
     spacingMode: String = "normal",
 ) {
     var open by rememberSaveable(key) { mutableStateOf(false) }
-    val minH =
-        when (spacingMode) {
-            "compact" -> 28.dp
-            "spacious" -> 44.dp
-            else -> 36.dp
-        }
     val hPad =
         when (spacingMode) {
             "compact" -> 10.dp
@@ -247,16 +241,14 @@ private fun ThinkingBlock(
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 5.dp
-            "spacious" -> 10.dp
-            else -> 7.dp
+            "compact" -> 4.dp
+            "spacious" -> 8.dp
+            else -> 6.dp
         }
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RpShapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        tonalElevation = 1.dp,
-        modifier = Modifier.heightIn(min = minH),
+        tonalElevation = 0.dp,
         onClick = { open = !open },
     ) {
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
@@ -296,9 +288,9 @@ fun ToolCard(
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 5.dp
-            "spacious" -> 10.dp
-            else -> 7.dp
+            "compact" -> 4.dp
+            "spacious" -> 8.dp
+            else -> 6.dp
         }
     SurfaceCard(
         onClick = { setOpen(!open) },
@@ -455,15 +447,9 @@ private fun SystemNoteView(
     n: SystemNote,
     spacingMode: String = "normal",
 ) {
-    val vPad =
-        when (spacingMode) {
-            "compact" -> 1.dp
-            "spacious" -> 4.dp
-            else -> 2.dp
-        }
     var open by rememberSaveable(n.key) { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxWidth().padding(vertical = vPad),
+        Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (n.detail != null) {
@@ -475,7 +461,7 @@ private fun SystemNoteView(
                     "• ${n.text}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
                 )
             }
             AnimatedVisibility(open) {
@@ -486,7 +472,7 @@ private fun SystemNoteView(
                 "• ${n.text}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
             )
         }
     }
@@ -499,7 +485,7 @@ fun SubagentCard(info: SubagentInfo) {
     val (openResult, setOpenResult) = rememberSaveable(info.taskId + "-res") { mutableStateOf(false) }
 
     SurfaceCard(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 1.dp,
