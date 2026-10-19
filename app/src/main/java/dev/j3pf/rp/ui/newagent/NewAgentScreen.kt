@@ -78,8 +78,14 @@ fun NewAgentContent(
     val scope = rememberCoroutineScope()
 
     Scaffold(
+        contentWindowInsets =
+            androidx.compose.foundation.layout
+                .WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets =
+                    androidx.compose.foundation.layout
+                        .WindowInsets(0, 0, 0, 0),
                 title = { Text("Nuevo agente") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
             )

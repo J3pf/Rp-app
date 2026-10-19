@@ -93,6 +93,13 @@ interface AgentDao {
         deleteNotIn(relayId, keep)
     }
 
+    @Query("UPDATE agents SET lastSeenAt = :now WHERE relayId = :relayId AND agentId = :agentId")
+    suspend fun touch(
+        relayId: String,
+        agentId: String,
+        now: Long,
+    )
+
     @Query("DELETE FROM agents WHERE relayId = :relayId")
     suspend fun clear(relayId: String)
 }

@@ -358,8 +358,14 @@ private fun SubScreen(
         }
     }
     Scaffold(
+        contentWindowInsets =
+            androidx.compose.foundation.layout
+                .WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets =
+                    androidx.compose.foundation.layout
+                        .WindowInsets(0, 0, 0, 0),
                 title = { Text(title) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
             )
@@ -383,8 +389,14 @@ fun DevicesContent(
 ) {
     var toRevoke by remember { mutableStateOf<String?>(null) }
     Scaffold(
+        contentWindowInsets =
+            androidx.compose.foundation.layout
+                .WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets =
+                    androidx.compose.foundation.layout
+                        .WindowInsets(0, 0, 0, 0),
                 title = { Text("Dispositivos") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
             )

@@ -26,10 +26,11 @@ data class MachineGroup(
     val agents: List<AgentSummary>,
 )
 
-/** Ordena agentes dentro de una máquina: prompts primero, working segundo, lastSeenAt más reciente después. */
+/** Ordena agentes dentro de una máquina: prompts abiertos primero, en línea antes que offline, working segundo, lastSeenAt más reciente después. */
 fun sortAgentsWithinGroup(agents: List<AgentSummary>): List<AgentSummary> =
     agents.sortedWith(
         compareByDescending<AgentSummary> { it.openPromptCount > 0 }
+            .thenByDescending { it.online }
             .thenByDescending { it.status == "working" }
             .thenByDescending { it.lastSeenAt ?: 0L },
     )

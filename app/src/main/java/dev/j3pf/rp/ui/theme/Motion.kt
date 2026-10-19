@@ -93,28 +93,34 @@ object RpMotion {
         defaultSpec: AnimationSpec<T>,
     ): AnimationSpec<T> = if (reducedMotion) snap() else defaultSpec
 
-    // Transiciones de navegación elegantes entre pantallas
+    // Transiciones de navegación sincronizadas estilo Material 3 (sin saltos al volver atrás)
+    private val navSlideIntSpec =
+        tween<IntOffset>(
+            durationMillis = 250,
+            easing = FastOutSlowInEasing,
+        )
+
     val navEnter: EnterTransition =
         slideInHorizontally(
-            initialOffsetX = { fullWidth -> (fullWidth * 0.12f).toInt() },
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        ) + fadeIn(animationSpec = tween(durationMillis = 240))
+            initialOffsetX = { fullWidth -> (fullWidth * 0.14f).toInt() },
+            animationSpec = navSlideIntSpec,
+        ) + fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
 
     val navExit: ExitTransition =
         slideOutHorizontally(
-            targetOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() },
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        ) + fadeOut(animationSpec = tween(durationMillis = 180))
+            targetOffsetX = { fullWidth -> -(fullWidth * 0.06f).toInt() },
+            animationSpec = navSlideIntSpec,
+        ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing))
 
     val navPopEnter: EnterTransition =
         slideInHorizontally(
-            initialOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() },
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        ) + fadeIn(animationSpec = tween(durationMillis = 240))
+            initialOffsetX = { fullWidth -> -(fullWidth * 0.06f).toInt() },
+            animationSpec = navSlideIntSpec,
+        ) + fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
 
     val navPopExit: ExitTransition =
         slideOutHorizontally(
-            targetOffsetX = { fullWidth -> (fullWidth * 0.12f).toInt() },
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        ) + fadeOut(animationSpec = tween(durationMillis = 180))
+            targetOffsetX = { fullWidth -> (fullWidth * 0.14f).toInt() },
+            animationSpec = navSlideIntSpec,
+        ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing))
 }

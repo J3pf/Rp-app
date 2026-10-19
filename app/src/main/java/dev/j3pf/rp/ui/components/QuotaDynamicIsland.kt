@@ -135,40 +135,43 @@ private fun QuotaMachinePill(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 2.dp,
-        shadowElevation = 6.dp,
+        shadowElevation = 4.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.padding(horizontal = 4.dp),
             ) {
                 Box(
                     Modifier
-                        .size(8.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
                         .background(parseColor(machine.color)),
                 )
                 Text(
                     text = machine.name,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.height(9.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                quotas.forEach { quota ->
-                    QuotaProviderPill(quota = quota, onClick = { onQuotaClick(quota) })
-                }
+            quotas.forEach { quota ->
+                QuotaProviderPill(quota = quota, onClick = { onQuotaClick(quota) })
             }
         }
     }

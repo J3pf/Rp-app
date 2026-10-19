@@ -5,6 +5,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -167,7 +168,7 @@ fun RpRoot(
             NavHost(
                 navController = nav,
                 startDestination = start,
-                modifier = Modifier.padding(padding),
+                modifier = Modifier.padding(padding).consumeWindowInsets(padding),
                 enterTransition = { if (reducedMotion) EnterTransition.None else RpMotion.navEnter },
                 exitTransition = { if (reducedMotion) ExitTransition.None else RpMotion.navExit },
                 popEnterTransition = { if (reducedMotion) EnterTransition.None else RpMotion.navPopEnter },

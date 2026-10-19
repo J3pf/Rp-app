@@ -268,7 +268,7 @@ class RelayConnectionTest {
                     .PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, notifFactory, scope)
             val chatRepo =
                 dev.j3pf.rp.data.repo
-                    .ChatRepository(ctx, db.chat(), db.outbox(), conn, bus, secrets, promptsRepo, api, scope)
+                    .ChatRepository(ctx, db.chat(), db.outbox(), conn, bus, secrets, promptsRepo, api, scope, db.agents())
 
             val s1 = chatRepo.open("m:a")
             val s2 = chatRepo.open("m:a")

@@ -139,11 +139,29 @@ object ChatReducer {
         )
     }
 
-    /** Registra un texto enviado desde el móvil para marcar luego el mensaje con 📱. */
+    /** Registra un texto enviado desde el móvil (burbuja optimista inmediata + estado pensando). */
     fun markLocalSent(
         state: ChatState,
         text: String,
-    ): ChatState = state.copy(localSent = state.localSent + text.trim())
+        at: Long = System.currentTimeMillis(),
+        imageCount: Int = 0,
+    ): ChatState {
+        val trimmed = text.trim()
+        val optimisticKey = "local:$at:${trimmed.hashCode()}"
+        val optimisticItem =
+            UserMsg(
+                key = optimisticKey,
+                text = trimmed,
+                at = at,
+                fromMobile = true,
+                imageCount = imageCount,
+            )
+        return state.copy(
+            localSent = state.localSent + trimmed,
+            items = state.items + optimisticItem,
+            working = true,
+        )
+    }
 
     // ───────────────────────────── Eventos ─────────────────────────────
 
@@ -637,10 +655,11 @@ object ChatReducer {
         at: Long = 0,
     ): ChatState {
         val (text, images) = userContent(msg["content"])
+        val trimmed = text.trim()
         val mobile =
             msg.bool("rp") == true ||
                 msg.str("origin") in setOf("rp", "mobile") ||
-                s.localSent.contains(text.trim())
+                s.localSent.contains(trimmed)
         val item =
             UserMsg(
                 key = keyOf(msg, "user", fallback),
@@ -650,7 +669,19 @@ object ChatReducer {
                 imageCount = images,
             )
         if (s.items.any { it.key == item.key }) return s
-        return s.copy(items = s.items + item, localSent = s.localSent - text.trim())
+        val localIdx =
+            if (mobile) {
+                s.items.indexOfFirst { it is UserMsg && it.key.startsWith("local:") && it.text.trim() == trimmed }
+            } else {
+                -1
+            }
+        val nextItems =
+            if (localIdx >= 0) {
+                s.items.toMutableList().also { it[localIdx] = item }
+            } else {
+                s.items + item
+            }
+        return s.copy(items = nextItems, localSent = s.localSent - trimmed)
     }
 
     private fun assistantFrom(

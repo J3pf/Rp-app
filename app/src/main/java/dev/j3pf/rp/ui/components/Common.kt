@@ -168,7 +168,7 @@ fun AppHeader(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -226,7 +226,7 @@ fun MachineHeroDropdown(
                     m.name,
                     "${contextLabel(
                         m.context,
-                    )} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}",
+                    )} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}${if (m.hostOnline) " · rp-host ✓" else ""}",
                     parseColor(m.color),
                 )
             }
@@ -245,24 +245,24 @@ fun MachineHeroDropdown(
         SurfaceCard(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(18.dp),
             tonalElevation = 2.dp,
         ) {
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Surface(
                     shape = CircleShape,
                     color = selectedColor.copy(alpha = 0.16f),
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(34.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        ColorDot(selectedColor, size = 14)
+                        ColorDot(selectedColor, size = 12)
                     }
                 }
 

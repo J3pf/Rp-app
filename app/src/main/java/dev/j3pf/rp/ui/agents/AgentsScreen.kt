@@ -96,16 +96,16 @@ fun AgentsHeroStats(
 ) {
     val working = agents.count { it.status == "working" && it.online }
     val waiting = agents.sumOf { it.openPromptCount }
-    val onlineMachines = machines.count { it.online }
+    val onlineAgents = agents.count { it.online }
 
     Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -136,11 +136,11 @@ fun AgentsHeroStats(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(
                     Modifier.size(8.dp).clip(CircleShape).background(
-                        if (onlineMachines > 0) RpColors.success else MaterialTheme.colorScheme.outline,
+                        if (onlineAgents > 0) RpColors.success else MaterialTheme.colorScheme.outline,
                     ),
                 )
                 Text(
-                    text = "$onlineMachines en línea",
+                    text = "$onlineAgents en línea",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -160,7 +160,7 @@ fun AgentsContent(
         QuotaDynamicIsland(
             machines = state.machines,
             selectedMachineId = if (state.selected == AppSettings.ALL) null else state.selected,
-            modifier = Modifier.padding(bottom = 6.dp),
+            modifier = Modifier.padding(bottom = 4.dp),
         )
     },
     onOpenChat: (String) -> Unit,
@@ -172,11 +172,14 @@ fun AgentsContent(
     listState: LazyListState = rememberLazyListState(),
 ) {
     val isFabExpanded by remember {
-        derivedStateOf { listState.firstVisibleItemIndex == 0 }
+        derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 }
     }
 
     Scaffold(
         modifier = modifier,
+        contentWindowInsets =
+            androidx.compose.foundation.layout
+                .WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNewAgent,
@@ -215,7 +218,7 @@ fun AgentsContent(
                 agents = state.allAgents,
                 selected = state.selected,
                 onSelect = onSelect,
-                modifier = Modifier.padding(bottom = 6.dp),
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
             )
 
             val reducedMotion = LocalReducedMotion.current
@@ -262,14 +265,17 @@ fun AgentsContent(
                     }
 
                     else -> {
+                        val showGroupHeaders = state.groups.size > 1
                         LazyColumn(
                             state = listState,
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 140.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             state.groups.forEach { g ->
-                                stickyHeader(key = "h-${g.machine.machineId}") {
-                                    MachineHeader(g.machine)
+                                if (showGroupHeaders) {
+                                    stickyHeader(key = "h-${g.machine.machineId}") {
+                                        MachineHeader(g.machine)
+                                    }
                                 }
                                 items(g.agents, key = { it.agentId }) { a ->
                                     AgentCard(

@@ -131,13 +131,19 @@ fun ChatContent(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val agent = ui.agent
-    val working = agent?.status == "working" || ui.chat.working
+    val working = ui.sending || agent?.status == "working" || ui.chat.working
     var showInfo by remember { mutableStateOf(false) }
     var showQuitDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets =
+            androidx.compose.foundation.layout
+                .WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets =
+                    androidx.compose.foundation.layout
+                        .WindowInsets(0, 0, 0, 0),
                 title = {
                     Column {
                         Text(
@@ -147,8 +153,14 @@ fun ChatContent(
                             style = MaterialTheme.typography.titleMedium,
                         )
                         if (agent != null) {
+                            val effectiveAgent =
+                                if (working && agent.online && agent.status == "idle") {
+                                    agent.copy(status = "working")
+                                } else {
+                                    agent
+                                }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                StatusChip(agent)
+                                StatusChip(effectiveAgent)
                                 val modelText = (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
                                 val thinkingText = ui.chat.thinkingLevel?.takeIf { it.isNotBlank() }
                                 val subtitle = listOfNotNull(modelText, thinkingText).joinToString(" · ")
@@ -493,6 +505,18 @@ internal fun MessageList(
         }
     }
 
+    val streamingMsg = ui.chat.streaming
+    val isAgentWorking =
+        (ui.sending || ui.agent?.status == "working" || ui.chat.working) &&
+            (streamingMsg == null || streamingMsg.blocks.isEmpty())
+
+    val lastItemKey = items.lastOrNull()?.key
+    LaunchedEffect(lastItemKey) {
+        if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     Box(modifier = modifier.fillMaxWidth()) {
         LazyColumn(
             state = listState,
@@ -501,6 +525,48 @@ internal fun MessageList(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
         ) {
+            if (isAgentWorking) {
+                item(key = "working-indicator", contentType = "WorkingIndicator") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                            shape = RpShapes.bubbleAgent,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                val runningTool =
+                                    ui.chat.tools.values
+                                        .lastOrNull { it.status == dev.j3pf.rp.chat.ToolStatus.RUNNING }
+                                val statusText =
+                                    when {
+                                        ui.sending -> "Enviando mensaje…"
+                                        runningTool != null -> "Ejecutando ${runningTool.name}…"
+                                        else -> "Pensando…"
+                                    }
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             items(
                 reversedItems,
                 key = { it.key },

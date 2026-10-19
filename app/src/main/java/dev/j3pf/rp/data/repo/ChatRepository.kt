@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.chat.ChatReducer
 import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.TerminalWaitInfo
+import dev.j3pf.rp.data.db.AgentDao
 import dev.j3pf.rp.data.db.ChatDao
 import dev.j3pf.rp.data.db.ChatRecordEntity
 import dev.j3pf.rp.data.db.OutboxDao
@@ -102,6 +103,7 @@ class ChatRepository
         private val prompts: PromptsRepository,
         private val api: RelayApi,
         @AppScope private val scope: CoroutineScope,
+        private val agentDao: AgentDao,
     ) {
         private class SessionEntry(
             val session: ChatSession,
@@ -347,7 +349,10 @@ class ChatRepository
                         asCommand = asCommand,
                         deviceId = s.deviceId,
                     )
-                _state.update { ChatReducer.markLocalSent(it, text) }
+                val now = System.currentTimeMillis()
+                val imgCount = attachments.count { it.mime.startsWith("image/") }
+                _state.update { ChatReducer.markLocalSent(it, text, at = now, imageCount = imgCount) }
+                agentDao.touch(s.relayId, agentId, now)
                 outboxDao.put(
                     OutboxEntity(
                         msg.clientMsgId,
@@ -355,7 +360,7 @@ class ChatRepository
                         agentId,
                         RpJson.encodeToString(UserMessage.serializer(), msg),
                         0,
-                        System.currentTimeMillis(),
+                        now,
                     ),
                 )
                 return deliver(msg)

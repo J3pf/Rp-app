@@ -101,8 +101,7 @@ class ChatViewModel
                     conn = conn,
                     muted = agentId in st.mutedAgents,
                 )
-            }
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
         fun setChoice(c: DeliveryChoice) = extra.update { it.copy(choice = c) }
 
