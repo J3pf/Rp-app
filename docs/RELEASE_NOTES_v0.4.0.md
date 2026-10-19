@@ -50,6 +50,7 @@ Version **v0.4.0** delivers a major UX/UI overhaul of the **Agent Mesh ("Red de 
 
 ## Additional v0.4.0 Improvements
 - In landscape layouts below 500dp height, the `Máquinas` and `Grupos` filters share one horizontally scrolling row.
+- Chat displays the active thinking level in the header and agent info dialog (alongside the active model), and accepts uppercase prefixes in slash command suggestions.
 - Mesh conversation timestamps follow the device locale and time zone (for example, Spanish formatting on Spanish-language devices).
 - Chat code highlighting runs asynchronously off the main thread. Dark-mode syntax colors are selected from the app theme surface luminance, not the system theme.
 - Added the ktlint Gradle plugin 14.2.0; run `./gradlew ktlintCheck` to check formatting.

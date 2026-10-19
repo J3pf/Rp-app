@@ -37,6 +37,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
 - **Comprehensive Visual & Functional Tests (Spec S5)**:
   - Roborazzi screenshots covering 1 agent, 4 agents (Omarchy + Croma scenario), and 12 agents across themes (Cute, Sexy, Omarchy × Light/Dark) on 360dp, 411dp, and tablet viewports.
   - Pure layout engine unit tests asserting zero bounding-box overlaps and viewport containment.
+- **Chat Active Thinking Level & Slash Commands**: Show active thinking level in chat header and agent info dialog (`model · thinkingLevel`), and support uppercase slash command prefixes (e.g. `/Thinking`).
 - **Localized Mesh Timestamps**: Conversation date/time formatting follows the device locale and time zone (for example, Spanish formatting on Spanish-language devices).
 - **Chat Code Highlighting**: Syntax highlighting runs asynchronously off the main thread and selects its dark-mode palette from the app theme surface luminance.
 - **Kotlin Formatting**: Added the ktlint Gradle plugin 14.2.0; `./gradlew ktlintCheck` verifies formatting.
