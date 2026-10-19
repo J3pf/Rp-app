@@ -819,11 +819,15 @@ internal fun Composer(
     val canSendNow = ui.canSend && (text.isNotBlank() || ui.attachments.isNotEmpty())
 
     Surface(
-        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
         tonalElevation = 4.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (ui.attachments.isNotEmpty()) {

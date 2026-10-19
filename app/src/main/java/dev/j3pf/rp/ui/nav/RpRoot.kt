@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -40,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -316,11 +317,19 @@ fun AppBottomBar(
     pending: Int = 0,
     onSelectTab: (AppTab) -> Unit = {},
 ) {
+    val strokeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
     Surface(
-        modifier = modifier,
+        modifier =
+            modifier.drawBehind {
+                drawLine(
+                    color = strokeColor,
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            },
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.22f),
         tonalElevation = 4.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
     ) {
         NavigationBar(
             containerColor = androidx.compose.ui.graphics.Color.Transparent,

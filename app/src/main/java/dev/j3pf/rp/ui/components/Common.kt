@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -9,6 +10,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -43,6 +48,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -977,46 +983,125 @@ fun PrimaryButton(
     }
 }
 
-/** Banner de estado de la conexión con el relay (sólo se muestra si no está conectado). */
+/** Banner flotante de estado de la conexión con el relay (cápsula animada y centrada). */
 @Composable
 fun ConnectionBanner(
     state: ConnState,
     modifier: Modifier = Modifier,
 ) {
+    val isVisible = state !is ConnState.Connected
     val text =
         when (state) {
-            ConnState.Connected -> {
-                return
-            }
-
-            ConnState.Connecting -> {
-                "Conectando con el relay…"
-            }
-
-            ConnState.Disconnected -> {
-                "Sin conexión con el relay · reintentando"
-            }
-
+            ConnState.Connected -> null
+            ConnState.Connecting -> "Conectando con el relay…"
+            ConnState.Disconnected -> "Sin conexión con el relay · reintentando"
             is ConnState.Fatal -> {
                 when (state.code) {
-                    4001 -> "El token fue revocado. Vuelve a emparejar el dispositivo."
-                    4002 -> "Versión de protocolo incompatible. Actualiza la app o el relay."
+                    4001 -> "Token revocado · Vuelve a emparejar el dispositivo"
+                    4002 -> "Protocolo incompatible · Actualiza la app"
                     else -> "Conexión cerrada (${state.code})"
                 }
             }
         }
     val fatal = state is ConnState.Fatal
-    Surface(
+    val connecting = state is ConnState.Connecting
+
+    AnimatedVisibility(
+        visible = isVisible && text != null,
+        enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(180)),
+        exit = shrinkVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(150)),
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-        color = if (fatal) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            val containerColor =
+                if (fatal) {
+                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.95f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                }
+
+            val contentColor =
+                if (fatal) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else if (connecting) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    RpColors.warning
+                }
+
+            val borderColor =
+                if (fatal) {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
+                } else if (connecting) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                } else {
+                    RpColors.warning.copy(alpha = 0.45f)
+                }
+
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = containerColor,
+                contentColor = contentColor,
+                border = BorderStroke(1.dp, borderColor),
+                tonalElevation = 4.dp,
+                shadowElevation = 2.dp,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (connecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.6.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else if (fatal) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.error),
+                        )
+                    } else {
+                        val infiniteTransition = rememberInfiniteTransition(label = "connPulsing")
+                        val pulseAlpha by infiniteTransition.animateFloat(
+                            initialValue = 0.35f,
+                            targetValue = 1f,
+                            animationSpec =
+                                infiniteRepeatable(
+                                    animation = tween(800, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                            label = "pulseAlpha",
+                        )
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(8.dp)
+                                    .graphicsLayer { alpha = pulseAlpha }
+                                    .clip(CircleShape)
+                                    .background(RpColors.warning),
+                        )
+                    }
+
+                    Text(
+                        text = text.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
     }
 }
 
