@@ -78,6 +78,59 @@ fun MeshCanvas(
     val paint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val textPaint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val path = remember { AndroidPath() }
+    val mediumTypeface =
+        remember {
+            android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        }
+    val dashEffects =
+        remember {
+            val intervals = floatArrayOf(15f, 15f)
+            Array(30) { phase -> DashPathEffect(intervals, phase.toFloat()) }
+        }
+    val edgesByKey =
+        remember(layout) {
+            layout?.edges.orEmpty().associateBy { positioned ->
+                val a = positioned.edge.a
+                val b = positioned.edge.b
+                if (a < b) "$a|$b" else "$b|$a"
+            }
+        }
+    val nodeDrawCache =
+        remember(layout, scheme.primary, mediumTypeface) {
+            val measurePaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG)
+            layout?.nodes?.mapValues { (_, positioned) ->
+                val node = positioned.node
+                val machineColor = parseMachineColor(node.machineColor, scheme.primary)
+                val badge =
+                    when (node.role) {
+                        "orchestrator" -> formatMeshRole(node.role).uppercase()
+                        "subordinate" -> formatMeshRole(node.role).uppercase()
+                        else -> null
+                    }
+                measurePaint.typeface = mediumTypeface
+                val badgeWidth =
+                    if (badge != null) {
+                        measurePaint.textSize = 9f
+                        measurePaint.measureText(badge) + 14f
+                    } else {
+                        0f
+                    }
+                measurePaint.textSize = 12f
+                val labelLines = wrapText(measurePaint, node.name, 160f, maxLines = 2)
+                val ellipsizedActivity =
+                    node.activity?.takeIf { it.isNotBlank() }?.let { act ->
+                        measurePaint.textSize = 10f
+                        ellipsize(measurePaint, act, 160f)
+                    }
+                CachedNodeDraw(
+                    machineColor = machineColor,
+                    badge = badge,
+                    badgeWidth = badgeWidth,
+                    labelLines = labelLines,
+                    ellipsizedActivity = ellipsizedActivity,
+                )
+            }.orEmpty()
+        }
 
     val nowMs = System.currentTimeMillis()
     val activeEdgeExpiresAt =
@@ -217,8 +270,8 @@ fun MeshCanvas(
                 val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
                 paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.8f).toArgb()
                 if (edge.pendingAsk) {
-                    val phase = if (reducedMotion) 0f else (currentTimeMs / 55f % 30f)
-                    paint.pathEffect = DashPathEffect(floatArrayOf(15f, 15f), phase)
+                    val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
+                    paint.pathEffect = dashEffects[phaseIdx]
                 }
                 nativeCanvas.drawPath(path, paint)
                 paint.pathEffect = null
@@ -239,16 +292,12 @@ fun MeshCanvas(
                         edgeKey
                     }
 
-            bubblesByEdge.values.forEach { edgeBubbles ->
+            bubblesByEdge.forEach { (edgeKey, edgeBubbles) ->
                 val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(2)
                 val firstComm = visibleBubbles.first().comm
                 val firstSender = firstComm.fromAgentId?.let(currentLayout.nodes::get) ?: return@forEach
                 val firstReceiver = firstComm.toAgentId?.let(currentLayout.nodes::get) ?: return@forEach
-                val firstEdge =
-                    currentLayout.edges.firstOrNull {
-                        (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
-                            (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
-                    }
+                val firstEdge = edgesByKey[edgeKey]
                 val controlX = firstEdge?.controlX ?: (firstSender.x + firstReceiver.x) / 2f
                 val controlY = firstEdge?.controlY ?: (firstSender.y + firstReceiver.y) / 2f
                 val midpointX = 0.25f * firstSender.x + 0.5f * controlX + 0.25f * firstReceiver.x
@@ -260,13 +309,8 @@ fun MeshCanvas(
                     val receiver = comm.toAgentId?.let(currentLayout.nodes::get) ?: return@forEachIndexed
                     val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
                     val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
-                    val edge =
-                        currentLayout.edges.firstOrNull {
-                            (it.edge.a == comm.fromAgentId && it.edge.b == comm.toAgentId) ||
-                                (it.edge.a == comm.toAgentId && it.edge.b == comm.fromAgentId)
-                        }
-                    val particleControlX = edge?.controlX ?: (sender.x + receiver.x) / 2f
-                    val particleControlY = edge?.controlY ?: (sender.y + receiver.y) / 2f
+                    val particleControlX = firstEdge?.controlX ?: (sender.x + receiver.x) / 2f
+                    val particleControlY = firstEdge?.controlY ?: (sender.y + receiver.y) / 2f
                     if (!reducedMotion) {
                         val inverse = 1f - progress
                         val x = inverse * inverse * sender.x + 2f * inverse * progress * particleControlX + progress * progress * receiver.x
@@ -308,7 +352,19 @@ fun MeshCanvas(
             }
 
             currentLayout.nodes.values.forEach { node ->
-                drawNode(nativeCanvas, node, boundsCenterX, boundsCenterY, currentTimeMs, reducedMotion, paint, textPaint, scheme)
+                drawNode(
+                    nativeCanvas,
+                    node,
+                    nodeDrawCache[node.node.agentId],
+                    boundsCenterX,
+                    boundsCenterY,
+                    currentTimeMs,
+                    reducedMotion,
+                    paint,
+                    textPaint,
+                    mediumTypeface,
+                    scheme,
+                )
             }
             nativeCanvas.restore()
         }
@@ -345,15 +401,25 @@ fun MeshCanvas(
     }
 }
 
+private data class CachedNodeDraw(
+    val machineColor: Color,
+    val badge: String?,
+    val badgeWidth: Float,
+    val labelLines: List<String>,
+    val ellipsizedActivity: String?,
+)
+
 private fun drawNode(
     canvas: android.graphics.Canvas,
     positioned: PositionedNode,
+    cached: CachedNodeDraw?,
     centerX: Float,
     centerY: Float,
     nowMs: Long,
     reducedMotion: Boolean,
     paint: AndroidPaint,
     textPaint: AndroidPaint,
+    mediumTypeface: android.graphics.Typeface,
     scheme: androidx.compose.material3.ColorScheme,
 ) {
     val node = positioned.node
@@ -368,7 +434,7 @@ private fun drawNode(
             "error" -> scheme.error
             else -> scheme.outline
         }.let { if (node.online) it else lerp(it, scheme.surfaceVariant, 0.68f) }
-    val machineColor = parseMachineColor(node.machineColor, scheme.primary)
+    val machineColor = cached?.machineColor ?: parseMachineColor(node.machineColor, scheme.primary)
 
     paint.reset()
     paint.isAntiAlias = true
@@ -386,7 +452,7 @@ private fun drawNode(
     canvas.drawCircle(x, y, radius, paint)
 
     val badge =
-        when (node.role) {
+        cached?.badge ?: when (node.role) {
             "orchestrator" -> formatMeshRole(node.role).uppercase()
             "subordinate" -> formatMeshRole(node.role).uppercase()
             else -> null
@@ -396,8 +462,8 @@ private fun drawNode(
         textPaint.isAntiAlias = true
         textPaint.textAlign = AndroidPaint.Align.CENTER
         textPaint.textSize = 9f
-        textPaint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-        val badgeWidth = textPaint.measureText(badge) + 14f
+        textPaint.typeface = mediumTypeface
+        val badgeWidth = cached?.badgeWidth ?: (textPaint.measureText(badge) + 14f)
         paint.reset()
         paint.isAntiAlias = true
         paint.color = scheme.secondaryContainer.toArgb()
@@ -422,11 +488,11 @@ private fun drawNode(
     textPaint.isAntiAlias = true
     textPaint.textAlign = AndroidPaint.Align.CENTER
     textPaint.color = scheme.onSurface.toArgb()
-    textPaint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+    textPaint.typeface = mediumTypeface
     textPaint.textSize = 12f
 
     val maxLabelWidth = 160f
-    val labelLines = wrapText(textPaint, node.name, maxLabelWidth, maxLines = 2)
+    val labelLines = cached?.labelLines ?: wrapText(textPaint, node.name, maxLabelWidth, maxLines = 2)
     val lineHeight = 14f
     val labelStartY = y + radius + 16f
     labelLines.forEachIndexed { lineIdx, lineText ->
@@ -439,11 +505,12 @@ private fun drawNode(
         textPaint.color = scheme.onSurfaceVariant.toArgb()
         canvas.drawText("${todos.done}/${todos.total}", x, y + radius + 29f + labelExtraOffset, textPaint)
     }
-    node.activity?.takeIf { it.isNotBlank() }?.let { activity ->
+    val activityText = cached?.ellipsizedActivity ?: node.activity?.takeIf { it.isNotBlank() }?.let { ellipsize(textPaint, it, maxLabelWidth) }
+    if (activityText != null) {
         textPaint.textSize = 10f
         textPaint.color = scheme.onSurfaceVariant.toArgb()
         canvas.drawText(
-            ellipsize(textPaint, activity, maxLabelWidth),
+            activityText,
             x,
             y + radius +
                 (

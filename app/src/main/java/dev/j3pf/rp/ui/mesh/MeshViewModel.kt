@@ -216,8 +216,11 @@ class MeshViewModel
             width: Float,
             height: Float,
         ) {
-            viewportWidth = width.coerceAtLeast(1f)
-            viewportHeight = height.coerceAtLeast(1f)
+            val newWidth = width.coerceAtLeast(1f)
+            val newHeight = height.coerceAtLeast(1f)
+            if (newWidth == viewportWidth && newHeight == viewportHeight && _uiState.value.layoutResult != null) return
+            viewportWidth = newWidth
+            viewportHeight = newHeight
             _uiState.update { it.withLayout(layoutEngine, viewportWidth, viewportHeight) }
         }
 
@@ -367,8 +370,9 @@ class MeshViewModel
             val machineNodes = snapshot.nodes.asSequence().filter { machineId == null || it.machineId == machineId }
             if (groupId == SOLO_GROUP_ID) return machineNodes.filter(::isSolo).mapTo(mutableSetOf()) { it.agentId }
             val group = snapshot.groups.firstOrNull { it.groupId == groupId } ?: return emptySet()
+            val groupMembers = group.memberAgentIds.toSet()
             return machineNodes
-                .filter { it.groupId == groupId || it.agentId in group.memberAgentIds }
+                .filter { it.groupId == groupId || it.agentId in groupMembers }
                 .mapTo(mutableSetOf()) { it.agentId }
         }
 
@@ -454,26 +458,24 @@ class MeshViewModel
             height: Float,
         ): MeshUiState {
             val mesh = snapshot ?: return copy(layoutResult = null)
+            val selectedGroupMembers =
+                if (selectedGroupId != null && selectedGroupId != SOLO_GROUP_ID) {
+                    mesh.groups
+                        .firstOrNull { it.groupId == selectedGroupId }
+                        ?.memberAgentIds
+                        ?.toSet()
+                        .orEmpty()
+                } else {
+                    emptySet()
+                }
             val filteredNodes =
                 mesh.nodes.filter { node ->
                     val machineMatches = selectedMachineId == null || node.machineId == selectedMachineId
                     val groupMatches =
                         when (selectedGroupId) {
-                            SOLO_GROUP_ID -> {
-                                isSolo(node)
-                            }
-
-                            null -> {
-                                true
-                            }
-
-                            else -> {
-                                node.groupId == selectedGroupId ||
-                                    mesh.groups
-                                        .firstOrNull { it.groupId == selectedGroupId }
-                                        ?.memberAgentIds
-                                        ?.contains(node.agentId) == true
-                            }
+                            SOLO_GROUP_ID -> isSolo(node)
+                            null -> true
+                            else -> node.groupId == selectedGroupId || node.agentId in selectedGroupMembers
                         }
                     machineMatches && groupMatches
                 }
