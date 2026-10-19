@@ -77,7 +77,7 @@ fun ChatItemView(
         is AssistantMsg -> AssistantBubble(item, tools, spacingMode)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item, spacingMode)
-        is SubagentCardItem -> SubagentCard(item.info)
+        is SubagentCardItem -> SubagentCard(item.info, spacingMode = spacingMode)
     }
 }
 
@@ -175,12 +175,13 @@ private fun AssistantBubble(
             "spacious" -> 9.dp
             else -> 6.dp
         }
-    Column(Modifier.fillMaxWidth().padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
         m.blocks.forEachIndexed { i, b ->
             when (b) {
                 is Block.Text -> {
                     if (b.text.isNotBlank()) {
                         Surface(
+                            modifier = Modifier.padding(end = 16.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RpShapes.bubbleAgent,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
@@ -207,7 +208,7 @@ private fun AssistantBubble(
                             )
                     val sub = run.subagent
                     if (sub != null) {
-                        SubagentCard(sub)
+                        SubagentCard(sub, spacingMode = spacingMode)
                     } else {
                         ToolCard(run, spacingMode = spacingMode)
                     }
@@ -251,13 +252,18 @@ private fun ThinkingBlock(
             "spacious" -> MaterialTheme.typography.labelLarge
             else -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
         }
+    val cardShape = RoundedCornerShape(8.dp)
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .clickable { open = !open },
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RpShapes.medium,
+        shape = cardShape,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         tonalElevation = 0.dp,
-        onClick = { open = !open },
     ) {
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
             Row(
@@ -329,16 +335,25 @@ fun ToolCard(
             "spacious" -> 12.sp
             else -> 11.5.sp
         }
+    val cardShape = RoundedCornerShape(8.dp)
 
-    SurfaceCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = { setOpen(!open) },
-        shape = RpShapes.medium,
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .clickable { setOpen(!open) },
+        shape = cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         tonalElevation = 0.dp,
     ) {
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 when (run.status) {
                     ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
                     ToolStatus.OK -> Text("✓", color = RpColors.success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -360,6 +375,12 @@ fun ToolCard(
                         color = MaterialTheme.colorScheme.outline,
                     )
                 }
+                Text(
+                    if (open) "▾" else "▸",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline,
+                )
             }
             AnimatedVisibility(open) {
                 Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -519,18 +540,37 @@ private fun SystemNoteView(
 
 /** Tarjeta de subagente enriquecida estilo Gentle Shell (modelo, tiempo, thinking, tokens, status, steps). */
 @Composable
-fun SubagentCard(info: SubagentInfo) {
+fun SubagentCard(
+    info: SubagentInfo,
+    spacingMode: String = "normal",
+) {
     val (openThinking, setOpenThinking) = rememberSaveable(info.taskId + "-think") { mutableStateOf(false) }
     val (openResult, setOpenResult) = rememberSaveable(info.taskId + "-res") { mutableStateOf(false) }
+    val hPad =
+        when (spacingMode) {
+            "compact" -> 8.dp
+            "spacious" -> 14.dp
+            else -> 10.dp
+        }
+    val vPad =
+        when (spacingMode) {
+            "compact" -> 6.dp
+            "spacious" -> 12.dp
+            else -> 8.dp
+        }
 
     SurfaceCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 1.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val contentSpacing = if (spacingMode == "compact") 4.dp else 8.dp
+        Column(
+            modifier = Modifier.padding(horizontal = hPad, vertical = vPad),
+            verticalArrangement = Arrangement.spacedBy(contentSpacing),
+        ) {
             // Header: Icon + Agent Name + Task Label + Model + Status + Time
             Row(
                 modifier = Modifier.fillMaxWidth(),
