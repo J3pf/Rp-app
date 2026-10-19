@@ -330,7 +330,6 @@ fun AgentsContent(
         QuotaDynamicIsland(
             machines = state.machines,
             selectedMachineId = if (state.selected == AppSettings.ALL) null else state.selected,
-            modifier = Modifier.padding(bottom = 4.dp),
         )
     },
     onOpenChat: (String) -> Unit,

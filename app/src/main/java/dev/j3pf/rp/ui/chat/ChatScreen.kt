@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -122,6 +123,7 @@ fun ChatContent(
     onAnswerPrompt: (Prompt, Answer) -> Unit = { _, _ -> },
     onToggleMute: () -> Unit = {},
     onFontScaleChange: (Float) -> Unit = {},
+    onMessageSpacingChange: (String) -> Unit = {},
     onQuit: () -> Unit = {},
     onForget: () -> Unit = {},
     onSwitchToNormal: () -> Unit = {},
@@ -239,6 +241,29 @@ fun ChatContent(
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                         ) {
                                             Text("A+", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            },
+                            onClick = {},
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Espaciado de mensajes", style = MaterialTheme.typography.labelMedium)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        listOf(
+                                            "compact" to "Compacto",
+                                            "normal" to "Normal",
+                                            "spacious" to "Amplio",
+                                        ).forEach { (id, label) ->
+                                            val selected = ui.chatMessageSpacing == id
+                                            FilterChip(
+                                                selected = selected,
+                                                onClick = { onMessageSpacingChange(id) },
+                                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                                shape = RoundedCornerShape(999.dp),
+                                            )
                                         }
                                     }
                                 }
@@ -471,6 +496,7 @@ fun ChatScreen(
         },
         onToggleMute = vm::toggleMute,
         onFontScaleChange = vm::setChatFontScale,
+        onMessageSpacingChange = vm::setChatMessageSpacing,
         onQuit = { vm.quit(onBack) },
         onForget = { vm.forget(onBack) },
         onSwitchToNormal = vm::switchToNormal,
@@ -588,6 +614,19 @@ internal fun MessageList(
             )
         }
 
+    val itemSpacing =
+        when (ui.chatMessageSpacing) {
+            "compact" -> 8.dp
+            "spacious" -> 22.dp
+            else -> 14.dp
+        }
+    val verticalListPadding =
+        when (ui.chatMessageSpacing) {
+            "compact" -> 8.dp
+            "spacious" -> 16.dp
+            else -> 12.dp
+        }
+
     Box(modifier = modifier.fillMaxWidth()) {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.ui.platform.LocalDensity provides scaledDensity,
@@ -596,8 +635,8 @@ internal fun MessageList(
                 state = listState,
                 reverseLayout = true,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = verticalListPadding),
+                verticalArrangement = Arrangement.spacedBy(itemSpacing, Alignment.Bottom),
             ) {
                 if (isAgentWorking) {
                     item(key = "working-indicator", contentType = "WorkingIndicator") {
@@ -657,7 +696,13 @@ internal fun MessageList(
                             )
                         }
                     Box(modifier = itemModifier) {
-                        ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
+                        ChatItemView(
+                            item = item,
+                            tools = ui.chat.tools,
+                            busyPromptId = busyPromptId,
+                            onAnswerPrompt = onAnswerPrompt,
+                            spacingMode = ui.chatMessageSpacing,
+                        )
                     }
                 }
             }
@@ -740,12 +785,16 @@ internal fun Composer(
             }
         }
 
+    val canSendNow = ui.canSend && (text.isNotBlank() || ui.attachments.isNotEmpty())
+
     Surface(
-        tonalElevation = 2.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f),
+        tonalElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (ui.attachments.isNotEmpty()) {
                 val attachmentsScroll = rememberScrollState()
                 Row(
@@ -804,7 +853,7 @@ internal fun Composer(
                         SuggestionChip(
                             onClick = { onText(replacement) },
                             label = { Text(label) },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(999.dp),
                         )
                     }
                 }
@@ -820,7 +869,7 @@ internal fun Composer(
                 Column {
                     AssistChip(
                         onClick = { choiceMenu = true },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(999.dp),
                         colors =
                             if (isSlashText) {
                                 AssistChipDefaults.assistChipColors(
@@ -828,9 +877,16 @@ internal fun Composer(
                                     labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                 )
                             } else {
-                                AssistChipDefaults.assistChipColors()
+                                AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                )
                             },
-                        label = { Text(if (isSlashText) "⚡ Comando Pi (/)" else "Entrega: ${ui.choice.label}") },
+                        label = {
+                            Text(
+                                text = if (isSlashText) "⚡ Comando Pi (/)" else "Entrega: ${ui.choice.label}",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
                     )
                     DropdownMenu(choiceMenu, { choiceMenu = false }) {
                         DeliveryChoice.entries.forEach { c ->
@@ -850,20 +906,28 @@ internal fun Composer(
                     FilterChip(
                         selected = ui.workingDelivery == Delivery.FOLLOW_UP,
                         onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
-                        shape = RoundedCornerShape(12.dp),
-                        label = { Text("Encolar (follow‑up)") },
+                        shape = RoundedCornerShape(999.dp),
+                        label = { Text("Encolar (follow‑up)", style = MaterialTheme.typography.labelSmall) },
                     )
                     FilterChip(
                         selected = ui.workingDelivery == Delivery.STEER,
                         onClick = { onWorkingDelivery(Delivery.STEER) },
-                        shape = RoundedCornerShape(12.dp),
-                        label = { Text("Interrumpir y dirigir (steer)") },
+                        shape = RoundedCornerShape(999.dp),
+                        label = { Text("Interrumpir y dirigir (steer)", style = MaterialTheme.typography.labelSmall) },
                     )
                 }
             }
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Column {
-                    IconButton(onClick = { attachMenu = true }) { Icon(Icons.Filled.AttachFile, "Adjuntar") }
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                    ) {
+                        IconButton(onClick = { attachMenu = true }, modifier = Modifier.size(42.dp)) {
+                            Icon(Icons.Filled.AttachFile, "Adjuntar", modifier = Modifier.size(20.dp))
+                        }
+                    }
                     DropdownMenu(attachMenu, { attachMenu = false }) {
                         DropdownMenuItem(text = { Text("Archivo") }, onClick = {
                             attachMenu = false
@@ -883,14 +947,39 @@ internal fun Composer(
                     value = text,
                     onValueChange = onText,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(22.dp),
                     placeholder = { Text("Escribe a tu agente…") },
                     maxLines = 6,
                 )
-                IconButton(
-                    onClick = onSend,
-                    enabled = ui.canSend && (text.isNotBlank() || ui.attachments.isNotEmpty()),
-                ) { Icon(Icons.AutoMirrored.Filled.Send, "Enviar") }
+                Surface(
+                    shape = CircleShape,
+                    color =
+                        if (canSendNow) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                        },
+                    contentColor =
+                        if (canSendNow) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.outline
+                        },
+                    border =
+                        if (!canSendNow) {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        } else {
+                            null
+                        },
+                ) {
+                    IconButton(
+                        onClick = onSend,
+                        enabled = canSendNow,
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, "Enviar", modifier = Modifier.size(20.dp))
+                    }
+                }
             }
         }
     }

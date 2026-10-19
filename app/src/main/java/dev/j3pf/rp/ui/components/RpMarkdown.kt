@@ -23,10 +23,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownTypography
+import com.mikepenz.markdown.model.markdownPadding
 import com.mikepenz.markdown.model.rememberMarkdownState
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.BoldHighlight
@@ -99,7 +102,7 @@ fun HighlightedCode(
     val displayedCode = if (annotatedString.text == code) annotatedString else AnnotatedString(code)
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -107,7 +110,7 @@ fun HighlightedCode(
             text = displayedCode,
             style = style,
             softWrap = false,
-            modifier = Modifier.horizontalScroll(scrollState).padding(8.dp),
+            modifier = Modifier.horizontalScroll(scrollState).padding(10.dp),
         )
     }
 }
@@ -143,7 +146,7 @@ private fun rememberRpMarkdownComponents() =
         },
     )
 
-/** Markdown con bloques de código resaltados y renderizado optimizado para streaming sin bloqueos de hilo principal. */
+/** Markdown con bloques de código resaltados, interlineado amplio y renderizado optimizado para streaming. */
 @Composable
 fun RpMarkdown(
     text: String,
@@ -155,9 +158,25 @@ fun RpMarkdown(
             retainState = true,
             immediate = true,
         )
+    val baseBody = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp)
     Markdown(
         markdownState = markdownState,
         modifier = modifier,
+        padding =
+            markdownPadding(
+                block = 8.dp,
+                list = 6.dp,
+                listItemTop = 3.dp,
+                listItemBottom = 3.dp,
+            ),
+        typography =
+            markdownTypography(
+                text = baseBody,
+                paragraph = baseBody,
+                bullet = baseBody,
+                ordered = baseBody,
+                list = baseBody,
+            ),
         components = rememberRpMarkdownComponents(),
     )
 }

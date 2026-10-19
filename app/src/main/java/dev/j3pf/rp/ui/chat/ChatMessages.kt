@@ -68,10 +68,11 @@ fun ChatItemView(
     tools: Map<String, ToolRun>,
     busyPromptId: String?,
     onAnswerPrompt: (Prompt, Answer) -> Unit,
+    spacingMode: String = "normal",
 ) {
     when (item) {
-        is UserMsg -> UserBubble(item)
-        is AssistantMsg -> AssistantBubble(item, tools)
+        is UserMsg -> UserBubble(item, spacingMode)
+        is AssistantMsg -> AssistantBubble(item, tools, spacingMode)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item)
         is SubagentCardItem -> SubagentCard(item.info)
@@ -79,15 +80,33 @@ fun ChatItemView(
 }
 
 @Composable
-private fun UserBubble(m: UserMsg) {
-    Row(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalArrangement = Arrangement.End) {
+private fun UserBubble(
+    m: UserMsg,
+    spacingMode: String = "normal",
+) {
+    val hPad =
+        when (spacingMode) {
+            "compact" -> 12.dp
+            "spacious" -> 18.dp
+            else -> 16.dp
+        }
+    val vPad =
+        when (spacingMode) {
+            "compact" -> 8.dp
+            "spacious" -> 14.dp
+            else -> 11.dp
+        }
+    Row(Modifier.fillMaxWidth().padding(start = 40.dp), horizontalArrangement = Arrangement.End) {
         Surface(
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             shape = RpShapes.bubbleUser,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
         ) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Column(
+                Modifier.padding(horizontal = hPad, vertical = vPad),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 if (m.fromMobile) {
                     Text(
                         "móvil",
@@ -95,7 +114,12 @@ private fun UserBubble(m: UserMsg) {
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                     )
                 }
-                if (m.text.isNotBlank()) Text(m.text)
+                if (m.text.isNotBlank()) {
+                    Text(
+                        text = m.text,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                    )
+                }
                 if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
             }
         }
@@ -106,8 +130,27 @@ private fun UserBubble(m: UserMsg) {
 private fun AssistantBubble(
     m: AssistantMsg,
     tools: Map<String, ToolRun>,
+    spacingMode: String = "normal",
 ) {
-    Column(Modifier.fillMaxWidth().padding(end = 24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val blockSpacing =
+        when (spacingMode) {
+            "compact" -> 6.dp
+            "spacious" -> 14.dp
+            else -> 10.dp
+        }
+    val hPad =
+        when (spacingMode) {
+            "compact" -> 12.dp
+            "spacious" -> 18.dp
+            else -> 16.dp
+        }
+    val vPad =
+        when (spacingMode) {
+            "compact" -> 8.dp
+            "spacious" -> 14.dp
+            else -> 12.dp
+        }
+    Column(Modifier.fillMaxWidth().padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
         m.blocks.forEachIndexed { i, b ->
             when (b) {
                 is Block.Text -> {
@@ -117,7 +160,7 @@ private fun AssistantBubble(
                             shape = RpShapes.bubbleAgent,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                         ) {
-                            Box(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) { RpMarkdown(b.text) }
+                            Box(Modifier.padding(horizontal = hPad, vertical = vPad)) { RpMarkdown(b.text) }
                         }
                     }
                 }

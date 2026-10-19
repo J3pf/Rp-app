@@ -59,6 +59,7 @@ data class ChatUiState(
     /** Notificaciones de este agente silenciadas (preferencia local). */
     val muted: Boolean = false,
     val chatFontScale: Float = 1.0f,
+    val chatMessageSpacing: String = "normal",
     /** Última entrega interactiva falló por indisponibilidad → ofrecer "Pasar a Normal". */
     val interactiveUnavailable: Boolean = false,
     val message: String? = null,
@@ -102,6 +103,7 @@ class ChatViewModel
                     conn = conn,
                     muted = agentId in st.mutedAgents,
                     chatFontScale = st.chatFontScale,
+                    chatMessageSpacing = st.chatMessageSpacing,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
@@ -128,6 +130,10 @@ class ChatViewModel
 
         fun setChatFontScale(scale: Float) {
             viewModelScope.launch { settingsRepo.setChatFontScale(scale) }
+        }
+
+        fun setChatMessageSpacing(spacing: String) {
+            viewModelScope.launch { settingsRepo.setChatMessageSpacing(spacing) }
         }
 
         /** Olvida un agente desconectado (`agent.forget`). */

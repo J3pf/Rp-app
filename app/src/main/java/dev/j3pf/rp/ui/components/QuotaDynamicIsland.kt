@@ -82,13 +82,13 @@ fun QuotaDynamicIsland(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
             key = { page -> machineIds[page] },
-            pageSpacing = 8.dp,
+            pageSpacing = 0.dp,
         ) { page ->
             val (machine, quotas) = machinesWithQuotas[page]
             QuotaMachinePill(
                 machine = machine,
                 quotas = quotas,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 onQuotaClick = { quota -> selectedQuota = SelectedQuota(machine, quota) },
             )
         }
@@ -133,42 +133,47 @@ private fun QuotaMachinePill(
     modifier: Modifier = Modifier,
     onQuotaClick: (MachineQuota) -> Unit,
 ) {
+    val accentColor = parseColor(machine.color)
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.30f),
         contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        tonalElevation = 3.dp,
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.32f)),
     ) {
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
                     .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                modifier = Modifier.padding(horizontal = 4.dp),
+            Surface(
+                shape = RpShapes.pill,
+                color = accentColor.copy(alpha = 0.16f),
+                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
             ) {
-                Box(
-                    Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(parseColor(machine.color)),
-                )
-                Text(
-                    text = machine.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "⚡",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        text = machine.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             quotas.forEach { quota ->
                 QuotaProviderPill(quota = quota, onClick = { onQuotaClick(quota) })
@@ -195,39 +200,43 @@ private fun QuotaProviderPill(
 
     Surface(
         onClick = onClick,
-        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-        shape = RpShapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        modifier = Modifier.defaultMinSize(minHeight = 32.dp),
+        shape = RpShapes.pill,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f)),
     ) {
         Column(
-            Modifier.width(108.dp).padding(horizontal = 10.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.Center,
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(statusColor),
+                )
                 Text(
                     text = quota.displayLabel(),
-                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = primaryWindow?.let { formatPercent(it.usedPercent) } ?: "—",
-                    modifier = Modifier.padding(start = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = statusColor,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                 )
             }
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(3.dp))
             LinearProgressIndicator(
                 progress = { animatedProgress },
-                modifier = Modifier.fillMaxWidth().height(3.dp),
+                modifier = Modifier.width(64.dp).height(2.5.dp),
                 color = statusColor,
                 trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
             )

@@ -96,10 +96,12 @@ fun SettingsContent(
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
     onSelectFontScale: (Float) -> Unit = {},
+    onSelectMessageSpacing: (String) -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showFontScaleDialog by remember { mutableStateOf(false) }
+    var showSpacingDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier =
@@ -181,6 +183,12 @@ fun SettingsContent(
                 fontScaleLabel(state.settings.chatFontScale),
                 icon = Icons.Filled.Palette,
             ) { showFontScaleDialog = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow(
+                "Espaciado de mensajes en el chat",
+                messageSpacingLabel(state.settings.chatMessageSpacing),
+                icon = Icons.Filled.Palette,
+            ) { showSpacingDialog = true }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             NavRow("Notificaciones", healthSummary(state.health), icon = Icons.Filled.Notifications) { onNav(SettingsDest.Notifications) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -320,6 +328,42 @@ fun SettingsContent(
             },
         )
     }
+    if (showSpacingDialog) {
+        val spacingOptions =
+            listOf(
+                "compact" to "Compacto (más mensajes en pantalla)",
+                "normal" to "Normal (equilibrado)",
+                "spacious" to "Amplio (mayor separación)",
+            )
+        AlertDialog(
+            onDismissRequest = { showSpacingDialog = false },
+            title = { Text("Espaciado de mensajes en el chat") },
+            text = {
+                Column {
+                    spacingOptions.forEach { (id, label) ->
+                        val isSelected = state.settings.chatMessageSpacing == id
+                        ListItem(
+                            headlineContent = { Text(label) },
+                            trailingContent = {
+                                if (isSelected) Text("✓", color = MaterialTheme.colorScheme.primary)
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable {
+                                        onSelectMessageSpacing(id)
+                                        showSpacingDialog = false
+                                    },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpacingDialog = false }) { Text("Cerrar") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -335,6 +379,7 @@ fun SettingsScreen(
         onNav = nav,
         onSelectTheme = vm::setAppTheme,
         onSelectFontScale = vm::setChatFontScale,
+        onSelectMessageSpacing = vm::setChatMessageSpacing,
         onLogout = { vm.logout(onLoggedOut) },
     )
 }
@@ -347,6 +392,13 @@ private fun fontScaleLabel(scale: Float): String =
         scale >= 1.25f -> "Extra grande (${(scale * 100).toInt()}%)"
         scale >= 1.08f -> "Grande (${(scale * 100).toInt()}%)"
         else -> "Normal (${(scale * 100).toInt()}%)"
+    }
+
+private fun messageSpacingLabel(spacing: String): String =
+    when (spacing) {
+        "compact" -> "Compacto"
+        "spacious" -> "Amplio"
+        else -> "Normal"
     }
 
 enum class SettingsDest { Devices, Machines, AddMachine, Notifications, Security, Battery, About }

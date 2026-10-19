@@ -157,6 +157,8 @@ class SettingsViewModel
 
         fun setChatFontScale(scale: Float) = viewModelScope.launch { settingsRepo.setChatFontScale(scale) }
 
+        fun setChatMessageSpacing(spacing: String) = viewModelScope.launch { settingsRepo.setChatMessageSpacing(spacing) }
+
         // ───────────────────────────── Notificaciones ─────────────────────────────
 
         fun setDirectPush(v: Boolean) = viewModelScope.launch { sessionRepo.applyPushChannels(v) }

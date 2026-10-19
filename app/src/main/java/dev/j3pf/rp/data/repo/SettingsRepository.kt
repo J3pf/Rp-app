@@ -48,6 +48,7 @@ data class AppSettings(
     val mutedAgents: Set<String> = emptySet(),
     val appTheme: String = "auto",
     val chatFontScale: Float = 1.0f,
+    val chatMessageSpacing: String = "normal",
     val selectedMeshMachine: String? = null,
     val selectedMeshGroup: String? = null,
 ) {
@@ -85,6 +86,7 @@ class SettingsRepository(
                     mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
                     appTheme = p[APP_THEME] ?: "auto",
                     chatFontScale = (p[CHAT_FONT_SCALE] ?: 1.0f).coerceIn(0.80f, 1.45f),
+                    chatMessageSpacing = p[CHAT_MESSAGE_SPACING] ?: "normal",
                     selectedMeshMachine = p[MESH_SELECTED_MACHINE],
                     selectedMeshGroup = p[MESH_SELECTED_GROUP],
                 )
@@ -111,6 +113,8 @@ class SettingsRepository(
     suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
 
     suspend fun setChatFontScale(v: Float) = edit { it[CHAT_FONT_SCALE] = v.coerceIn(0.80f, 1.45f) }
+
+    suspend fun setChatMessageSpacing(v: String) = edit { it[CHAT_MESSAGE_SPACING] = v }
 
     suspend fun setMeshSelectedMachine(machineId: String?) =
         edit {
@@ -151,6 +155,7 @@ class SettingsRepository(
         val MUTED_AGENTS = stringSetPreferencesKey("mutedAgents")
         val APP_THEME = stringPreferencesKey("appTheme")
         val CHAT_FONT_SCALE = floatPreferencesKey("chatFontScale")
+        val CHAT_MESSAGE_SPACING = stringPreferencesKey("chatMessageSpacing")
         val MESH_SELECTED_MACHINE = stringPreferencesKey("mesh_selected_machine")
         val MESH_SELECTED_GROUP = stringPreferencesKey("mesh_selected_group")
     }
