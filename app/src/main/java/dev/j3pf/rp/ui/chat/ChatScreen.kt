@@ -153,7 +153,12 @@ fun ChatContent(
                                 val thinkingText = ui.chat.thinkingLevel?.takeIf { it.isNotBlank() }
                                 val subtitle = listOfNotNull(modelText, thinkingText).joinToString(" · ")
                                 if (subtitle.isNotBlank()) {
-                                    Text(subtitle, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                             }
                         }
