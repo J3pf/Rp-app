@@ -840,35 +840,38 @@ internal fun Composer(
                 }
             }
             val isSlashText = text.trimStart().startsWith("/")
-            val slashCommands =
-                remember {
-                    listOf("/clear", "/compact", "/model", "/thinking", "/quit", "/undo", "/sdd-status", "/help")
-                }
-            val thinkingLevels =
-                remember {
-                    listOf("off", "minimal", "low", "medium", "high", "xhigh", "max")
+            val catalog =
+                remember(ui.agent?.launcher, ui.agent?.model?.id, ui.agent?.model?.provider) {
+                    SlashCommandCatalogs.resolve(ui.agent)
                 }
             val suggestions: List<Pair<String, String>> =
-                remember(text) {
+                remember(text, catalog) {
                     val trimmed = text.trimStart()
                     val lowerTrimmed = trimmed.lowercase()
                     if (!lowerTrimmed.startsWith("/")) {
                         emptyList()
-                    } else if (lowerTrimmed == "/thinking" || lowerTrimmed.startsWith("/thinking ")) {
-                        val arg = trimmed.substring("/thinking".length).trimStart()
-                        val matchingLevels =
-                            if (arg.isEmpty()) {
-                                thinkingLevels
-                            } else {
-                                thinkingLevels.filter { it.startsWith(arg.lowercase()) && it != arg.lowercase() }
-                            }
-                        matchingLevels.map { level -> level to "/thinking $level" }
-                    } else if (!lowerTrimmed.contains(" ")) {
-                        slashCommands
-                            .filter { it.startsWith(lowerTrimmed) && it != lowerTrimmed }
-                            .map { cmd -> cmd to "$cmd " }
                     } else {
-                        emptyList()
+                        val subEntry =
+                            catalog.subSuggestions.entries.firstOrNull { (cmd, _) ->
+                                lowerTrimmed == cmd || lowerTrimmed.startsWith("$cmd ")
+                            }
+                        if (subEntry != null) {
+                            val (cmd, levels) = subEntry
+                            val arg = trimmed.substring(cmd.length).trimStart()
+                            val matchingLevels =
+                                if (arg.isEmpty()) {
+                                    levels
+                                } else {
+                                    levels.filter { it.startsWith(arg.lowercase()) && it != arg.lowercase() }
+                                }
+                            matchingLevels.map { level -> level to "$cmd $level" }
+                        } else if (!lowerTrimmed.contains(" ")) {
+                            catalog.commands
+                                .filter { it.startsWith(lowerTrimmed) && it != lowerTrimmed }
+                                .map { cmd -> cmd to "$cmd " }
+                        } else {
+                            emptyList()
+                        }
                     }
                 }
 
@@ -914,7 +917,7 @@ internal fun Composer(
                             },
                         label = {
                             Text(
-                                text = if (isSlashText) "⚡ Comando Pi (/)" else "Entrega: ${ui.choice.label}",
+                                text = if (isSlashText) "⚡ Comando ${catalog.launcherLabel} (/)" else "Entrega: ${ui.choice.label}",
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         },
@@ -948,7 +951,7 @@ internal fun Composer(
                     )
                 }
                 if (text.isEmpty() && ui.attachments.isEmpty()) {
-                    listOf("/status", "/compact", "/model", "/thinking", "/clear").forEach { cmd ->
+                    catalog.quickShortcuts.forEach { cmd ->
                         Surface(
                             shape = RoundedCornerShape(999.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),

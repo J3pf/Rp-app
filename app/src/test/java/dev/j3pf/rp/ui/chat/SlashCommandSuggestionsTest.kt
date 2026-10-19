@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.ui.theme.RpTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -191,5 +192,65 @@ class SlashCommandSuggestionsTest {
         rule.waitForIdle()
 
         assertEquals("/thinking high", currentText)
+    }
+
+    @Test
+    fun `antigravity launcher suggests goal and plan commands and displays Antigravity label`() {
+        var currentText by mutableStateOf("/go")
+        val agyAgent = AgentSummary(agentId = "a1", machineId = "m1", launcher = "agy")
+
+        rule.setContent {
+            RpTheme {
+                Composer(
+                    ui = ChatUiState(agent = agyAgent),
+                    working = false,
+                    text = currentText,
+                    onText = { currentText = it },
+                    onChoice = {},
+                    onWorkingDelivery = {},
+                    onPicked = {},
+                    onRemoveAttachment = {},
+                    newCameraTarget = { Uri.EMPTY },
+                    onSend = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("⚡ Comando Antigravity (/)").assertIsDisplayed()
+        rule.onNodeWithText("/goal").assertIsDisplayed()
+        rule.onNodeWithText("/goal").performClick()
+        rule.waitForIdle()
+
+        assertEquals("/goal ", currentText)
+    }
+
+    @Test
+    fun `claude launcher suggests review and compact commands`() {
+        var currentText by mutableStateOf("/rev")
+        val claudeAgent = AgentSummary(agentId = "a2", machineId = "m1", launcher = "claude")
+
+        rule.setContent {
+            RpTheme {
+                Composer(
+                    ui = ChatUiState(agent = claudeAgent),
+                    working = false,
+                    text = currentText,
+                    onText = { currentText = it },
+                    onChoice = {},
+                    onWorkingDelivery = {},
+                    onPicked = {},
+                    onRemoveAttachment = {},
+                    newCameraTarget = { Uri.EMPTY },
+                    onSend = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("⚡ Comando Claude (/)").assertIsDisplayed()
+        rule.onNodeWithText("/review").assertIsDisplayed()
+        rule.onNodeWithText("/review").performClick()
+        rule.waitForIdle()
+
+        assertEquals("/review ", currentText)
     }
 }
