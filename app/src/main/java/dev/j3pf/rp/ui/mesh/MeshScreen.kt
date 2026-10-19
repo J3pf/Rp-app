@@ -172,16 +172,17 @@ internal fun MeshScreenContent(
                         if (group.isSolo) {
                             "Sin grupo"
                         } else {
-                            uiState.snapshot
-                                ?.groups
-                                ?.firstOrNull { it.groupId == group.groupId }
-                                ?.orchestratorAgentId
-                                ?.let { id ->
-                                    uiState.snapshot.nodes
-                                        .firstOrNull { it.agentId == id }
-                                        ?.name
-                                }
-                                ?: group.label
+                            group.label.ifBlank {
+                                uiState.snapshot
+                                    ?.groups
+                                    ?.firstOrNull { it.groupId == group.groupId }
+                                    ?.orchestratorAgentId
+                                    ?.let { id ->
+                                        uiState.snapshot.nodes
+                                            .firstOrNull { it.agentId == id }
+                                            ?.name
+                                    }.orEmpty()
+                            }
                         }
                     FilterChip(
                         selected = uiState.selectedGroupId == group.groupId,
