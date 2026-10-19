@@ -51,6 +51,9 @@ English docs (CHANGELOG, docs/ section for the mesh screen with the display-name
 - [x] T25 (K2): SubcomposeLayout / measured card heights in MeshCanvas fed into MeshLayoutEngine; add fontScale 1.5 and 2.0 legibility/containment tests in MeshScreenTest [gentle-ai-worker] [161e8c4]
 - [x] T26 (K3): In compact height (landscape phone), collapse Máquinas and Grupos into one horizontal scrolling row so orchestrator and first row are visible initially [gentle-ai-worker] [161e8c4]
 - [x] T27: Re-record Roborazzi screenshots with landscape filter collapse, inspect all 11 scenarios, rebuild signed release APK v0.4.0 [inline] [27c6f89]
+- [x] T28 (C1-C6): Code fixes: streaming markdown immediate fallback (C1), markdown horizontal scroll (C2), canvas pan/zoom lambda hoisting (C3), remove dead satellite positioning (C4), BiometricGate deprecation reason (C5), bubble clearance against all cards (C6) [gentle-ai-worker] [569f938]
+- [x] T29 (D1-D7): Docs fixes: orthogonal bus connectors (D1), role badge only on orchestrator (D2), real viewport behavior (D3), relay compatibility & sentinels (D4), missing changelog/release note entries (D5), install links v0.4.0 (D6), avatar initial doc accuracy (D7) [gentle-ai-worker] [b9121b2]
+- [x] T30: Re-run ktlint, full tests, update/verify Roborazzi screenshots if needed, check lint 0 warnings, build signed release APK v0.4.0 [inline] [896fc58]
 
 ## Log
 L1: [ORCHESTRATOR → Rp-app] Feature: mesh-redesign ("Red de agentes" screen refactor). Use ODD: create odd/tasks/mesh-redesign.md (## Specs quoting the user verbatim, ## Tasks, ## Log with L1) + Engram mirror odd/mesh-redesign/tasks (project rp-app) BEFORE the first source write. Test-first (observe RED, then GREEN). Code/comments/docs in English; UI copy stays Spanish.
