@@ -181,6 +181,24 @@ class RpMarkdownTest {
         assertTrue(textNode.config.contains(SemanticsProperties.HorizontalScrollAxisRange))
     }
 
+    @Test
+    fun `markdown renders headings and paragraphs across compact and spacious spacing modes`() {
+        val markdownText = "# Encabezado 1\n## Encabezado 2\nTexto del párrafo normal con detalles."
+
+        rule.setContent {
+            CompositionLocalProvider(LocalHighlightDispatcher provides Dispatchers.Unconfined) {
+                RpTheme {
+                    RpMarkdown(markdownText, spacingMode = "compact")
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Encabezado 1", substring = true).fetchSemanticsNode()
+        rule.onNodeWithText("Encabezado 2", substring = true).fetchSemanticsNode()
+        rule.onNodeWithText("Texto del párrafo normal", substring = true).fetchSemanticsNode()
+    }
+
     private class PausedDispatcher : CoroutineDispatcher() {
         override fun dispatch(
             context: CoroutineContext,

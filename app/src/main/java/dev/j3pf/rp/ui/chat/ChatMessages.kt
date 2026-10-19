@@ -86,15 +86,21 @@ private fun UserBubble(
 ) {
     val hPad =
         when (spacingMode) {
-            "compact" -> 12.dp
+            "compact" -> 10.dp
             "spacious" -> 18.dp
-            else -> 16.dp
+            else -> 14.dp
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 8.dp
+            "compact" -> 6.dp
             "spacious" -> 14.dp
-            else -> 11.dp
+            else -> 9.dp
+        }
+    val textLineHeight =
+        when (spacingMode) {
+            "compact" -> 19.sp
+            "spacious" -> 24.sp
+            else -> 21.sp
         }
     Row(Modifier.fillMaxWidth().padding(start = 40.dp), horizontalArrangement = Arrangement.End) {
         Surface(
@@ -117,7 +123,7 @@ private fun UserBubble(
                 if (m.text.isNotBlank()) {
                     Text(
                         text = m.text,
-                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = textLineHeight),
                     )
                 }
                 if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
@@ -134,21 +140,21 @@ private fun AssistantBubble(
 ) {
     val blockSpacing =
         when (spacingMode) {
-            "compact" -> 6.dp
+            "compact" -> 4.dp
             "spacious" -> 14.dp
-            else -> 10.dp
+            else -> 8.dp
         }
     val hPad =
         when (spacingMode) {
-            "compact" -> 12.dp
+            "compact" -> 10.dp
             "spacious" -> 18.dp
-            else -> 16.dp
+            else -> 14.dp
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 8.dp
+            "compact" -> 6.dp
             "spacious" -> 14.dp
-            else -> 12.dp
+            else -> 9.dp
         }
     Column(Modifier.fillMaxWidth().padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
         m.blocks.forEachIndexed { i, b ->
@@ -160,7 +166,9 @@ private fun AssistantBubble(
                             shape = RpShapes.bubbleAgent,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                         ) {
-                            Box(Modifier.padding(horizontal = hPad, vertical = vPad)) { RpMarkdown(b.text) }
+                            Box(Modifier.padding(horizontal = hPad, vertical = vPad)) {
+                                RpMarkdown(b.text, spacingMode = spacingMode)
+                            }
                         }
                     }
                 }

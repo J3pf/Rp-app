@@ -21,6 +21,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -146,11 +147,12 @@ private fun rememberRpMarkdownComponents() =
         },
     )
 
-/** Markdown con bloques de código resaltados, interlineado amplio y renderizado optimizado para streaming. */
+/** Markdown con bloques de código resaltados, tipografía adaptada a burbujas de chat y padding dinámico según spacingMode. */
 @Composable
 fun RpMarkdown(
     text: String,
     modifier: Modifier = Modifier,
+    spacingMode: String = "normal",
 ) {
     val markdownState =
         rememberMarkdownState(
@@ -158,24 +160,121 @@ fun RpMarkdown(
             retainState = true,
             immediate = true,
         )
-    val baseBody = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp)
+    val bodyLineHeight =
+        when (spacingMode) {
+            "compact" -> 19.sp
+            "spacious" -> 24.sp
+            else -> 21.sp
+        }
+    val baseBody = MaterialTheme.typography.bodyMedium.copy(lineHeight = bodyLineHeight)
+    val blockPadding =
+        when (spacingMode) {
+            "compact" -> 2.dp
+            "spacious" -> 6.dp
+            else -> 3.dp
+        }
+    val listPadding =
+        when (spacingMode) {
+            "compact" -> 1.dp
+            "spacious" -> 4.dp
+            else -> 2.dp
+        }
+    val listItemPadding =
+        when (spacingMode) {
+            "compact" -> 1.dp
+            "spacious" -> 3.dp
+            else -> 1.5.dp
+        }
+
     Markdown(
         markdownState = markdownState,
         modifier = modifier,
         padding =
             markdownPadding(
-                block = 8.dp,
-                list = 6.dp,
-                listItemTop = 3.dp,
-                listItemBottom = 3.dp,
+                block = blockPadding,
+                list = listPadding,
+                listItemTop = listItemPadding,
+                listItemBottom = listItemPadding,
             ),
         typography =
             markdownTypography(
+                h1 =
+                    MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize =
+                            when (spacingMode) {
+                                "compact" -> 17.sp
+                                "spacious" -> 19.sp
+                                else -> 18.sp
+                            },
+                        lineHeight =
+                            when (spacingMode) {
+                                "compact" -> 21.sp
+                                "spacious" -> 24.sp
+                                else -> 22.sp
+                            },
+                    ),
+                h2 =
+                    MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize =
+                            when (spacingMode) {
+                                "compact" -> 16.sp
+                                "spacious" -> 17.sp
+                                else -> 16.sp
+                            },
+                        lineHeight =
+                            when (spacingMode) {
+                                "compact" -> 20.sp
+                                "spacious" -> 22.sp
+                                else -> 20.sp
+                            },
+                    ),
+                h3 =
+                    MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize =
+                            when (spacingMode) {
+                                "compact" -> 15.sp
+                                "spacious" -> 16.sp
+                                else -> 15.sp
+                            },
+                        lineHeight =
+                            when (spacingMode) {
+                                "compact" -> 19.sp
+                                "spacious" -> 21.sp
+                                else -> 19.sp
+                            },
+                    ),
+                h4 =
+                    MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        lineHeight =
+                            when (spacingMode) {
+                                "compact" -> 18.sp
+                                "spacious" -> 20.sp
+                                else -> 18.sp
+                            },
+                    ),
+                h5 =
+                    MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                    ),
+                h6 =
+                    MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                    ),
                 text = baseBody,
                 paragraph = baseBody,
                 bullet = baseBody,
                 ordered = baseBody,
                 list = baseBody,
+                quote = baseBody.copy(fontStyle = FontStyle.Italic),
             ),
         components = rememberRpMarkdownComponents(),
     )
