@@ -113,7 +113,24 @@ private fun UserBubble(
                 Modifier.padding(horizontal = hPad, vertical = vPad),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (m.fromMobile) {
+                val isOptimistic = m.key.startsWith("local:")
+                if (isOptimistic) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        )
+                        Text(
+                            "enviando…",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        )
+                    }
+                } else if (m.fromMobile) {
                     Text(
                         "móvil",
                         style = MaterialTheme.typography.labelSmall,

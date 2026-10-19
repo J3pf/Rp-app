@@ -81,7 +81,16 @@ class AgentsViewModel
                                 sortAgentsWithinGroup(list),
                             )
                         }
-                AgentsUiState(ms, all, groups, sel, canSpawn = visibleMachines.any { it.hostOnline }, refreshing = refreshing)
+                val sortedGroups =
+                    groups.sortedByDescending { g ->
+                        val hasPrompts = g.agents.any { it.openPromptCount > 0 }
+                        val isWorking = g.agents.any { it.status == "working" && it.online }
+                        val maxLastSeen = g.agents.maxOfOrNull { it.lastSeenAt ?: 0L } ?: 0L
+                        (if (hasPrompts) 2_000_000_000_000L else 0L) +
+                            (if (isWorking) 1_000_000_000_000L else 0L) +
+                            maxLastSeen
+                    }
+                AgentsUiState(ms, all, sortedGroups, sel, canSpawn = visibleMachines.any { it.hostOnline }, refreshing = refreshing)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AgentsUiState())
 
         private val agentsRepo = agents

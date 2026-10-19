@@ -655,6 +655,26 @@ fun AgentCard(
             rawTitle
         }
 
+    val isWorking = a.status == "working" && a.online
+    val reducedMotion = LocalReducedMotion.current
+    val pulseTransition = rememberInfiniteTransition(label = "pulse")
+    val borderAlpha =
+        if (isWorking && !reducedMotion) {
+            pulseTransition
+                .animateFloat(
+                    initialValue = 0.35f,
+                    targetValue = 0.90f,
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                    label = "borderPulse",
+                ).value
+        } else {
+            0.35f
+        }
+
     SurfaceCard(
         onClick = onClick,
         modifier =
@@ -663,7 +683,7 @@ fun AgentCard(
                 .padding(horizontal = 16.dp, vertical = 2.dp),
         shape = RoundedCornerShape(18.dp),
         tonalElevation = 1.dp,
-        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f)),
+        border = BorderStroke(if (isWorking) 1.5.dp else 1.dp, statusColor.copy(alpha = borderAlpha)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -674,12 +694,9 @@ fun AgentCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                val isWorking = a.status == "working" && a.online
-                val reducedMotion = LocalReducedMotion.current
-                val avatarPulseTransition = rememberInfiniteTransition(label = "avatarPulse")
                 val avatarScale: Float =
                     if (isWorking && !reducedMotion) {
-                        avatarPulseTransition
+                        pulseTransition
                             .animateFloat(
                                 initialValue = 1.0f,
                                 targetValue = 1.18f,
@@ -739,20 +756,53 @@ fun AgentCard(
                 )
 
                 // Slot dedicado y siempre visible para tiempo relativo de actividad
-                val timeText = if (a.status == "working" && a.online) "activo ahora" else relativeTime(a.lastSeenAt)
-                if (timeText.isNotBlank()) {
-                    Text(
-                        text = timeText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color =
-                            if (a.status == "working" && a.online) {
-                                MaterialTheme.colorScheme.primary
+                if (isWorking) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        val dotAlpha =
+                            if (!reducedMotion) {
+                                pulseTransition
+                                    .animateFloat(
+                                        initialValue = 0.4f,
+                                        targetValue = 1.0f,
+                                        animationSpec =
+                                            infiniteRepeatable(
+                                                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+                                                repeatMode = RepeatMode.Reverse,
+                                            ),
+                                        label = "dotAlpha",
+                                    ).value
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                    )
+                                1.0f
+                            }
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(statusColor.copy(alpha = dotAlpha)),
+                        )
+                        Text(
+                            text = "activo ahora",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
+                } else {
+                    val timeText = relativeTime(a.lastSeenAt)
+                    if (timeText.isNotBlank()) {
+                        Text(
+                            text = timeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
                 }
 
                 if (a.openPromptCount > 0) {

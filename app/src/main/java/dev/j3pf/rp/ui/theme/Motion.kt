@@ -93,34 +93,42 @@ object RpMotion {
         defaultSpec: AnimationSpec<T>,
     ): AnimationSpec<T> = if (reducedMotion) snap() else defaultSpec
 
-    // Transiciones de navegación sincronizadas estilo Material 3 (sin saltos al volver atrás)
-    private val navSlideIntSpec =
-        tween<IntOffset>(
-            durationMillis = 250,
-            easing = FastOutSlowInEasing,
-        )
+    // Transiciones entre pestañas principales de la barra inferior (cross-fade limpio)
+    val tabEnter: EnterTransition =
+        fadeIn(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
 
-    val navEnter: EnterTransition =
+    val tabExit: ExitTransition =
+        fadeOut(animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing))
+
+    // Transición para entrar en pantallas de detalle (Chat, Máquinas, Ajustes, etc.)
+    val detailEnter: EnterTransition =
         slideInHorizontally(
-            initialOffsetX = { fullWidth -> (fullWidth * 0.14f).toInt() },
-            animationSpec = navSlideIntSpec,
-        ) + fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+            initialOffsetX = { fullWidth -> (fullWidth * 0.28f).toInt() },
+            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        ) + fadeIn(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing))
 
-    val navExit: ExitTransition =
+    val detailExit: ExitTransition =
         slideOutHorizontally(
-            targetOffsetX = { fullWidth -> -(fullWidth * 0.06f).toInt() },
-            animationSpec = navSlideIntSpec,
+            targetOffsetX = { fullWidth -> -(fullWidth * 0.12f).toInt() },
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
         ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing))
 
-    val navPopEnter: EnterTransition =
+    val detailPopEnter: EnterTransition =
         slideInHorizontally(
-            initialOffsetX = { fullWidth -> -(fullWidth * 0.06f).toInt() },
-            animationSpec = navSlideIntSpec,
+            initialOffsetX = { fullWidth -> -(fullWidth * 0.12f).toInt() },
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
         ) + fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
 
-    val navPopExit: ExitTransition =
+    // Al volver atrás, la pantalla actual se desliza por completo hacia la derecha de forma fluida
+    val detailPopExit: ExitTransition =
         slideOutHorizontally(
-            targetOffsetX = { fullWidth -> (fullWidth * 0.14f).toInt() },
-            animationSpec = navSlideIntSpec,
-        ) + fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing))
+            targetOffsetX = { fullWidth -> fullWidth },
+            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        ) + fadeOut(animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing))
+
+    // Aliases retrocompatibles
+    val navEnter: EnterTransition = detailEnter
+    val navExit: ExitTransition = detailExit
+    val navPopEnter: EnterTransition = detailPopEnter
+    val navPopExit: ExitTransition = detailPopExit
 }

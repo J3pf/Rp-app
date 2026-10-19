@@ -161,6 +161,12 @@ fun RpRoot(
 
     val reducedMotion = rememberIsReducedMotion()
 
+    fun isBottomTab(d: androidx.navigation.NavDestination?): Boolean =
+        d?.hasRoute<AgentsRoute>() == true ||
+            d?.hasRoute<MeshRoute>() == true ||
+            d?.hasRoute<PendingRoute>() == true ||
+            d?.hasRoute<SettingsRoute>() == true
+
     CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
         Scaffold(
             bottomBar = { if (showBar) BottomBar(nav, pendingCount) },
@@ -169,10 +175,42 @@ fun RpRoot(
                 navController = nav,
                 startDestination = start,
                 modifier = Modifier.padding(padding).consumeWindowInsets(padding),
-                enterTransition = { if (reducedMotion) EnterTransition.None else RpMotion.navEnter },
-                exitTransition = { if (reducedMotion) ExitTransition.None else RpMotion.navExit },
-                popEnterTransition = { if (reducedMotion) EnterTransition.None else RpMotion.navPopEnter },
-                popExitTransition = { if (reducedMotion) ExitTransition.None else RpMotion.navPopExit },
+                enterTransition = {
+                    if (reducedMotion) {
+                        EnterTransition.None
+                    } else if (isBottomTab(initialState.destination) && isBottomTab(targetState.destination)) {
+                        RpMotion.tabEnter
+                    } else {
+                        RpMotion.detailEnter
+                    }
+                },
+                exitTransition = {
+                    if (reducedMotion) {
+                        ExitTransition.None
+                    } else if (isBottomTab(initialState.destination) && isBottomTab(targetState.destination)) {
+                        RpMotion.tabExit
+                    } else {
+                        RpMotion.detailExit
+                    }
+                },
+                popEnterTransition = {
+                    if (reducedMotion) {
+                        EnterTransition.None
+                    } else if (isBottomTab(initialState.destination) && isBottomTab(targetState.destination)) {
+                        RpMotion.tabEnter
+                    } else {
+                        RpMotion.detailPopEnter
+                    }
+                },
+                popExitTransition = {
+                    if (reducedMotion) {
+                        ExitTransition.None
+                    } else if (isBottomTab(initialState.destination) && isBottomTab(targetState.destination)) {
+                        RpMotion.tabExit
+                    } else {
+                        RpMotion.detailPopExit
+                    }
+                },
             ) {
                 composable<OnboardingRoute> { OnboardingScreen(onStart = { nav.navigate(ScanRoute) }) }
                 composable<ScanRoute> {
