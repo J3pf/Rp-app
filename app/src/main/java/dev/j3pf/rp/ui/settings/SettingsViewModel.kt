@@ -155,6 +155,8 @@ class SettingsViewModel
 
         fun setAppTheme(theme: String) = viewModelScope.launch { settingsRepo.setAppTheme(theme) }
 
+        fun setChatFontScale(scale: Float) = viewModelScope.launch { settingsRepo.setChatFontScale(scale) }
+
         // ───────────────────────────── Notificaciones ─────────────────────────────
 
         fun setDirectPush(v: Boolean) = viewModelScope.launch { sessionRepo.applyPushChannels(v) }

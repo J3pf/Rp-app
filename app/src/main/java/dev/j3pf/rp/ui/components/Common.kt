@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -193,6 +194,13 @@ fun AppHeader(
     }
 }
 
+private data class HeroInfo(
+    val overlineLabel: String,
+    val selectedTitle: String,
+    val selectedSubtitle: String,
+    val selectedColor: Color,
+)
+
 /**
  * Hero Card interactivo para conmutar entre máquinas mediante un Dropdown estilizado (design.md §1 y §6).
  */
@@ -206,34 +214,43 @@ fun MachineHeroDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar la etiqueta y estado del elemento seleccionado
-    val (selectedTitle, selectedSubtitle, selectedColor) =
+    val singleMachine = machines.singleOrNull()
+    val activeMachine =
         when {
+            selected == AppSettings.ALL && singleMachine != null -> singleMachine
+            else -> machines.firstOrNull { it.machineId == selected }
+        }
+
+    // Determinar la etiqueta y estado del elemento seleccionado
+    val (overlineLabel, selectedTitle, selectedSubtitle, selectedColor) =
+        when {
+            activeMachine != null -> {
+                val m = activeMachine
+                val count = agents.count { it.machineId == m.machineId }
+                val onlineCount = agents.count { it.machineId == m.machineId && it.online }
+                HeroInfo(
+                    "PC CONECTADA · ${contextLabel(m.context).uppercase()}",
+                    m.name,
+                    "$onlineCount de $count sesiones activas${if (m.online) " · PC en línea" else " · PC desconectada"}",
+                    parseColor(m.color),
+                )
+            }
+
             selected == AppSettings.ALL -> {
                 val total = agents.size
                 val online = machines.count { it.online }
-                Triple(
+                HeroInfo(
+                    "EQUIPOS VINCULADOS",
                     "Todas las máquinas",
                     "$total ${if (total == 1) "agente" else "agentes"} · $online ${if (online == 1) "PC activa" else "PCs activas"}",
                     MaterialTheme.colorScheme.primary,
                 )
             }
 
-            machines.any { it.machineId == selected } -> {
-                val m = machines.first { it.machineId == selected }
-                val count = agents.count { it.machineId == m.machineId }
-                Triple(
-                    m.name,
-                    "${contextLabel(
-                        m.context,
-                    )} · $count ${if (count == 1) "agente" else "agentes"}${if (m.online) " · en línea" else " · desconectada"}${if (m.hostOnline) " · rp-host ✓" else ""}",
-                    parseColor(m.color),
-                )
-            }
-
             else -> {
                 val count = agents.count { it.machineContext == selected }
-                Triple(
+                HeroInfo(
+                    "CONTEXTO",
                     contextLabel(selected),
                     "$count ${if (count == 1) "agente" else "agentes"} en este contexto",
                     parseColor(machines.firstOrNull { it.context == selected }?.color),
@@ -245,36 +262,66 @@ fun MachineHeroDropdown(
         SurfaceCard(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            tonalElevation = 2.dp,
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.50f),
+            tonalElevation = 3.dp,
+            border = BorderStroke(1.2.dp, selectedColor.copy(alpha = 0.55f)),
         ) {
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Surface(
-                    shape = CircleShape,
-                    color = selectedColor.copy(alpha = 0.16f),
-                    modifier = Modifier.size(34.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = selectedColor.copy(alpha = 0.20f),
+                    border = BorderStroke(1.dp, selectedColor.copy(alpha = 0.45f)),
+                    modifier = Modifier.size(38.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        ColorDot(selectedColor, size = 12)
+                        Icon(
+                            imageVector = Icons.Filled.Computer,
+                            contentDescription = null,
+                            tint = selectedColor,
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = overlineLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = selectedColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = selectedTitle,
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (activeMachine?.hostOnline == true) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.75f),
+                            ) {
+                                Text(
+                                    text = "rp-host ✓",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
                     }
                     Text(
                         text = selectedSubtitle,
@@ -286,19 +333,23 @@ fun MachineHeroDropdown(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text(
-                            text = "Cambiar",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (machines.size > 1) {
+                            Text(
+                                text = "PC",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Icon(
                             imageVector = Icons.Filled.ArrowDropDown,
                             contentDescription = "Desplegar máquinas",

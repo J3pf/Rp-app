@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -46,6 +47,7 @@ data class AppSettings(
     /** Agentes silenciados (preferencia local por agente). */
     val mutedAgents: Set<String> = emptySet(),
     val appTheme: String = "auto",
+    val chatFontScale: Float = 1.0f,
     val selectedMeshMachine: String? = null,
     val selectedMeshGroup: String? = null,
 ) {
@@ -82,6 +84,7 @@ class SettingsRepository(
                             ?: NotifyPrefs(),
                     mutedAgents = p[MUTED_AGENTS] ?: emptySet(),
                     appTheme = p[APP_THEME] ?: "auto",
+                    chatFontScale = (p[CHAT_FONT_SCALE] ?: 1.0f).coerceIn(0.80f, 1.45f),
                     selectedMeshMachine = p[MESH_SELECTED_MACHINE],
                     selectedMeshGroup = p[MESH_SELECTED_GROUP],
                 )
@@ -106,6 +109,8 @@ class SettingsRepository(
     suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
 
     suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
+
+    suspend fun setChatFontScale(v: Float) = edit { it[CHAT_FONT_SCALE] = v.coerceIn(0.80f, 1.45f) }
 
     suspend fun setMeshSelectedMachine(machineId: String?) =
         edit {
@@ -145,6 +150,7 @@ class SettingsRepository(
         val PREFS = stringPreferencesKey("notifyPrefs")
         val MUTED_AGENTS = stringSetPreferencesKey("mutedAgents")
         val APP_THEME = stringPreferencesKey("appTheme")
+        val CHAT_FONT_SCALE = floatPreferencesKey("chatFontScale")
         val MESH_SELECTED_MACHINE = stringPreferencesKey("mesh_selected_machine")
         val MESH_SELECTED_GROUP = stringPreferencesKey("mesh_selected_group")
     }

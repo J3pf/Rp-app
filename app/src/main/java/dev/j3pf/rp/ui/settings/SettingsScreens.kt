@@ -95,9 +95,11 @@ fun SettingsContent(
     onSelectTheme: (String) -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
+    onSelectFontScale: (Float) -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showFontScaleDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier =
@@ -173,6 +175,12 @@ fun SettingsContent(
             tonalElevation = 1.dp,
         ) {
             NavRow("Tema de la app", themeLabel(state.settings.appTheme), icon = Icons.Filled.Palette) { showThemeDialog = true }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+            NavRow(
+                "Tamaño de letra en el chat",
+                fontScaleLabel(state.settings.chatFontScale),
+                icon = Icons.Filled.Palette,
+            ) { showFontScaleDialog = true }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             NavRow("Notificaciones", healthSummary(state.health), icon = Icons.Filled.Notifications) { onNav(SettingsDest.Notifications) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -275,6 +283,43 @@ fun SettingsContent(
             },
         )
     }
+    if (showFontScaleDialog) {
+        val options =
+            listOf(
+                0.85f to "Pequeño (85%)",
+                1.00f to "Normal (100%)",
+                1.15f to "Grande (115%)",
+                1.30f to "Extra grande (130%)",
+            )
+        AlertDialog(
+            onDismissRequest = { showFontScaleDialog = false },
+            title = { Text("Tamaño de letra en el chat") },
+            text = {
+                Column {
+                    options.forEach { (scale, label) ->
+                        val isSelected = kotlin.math.abs(state.settings.chatFontScale - scale) < 0.04f
+                        ListItem(
+                            headlineContent = { Text(label) },
+                            trailingContent = {
+                                if (isSelected) Text("✓", color = MaterialTheme.colorScheme.primary)
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable {
+                                        onSelectFontScale(scale)
+                                        showFontScaleDialog = false
+                                    },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFontScaleDialog = false }) { Text("Cerrar") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -289,11 +334,20 @@ fun SettingsScreen(
         state = st,
         onNav = nav,
         onSelectTheme = vm::setAppTheme,
+        onSelectFontScale = vm::setChatFontScale,
         onLogout = { vm.logout(onLoggedOut) },
     )
 }
 
 private fun themeLabel(id: String): String = RpThemeChoice.entries.find { it.id == id }?.label ?: "Sincronizado con Pi (automático)"
+
+private fun fontScaleLabel(scale: Float): String =
+    when {
+        scale <= 0.90f -> "Pequeño (${(scale * 100).toInt()}%)"
+        scale >= 1.25f -> "Extra grande (${(scale * 100).toInt()}%)"
+        scale >= 1.08f -> "Grande (${(scale * 100).toInt()}%)"
+        else -> "Normal (${(scale * 100).toInt()}%)"
+    }
 
 enum class SettingsDest { Devices, Machines, AddMachine, Notifications, Security, Battery, About }
 

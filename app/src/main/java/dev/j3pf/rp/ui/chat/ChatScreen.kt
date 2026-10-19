@@ -121,6 +121,7 @@ fun ChatContent(
     onRefresh: () -> Unit = {},
     onAnswerPrompt: (Prompt, Answer) -> Unit = { _, _ -> },
     onToggleMute: () -> Unit = {},
+    onFontScaleChange: (Float) -> Unit = {},
     onQuit: () -> Unit = {},
     onForget: () -> Unit = {},
     onSwitchToNormal: () -> Unit = {},
@@ -145,12 +146,27 @@ fun ChatContent(
                     androidx.compose.foundation.layout
                         .WindowInsets(0, 0, 0, 0),
                 title = {
-                    Column {
+                    val rawTitle = agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: ui.chat.sessionName ?: "Agente"
+                    val folder =
+                        agent
+                            ?.cwd
+                            ?.let {
+                                dev.j3pf.rp.util
+                                    .lastSegment(it)
+                            }.orEmpty()
+                    val displayTopic =
+                        if (folder.isNotEmpty() && rawTitle.startsWith("$folder · ")) {
+                            rawTitle.removePrefix("$folder · ").trim()
+                        } else {
+                            rawTitle
+                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: ui.chat.sessionName ?: "Agente",
+                            displayTopic,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
                         )
                         if (agent != null) {
                             val effectiveAgent =
@@ -161,13 +177,21 @@ fun ChatContent(
                                 }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 StatusChip(effectiveAgent)
+                                val branch = agent.gitBranch?.takeIf { it.isNotBlank() }?.let { "⎇ $it" }
                                 val modelText = (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
                                 val thinkingText = ui.chat.thinkingLevel?.takeIf { it.isNotBlank() }
-                                val subtitle = listOfNotNull(modelText, thinkingText).joinToString(" · ")
+                                val subtitle =
+                                    listOfNotNull(
+                                        folder.takeIf { it.isNotBlank() },
+                                        branch,
+                                        modelText,
+                                        thinkingText,
+                                    ).joinToString(" · ")
                                 if (subtitle.isNotBlank()) {
                                     Text(
                                         subtitle,
                                         style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -184,6 +208,43 @@ fun ChatContent(
                     var menu by remember { mutableStateOf(false) }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
                     DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Letra (${(ui.chatFontScale * 100).toInt()}%)")
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        TextButton(
+                                            onClick = { onFontScaleChange((ui.chatFontScale - 0.10f).coerceAtLeast(0.80f)) },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        ) {
+                                            Text("A-", fontWeight = FontWeight.Bold)
+                                        }
+                                        if (kotlin.math.abs(ui.chatFontScale - 1.0f) > 0.03f) {
+                                            TextButton(
+                                                onClick = { onFontScaleChange(1.0f) },
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            ) {
+                                                Text("100%", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                        TextButton(
+                                            onClick = { onFontScaleChange((ui.chatFontScale + 0.10f).coerceAtMost(1.45f)) },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        ) {
+                                            Text("A+", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            },
+                            onClick = {},
+                        )
                         DropdownMenuItem(text = { Text("Información") }, onClick = {
                             menu = false
                             showInfo = true
@@ -409,6 +470,7 @@ fun ChatScreen(
             }
         },
         onToggleMute = vm::toggleMute,
+        onFontScaleChange = vm::setChatFontScale,
         onQuit = { vm.quit(onBack) },
         onForget = { vm.forget(onBack) },
         onSwitchToNormal = vm::switchToNormal,
@@ -517,73 +579,86 @@ internal fun MessageList(
         }
     }
 
+    val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+    val scaledDensity =
+        remember(baseDensity, ui.chatFontScale) {
+            androidx.compose.ui.unit.Density(
+                density = baseDensity.density,
+                fontScale = baseDensity.fontScale * ui.chatFontScale,
+            )
+        }
+
     Box(modifier = modifier.fillMaxWidth()) {
-        LazyColumn(
-            state = listState,
-            reverseLayout = true,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides scaledDensity,
         ) {
-            if (isAgentWorking) {
-                item(key = "working-indicator", contentType = "WorkingIndicator") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                            shape = RpShapes.bubbleAgent,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+            LazyColumn(
+                state = listState,
+                reverseLayout = true,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
+            ) {
+                if (isAgentWorking) {
+                    item(key = "working-indicator", contentType = "WorkingIndicator") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                shape = RpShapes.bubbleAgent,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                             ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                val runningTool =
-                                    ui.chat.tools.values
-                                        .lastOrNull { it.status == dev.j3pf.rp.chat.ToolStatus.RUNNING }
-                                val statusText =
-                                    when {
-                                        ui.sending -> "Enviando mensaje…"
-                                        runningTool != null -> "Ejecutando ${runningTool.name}…"
-                                        else -> "Pensando…"
-                                    }
-                                Text(
-                                    text = statusText,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium,
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    val runningTool =
+                                        ui.chat.tools.values
+                                            .lastOrNull { it.status == dev.j3pf.rp.chat.ToolStatus.RUNNING }
+                                    val statusText =
+                                        when {
+                                            ui.sending -> "Enviando mensaje…"
+                                            runningTool != null -> "Ejecutando ${runningTool.name}…"
+                                            else -> "Pensando…"
+                                        }
+                                    Text(
+                                        text = statusText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-            items(
-                reversedItems,
-                key = { it.key },
-                contentType = { it::class.simpleName },
-            ) { item ->
-                val reducedMotion = LocalReducedMotion.current
-                val itemModifier =
-                    if (reducedMotion) {
-                        Modifier
-                    } else {
-                        Modifier.animateItem(
-                            fadeInSpec = null,
-                            fadeOutSpec = null,
-                        )
+                items(
+                    reversedItems,
+                    key = { it.key },
+                    contentType = { it::class.simpleName },
+                ) { item ->
+                    val reducedMotion = LocalReducedMotion.current
+                    val itemModifier =
+                        if (reducedMotion) {
+                            Modifier
+                        } else {
+                            Modifier.animateItem(
+                                fadeInSpec = null,
+                                fadeOutSpec = null,
+                            )
+                        }
+                    Box(modifier = itemModifier) {
+                        ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
                     }
-                Box(modifier = itemModifier) {
-                    ChatItemView(item, ui.chat.tools, busyPromptId, onAnswerPrompt)
                 }
             }
         }

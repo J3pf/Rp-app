@@ -58,6 +58,7 @@ data class ChatUiState(
     val syncingHistory: Boolean = false,
     /** Notificaciones de este agente silenciadas (preferencia local). */
     val muted: Boolean = false,
+    val chatFontScale: Float = 1.0f,
     /** Última entrega interactiva falló por indisponibilidad → ofrecer "Pasar a Normal". */
     val interactiveUnavailable: Boolean = false,
     val message: String? = null,
@@ -100,6 +101,7 @@ class ChatViewModel
                     agent = agent,
                     conn = conn,
                     muted = agentId in st.mutedAgents,
+                    chatFontScale = st.chatFontScale,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
@@ -122,6 +124,10 @@ class ChatViewModel
 
         fun toggleMute() {
             viewModelScope.launch { settingsRepo.setAgentMuted(agentId, !state.value.muted) }
+        }
+
+        fun setChatFontScale(scale: Float) {
+            viewModelScope.launch { settingsRepo.setChatFontScale(scale) }
         }
 
         /** Olvida un agente desconectado (`agent.forget`). */

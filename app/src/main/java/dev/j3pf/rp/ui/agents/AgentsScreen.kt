@@ -9,6 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,9 +31,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -42,6 +46,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -149,6 +155,170 @@ fun AgentsHeroStats(
     }
 }
 
+private enum class SessionQuickFilter(
+    val label: String,
+) {
+    ALL("Todas"),
+    ACTIVE("En línea"),
+    AGY("✦ agy"),
+    PI("π pi"),
+}
+
+@Composable
+private fun SessionsSectionHeader(
+    totalCount: Int,
+    hasAgy: Boolean,
+    hasPi: Boolean,
+    selectedFilter: SessionQuickFilter,
+    onSelectFilter: (SessionQuickFilter) -> Unit,
+    searchActive: Boolean,
+    searchQuery: String,
+    onToggleSearch: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "SESIONES",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = "$totalCount",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
+                val visibleFilters =
+                    buildList {
+                        add(SessionQuickFilter.ALL)
+                        add(SessionQuickFilter.ACTIVE)
+                        if (hasAgy) add(SessionQuickFilter.AGY)
+                        if (hasPi) add(SessionQuickFilter.PI)
+                    }
+                visibleFilters.forEach { filter ->
+                    val isSelected = selectedFilter == filter
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            },
+                        border =
+                            if (isSelected) {
+                                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                            } else {
+                                null
+                            },
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable { onSelectFilter(filter) },
+                    ) {
+                        Text(
+                            text = filter.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color =
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onToggleSearch,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = if (searchActive) Icons.Filled.Close else Icons.Filled.Search,
+                        contentDescription = if (searchActive) "Cerrar búsqueda" else "Buscar sesión",
+                        tint =
+                            if (searchActive || searchQuery.isNotBlank()) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+
+        if (searchActive) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                placeholder = {
+                    Text(
+                        "Filtrar por proyecto, tema o rama...",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                trailingIcon =
+                    if (searchQuery.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { onSearchQueryChange("") }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = "Limpiar búsqueda",
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        null
+                    },
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AgentsContent(
@@ -174,6 +344,45 @@ fun AgentsContent(
     val isFabExpanded by remember {
         derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 }
     }
+    var quickFilter by rememberSaveable { mutableStateOf(SessionQuickFilter.ALL) }
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    val filteredGroups =
+        remember(state.groups, quickFilter, searchQuery) {
+            val q = searchQuery.trim().lowercase()
+            if (quickFilter == SessionQuickFilter.ALL && q.isEmpty()) {
+                state.groups
+            } else {
+                state.groups.mapNotNull { group ->
+                    val matching =
+                        group.agents.filter { a ->
+                            val matchesFilter =
+                                when (quickFilter) {
+                                    SessionQuickFilter.ALL -> true
+                                    SessionQuickFilter.ACTIVE -> a.online
+                                    SessionQuickFilter.AGY -> a.launcher == "agy"
+                                    SessionQuickFilter.PI -> a.launcher != "agy"
+                                }
+                            val matchesQuery =
+                                if (q.isEmpty()) {
+                                    true
+                                } else {
+                                    (a.sessionName?.lowercase()?.contains(q) == true) ||
+                                        (a.cwd?.lowercase()?.contains(q) == true) ||
+                                        (a.gitBranch?.lowercase()?.contains(q) == true) ||
+                                        (a.lastMessagePreview?.lowercase()?.contains(q) == true)
+                                }
+                            matchesFilter && matchesQuery
+                        }
+                    if (matching.isEmpty()) null else group.copy(agents = matching)
+                }
+            }
+        }
+
+    val totalVisibleAgents = remember(filteredGroups) { filteredGroups.sumOf { it.agents.size } }
+    val hasAgy = remember(state.allAgents) { state.allAgents.any { it.launcher == "agy" } }
+    val hasPi = remember(state.allAgents) { state.allAgents.any { it.launcher != "agy" } }
 
     Scaffold(
         modifier = modifier,
@@ -212,14 +421,31 @@ fun AgentsContent(
                 machines = state.machines,
             )
 
-            // Switcher de máquinas tipo Dropdown con Hero Card (design.md §1 y §6)
+            // Switcher de máquinas tipo Hardware Context Bar (design.md §1 y §6)
             MachineHeroDropdown(
                 machines = state.machines,
                 agents = state.allAgents,
                 selected = state.selected,
                 onSelect = onSelect,
-                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
             )
+
+            if (state.allAgents.isNotEmpty()) {
+                SessionsSectionHeader(
+                    totalCount = totalVisibleAgents,
+                    hasAgy = hasAgy,
+                    hasPi = hasPi,
+                    selectedFilter = quickFilter,
+                    onSelectFilter = { quickFilter = it },
+                    searchActive = searchActive,
+                    searchQuery = searchQuery,
+                    onToggleSearch = {
+                        searchActive = !searchActive
+                        if (!searchActive) searchQuery = ""
+                    },
+                    onSearchQueryChange = { searchQuery = it },
+                )
+            }
 
             val reducedMotion = LocalReducedMotion.current
             PullToRefreshBox(
@@ -264,14 +490,42 @@ fun AgentsContent(
                         }
                     }
 
+                    filteredGroups.isEmpty() -> {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                        ) {
+                            EmptyState(
+                                title = "Sin sesiones que coincidan",
+                                subtitle = "Prueba cambiando el filtro rápido o limpiando la búsqueda.",
+                                actionLabel = "Mostrar todas",
+                                onAction = {
+                                    quickFilter = SessionQuickFilter.ALL
+                                    searchQuery = ""
+                                    searchActive = false
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Search,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(32.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
+
                     else -> {
-                        val showGroupHeaders = state.groups.size > 1
+                        val showGroupHeaders = filteredGroups.size > 1
                         LazyColumn(
                             state = listState,
                             contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            state.groups.forEach { g ->
+                            filteredGroups.forEach { g ->
                                 if (showGroupHeaders) {
                                     stickyHeader(key = "h-${g.machine.machineId}") {
                                         MachineHeader(g.machine)
@@ -371,7 +625,7 @@ private fun MachineHeader(m: MachineSummary) {
     }
 }
 
-/** Tarjeta de agente: nombre · carpeta · rama · modelo, chips de estado/lanzador/herdr/modo gentle y vista previa. */
+/** Tarjeta de agente: carpeta/rama separadas del tema de conversación (2 líneas), chips de estado y vista previa. */
 @Composable
 fun AgentCard(
     a: AgentSummary,
@@ -393,21 +647,30 @@ fun AgentCard(
             else -> RpColors.success
         }
 
+    val folder = lastSegment(a.cwd).takeIf { it.isNotEmpty() }
+    val rawTitle = agentTitle(a.sessionName, a.cwd, a.agentId)
+    val displayTopic =
+        if (folder != null && rawTitle.startsWith("$folder · ")) {
+            rawTitle.removePrefix("$folder · ").trim().ifEmpty { rawTitle }
+        } else {
+            rawTitle
+        }
+
     SurfaceCard(
         onClick = onClick,
         modifier =
             modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         tonalElevation = 1.dp,
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f)),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Fila superior: punto de color de máquina, título de sesión, tiempo relativo dedicado, campana y menú
+            // Fila 1: Badge de agente + Carpeta / Rama Git a la izquierda, Tiempo relativo + acciones a la derecha
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -420,7 +683,7 @@ fun AgentCard(
                         avatarPulseTransition
                             .animateFloat(
                                 initialValue = 1.0f,
-                                targetValue = 1.25f,
+                                targetValue = 1.18f,
                                 animationSpec =
                                     infiniteRepeatable(
                                         animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
@@ -432,9 +695,10 @@ fun AgentCard(
                         1.0f
                     }
 
+                val isAgy = a.launcher == "agy"
                 Surface(
-                    shape = CircleShape,
-                    color = parseColor(a.machineColor).copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(8.dp),
+                    color = statusColor.copy(alpha = 0.16f),
                     modifier =
                         Modifier
                             .size(24.dp)
@@ -444,29 +708,45 @@ fun AgentCard(
                             },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        ColorDot(parseColor(a.machineColor), size = 8)
+                        Text(
+                            text = if (isAgy) "✦" else "π",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = statusColor,
+                        )
                     }
                 }
 
+                // Píldora de carpeta + rama git
+                val projectContext =
+                    listOfNotNull(
+                        folder?.let { "📁 $it" },
+                        a.gitBranch?.takeIf { it.isNotBlank() }?.let { "⎇ $it" },
+                        a.model?.label?.takeIf { it.isNotEmpty() },
+                    ).joinToString(" · ")
+
                 Text(
-                    text = agentTitle(a.sessionName, a.cwd, a.agentId),
+                    text = projectContext.ifEmpty { "Sesión" },
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style =
+                        MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                        ),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                // R4: Slot dedicado y siempre visible para tiempo relativo de actividad
+                // Slot dedicado y siempre visible para tiempo relativo de actividad
                 val timeText = if (a.status == "working" && a.online) "activo ahora" else relativeTime(a.lastSeenAt)
                 if (timeText.isNotBlank()) {
                     Text(
                         text = timeText,
                         style = MaterialTheme.typography.labelSmall,
                         color =
-                            if (a.status == "working" &&
-                                a.online
-                            ) {
+                            if (a.status == "working" && a.online) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -496,21 +776,21 @@ fun AgentCard(
                 if (!a.online) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (canResume) {
-                            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+                            IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
                                 Icon(
                                     Icons.Filled.PlayArrow,
                                     contentDescription = "Reanudar agente",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         }
                         Box {
-                            IconButton(onClick = { setMenu(true) }, modifier = Modifier.size(32.dp)) {
+                            IconButton(onClick = { setMenu(true) }, modifier = Modifier.size(28.dp)) {
                                 Icon(
                                     Icons.Filled.MoreVert,
                                     contentDescription = "Opciones",
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                             DropdownMenu(expanded = menu, onDismissRequest = { setMenu(false) }) {
@@ -536,27 +816,15 @@ fun AgentCard(
                 }
             }
 
-            // Metadatos técnicos (carpeta, rama, modelo) con espaciado reducido (R4)
-            val meta =
-                listOfNotNull(
-                    lastSegment(a.cwd).takeIf { it.isNotEmpty() },
-                    a.gitBranch?.let { "git:$it" },
-                    a.model?.label?.takeIf { it.isNotEmpty() },
-                ).joinToString(" • ")
-
-            if (meta.isNotEmpty()) {
-                Text(
-                    text = meta,
-                    style =
-                        MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                        ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            // Fila 2: Título / tema de la conversación hasta en 2 líneas completas
+            Text(
+                text = displayTopic,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
 
             // Chips de estado condensados y envueltos sin scroll horizontal
             FlowRow(
