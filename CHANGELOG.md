@@ -3,6 +3,13 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-10-19
+
+### Fixed
+- **Test Determinism (no user-facing changes)**:
+  - Made `PromptsRepositoryTest`, `RelayConnectionTest`, and `MeshRepositoryTest` coroutine scopes deterministic with `UnconfinedTestDispatcher` and `runTest`.
+  - Eliminated wall-clock polling timeouts (`withTimeout(5000)`) under CPU contention, awaiting exact flow state conditions.
+
 ## [0.4.0] - 2026-10-18
 
 ### Added

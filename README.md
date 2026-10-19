@@ -72,13 +72,13 @@ An Android app (Kotlin + Jetpack Compose) for viewing and controlling your [Pi](
 You can install the app directly on your device without building it:
 
 1. **Download the APK:**
-   - 📦 **[RP App v0.4.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.4.0)**
-   - Official direct-channel release (no Google services): **[rp-v0.4.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.4.0/rp-v0.4.0-direct.apk)**.
+   - 📦 **[RP App v0.4.1 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.4.1)**
+   - Official direct-channel release (no Google services): **[rp-v0.4.1-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.4.1/rp-v0.4.1-direct.apk)**.
 2. **Install on your phone:**
    - **On the phone:** Open the downloaded file and allow your browser or file manager to install unknown apps if prompted.
    - **Over USB with ADB:** Connect a phone with USB debugging enabled and run:
      ```bash
-     adb install -r rp-v0.4.0-direct.apk
+     adb install -r rp-v0.4.1-direct.apk
      ```
 3. **Pair with your relay:**
    - On the relay server, run:

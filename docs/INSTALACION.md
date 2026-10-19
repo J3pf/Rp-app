@@ -21,9 +21,9 @@ This guide explains how to install the **RP** Android app, pair it with your **R
 ### Option A: Direct download from the official release (recommended)
 
 1. Open the official GitHub release on your phone or computer:
-   👉 **[RP App v0.4.0 — Download APK](https://github.com/J3pf/Rp-app/releases/tag/v0.4.0)**
+   👉 **[RP App v0.4.1 — Download APK](https://github.com/J3pf/Rp-app/releases/tag/v0.4.1)**
 2. Download the official installer:
-   - **[rp-v0.4.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.4.0/rp-v0.4.0-direct.apk)**: the official release without Google services, using the `remoteMessaging` WebSocket push channel.
+   - **[rp-v0.4.1-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.4.1/rp-v0.4.1-direct.apk)**: the official release without Google services, using the `remoteMessaging` WebSocket push channel.
 
 #### Install on your phone
 - **From the phone browser:**
@@ -34,7 +34,7 @@ This guide explains how to install the **RP** Android app, pair it with your **R
   1. Enable **Developer options** and **USB debugging** on the phone.
   2. Run:
      ```bash
-     adb install -r rp-v0.4.0-direct.apk
+     adb install -r rp-v0.4.1-direct.apk
      ```
 
 ### Option B: Build locally from source
