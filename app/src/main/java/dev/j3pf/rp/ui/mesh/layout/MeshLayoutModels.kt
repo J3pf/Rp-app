@@ -3,6 +3,11 @@ package dev.j3pf.rp.ui.mesh.layout
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 
+enum class NodeDisplayMode {
+    CARD,
+    LEAF_ITEM,
+}
+
 /** A mesh node positioned in layout coordinates. */
 data class PositionedNode(
     val node: MeshNode,
@@ -11,6 +16,10 @@ data class PositionedNode(
     val width: Float = 200f,
     val height: Float = 100f,
     val level: Int,
+    val displayMode: NodeDisplayMode = NodeDisplayMode.CARD,
+    val parentId: String? = null,
+    val leafIndex: Int = -1,
+    val totalLeaves: Int = 0,
 ) {
     val left: Float get() = x - width / 2f
     val top: Float get() = y - height / 2f
@@ -71,6 +80,9 @@ data class LayoutConfig(
     val cardHeight: Float = 100f,
     val minCardWidth: Float = 180f,
     val minCardHeight: Float = 100f,
+    val leafItemWidth: Float = 220f,
+    val leafItemHeight: Float = 36f,
+    val leafThreshold: Int = 3,
     val cardSpacingX: Float = 12f,
     val cardSpacingY: Float = 56f,
     val viewportPaddingX: Float = 12f,

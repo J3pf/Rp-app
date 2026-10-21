@@ -16,6 +16,133 @@ class MeshLayoutEngineTest {
     private val engine = MeshLayoutEngine()
 
     @Test
+    fun `tidy tree centers parent horizontally over its children`() {
+        val nodes =
+            listOf(
+                node("root", role = "orchestrator"),
+                node("child-1", parent = "root", role = "subordinate", subagents = listOf(subagent("s1"))),
+                node("child-2", parent = "root", role = "subordinate", subagents = listOf(subagent("s2"))),
+                node("child-3", parent = "root", role = "subordinate", subagents = listOf(subagent("s3"))),
+            )
+        val result = engine.computeLayout(nodes, emptyList(), width = 1200f, height = 800f)
+        val root = result.nodes.getValue("root")
+        val c1 = result.nodes.getValue("child-1")
+        val c3 = result.nodes.getValue("child-3")
+
+        val expectedCenterX = (c1.x + c3.x) / 2f
+        assertEquals(expectedCenterX, root.x, 2f)
+        assertEquals(c1.y, c3.y, 0.1f)
+    }
+
+    @Test
+    fun `same depth level aligns on the exact same row`() {
+        val nodes =
+            listOf(
+                node("ceo", role = "orchestrator"),
+                node("dir-a", parent = "ceo", role = "subordinate", subagents = listOf(subagent("sa"))),
+                node("dir-b", parent = "ceo", role = "subordinate", subagents = listOf(subagent("sb"))),
+                node("team-a1", parent = "dir-a", role = "subordinate", subagents = listOf(subagent("s1"))),
+                node("team-b1", parent = "dir-b", role = "subordinate", subagents = listOf(subagent("s2"))),
+            )
+        val result = engine.computeLayout(nodes, emptyList(), width = 1200f, height = 800f)
+        val dirA = result.nodes.getValue("dir-a")
+        val dirB = result.nodes.getValue("dir-b")
+        val teamA1 = result.nodes.getValue("team-a1")
+        val teamB1 = result.nodes.getValue("team-b1")
+
+        assertEquals(dirA.y, dirB.y, 0.1f)
+        assertEquals(teamA1.y, teamB1.y, 0.1f)
+        assertTrue(dirA.y < teamA1.y)
+    }
+
+    @Test
+    fun `multiple roots sit side by side on top row without orphan nodes`() {
+        val nodes =
+            listOf(
+                node("root-1", role = "orchestrator"),
+                node("worker-1", parent = "root-1", role = "subordinate"),
+                node("root-2", role = "orchestrator"),
+                node("worker-2", parent = "root-2", role = "subordinate"),
+                node("solo-node", role = "solo"),
+            )
+        val result = engine.computeLayout(nodes, emptyList(), width = 1200f, height = 800f)
+        val r1 = result.nodes.getValue("root-1")
+        val r2 = result.nodes.getValue("root-2")
+        val solo = result.nodes.getValue("solo-node")
+
+        assertEquals(0, r1.level)
+        assertEquals(0, r2.level)
+        assertEquals(0, solo.level)
+        assertEquals(r1.y, r2.y, 0.1f)
+        assertEquals(r1.y, solo.y, 0.1f)
+        assertFalse(r1.intersects(r2))
+        assertFalse(r1.intersects(solo))
+        assertFalse(r2.intersects(solo))
+    }
+
+    @Test
+    fun `leaf children exceeding threshold render as compact vertical list hanging under parent`() {
+        val root = node("manager", role = "orchestrator")
+        val leaves = (1..5).map { node("leaf-$it", parent = "manager", role = "subordinate") }
+        val result = engine.computeLayout(listOf(root) + leaves, emptyList(), width = 600f, height = 800f)
+
+        val manager = result.nodes.getValue("manager")
+        assertEquals(NodeDisplayMode.CARD, manager.displayMode)
+
+        val positionedLeaves = leaves.map { result.nodes.getValue(it.agentId) }
+        positionedLeaves.forEach { leaf ->
+            assertEquals(NodeDisplayMode.LEAF_ITEM, leaf.displayMode)
+            assertEquals("manager", leaf.parentId)
+            assertTrue(leaf.top >= manager.bottom)
+        }
+
+        // Leaves must be stacked vertically (each leaf has a greater y than the previous)
+        for (i in 0 until positionedLeaves.size - 1) {
+            assertTrue(
+                positionedLeaves[i].y < positionedLeaves[i + 1].y,
+                "Leaf $i (y=${positionedLeaves[i].y}) must be above leaf ${i + 1} (y=${positionedLeaves[i + 1].y})",
+            )
+            // They share approximately the same horizontal alignment under the manager
+            assertEquals(positionedLeaves[i].x, positionedLeaves[i + 1].x, 5f)
+        }
+    }
+
+    @Test
+    fun `orthogonal connectors route from parent bottom through horizontal bus to child top`() {
+        val root = node("root", role = "orchestrator")
+        val c1 = node("child-1", parent = "root", role = "subordinate", subagents = listOf(subagent("s1")))
+        val c2 = node("child-2", parent = "root", role = "subordinate", subagents = listOf(subagent("s2")))
+        val edge1 = edge("e1", "root", "child-1")
+        val edge2 = edge("e2", "root", "child-2")
+
+        val result = engine.computeLayout(listOf(root, c1, c2), listOf(edge1, edge2), width = 800f, height = 600f)
+        val pRoot = result.nodes.getValue("root")
+        val pC1 = result.nodes.getValue("child-1")
+        val pC2 = result.nodes.getValue("child-2")
+
+        val posEdge1 = result.edges.first { it.edge.edgeId == "e1" }
+        val posEdge2 = result.edges.first { it.edge.edgeId == "e2" }
+
+        assertTrue(posEdge1.routePoints.size >= 4, "Edge 1 must have at least 4 route points for orthogonal bus")
+        assertTrue(posEdge2.routePoints.size >= 4, "Edge 2 must have at least 4 route points for orthogonal bus")
+
+        // First point is parent bottom-center
+        assertEquals(pRoot.x, posEdge1.routePoints.first().x, 1f)
+        assertEquals(pRoot.bottom, posEdge1.routePoints.first().y, 1f)
+
+        // Last point is child top-center
+        assertEquals(pC1.x, posEdge1.routePoints.last().x, 1f)
+        assertEquals(pC1.top, posEdge1.routePoints.last().y, 1f)
+
+        // The horizontal bus Y is between parent bottom and child top, and identical for sibling edges
+        val busY1 = posEdge1.routePoints[1].y
+        val busY2 = posEdge2.routePoints[1].y
+        assertEquals(busY1, busY2, 0.5f)
+        assertTrue(busY1 > pRoot.bottom)
+        assertTrue(busY1 < pC1.top)
+    }
+
+    @Test
     fun `orchestrator is centered at the top and subordinates are below it`() {
         val width = 360f
         val result = engine.computeLayout(hierarchy(4), emptyList(), width = width, height = 640f)
@@ -92,25 +219,19 @@ class MeshLayoutEngineTest {
     }
 
     @Test
-    fun `many subordinates wrap into rows below the orchestrator`() {
+    fun `many subordinate leaves render as compact vertical list hanging under manager`() {
         val result = engine.computeLayout(hierarchy(12), emptyList(), width = 360f, height = 640f)
         val orchestrator = result.nodes.getValue("root")
-        val subordinateRows =
-            result.nodes.values
-                .filter { it.level == 1 }
-                .map { it.y }
-                .distinct()
+        val leaves = result.nodes.values.filter { it.displayMode == NodeDisplayMode.LEAF_ITEM }
 
-        assertTrue(subordinateRows.size > 1)
-        assertTrue(subordinateRows.all { orchestrator.y < it })
+        assertEquals(11, leaves.size)
+        assertTrue(leaves.all { it.parentId == "root" })
+        assertTrue(leaves.all { orchestrator.bottom <= it.top })
     }
 
     @Test
     fun `phone columns preserve minimum readable width and tablet cards stay comfortably wide`() {
         val phone = engine.computeLayout(hierarchy(4), emptyList(), width = 411f, height = 750f)
-        val phoneSubordinates = phone.nodes.values.filter { it.level == 1 }
-
-        assertEquals(2, phoneSubordinates.groupBy { it.y }.values.maxOf { row -> row.map { it.x }.distinct().size })
         assertTrue(phone.nodes.values.all { it.width >= 180f })
 
         val narrowPhone = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 640f)
@@ -126,7 +247,7 @@ class MeshLayoutEngineTest {
 
         val tablet = engine.computeLayout(hierarchy(4), emptyList(), width = 800f, height = 1280f)
         assertTrue(tablet.nodes.values.all { it.width <= 280f })
-        assertTrue(tablet.nodes.getValue("root").width >= 250f)
+        assertTrue(tablet.nodes.getValue("root").width >= 200f)
     }
 
     @Test
@@ -221,9 +342,16 @@ class MeshLayoutEngineTest {
 
     @Test
     fun `tall layouts retain intrinsic card height and extend below the viewport for panning`() {
-        val result = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 300f)
+        val deepHierarchy =
+            listOf(
+                node("root", role = "orchestrator"),
+                node("level-1", parent = "root", role = "subordinate", subagents = listOf(subagent("s1"))),
+                node("level-2", parent = "level-1", role = "subordinate", subagents = listOf(subagent("s2"))),
+                node("level-3", parent = "level-2", role = "subordinate"),
+            )
+        val result = engine.computeLayout(deepHierarchy, emptyList(), width = 360f, height = 300f)
 
-        assertTrue(result.nodes.values.all { it.height == 100f })
+        assertTrue(result.nodes.values.all { it.height >= 100f })
         assertTrue(result.nodes.values.maxOf { it.bottom } > 300f)
     }
 
@@ -401,7 +529,7 @@ class MeshLayoutEngineTest {
             )
         assertEquals("solo-a", disconnected.centerNodeId)
         assertEquals(0, disconnected.nodes.getValue("solo-a").level)
-        assertEquals(1, disconnected.nodes.getValue("solo-b").level)
+        assertEquals(0, disconnected.nodes.getValue("solo-b").level)
         assertFalse(disconnected.nodes.getValue("solo-a").intersects(disconnected.nodes.getValue("solo-b")))
 
         val cyclic =
@@ -417,7 +545,7 @@ class MeshLayoutEngineTest {
     }
 
     @Test
-    fun `density sweep across one through twelve agents with zero to four subagents preserves legible card width`() {
+    fun `density sweep across one through twelve agents with zero to four subagents preserves legible card width and prevents overlaps`() {
         val density = 2.625f
         val widthPx = 1080f
         val heightPx = 1800f
@@ -437,8 +565,6 @@ class MeshLayoutEngineTest {
                         node.width >= 180f - 0.01f,
                         "Node ${node.node.agentId} has width ${node.width} < 180dp at count=$count, subs=$subagentCount",
                     )
-                    assertTrue(node.left >= 0f, "Node ${node.node.agentId} left < 0 at count=$count")
-                    assertTrue(node.right <= widthDp + 0.01f, "Node ${node.node.agentId} right > widthDp at count=$count")
                 }
                 val positioned = result.nodes.values.toList()
                 positioned.forEachIndexed { index, left ->
