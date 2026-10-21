@@ -38,6 +38,8 @@ import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
+import dev.j3pf.rp.protocol.MeshSubagent
+import dev.j3pf.rp.protocol.MeshTodos
 import dev.j3pf.rp.protocol.ModelInfo
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
@@ -565,6 +567,46 @@ class RoborazziScreenshotTest {
     }
 
     @Test
+    fun screenshotMeshDiagramMultiRoot() {
+        val (_, meshUiState) = buildMultiRootScenario()
+
+        captureScreen("mesh_diagram_multiroot") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 1)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun screenshotMeshDiagramDeepTree() {
+        val (_, meshUiState) = buildDeepTreeScenario()
+
+        captureScreen("mesh_diagram_deeptree") {
+            Scaffold(
+                bottomBar = {
+                    AppBottomBar(selectedTab = AppTab.MESH, pending = 1)
+                },
+            ) { padding: PaddingValues ->
+                Box(Modifier.padding(padding).fillMaxSize()) {
+                    MeshScreenContent(
+                        uiState = meshUiState,
+                        onOpenChat = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun screenshotMeshNodeDetailCollapsed() {
         val (snapshot, _) = build4AgentsScenario()
         val node = snapshot.nodes.first()
@@ -974,6 +1016,202 @@ class RoborazziScreenshotTest {
                     ),
                 liveComms = listOf(comm12),
                 activeBubbles = listOf(LiveCommBubble(comm = comm12, expiresAtMs = Long.MAX_VALUE)),
+            )
+        return snapshot to uiState
+    }
+
+    private fun buildMultiRootScenario(): Pair<MeshSnapshot, MeshUiState> {
+        val rootApp =
+            MeshNode(
+                agentId = "orch-app",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Orquestador App",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                gitBranch = "main",
+                activity = "Coordinando UI",
+                todos = MeshTodos(total = 5, done = 3, inProgress = 1, blocked = 0, pending = 1),
+            )
+        val workerUI =
+            MeshNode(
+                agentId = "worker-ui",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Worker UI",
+                role = "subordinate",
+                parentAgentId = "orch-app",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app/ui",
+            )
+        val rootRelay =
+            MeshNode(
+                agentId = "orch-relay",
+                machineId = "m-croma",
+                machineName = "Croma",
+                machineColor = "#7AA2F7",
+                name = "Orquestador Relay",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-relay",
+                gitBranch = "main",
+                activity = "Gestionando sockets",
+                todos = MeshTodos(total = 4, done = 2, inProgress = 1, blocked = 0, pending = 1),
+            )
+        val workerApi =
+            MeshNode(
+                agentId = "worker-api",
+                machineId = "m-croma",
+                machineName = "Croma",
+                machineColor = "#7AA2F7",
+                name = "Worker API",
+                role = "subordinate",
+                parentAgentId = "orch-relay",
+                status = "idle",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-relay/api",
+            )
+        val soloNode =
+            MeshNode(
+                agentId = "solo-plugin",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Worker Plugin",
+                role = "solo",
+                status = "idle",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-plugin",
+            )
+        val allNodes = listOf(rootApp, workerUI, rootRelay, workerApi, soloNode)
+        val edges =
+            listOf(
+                MeshEdge("edge-app", "orch-app", "worker-ui", count = 3, active = true),
+                MeshEdge("edge-relay", "orch-relay", "worker-api", count = 2, active = false),
+                MeshEdge("edge-peer", "orch-app", "orch-relay", count = 12, active = true, lastAction = "ask"),
+            )
+        val snapshot = MeshSnapshot(nodes = allNodes, edges = edges)
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                layoutResult = layout,
+                machineChips =
+                    listOf(
+                        MeshMachineChip(machineId = null, name = "Todas", color = "", agentCount = 5),
+                        MeshMachineChip(machineId = "m-omarchy", name = "Omarchy", color = "#6750A4", agentCount = 3),
+                        MeshMachineChip(machineId = "m-croma", name = "Croma", color = "#7AA2F7", agentCount = 2),
+                    ),
+            )
+        return snapshot to uiState
+    }
+
+    private fun buildDeepTreeScenario(): Pair<MeshSnapshot, MeshUiState> {
+        val ceo =
+            MeshNode(
+                agentId = "ceo",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "CEO Orquestador",
+                role = "orchestrator",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP",
+                activity = "Estrategia de arquitectura",
+            )
+        val dirProd =
+            MeshNode(
+                agentId = "dir-prod",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Director Producto",
+                role = "subordinate",
+                parentAgentId = "ceo",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app",
+                subagents =
+                    listOf(
+                        dev.j3pf.rp.protocol
+                            .MeshSubagent("s1", "UI Lead", "Sprint 1", "working"),
+                    ),
+            )
+        val dirInfra =
+            MeshNode(
+                agentId = "dir-infra",
+                machineId = "m-croma",
+                machineName = "Croma",
+                machineColor = "#7AA2F7",
+                name = "Director Infraestructura",
+                role = "subordinate",
+                parentAgentId = "ceo",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-relay",
+                subagents =
+                    listOf(
+                        dev.j3pf.rp.protocol
+                            .MeshSubagent("s2", "Infra Lead", "Sockets", "working"),
+                    ),
+            )
+        val teamLead =
+            MeshNode(
+                agentId = "lead-dev",
+                machineId = "m-omarchy",
+                machineName = "Omarchy",
+                machineColor = "#6750A4",
+                name = "Líder Desarrollo",
+                role = "subordinate",
+                parentAgentId = "dir-prod",
+                status = "working",
+                online = true,
+                cwd = "/home/drift/Workspace/RP/Rp-app/dev",
+                subagents =
+                    listOf(
+                        dev.j3pf.rp.protocol
+                            .MeshSubagent("s3", "Scrum", "Tasks", "working"),
+                    ),
+            )
+        val leaves =
+            (1..4).map { i ->
+                MeshNode(
+                    agentId = "dev-leaf-$i",
+                    machineId = "m-omarchy",
+                    machineName = "Omarchy",
+                    machineColor = "#6750A4",
+                    name = "Especialista $i",
+                    role = "subordinate",
+                    parentAgentId = "lead-dev",
+                    status = if (i % 2 == 0) "working" else "idle",
+                    online = true,
+                    cwd = "/home/drift/Workspace/RP/Rp-app/spec-$i",
+                )
+            }
+        val allNodes = listOf(ceo, dirProd, dirInfra, teamLead) + leaves
+        val edges =
+            listOf(
+                MeshEdge("e-p1", "ceo", "dir-prod"),
+                MeshEdge("e-p2", "ceo", "dir-infra"),
+                MeshEdge("e-p3", "dir-prod", "lead-dev"),
+            ) + leaves.map { MeshEdge("e-l-${it.agentId}", "lead-dev", it.agentId) }
+        val snapshot = MeshSnapshot(nodes = allNodes, edges = edges)
+        val layout = MeshLayoutEngine().computeLayout(allNodes, edges, width = 411f, height = 750f)
+        val uiState =
+            MeshUiState(
+                isLoading = false,
+                isConnected = true,
+                snapshot = snapshot,
+                layoutResult = layout,
             )
         return snapshot to uiState
     }
