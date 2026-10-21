@@ -76,16 +76,17 @@ data class LayoutBounds(
 
 data class LayoutConfig(
     val edgeCurveOffset: Float = 24f,
-    val cardWidth: Float = 280f,
+    val cardWidth: Float = 240f,
     val cardHeight: Float = 100f,
     val minCardWidth: Float = 180f,
     val minCardHeight: Float = 100f,
     val leafItemWidth: Float = 220f,
     val leafItemHeight: Float = 36f,
-    val leafThreshold: Int = 3,
-    val cardSpacingX: Float = 12f,
+    val leafSpacingY: Float = 8f,
+    val leafThreshold: Int = 4,
+    val cardSpacingX: Float = 16f,
     val cardSpacingY: Float = 56f,
-    val viewportPaddingX: Float = 12f,
+    val viewportPaddingX: Float = 16f,
     val viewportPaddingY: Float = 16f,
     val edgeRoutingMargin: Float = 16f,
 )

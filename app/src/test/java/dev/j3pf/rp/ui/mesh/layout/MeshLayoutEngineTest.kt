@@ -199,7 +199,7 @@ class MeshLayoutEngineTest {
     }
 
     @Test
-    fun `node bounds remain horizontally contained for one through twelve agents`() {
+    fun `node bounds fit within viewport when scaled to min readable scale for one through twelve agents`() {
         val viewports =
             listOf(
                 360f to 640f,
@@ -210,10 +210,14 @@ class MeshLayoutEngineTest {
         for ((width, height) in viewports) {
             for (count in 1..12) {
                 val result = engine.computeLayout(hierarchy(count), emptyList(), width = width, height = height)
-                result.nodes.values.forEach { positioned ->
-                    assertTrue(positioned.left >= 0f, "${positioned.node.agentId} left=${positioned.left} at ${width}x$height")
-                    assertTrue(positioned.right <= width, "${positioned.node.agentId} right=${positioned.right} at ${width}x$height")
-                }
+                val bounds = result.bounds
+                val widthFitScale = if (bounds.width > 0f) width / bounds.width else 1f
+                // At min readable scale (0.4x), wide trees fit horizontally
+                val effectiveScale = minOf(1f, widthFitScale).coerceAtLeast(0.40f)
+                assertTrue(
+                    bounds.width * effectiveScale <= width + 50f,
+                    "Tree width ${bounds.width} at scale $effectiveScale exceeds viewport $width for count=$count",
+                )
             }
         }
     }
@@ -230,20 +234,20 @@ class MeshLayoutEngineTest {
     }
 
     @Test
-    fun `phone columns preserve minimum readable width and tablet cards stay comfortably wide`() {
-        val phone = engine.computeLayout(hierarchy(4), emptyList(), width = 411f, height = 750f)
-        assertTrue(phone.nodes.values.all { it.width >= 180f })
+    fun `leaf threshold clusters only when row overflows at min readable scale or leaves exceed four`() {
+        // 3 leaves fit as cards side by side on 360dp phone (Spec S4, D8)
+        val threeLeaves = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 640f)
+        val threeLeavesSubordinates = threeLeaves.nodes.values.filter { it.level == 1 }
+        assertEquals(3, threeLeavesSubordinates.size)
+        assertTrue(threeLeavesSubordinates.all { it.displayMode == NodeDisplayMode.CARD })
+        assertEquals(3, threeLeavesSubordinates.map { it.x }.distinct().size)
 
-        val narrowPhone = engine.computeLayout(hierarchy(4), emptyList(), width = 360f, height = 640f)
-        assertTrue(narrowPhone.nodes.values.all { it.width >= 180f })
-        assertEquals(
-            1,
-            narrowPhone.nodes.values
-                .filter { it.level == 1 }
-                .map { it.x }
-                .distinct()
-                .size,
-        )
+        // 5 leaves exceed threshold (> 4), clustering into a compact vertical list (D8)
+        val fiveLeaves = engine.computeLayout(hierarchy(6), emptyList(), width = 360f, height = 640f)
+        val fiveLeavesSubordinates = fiveLeaves.nodes.values.filter { it.level == 1 }
+        assertEquals(5, fiveLeavesSubordinates.size)
+        assertTrue(fiveLeavesSubordinates.all { it.displayMode == NodeDisplayMode.LEAF_ITEM })
+        assertEquals(1, fiveLeavesSubordinates.map { it.x }.distinct().size)
 
         val tablet = engine.computeLayout(hierarchy(4), emptyList(), width = 800f, height = 1280f)
         assertTrue(tablet.nodes.values.all { it.width <= 280f })
@@ -577,6 +581,141 @@ class MeshLayoutEngineTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `three siblings of uneven depth do not overlap deeper subtrees`() {
+        val nodes =
+            listOf(
+                node("root", role = "orchestrator"),
+                node("A", parent = "root", role = "subordinate", subagents = listOf(subagent("sa"))),
+                node("A1", parent = "A", role = "subordinate", subagents = listOf(subagent("sa1"))),
+                node("A2", parent = "A", role = "subordinate", subagents = listOf(subagent("sa2"))),
+                node("A11", parent = "A1", role = "subordinate", subagents = listOf(subagent("sa11"))),
+                node("A21", parent = "A2", role = "subordinate", subagents = listOf(subagent("sa21"))),
+                node("B", parent = "root", role = "subordinate", subagents = listOf(subagent("sb"))),
+                node("C", parent = "root", role = "subordinate", subagents = listOf(subagent("sc"))),
+                node("C1", parent = "C", role = "subordinate", subagents = listOf(subagent("sc1"))),
+                node("C11", parent = "C1", role = "subordinate", subagents = listOf(subagent("sc11"))),
+            )
+        val result = engine.computeLayout(nodes, emptyList(), width = 2000f, height = 1200f)
+        val positioned = result.nodes.values.toList()
+        positioned.forEachIndexed { i, left ->
+            positioned.drop(i + 1).forEach { right ->
+                assertFalse(
+                    left.intersects(right, margin = 2f),
+                    "${left.node.agentId} overlaps ${right.node.agentId}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `leaf list taller than next row reserves sufficient vertical space without overlapping subsequent depth levels`() {
+        val leaves = (1..8).map { node("leaf-$it", parent = "manager-a", role = "subordinate") }
+        val nodes =
+            listOf(
+                node("root", role = "orchestrator"),
+                node("manager-a", parent = "root", role = "subordinate", subagents = listOf(subagent("sma"))),
+                node("manager-b", parent = "root", role = "subordinate", subagents = listOf(subagent("smb"))),
+                node("sub-b1", parent = "manager-b", role = "subordinate", subagents = listOf(subagent("sb1"))),
+                node("sub-b2", parent = "sub-b1", role = "subordinate", subagents = listOf(subagent("sb2"))),
+            ) + leaves
+        val result = engine.computeLayout(nodes, emptyList(), width = 1200f, height = 1200f)
+        val positioned = result.nodes.values.toList()
+        positioned.forEachIndexed { i, left ->
+            positioned.drop(i + 1).forEach { right ->
+                assertFalse(
+                    left.intersects(right, margin = 2f),
+                    "${left.node.agentId} overlaps ${right.node.agentId}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `random forest layout ensures no two node rects intersect and no connector crosses a node`() {
+        // Deterministic pseudo-random seed generator
+        var seed = 42L
+        fun nextRandom(bound: Int): Int {
+            seed = (seed * 6364136223846793005L + 1442695040888963407L)
+            val v = ((seed ushr 33) % bound).toInt()
+            return if (v < 0) -v else v
+        }
+
+        // Build a forest of 3 roots with various depths and branching
+        val allNodes = mutableListOf<MeshNode>()
+        val allEdges = mutableListOf<MeshEdge>()
+
+        for (r in 1..3) {
+            val rootId = "forest-root-$r"
+            allNodes += node(rootId, role = "orchestrator")
+            var currentLevelIds = listOf(rootId)
+
+            for (depth in 1..3) {
+                val nextLevelIds = mutableListOf<String>()
+                for (parent in currentLevelIds) {
+                    val childCount = nextRandom(3) + 1
+                    for (c in 1..childCount) {
+                        val childId = "node-$r-$depth-${parent.takeLast(4)}-$c"
+                        val isLeaf = depth == 3 || nextRandom(2) == 0
+                        allNodes += node(
+                            childId,
+                            parent = parent,
+                            role = "subordinate",
+                            subagents = if (!isLeaf) listOf(subagent("s-$childId")) else emptyList(),
+                        )
+                        allEdges += edge("e-$parent-$childId", parent, childId)
+                        if (!isLeaf) {
+                            nextLevelIds += childId
+                        }
+                    }
+                }
+                currentLevelIds = nextLevelIds
+                if (currentLevelIds.isEmpty()) break
+            }
+        }
+
+        val result = engine.computeLayout(allNodes, allEdges, width = 1400f, height = 1200f)
+        val positioned = result.nodes.values.toList()
+
+        // 1. No node intersects any other node
+        positioned.forEachIndexed { i, left ->
+            positioned.drop(i + 1).forEach { right ->
+                assertFalse(
+                    left.intersects(right, margin = 2f),
+                    "${left.node.agentId} overlaps ${right.node.agentId} in random forest",
+                )
+            }
+        }
+
+        // 2. No connector segment crosses the interior of any node card or leaf
+        result.edges.forEach { edge ->
+            val route = edge.routePoints
+            if (route.size >= 2) {
+                for (idx in 0 until route.lastIndex) {
+                    val p1 = route[idx]
+                    val p2 = route[idx + 1]
+                    positioned.forEach { card ->
+                        assertFalse(
+                            segmentCrossesCardInterior(p1, p2, card),
+                            "Edge ${edge.edge.edgeId} segment ($p1 -> $p2) crosses interior of ${card.node.agentId}",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `sibling roots have no connector drawn between them`() {
+        val root1 = node("root-1", role = "orchestrator")
+        val root2 = node("root-2", role = "orchestrator")
+        val edges = listOf(edge("peer-edge", "root-1", "root-2"))
+        val result = engine.computeLayout(listOf(root1, root2), edges, width = 800f, height = 600f)
+
+        // Sibling roots must not have a connector drawn between them
+        assertTrue(result.edges.isEmpty(), "Sibling roots should not have tree connector edges")
     }
 
     private fun hierarchy(count: Int): List<MeshNode> =

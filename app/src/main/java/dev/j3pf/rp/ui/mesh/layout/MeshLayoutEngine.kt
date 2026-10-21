@@ -118,7 +118,7 @@ class MeshLayoutEngine(
                 node.agentId to (measuredHeight ?: estimatedHeight)
             }
 
-        // Leaf clustering per parent: S4 rules
+        // Leaf clustering per parent: S4 and D8 rules
         val leafGroupChildren = mutableMapOf<String, List<MeshNode>>()
         val regularChildren = mutableMapOf<String, List<MeshNode>>()
 
@@ -136,13 +136,15 @@ class MeshLayoutEngine(
                             { it.agentId },
                         ),
                     )
-            val nonLeaves = children.filter { it !in candidateLeaves }
+            val candidateLeavesSet = candidateLeaves.map { it.agentId }.toSet()
+            val nonLeaves = children.filter { it.agentId !in candidateLeavesSet }
 
             val totalChildrenCount = nonLeaves.size + candidateLeaves.size
             val minRowSpan = totalChildrenCount * config.minCardWidth + (totalChildrenCount - 1) * config.cardSpacingX
+            // D8: 3 leaves fit as cards on 360dp; cluster only when > 4 or row overflows at readable scale
             val shouldCluster =
                 candidateLeaves.size > config.leafThreshold ||
-                    (candidateLeaves.size > 1 && minRowSpan > availableWidth)
+                    (candidateLeaves.size > 3 && minRowSpan > availableWidth / 0.60f)
 
             if (shouldCluster && candidateLeaves.isNotEmpty()) {
                 leafGroupChildren[parentId] = candidateLeaves
@@ -172,37 +174,23 @@ class MeshLayoutEngine(
 
         val maxDepth = levels.values.maxOrNull() ?: 0
 
-        // Determine dynamic card width per level to fit available width when possible
-        val cardWidthByLevel = mutableMapOf<Int, Float>()
-        for (d in 0..maxDepth) {
-            val cardsAtLevel =
-                orderedNodes.filter {
-                    levels[it.agentId] == d &&
-                        leafGroupChildren.values.none { leaves -> leaves.any { l -> l.agentId == it.agentId } }
-                }
-            val cardCount = cardsAtLevel.size
-            val dynamicWidth =
-                if (cardCount > 1) {
-                    ((availableWidth - (cardCount - 1) * config.cardSpacingX) / cardCount)
-                        .coerceIn(config.minCardWidth, config.cardWidth)
-                } else {
-                    config.cardWidth.coerceIn(config.minCardWidth, 320f)
-                }
-            cardWidthByLevel[d] = dynamicWidth
-        }
-
-        val leafWidth = min(config.leafItemWidth, config.cardWidth)
+        // Consistent card widths for managers and roots (D4: roots same size as other managers)
+        val standardCardWidth = config.cardWidth
+        val leafWidth = min(config.leafItemWidth, standardCardWidth)
         val leafHeight = config.leafItemHeight
+        val leafSpacingY = config.leafSpacingY
 
+        val allLeavesSet = leafGroupChildren.values.flatten().map { it.agentId }.toSet()
         val rowHeights = mutableMapOf<Int, Float>()
         for (d in 0..maxDepth) {
-            val cardsAtLevel =
-                orderedNodes.filter {
-                    levels[it.agentId] == d &&
-                        leafGroupChildren.values.none { leaves -> leaves.any { l -> l.agentId == it.agentId } }
-                }
+            val cardsAtLevel = orderedNodes.filter { levels[it.agentId] == d && it.agentId !in allLeavesSet }
             val cardMaxHeight = cardsAtLevel.maxOfOrNull { nodeHeights.getValue(it.agentId) } ?: baseCardHeight
-            rowHeights[d] = max(baseCardHeight, cardMaxHeight)
+            // C3: reserve row height for leaf groups hanging from parent at d - 1
+            val leafGroupsAtLevel = leafGroupChildren.filter { (pId, leaves) -> levels[pId] == d - 1 && leaves.isNotEmpty() }
+            val leafGroupMaxHeight = leafGroupsAtLevel.values.maxOfOrNull { leaves ->
+                leaves.size * leafHeight + (leaves.size - 1).coerceAtLeast(0) * leafSpacingY
+            } ?: 0f
+            rowHeights[d] = max(baseCardHeight, max(cardMaxHeight, leafGroupMaxHeight))
         }
 
         val rowTops = mutableMapOf<Int, Float>()
@@ -246,7 +234,7 @@ class MeshLayoutEngine(
 
             val leaves = leafGroupChildren[node.agentId].orEmpty()
             if (leaves.isNotEmpty()) {
-                val groupHeight = leaves.size * (leafHeight + 4f)
+                val groupHeight = leaves.size * leafHeight + (leaves.size - 1).coerceAtLeast(0) * leafSpacingY
                 val leafGroupTree =
                     TreeNode(
                         nodeId = null,
@@ -260,16 +248,52 @@ class MeshLayoutEngine(
                 subTrees.add(leafGroupTree)
             }
 
-            val nodeWidth = cardWidthByLevel[depth] ?: config.cardWidth
             return TreeNode(
                 nodeId = node.agentId,
                 isLeafGroup = false,
                 leafNodes = emptyList(),
-                width = nodeWidth,
+                width = standardCardWidth,
                 height = nodeHeights.getValue(node.agentId),
                 depth = depth,
                 children = subTrees,
             )
+        }
+
+        // C1 & C2: Place sibling trees side by side with accumulated running right contour
+        fun placeSiblingsSideBySide(
+            siblings: List<TreeNode>,
+            spacing: Float,
+        ) {
+            if (siblings.isEmpty()) return
+            val runningRightContour = mutableMapOf<Int, Float>()
+
+            val first = siblings[0]
+            first.x = 0f
+            first.rightContour.forEach { (d, r) -> runningRightContour[d] = r }
+
+            for (i in 1 until siblings.size) {
+                val child = siblings[i]
+                var requiredShift = 0f
+
+                for ((d, leftOffset) in child.leftContour) {
+                    val accumulatedRight = runningRightContour[d]
+                    if (accumulatedRight != null) {
+                        val shiftForDepth = accumulatedRight - leftOffset + spacing
+                        requiredShift = max(requiredShift, shiftForDepth)
+                    }
+                }
+
+                val prevChild = siblings[i - 1]
+                val minCenterDistance = (prevChild.width / 2f) + spacing + (child.width / 2f)
+                val minShift = prevChild.x + minCenterDistance
+                child.x = max(requiredShift, minShift)
+
+                for ((d, rightOffset) in child.rightContour) {
+                    val childAbsoluteRight = child.x + rightOffset
+                    val currentMax = runningRightContour[d]
+                    runningRightContour[d] = if (currentMax != null) max(currentMax, childAbsoluteRight) else childAbsoluteRight
+                }
+            }
         }
 
         // Reingold-Tilford tidy-tree layout on a single tree
@@ -283,25 +307,8 @@ class MeshLayoutEngine(
 
             tree.children.forEach { layoutTree(it) }
 
-            // Place children side by side with contour separation
-            tree.children[0].x = 0f
-            for (i in 1 until tree.children.size) {
-                val left = tree.children[i - 1]
-                val right = tree.children[i]
-                var minDistance = config.cardSpacingX
-
-                // Check contours across all shared depths
-                val sharedDepths = left.rightContour.keys.intersect(right.leftContour.keys)
-                for (d in sharedDepths) {
-                    val leftEdge = left.x + left.rightContour.getValue(d)
-                    val rightEdge = right.x + right.leftContour.getValue(d)
-                    val gap = rightEdge - leftEdge
-                    if (gap < config.cardSpacingX) {
-                        minDistance = max(minDistance, config.cardSpacingX - gap)
-                    }
-                }
-                right.x += minDistance
-            }
+            // Place children side by side using running accumulated right contour
+            placeSiblingsSideBySide(tree.children, config.cardSpacingX)
 
             // Parent is centered over its children
             val childrenMidpoint = (tree.children.first().x + tree.children.last().x) / 2f
@@ -331,23 +338,8 @@ class MeshLayoutEngine(
         val rootTrees = roots.map { buildTree(it, 0) }
         rootTrees.forEach { layoutTree(it) }
 
-        // Place multiple roots side by side on top row
-        rootTrees[0].x = 0f
-        for (i in 1 until rootTrees.size) {
-            val left = rootTrees[i - 1]
-            val right = rootTrees[i]
-            var minDistance = config.cardSpacingX * 1.5f
-            val sharedDepths = left.rightContour.keys.intersect(right.leftContour.keys)
-            for (d in sharedDepths) {
-                val leftEdge = left.x + left.rightContour.getValue(d)
-                val rightEdge = right.x + right.leftContour.getValue(d)
-                val gap = rightEdge - leftEdge
-                if (gap < config.cardSpacingX * 1.5f) {
-                    minDistance = max(minDistance, config.cardSpacingX * 1.5f - gap)
-                }
-            }
-            right.x += minDistance
-        }
+        // Place multiple roots side by side on top row with running accumulated right contour
+        placeSiblingsSideBySide(rootTrees, config.cardSpacingX * 1.5f)
 
         // Shift root trees to center inside available viewport
         var allMinX = Float.POSITIVE_INFINITY
@@ -364,9 +356,11 @@ class MeshLayoutEngine(
         }
         rootTrees.forEach { computeTreeBounds(it, it.x) }
 
-        val totalTreeWidth = if (allMaxX > allMinX) allMaxX - allMinX else config.cardWidth
+        val totalTreeWidth = if (allMaxX > allMinX) allMaxX - allMinX else standardCardWidth
         val globalOffsetX =
-            if (totalTreeWidth < availableWidth) {
+            if (roots.size == 1) {
+                width / 2f - rootTrees.first().x
+            } else if (totalTreeWidth < availableWidth) {
                 horizontalPadding + (availableWidth - totalTreeWidth) / 2f - allMinX
             } else {
                 horizontalPadding - allMinX
@@ -400,7 +394,7 @@ class MeshLayoutEngine(
                             leafIndex = index,
                             totalLeaves = leaves.size,
                         )
-                    currentLeafTop += thisLeafHeight + 8f
+                    currentLeafTop += thisLeafHeight + leafSpacingY
                 }
             } else {
                 val id = treeNode.nodeId!!
@@ -427,11 +421,16 @@ class MeshLayoutEngine(
             emitNodes(rootTree, globalOffsetX)
         }
 
+        // Precompute layout row maps for O(1) orthogonal edge routing (C8 W3)
+        val rowsByY = positionedNodes.values.groupBy { it.y }.toSortedMap()
+        val sortedRowCenters = rowsByY.keys.toList()
+        val minLeftBound = positionedNodes.values.minOfOrNull { it.left } ?: 0f
+
         // Position orthogonal bus edges
         val positionedEdges =
             edges
                 .sortedWith(compareBy<MeshEdge>({ it.edgeId }, { it.a }, { it.b }))
-                .mapNotNull { edge -> positionEdge(edge, positionedNodes) }
+                .mapNotNull { edge -> positionEdge(edge, positionedNodes, rowsByY, sortedRowCenters, minLeftBound) }
 
         val primaryRoot = roots.firstOrNull { it.role == "orchestrator" } ?: roots.first()
         return MeshLayoutResult(
@@ -445,12 +444,19 @@ class MeshLayoutEngine(
     private fun positionEdge(
         edge: MeshEdge,
         nodes: Map<String, PositionedNode>,
+        rowsByY: Map<Float, List<PositionedNode>>,
+        rowCenters: List<Float>,
+        minLeft: Float,
     ): PositionedEdge? {
         val a = nodes[edge.a] ?: return null
         val b = nodes[edge.b] ?: return null
 
         val aIsParent = a.level < b.level
         val bIsParent = b.level < a.level
+        val isSiblingRoots = a.level == 0 && b.level == 0
+
+        // D4: Sibling roots on the top row have no hierarchy connector
+        if (isSiblingRoots) return null
 
         val parentAndChild =
             when {
@@ -460,8 +466,8 @@ class MeshLayoutEngine(
             }
 
         val routePoints =
-            parentAndChild?.let { (parent, child) ->
-                orthogonalBusRoute(parent, child, nodes)
+            parentAndChild?.let { (p, c) ->
+                orthogonalBusRoute(p, c, rowsByY, rowCenters, minLeft)
             } ?: emptyList()
 
         val endpoints =
@@ -513,14 +519,16 @@ class MeshLayoutEngine(
     private fun orthogonalBusRoute(
         parent: PositionedNode,
         child: PositionedNode,
-        nodes: Map<String, PositionedNode>,
+        rowsByY: Map<Float, List<PositionedNode>>,
+        rowCenters: List<Float>,
+        minLeft: Float,
     ): List<EdgePoint> {
         if (child.displayMode == NodeDisplayMode.LEAF_ITEM) {
-            val rows = nodes.values.groupBy { it.y }.toSortedMap()
-            val childRow = rows[child.y].orEmpty()
+            val childRow = rowsByY[child.y].orEmpty()
             val minChildTop = childRow.minOfOrNull { it.top } ?: child.top
             val busY = (parent.bottom + minOf(minChildTop, child.top)) / 2f
-            val spineX = child.left + 16f
+            // D1: One vertical spine at the LEFT of the rows, short horizontal tick into bullet
+            val spineX = child.left - 16f
             val points = mutableListOf<EdgePoint>()
             points += EdgePoint(parent.x, parent.bottom)
             if (parent.x != spineX) {
@@ -528,23 +536,22 @@ class MeshLayoutEngine(
                 points += EdgePoint(spineX, busY)
             }
             points += EdgePoint(spineX, child.y)
+            points += EdgePoint(child.left, child.y)
             return points
         }
 
         // Multi-level hierarchy edges (skipping intermediate rows)
         if (child.level > parent.level + 1) {
-            val rows = nodes.values.groupBy { it.y }.toSortedMap()
-            val rowCenters = rows.keys.toList()
             val parentRowIndex = rowCenters.indexOf(parent.y)
             val childRowIndex = rowCenters.indexOf(child.y)
             if (parentRowIndex >= 0 && childRowIndex > parentRowIndex + 1) {
-                val parentRow = rows.getValue(parent.y)
-                val childRow = rows.getValue(child.y)
-                val nextRow = rows.getValue(rowCenters[parentRowIndex + 1])
-                val previousRow = rows.getValue(rowCenters[childRowIndex - 1])
+                val parentRow = rowsByY.getValue(parent.y)
+                val childRow = rowsByY.getValue(child.y)
+                val nextRow = rowsByY.getValue(rowCenters[parentRowIndex + 1])
+                val previousRow = rowsByY.getValue(rowCenters[childRowIndex - 1])
                 val sourceChannelY = (parentRow.maxOf { it.bottom } + nextRow.minOf { it.top }) / 2f
                 val targetChannelY = (previousRow.maxOf { it.bottom } + childRow.minOf { it.top }) / 2f
-                val channelX = nodes.values.minOf { it.left } - config.edgeRoutingMargin.coerceAtLeast(4f)
+                val channelX = minLeft - config.edgeRoutingMargin.coerceAtLeast(4f)
                 val points = mutableListOf<EdgePoint>()
                 points += EdgePoint(parent.x, parent.bottom)
                 points += EdgePoint(parent.x, sourceChannelY)
