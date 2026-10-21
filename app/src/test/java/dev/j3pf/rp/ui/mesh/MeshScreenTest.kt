@@ -21,6 +21,7 @@ import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
+import dev.j3pf.rp.protocol.MeshSubagent
 import dev.j3pf.rp.protocol.MeshTodos
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.theme.RpTheme
@@ -138,6 +139,80 @@ class MeshScreenTest {
         rule.onNodeWithText("Orquestador Principal").assertIsDisplayed()
         rule.onNodeWithText("Worker Protocol").assertIsDisplayed()
         rule.onNodeWithContentDescription("Orquestador Orquestador Principal, Inactivo").assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping leaf item opens node detail sheet`() {
+        val manager = node("manager-1", "Jefe de Equipo", "orchestrator")
+        val leaves = (1..5).map { node("leaf-$it", "Especialista $it", "subordinate", parent = "manager-1") }
+        val allNodes = listOf(manager) + leaves
+        val snapshot = MeshSnapshot(nodes = allNodes)
+        val layout = MeshLayoutEngine().computeLayout(allNodes, emptyList(), width = 600f, height = 800f)
+        val clickedNodeId = mutableStateOf<String?>(null)
+        val state =
+            mutableStateOf(
+                MeshUiState(
+                    isLoading = false,
+                    snapshot = snapshot,
+                    layoutResult = layout,
+                ),
+            )
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(
+                    uiState = state.value,
+                    onOpenChat = {},
+                    onNodeClick = { id ->
+                        clickedNodeId.value = id
+                        val found = allNodes.first { it.agentId == id }
+                        state.value = state.value.copy(nodeDetail = MeshNodeDetail(found))
+                    },
+                )
+            }
+        }
+
+        // Leaf items should be displayed with their names
+        rule.onNodeWithText("Especialista 1").assertIsDisplayed().performClick()
+        rule.waitForIdle()
+
+        assertEquals("leaf-1", clickedNodeId.value)
+        rule.onNodeWithText("Detalles").assertExists()
+    }
+
+    @Test
+    fun `recenter action button is displayed and clickable`() {
+        val root = node("root", "Orquestador", "orchestrator")
+        val snapshot = MeshSnapshot(nodes = listOf(root))
+        val layout = MeshLayoutEngine().computeLayout(listOf(root), emptyList())
+        val state = MeshUiState(isLoading = false, snapshot = snapshot, layoutResult = layout)
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = state, onOpenChat = {})
+            }
+        }
+
+        rule.onNodeWithContentDescription("Recentrar organigrama").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Recentrar").assertIsDisplayed()
+    }
+
+    @Test
+    fun `TalkBack hierarchy semantics include reporta a on subordinate leaf items`() {
+        val manager = node("orch", "Maestro", "orchestrator")
+        val worker = node("w1", "Colaborador", "subordinate", parent = "orch")
+        val snapshot = MeshSnapshot(nodes = listOf(manager, worker))
+        val layout = MeshLayoutEngine().computeLayout(listOf(manager, worker), emptyList())
+        val state = MeshUiState(isLoading = false, snapshot = snapshot, layoutResult = layout)
+
+        rule.setContent {
+            RpTheme {
+                MeshScreenContent(uiState = state, onOpenChat = {})
+            }
+        }
+
+        val expectedDesc = "Subordinado Colaborador, Inactivo, reporta a Maestro"
+        rule.onNodeWithContentDescription(expectedDesc).assertExists()
     }
 
     @Test
@@ -815,7 +890,8 @@ class MeshScreenTest {
 
         val cardBounds =
             nodes.map { node ->
-                val description = formatMeshNodeContentDescription(node, nodes)
+                val parent = node.parentAgentId?.let { pid -> nodes.firstOrNull { it.agentId == pid } }
+                val description = formatMeshNodeContentDescription(node, nodes, parent)
                 rule
                     .onNodeWithContentDescription(description)
                     .assertIsDisplayed()
@@ -831,7 +907,7 @@ class MeshScreenTest {
         val firstSubordinate =
             rule
                 .onNodeWithContentDescription(
-                    formatMeshNodeContentDescription(nodes[1], nodes),
+                    formatMeshNodeContentDescription(nodes[1], nodes, nodes.first()),
                 ).fetchSemanticsNode()
                 .boundsInRoot
         kotlin.test.assertTrue(orchestrator.bottom <= firstSubordinate.top + 1f, "First subordinate row overlaps the orchestrator")
@@ -933,8 +1009,9 @@ class MeshScreenTest {
 
         val cards =
             nodes.map { node ->
+                val parent = node.parentAgentId?.let { pid -> nodes.firstOrNull { it.agentId == pid } }
                 rule
-                    .onNodeWithContentDescription(formatMeshNodeContentDescription(node, nodes))
+                    .onNodeWithContentDescription(formatMeshNodeContentDescription(node, nodes, parent))
                     .assertExists()
                     .fetchSemanticsNode()
                     .boundsInRoot
@@ -1197,6 +1274,8 @@ class MeshScreenTest {
         id: String,
         name: String,
         role: String,
+        parent: String? = null,
+        subagents: List<MeshSubagent> = emptyList(),
     ) = MeshNode(
         agentId = id,
         machineId = "machine",
@@ -1205,5 +1284,7 @@ class MeshScreenTest {
         status = "idle",
         online = true,
         role = role,
+        parentAgentId = parent,
+        subagents = subagents,
     )
 }

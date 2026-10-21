@@ -2,15 +2,28 @@ package dev.j3pf.rp.ui.mesh
 
 import android.graphics.DashPathEffect
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +32,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -31,14 +45,20 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.withTranslation
 import dev.j3pf.rp.ui.mesh.layout.LayoutBounds
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
+import dev.j3pf.rp.ui.mesh.layout.NodeDisplayMode
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
+import dev.j3pf.rp.ui.theme.RpShapes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
@@ -182,7 +202,7 @@ fun MeshCanvas(
         val heightFitScale = if (bounds.height > 0f) heightDp / contentHeight else 1f
         val naturalFitScale = minOf(widthFitScale, heightFitScale)
         val isLandscape = widthDp > heightDp && widthDp >= 600f
-        val autoFitScale = if (isLandscape) 1f else minOf(1f, naturalFitScale).coerceAtLeast(0.65f)
+        val autoFitScale = if (isLandscape) 1f else minOf(1f, naturalFitScale).coerceAtLeast(0.40f)
         val topPaddingDp = 16f
 
         // Canvas for connectors, active glow, dashed lines, and comm particles/bubbles
@@ -390,38 +410,119 @@ fun MeshCanvas(
             }
         }
 
-        // Render interactive Agent Cards in DP space with full legibility
+        // Render interactive Agent Cards and Leaf Items in DP space with full legibility
         currentLayout?.nodes?.values?.forEach { positioned ->
             val node = positioned.node
-            MeshAgentCard(
-                node = node,
+            if (positioned.displayMode == NodeDisplayMode.LEAF_ITEM) {
+                val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
+                MeshLeafItem(
+                    node = node,
+                    modifier =
+                        Modifier
+                            .offset {
+                                val cardZoom = zoom * autoFitScale
+                                val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
+                                val cardTopDp =
+                                    meshContentOffsetY(bounds, heightDp, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
+                                IntOffset(
+                                    x = (cardLeftDp * density.density).roundToInt(),
+                                    y = (cardTopDp * density.density).roundToInt(),
+                                )
+                            }.width(positioned.width.dp)
+                            .wrapContentHeight()
+                            .onSizeChanged { size ->
+                                val measuredHeight = size.height / density.density
+                                if (cardHeights[node.agentId] != measuredHeight) {
+                                    cardHeights = cardHeights + (node.agentId to measuredHeight)
+                                }
+                            }.graphicsLayer {
+                                val cardZoom = zoom * autoFitScale
+                                scaleX = cardZoom
+                                scaleY = cardZoom
+                                transformOrigin = TransformOrigin(0f, 0f)
+                            },
+                    allNodes = allNodes,
+                    parentNode = parentNode,
+                    onClick = { onNodeClick(node.agentId) },
+                )
+            } else {
+                val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
+                MeshAgentCard(
+                    node = node,
+                    modifier =
+                        Modifier
+                            .offset {
+                                val cardZoom = zoom * autoFitScale
+                                val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
+                                val cardTopDp =
+                                    meshContentOffsetY(bounds, heightDp, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
+                                IntOffset(
+                                    x = (cardLeftDp * density.density).roundToInt(),
+                                    y = (cardTopDp * density.density).roundToInt(),
+                                )
+                            }.width(positioned.width.dp)
+                            .wrapContentHeight()
+                            .onSizeChanged { size ->
+                                val measuredHeight = size.height / density.density
+                                if (cardHeights[node.agentId] != measuredHeight) {
+                                    cardHeights = cardHeights + (node.agentId to measuredHeight)
+                                }
+                            }.graphicsLayer {
+                                val cardZoom = zoom * autoFitScale
+                                scaleX = cardZoom
+                                scaleY = cardZoom
+                                transformOrigin = TransformOrigin(0f, 0f)
+                            },
+                    allNodes = allNodes,
+                    parentNode = parentNode,
+                    onClick = { onNodeClick(node.agentId) },
+                    reducedMotion = reducedMotion,
+                )
+            }
+        }
+
+        // Floating Re-Center Action Button (Spec S5)
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            Surface(
+                shape = RpShapes.pill,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
+                shadowElevation = 2.dp,
                 modifier =
                     Modifier
-                        .offset {
-                            val cardZoom = zoom * autoFitScale
-                            val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
-                            val cardTopDp = meshContentOffsetY(bounds, heightDp, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
-                            IntOffset(
-                                x = (cardLeftDp * density.density).roundToInt(),
-                                y = (cardTopDp * density.density).roundToInt(),
-                            )
-                        }.width(positioned.width.dp)
-                        .wrapContentHeight()
-                        .onSizeChanged { size ->
-                            val measuredHeight = size.height / density.density
-                            if (cardHeights[node.agentId] != measuredHeight) {
-                                cardHeights = cardHeights + (node.agentId to measuredHeight)
-                            }
-                        }.graphicsLayer {
-                            val cardZoom = zoom * autoFitScale
-                            scaleX = cardZoom
-                            scaleY = cardZoom
-                            transformOrigin = TransformOrigin(0f, 0f)
+                        .heightIn(min = 36.dp)
+                        .clickable(role = Role.Button) {
+                            zoom = 1f
+                            panX = 0f
+                            panY = 0f
+                        }.semantics {
+                            contentDescription = "Recentrar organigrama"
                         },
-                allNodes = allNodes,
-                onClick = { onNodeClick(node.agentId) },
-                reducedMotion = reducedMotion,
-            )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = "Recentrar",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
         }
     }
 }
@@ -597,7 +698,7 @@ private fun distanceToSegment(
     return hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 }
 
-private const val MIN_ZOOM = 0.5f
+private const val MIN_ZOOM = 0.4f
 private const val MAX_ZOOM = 3f
 private const val ACTIVE_EDGE_MS = 20_000L
 private const val BUBBLE_LIFETIME_MS = 6_000L
