@@ -167,9 +167,15 @@ fun formatMeshTodos(
 fun formatMeshNodeContentDescription(
     node: MeshNode,
     allNodes: List<MeshNode> = emptyList(),
-): String =
-    "${formatMeshRole(node.role)} ${formatMeshDisplayName(node, allNodes)}, ${formatMeshStatus(node.status)}" +
-        (node.todos?.let { ", ${formatMeshTodos(it.done, it.total)}" } ?: "")
+    parentNode: MeshNode? = null,
+): String {
+    val role = formatMeshRole(node.role)
+    val name = formatMeshDisplayName(node, allNodes)
+    val status = formatMeshStatus(node.status)
+    val reportsTo = parentNode?.let { ", reporta a ${formatMeshDisplayName(it, allNodes)}" }.orEmpty()
+    val todos = node.todos?.let { ", ${formatMeshTodos(it.done, it.total)}" }.orEmpty()
+    return "$role $name, $status$reportsTo$todos"
+}
 
 fun formatMeshDateTime(
     at: Long,

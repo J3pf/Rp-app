@@ -62,12 +62,13 @@ fun MeshAgentCard(
     node: MeshNode,
     modifier: Modifier = Modifier,
     allNodes: List<MeshNode> = emptyList(),
+    parentNode: MeshNode? = null,
     onClick: () -> Unit,
     reducedMotion: Boolean = LocalReducedMotion.current,
 ) {
     val displayName = formatMeshDisplayName(node, allNodes)
     val secondaryLine = formatMeshSecondaryLine(node)
-    val accessibleDesc = formatMeshNodeContentDescription(node, allNodes)
+    val accessibleDesc = formatMeshNodeContentDescription(node, allNodes, parentNode)
     val isWorking = node.status == "working"
     val isOffline = !node.online || node.status == "offline"
 
@@ -338,7 +339,7 @@ fun MeshSubagentChip(
 }
 
 @Composable
-private fun StatusDot(
+internal fun StatusDot(
     status: String,
     online: Boolean,
 ) {

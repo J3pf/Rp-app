@@ -114,6 +114,31 @@ class MeshFormattersTest {
     }
 
     @Test
+    fun `formatMeshNodeContentDescription includes reports to when parent node is supplied`() {
+        val parent =
+            MeshNode(
+                agentId = "orch-1",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Orquestador Maestro",
+                status = "working",
+                role = "orchestrator",
+            )
+        val child =
+            MeshNode(
+                agentId = "worker-1",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Worker UI",
+                status = "idle",
+                role = "subordinate",
+                parentAgentId = "orch-1",
+            )
+        val desc = formatMeshNodeContentDescription(child, listOf(parent, child), parent)
+        assertEquals("Subordinado Worker UI, Inactivo, reporta a Orquestador Maestro", desc)
+    }
+
+    @Test
     fun `formatMeshDisplayName filters out raw IDs and falls back to cwd basename or Agente`() {
         val uuidNode =
             MeshNode(
