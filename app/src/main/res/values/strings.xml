@@ -16,4 +16,11 @@
     <string name="notif_sending">Enviando…</string>
     <string name="notif_retrying">Sin conexión · se reintentará</string>
     <string name="notif_reply_hint">Escribe tu respuesta</string>
+    <string name="mesh_title">Red de agentes</string>
+    <string name="mesh_recenter">Recentrar</string>
+    <string name="mesh_recenter_desc">Recentrar organigrama</string>
+    <string name="mesh_reports_to">reporta a %1$s</string>
+    <string name="mesh_status_working">Trabajando</string>
+    <string name="mesh_status_idle">Inactivo</string>
+    <string name="mesh_status_offline">Desconectado</string>
 </resources>

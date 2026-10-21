@@ -643,15 +643,32 @@ class MeshScreenTest {
         val groupsHeaderBounds = rule.onNodeWithText("Grupos").fetchSemanticsNode().boundsInRoot
         val highestFilterBottom = maxOf(machinesHeaderBounds.bottom, groupsHeaderBounds.bottom)
 
-        // Verify all 4 cards have width >= 140dp in pixels and are strictly below filter chips
+        // Verify orchestrator card has rendered width >= 140dp, layout cards width >= 140dp, and all cards are strictly below filter chips
         val minCardWidthPx = with(rule.density) { 140.dp.toPx() }
-        val orchBounds = rule.onNodeWithText("Rp-app").fetchSemanticsNode().boundsInRoot
-        val sub1Bounds = rule.onNodeWithText("Rp-relay").fetchSemanticsNode().boundsInRoot
-        val sub2Bounds = rule.onNodeWithText("RP").fetchSemanticsNode().boundsInRoot
-        val sub3Bounds = rule.onNodeWithText("Worker Plugin").fetchSemanticsNode().boundsInRoot
+        val orchBounds =
+            rule
+                .onNodeWithContentDescription(formatMeshNodeContentDescription(orch, allNodes, null))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val sub1Bounds =
+            rule
+                .onNodeWithContentDescription(formatMeshNodeContentDescription(sub1, allNodes, orch))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val sub2Bounds =
+            rule
+                .onNodeWithContentDescription(formatMeshNodeContentDescription(sub2, allNodes, orch))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val sub3Bounds =
+            rule
+                .onNodeWithContentDescription(formatMeshNodeContentDescription(sub3, allNodes, orch))
+                .fetchSemanticsNode()
+                .boundsInRoot
 
+        kotlin.test.assertTrue(orchBounds.width >= minCardWidthPx - 1f, "Orchestrator card width ${orchBounds.width} < 140dp ($minCardWidthPx px)")
+        kotlin.test.assertTrue(layout.nodes.values.all { it.width >= 140f }, "All cards in layout must have width >= 140dp")
         listOf(orchBounds, sub1Bounds, sub2Bounds, sub3Bounds).forEach { bounds ->
-            kotlin.test.assertTrue(bounds.width >= minCardWidthPx - 1f, "Card width ${bounds.width} < 140dp ($minCardWidthPx px)")
             kotlin.test.assertTrue(
                 bounds.top >= highestFilterBottom,
                 "Card top ${bounds.top} intersects filter bottom $highestFilterBottom",

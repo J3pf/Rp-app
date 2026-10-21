@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -79,6 +81,7 @@ fun MeshCanvas(
     layout: MeshLayoutResult?,
     modifier: Modifier = Modifier,
     activeBubbles: List<LiveCommBubble> = emptyList(),
+    recenterTrigger: Int = 0,
     onNodeClick: (String) -> Unit,
     onEdgeClick: (String) -> Unit,
     onViewportSizeChanged: (Float, Float) -> Unit = { _, _ -> },
@@ -96,8 +99,14 @@ fun MeshCanvas(
     var zoom by remember { mutableFloatStateOf(1f) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(recenterTrigger) {
+        zoom = 1f
+        panX = 0f
+        panY = 0f
+    }
+
     val frameTime = remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var cardHeights by remember(layout?.nodes?.keys?.toList()) { mutableStateOf(emptyMap<String, Float>()) }
     val paint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val textPaint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
     val path = remember { AndroidPath() }
@@ -161,40 +170,48 @@ fun MeshCanvas(
                 }
         }
 
+    val cardHeights = remember { mutableStateMapOf<String, Float>() }
+
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
         val widthDp = widthPx / density.density
         val heightDp = heightPx / density.density
-        val currentLayout =
-            remember(layout, widthDp, heightDp, cardHeights) {
-                layout?.let { inputLayout ->
-                    MeshLayoutEngine().computeLayout(
-                        nodes = inputLayout.nodes.values.map { it.node },
-                        edges = inputLayout.edges.map { it.edge },
-                        width = widthDp,
-                        height = heightDp,
-                        previousLayout = inputLayout,
-                        cardHeights = cardHeights,
-                    )
-                }
-            }
 
         LaunchedEffect(widthDp, heightDp) {
             onViewportSizeChanged(widthDp, heightDp)
         }
 
-        val bounds = currentLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
+        // Single batched layout pass when measured card heights differ (C7 W1/W2)
+        val currentLayout =
+            remember(layout, widthDp, cardHeights.toMap()) {
+                layout?.let { inputLayout ->
+                    if (cardHeights.isEmpty()) {
+                        inputLayout
+                    } else {
+                        MeshLayoutEngine().computeLayout(
+                            nodes = inputLayout.nodes.values.map { it.node },
+                            edges = inputLayout.edges.map { it.edge },
+                            width = widthDp,
+                            previousLayout = inputLayout,
+                            cardHeights = cardHeights.toMap(),
+                        )
+                    }
+                }
+            }
+
+        val activeLayout = currentLayout ?: layout
+        val bounds = activeLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
         val canvasCardBounds =
-            remember(currentLayout) {
-                currentLayout
+            remember(activeLayout) {
+                activeLayout
                     ?.nodes
                     ?.values
                     ?.map { it.bounds() }
                     .orEmpty()
             }
 
-        // Fit-to-content scaling in DP space
+        // Fit-to-content scaling in DP space (Specs S5, D5)
         val padding = 20f
         val contentWidth = maxOf(bounds.width + 2f * padding, 100f)
         val contentHeight = maxOf(bounds.height + 2f * padding, 100f)
@@ -202,81 +219,95 @@ fun MeshCanvas(
         val heightFitScale = if (bounds.height > 0f) heightDp / contentHeight else 1f
         val naturalFitScale = minOf(widthFitScale, heightFitScale)
         val isLandscape = widthDp > heightDp && widthDp >= 600f
-        val autoFitScale = if (isLandscape) 1f else minOf(1f, naturalFitScale).coerceAtLeast(0.40f)
+        val autoFitScale = if (isLandscape) 1f else minOf(1f, naturalFitScale).coerceIn(0.585f, 1f)
         val topPaddingDp = 16f
+        val effectiveZoom = (zoom * autoFitScale).coerceIn(MIN_ZOOM, MAX_ZOOM)
 
-        // Canvas for connectors, active glow, dashed lines, and comm particles/bubbles
-        Canvas(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(widthDp, heightDp, bounds, autoFitScale) {
-                    detectTransformGestures { centroid, pan, zoomChange, _ ->
-                        val oldZoom = zoom
-                        val newZoom = (oldZoom * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
-                        val oldEffectiveZoom = oldZoom * autoFitScale
-                        val newEffectiveZoom = newZoom * autoFitScale
-                        val zoomRatio = newEffectiveZoom / oldEffectiveZoom
-                        val panDpX = pan.x / density.density
-                        val panDpY = pan.y / density.density
-                        val centroidDpX = centroid.x / density.density
-                        val centroidDpY = centroid.y / density.density
-                        val oldOffsetX = meshContentOffsetX(bounds, widthDp, oldEffectiveZoom)
-                        val oldOffsetY = meshContentOffsetY(bounds, heightDp, oldEffectiveZoom, topPaddingDp)
-                        val newOffsetX = meshContentOffsetX(bounds, widthDp, newEffectiveZoom)
-                        val newOffsetY = meshContentOffsetY(bounds, heightDp, newEffectiveZoom, topPaddingDp)
-                        panX = centroidDpX + panDpX - newOffsetX - (centroidDpX - oldOffsetX - panX) * zoomRatio
-                        panY = centroidDpY + panDpY - newOffsetY - (centroidDpY - oldOffsetY - panY) * zoomRatio
-                        zoom = newZoom
-                    }
-                }.pointerInput(layout, widthDp, heightDp, bounds, autoFitScale) {
-                    detectTapGestures(
-                        onDoubleTap = {
-                            zoom = 1f
-                            panX = 0f
-                            panY = 0f
-                        },
-                        onTap = { tap ->
-                            val activeLayout = layout ?: return@detectTapGestures
-                            val tapDpX = tap.x / density.density
-                            val tapDpY = tap.y / density.density
-                            val tapEffectiveZoom = zoom * autoFitScale
-                            val tapContentOffsetX = meshContentOffsetX(bounds, widthDp, tapEffectiveZoom)
-                            val tapContentOffsetY = meshContentOffsetY(bounds, heightDp, tapEffectiveZoom, topPaddingDp)
-                            val localTap =
-                                Offset(
-                                    x = (tapDpX - tapContentOffsetX - panX) / tapEffectiveZoom,
-                                    y = (tapDpY - tapContentOffsetY - panY) / tapEffectiveZoom,
-                                )
-                            // Check if tap hit any node card
-                            val hitNode =
-                                activeLayout.nodes.values.firstOrNull { node ->
-                                    localTap.x >= node.left &&
-                                        localTap.x <= node.right &&
-                                        localTap.y >= node.top &&
-                                        localTap.y <= node.bottom
-                                }
-                            if (hitNode != null) {
-                                onNodeClick(hitNode.node.agentId)
-                                return@detectTapGestures
-                            }
-                            // Check edge tap
-                            val hitEdge =
-                                activeLayout.edges.firstOrNull { edge ->
-                                    distanceToCurve(localTap, edge) <= 20f
-                                }
-                            hitEdge?.let { onEdgeClick(it.edge.edgeId) }
-                        },
-                    )
-                },
+        // C9: Transform gestures on parent Box so dragging on cards or empty space works seamlessly
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { centroid, pan, zoomChange, _ ->
+                            val oldZoom = zoom
+                            val newZoom = (oldZoom * zoomChange).coerceIn(0.40f, 2.50f)
+                            val oldEffZoom = (oldZoom * autoFitScale).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                            val newEffZoom = (newZoom * autoFitScale).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                            val zoomRatio = if (oldEffZoom > 0f) newEffZoom / oldEffZoom else 1f
+                            val panDpX = pan.x / density.density
+                            val panDpY = pan.y / density.density
+                            val centroidDpX = centroid.x / density.density
+                            val centroidDpY = centroid.y / density.density
+                            val oldOffsetX = meshContentOffsetX(bounds, widthDp, oldEffZoom)
+                            val oldOffsetY = meshContentOffsetY(bounds, oldEffZoom, topPaddingDp)
+                            val newOffsetX = meshContentOffsetX(bounds, widthDp, newEffZoom)
+                            val newOffsetY = meshContentOffsetY(bounds, newEffZoom, topPaddingDp)
+
+                            val unconstrainedPanX = centroidDpX + panDpX - newOffsetX - (centroidDpX - oldOffsetX - panX) * zoomRatio
+                            val unconstrainedPanY = centroidDpY + panDpY - newOffsetY - (centroidDpY - oldOffsetY - panY) * zoomRatio
+
+                            // Clamp pan bounds + margin (C4)
+                            val maxPanX = maxOf(0f, (bounds.width * newEffZoom - widthDp) / 2f) + 60f
+                            val maxPanY = maxOf(0f, bounds.height * newEffZoom - heightDp + topPaddingDp) + 60f
+                            panX = unconstrainedPanX.coerceIn(-maxPanX, maxPanX)
+                            panY = unconstrainedPanY.coerceIn(-maxPanY, 60f)
+                            zoom = newZoom
+                        }
+                    },
         ) {
-            val activeLayout = currentLayout ?: return@Canvas
-            val nativeCanvas = drawContext.canvas.nativeCanvas
-            val currentTimeMs = frameTime.longValue
-            val drawEffectiveZoom = zoom * autoFitScale
-            val drawContentOffsetX = meshContentOffsetX(bounds, widthDp, drawEffectiveZoom)
-            val drawContentOffsetY = meshContentOffsetY(bounds, heightDp, drawEffectiveZoom, topPaddingDp)
-            val drawPanX = panX
-            val drawPanY = panY
+            // Canvas for connectors, active glow, dashed lines, and comm particles/bubbles
+            Canvas(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(layout, widthDp, heightDp, bounds, effectiveZoom) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                zoom = 1f
+                                panX = 0f
+                                panY = 0f
+                            },
+                            onTap = { tap ->
+                                val curLayout = layout ?: return@detectTapGestures
+                                val tapDpX = tap.x / density.density
+                                val tapDpY = tap.y / density.density
+                                val tapContentOffsetX = meshContentOffsetX(bounds, widthDp, effectiveZoom)
+                                val tapContentOffsetY = meshContentOffsetY(bounds, effectiveZoom, topPaddingDp)
+                                val localTap =
+                                    Offset(
+                                        x = (tapDpX - tapContentOffsetX - panX) / effectiveZoom,
+                                        y = (tapDpY - tapContentOffsetY - panY) / effectiveZoom,
+                                    )
+                                // Check if tap hit any node card
+                                val hitNode =
+                                    curLayout.nodes.values.firstOrNull { node ->
+                                        localTap.x >= node.left &&
+                                            localTap.x <= node.right &&
+                                            localTap.y >= node.top &&
+                                            localTap.y <= node.bottom
+                                    }
+                                if (hitNode != null) {
+                                    onNodeClick(hitNode.node.agentId)
+                                    return@detectTapGestures
+                                }
+                                // Check edge tap
+                                val hitEdge =
+                                    curLayout.edges.firstOrNull { edge ->
+                                        distanceToCurve(localTap, edge) <= 20f
+                                    }
+                                hitEdge?.let { onEdgeClick(it.edge.edgeId) }
+                            },
+                        )
+                    },
+            ) {
+                val curLayout = activeLayout ?: return@Canvas
+                val nativeCanvas = drawContext.canvas.nativeCanvas
+                val currentTimeMs = frameTime.longValue
+                val drawEffectiveZoom = effectiveZoom
+                val drawContentOffsetX = meshContentOffsetX(bounds, widthDp, drawEffectiveZoom)
+                val drawContentOffsetY = meshContentOffsetY(bounds, drawEffectiveZoom, topPaddingDp)
+                val drawPanX = panX
+                val drawPanY = panY
 
             nativeCanvas.withTranslation(
                 (drawContentOffsetX + drawPanX) * density.density,
@@ -411,7 +442,7 @@ fun MeshCanvas(
         }
 
         // Render interactive Agent Cards and Leaf Items in DP space with full legibility
-        currentLayout?.nodes?.values?.forEach { positioned ->
+        activeLayout?.nodes?.values?.forEach { positioned ->
             val node = positioned.node
             if (positioned.displayMode == NodeDisplayMode.LEAF_ITEM) {
                 val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
@@ -420,10 +451,10 @@ fun MeshCanvas(
                     modifier =
                         Modifier
                             .offset {
-                                val cardZoom = zoom * autoFitScale
+                                val cardZoom = effectiveZoom
                                 val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
                                 val cardTopDp =
-                                    meshContentOffsetY(bounds, heightDp, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
+                                    meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
                                 IntOffset(
                                     x = (cardLeftDp * density.density).roundToInt(),
                                     y = (cardTopDp * density.density).roundToInt(),
@@ -433,10 +464,10 @@ fun MeshCanvas(
                             .onSizeChanged { size ->
                                 val measuredHeight = size.height / density.density
                                 if (cardHeights[node.agentId] != measuredHeight) {
-                                    cardHeights = cardHeights + (node.agentId to measuredHeight)
+                                    cardHeights[node.agentId] = measuredHeight
                                 }
                             }.graphicsLayer {
-                                val cardZoom = zoom * autoFitScale
+                                val cardZoom = effectiveZoom
                                 scaleX = cardZoom
                                 scaleY = cardZoom
                                 transformOrigin = TransformOrigin(0f, 0f)
@@ -452,10 +483,10 @@ fun MeshCanvas(
                     modifier =
                         Modifier
                             .offset {
-                                val cardZoom = zoom * autoFitScale
+                                val cardZoom = effectiveZoom
                                 val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
                                 val cardTopDp =
-                                    meshContentOffsetY(bounds, heightDp, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
+                                    meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
                                 IntOffset(
                                     x = (cardLeftDp * density.density).roundToInt(),
                                     y = (cardTopDp * density.density).roundToInt(),
@@ -465,10 +496,10 @@ fun MeshCanvas(
                             .onSizeChanged { size ->
                                 val measuredHeight = size.height / density.density
                                 if (cardHeights[node.agentId] != measuredHeight) {
-                                    cardHeights = cardHeights + (node.agentId to measuredHeight)
+                                    cardHeights[node.agentId] = measuredHeight
                                 }
                             }.graphicsLayer {
-                                val cardZoom = zoom * autoFitScale
+                                val cardZoom = effectiveZoom
                                 scaleX = cardZoom
                                 scaleY = cardZoom
                                 transformOrigin = TransformOrigin(0f, 0f)
@@ -480,49 +511,6 @@ fun MeshCanvas(
                 )
             }
         }
-
-        // Floating Re-Center Action Button (Spec S5)
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-            contentAlignment = Alignment.BottomEnd,
-        ) {
-            Surface(
-                shape = RpShapes.pill,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)),
-                shadowElevation = 2.dp,
-                modifier =
-                    Modifier
-                        .heightIn(min = 36.dp)
-                        .clickable(role = Role.Button) {
-                            zoom = 1f
-                            panX = 0f
-                            panY = 0f
-                        }.semantics {
-                            contentDescription = "Recentrar organigrama"
-                        },
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = "Recentrar",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
         }
     }
 }
@@ -535,15 +523,9 @@ private fun meshContentOffsetX(
 
 private fun meshContentOffsetY(
     bounds: LayoutBounds,
-    heightDp: Float,
     zoom: Float,
     topPaddingDp: Float,
-): Float =
-    if (bounds.height * zoom > heightDp - topPaddingDp) {
-        topPaddingDp - bounds.minY * zoom
-    } else {
-        (heightDp - bounds.height * zoom) / 2f - bounds.minY * zoom
-    }
+): Float = topPaddingDp - bounds.minY * zoom
 
 internal fun safeCommBubbleCenterY(
     midpointY: Float,
@@ -699,6 +681,6 @@ private fun distanceToSegment(
 }
 
 private const val MIN_ZOOM = 0.4f
-private const val MAX_ZOOM = 3f
+private const val MAX_ZOOM = 2.5f
 private const val ACTIVE_EDGE_MS = 20_000L
 private const val BUBBLE_LIFETIME_MS = 6_000L

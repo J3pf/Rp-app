@@ -18,8 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,12 +31,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,6 +49,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.j3pf.rp.R
 import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.components.rememberShimmerBrush
 
@@ -110,18 +117,42 @@ internal fun MeshScreenContent(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compactFilters = maxHeight < 500.dp
+        var recenterTrigger by remember { mutableIntStateOf(0) }
+
         Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Red de agentes", style = MaterialTheme.typography.headlineSmall)
-                TextButton(
-                    onClick = onToggleListView,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                Text(stringResource(R.string.mesh_title), style = MaterialTheme.typography.headlineSmall)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(if (uiState.isListView) "Vista de diagrama" else "Vista de lista")
+                    if (!uiState.isListView && !uiState.isEmpty && uiState.snapshot != null) {
+                        TextButton(
+                            onClick = { recenterTrigger++ },
+                            modifier =
+                                Modifier.heightIn(min = 48.dp).semantics {
+                                    contentDescription = "Recentrar organigrama"
+                                },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.mesh_recenter))
+                        }
+                    }
+                    TextButton(
+                        onClick = onToggleListView,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(if (uiState.isListView) "Vista de diagrama" else "Vista de lista")
+                    }
                 }
             }
 
@@ -195,6 +226,7 @@ internal fun MeshScreenContent(
                     MeshCanvas(
                         layout = uiState.layoutResult,
                         activeBubbles = uiState.activeBubbles,
+                        recenterTrigger = recenterTrigger,
                         onNodeClick = onNodeClick,
                         onEdgeClick = onEdgeClick,
                         onViewportSizeChanged = onViewportSizeChanged,

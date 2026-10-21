@@ -76,7 +76,7 @@ data class LayoutBounds(
 
 data class LayoutConfig(
     val edgeCurveOffset: Float = 24f,
-    val cardWidth: Float = 240f,
+    val cardWidth: Float = 280f,
     val cardHeight: Float = 100f,
     val minCardWidth: Float = 180f,
     val minCardHeight: Float = 100f,
