@@ -3,7 +3,27 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - 2026-10-19
+## [0.5.0] - 2026-10-21
+
+### Added
+- **Corporate Org-Chart Layout ("Organigrama Mixto")**:
+  - Implemented pure Reingold–Tilford / Walker tidy-tree algorithm in `MeshLayoutEngine`: parent centered horizontally above children, same depth = same horizontal row, mathematical collision avoidance.
+  - Multi-root support displaying unparented peer orchestrators and solo agents side by side on row 0 without floating orphan nodes.
+  - Compact vertical bullet lists for leaf children hanging under their manager node when exceeding the leaf threshold or available row width.
+  - Orthogonal connectors with horizontal bus routing in inter-row channels and single vertical spine for leaf lists.
+  - Sane pan/zoom with auto-fit scale down to 0.4x and a visible floating "Recentrar" action button with refresh icon in the viewport.
+  - TalkBack accessibility hierarchy semantics announcing reporting structure (e.g. `"X, reporta a Y"`).
+  - Roborazzi visual golden screenshots for multi-root and 4-level deep corporate tree scenarios, and contact sheet generation.
+- **Dynamic Slash Command Catalogs** (contributed by Luis Eduardo Chacón Wilches):
+  - Added launcher-aware slash command catalog for Pi, Antigravity, Claude, Gentle Shell, and generic Shell with argument sub-suggestions.
+- **Floating Connection Banner** (contributed by Luis Eduardo Chacón Wilches):
+  - Elevated floating pill banner for relay connection states with pulsing status dot.
+- **Navigation Transitions & Predictive Back** (contributed by Luis Eduardo Chacón Wilches):
+  - Smooth tab-switching and detail slide transitions; enabled Android 13+ predictive back callback.
+- **Chat Density & Spacing Controls** (contributed by Luis Eduardo Chacón Wilches):
+  - Chat message spacing preferences (`Compact`, `Normal`, `Relaxed`), chat font scale, full-width thinking blocks, and docked quota bar.
+
+
 
 ### Fixed
 - **Test Determinism (no user-facing changes)**:
