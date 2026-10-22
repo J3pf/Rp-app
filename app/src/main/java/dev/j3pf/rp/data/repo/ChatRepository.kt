@@ -420,9 +420,7 @@ class ChatRepository
                             }
                         }
 
-                        else -> {
-                            Unit
-                        }
+                        else -> {}
                     }
                     delay(1000)
                 }
