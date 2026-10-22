@@ -637,6 +637,7 @@ class MeshLayoutEngineTest {
     fun `random forest layout ensures no two node rects intersect and no connector crosses a node`() {
         // Deterministic pseudo-random seed generator
         var seed = 42L
+
         fun nextRandom(bound: Int): Int {
             seed = (seed * 6364136223846793005L + 1442695040888963407L)
             val v = ((seed ushr 33) % bound).toInt()
@@ -659,12 +660,13 @@ class MeshLayoutEngineTest {
                     for (c in 1..childCount) {
                         val childId = "node-$r-$depth-${parent.takeLast(4)}-$c"
                         val isLeaf = depth == 3 || nextRandom(2) == 0
-                        allNodes += node(
-                            childId,
-                            parent = parent,
-                            role = "subordinate",
-                            subagents = if (!isLeaf) listOf(subagent("s-$childId")) else emptyList(),
-                        )
+                        allNodes +=
+                            node(
+                                childId,
+                                parent = parent,
+                                role = "subordinate",
+                                subagents = if (!isLeaf) listOf(subagent("s-$childId")) else emptyList(),
+                            )
                         allEdges += edge("e-$parent-$childId", parent, childId)
                         if (!isLeaf) {
                             nextLevelIds += childId

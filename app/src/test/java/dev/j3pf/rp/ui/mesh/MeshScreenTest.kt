@@ -666,7 +666,10 @@ class MeshScreenTest {
                 .fetchSemanticsNode()
                 .boundsInRoot
 
-        kotlin.test.assertTrue(orchBounds.width >= minCardWidthPx - 1f, "Orchestrator card width ${orchBounds.width} < 140dp ($minCardWidthPx px)")
+        kotlin.test.assertTrue(
+            orchBounds.width >= minCardWidthPx - 1f,
+            "Orchestrator card width ${orchBounds.width} < 140dp ($minCardWidthPx px)",
+        )
         kotlin.test.assertTrue(layout.nodes.values.all { it.width >= 140f }, "All cards in layout must have width >= 140dp")
         listOf(orchBounds, sub1Bounds, sub2Bounds, sub3Bounds).forEach { bounds ->
             kotlin.test.assertTrue(

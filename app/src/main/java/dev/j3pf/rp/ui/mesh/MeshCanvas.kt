@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -309,208 +308,208 @@ fun MeshCanvas(
                 val drawPanX = panX
                 val drawPanY = panY
 
-            nativeCanvas.withTranslation(
-                (drawContentOffsetX + drawPanX) * density.density,
-                (drawContentOffsetY + drawPanY) * density.density,
-            ) {
-                nativeCanvas.scale(
-                    drawEffectiveZoom * density.density,
-                    drawEffectiveZoom * density.density,
-                )
+                nativeCanvas.withTranslation(
+                    (drawContentOffsetX + drawPanX) * density.density,
+                    (drawContentOffsetY + drawPanY) * density.density,
+                ) {
+                    nativeCanvas.scale(
+                        drawEffectiveZoom * density.density,
+                        drawEffectiveZoom * density.density,
+                    )
 
-                // Draw edge curves in DP space
-                activeLayout.edges.forEach { positioned ->
-                    val edge = positioned.edge
-                    path.reset()
-                    if (positioned.routePoints.size >= 2) {
-                        val firstPoint = positioned.routePoints.first()
-                        path.moveTo(firstPoint.x, firstPoint.y)
-                        for (index in 1 until positioned.routePoints.size) {
-                            val point = positioned.routePoints[index]
-                            path.lineTo(point.x, point.y)
+                    // Draw edge curves in DP space
+                    activeLayout.edges.forEach { positioned ->
+                        val edge = positioned.edge
+                        path.reset()
+                        if (positioned.routePoints.size >= 2) {
+                            val firstPoint = positioned.routePoints.first()
+                            path.moveTo(firstPoint.x, firstPoint.y)
+                            for (index in 1 until positioned.routePoints.size) {
+                                val point = positioned.routePoints[index]
+                                path.lineTo(point.x, point.y)
+                            }
+                        } else {
+                            path.moveTo(positioned.fromX, positioned.fromY)
+                            path.quadTo(
+                                positioned.controlX,
+                                positioned.controlY,
+                                positioned.toX,
+                                positioned.toY,
+                            )
                         }
-                    } else {
-                        path.moveTo(positioned.fromX, positioned.fromY)
-                        path.quadTo(
-                            positioned.controlX,
-                            positioned.controlY,
-                            positioned.toX,
-                            positioned.toY,
-                        )
-                    }
-                    val age = edge.lastAt?.let { currentTimeMs - it }
-                    val active = age?.let { it in 0..ACTIVE_EDGE_MS } ?: edge.active
-                    val edgeTint = if (edge.pendingAsk) scheme.tertiary else scheme.outlineVariant
+                        val age = edge.lastAt?.let { currentTimeMs - it }
+                        val active = age?.let { it in 0..ACTIVE_EDGE_MS } ?: edge.active
+                        val edgeTint = if (edge.pendingAsk) scheme.tertiary else scheme.outlineVariant
 
-                    if (active) {
+                        if (active) {
+                            paint.reset()
+                            paint.isAntiAlias = true
+                            paint.style = AndroidPaint.Style.STROKE
+                            paint.strokeWidth = 3.5f
+                            paint.strokeCap = AndroidPaint.Cap.ROUND
+                            paint.color = scheme.primary.copy(alpha = 0.28f).toArgb()
+                            nativeCanvas.drawPath(path, paint)
+                        }
+
                         paint.reset()
                         paint.isAntiAlias = true
                         paint.style = AndroidPaint.Style.STROKE
-                        paint.strokeWidth = 3.5f
+                        paint.strokeWidth = if (active) 2f else 1.2f
                         paint.strokeCap = AndroidPaint.Cap.ROUND
-                        paint.color = scheme.primary.copy(alpha = 0.28f).toArgb()
+                        val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
+                        paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f).toArgb()
+                        if (edge.pendingAsk) {
+                            val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
+                            paint.pathEffect = dashEffects[phaseIdx]
+                        }
                         nativeCanvas.drawPath(path, paint)
+                        paint.pathEffect = null
                     }
 
-                    paint.reset()
-                    paint.isAntiAlias = true
-                    paint.style = AndroidPaint.Style.STROKE
-                    paint.strokeWidth = if (active) 2f else 1.2f
-                    paint.strokeCap = AndroidPaint.Cap.ROUND
-                    val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
-                    paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f).toArgb()
-                    if (edge.pendingAsk) {
-                        val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
-                        paint.pathEffect = dashEffects[phaseIdx]
-                    }
-                    nativeCanvas.drawPath(path, paint)
-                    paint.pathEffect = null
-                }
+                    // In-flight comms and speech bubbles
+                    bubblesByEdge.values.forEach { edgeBubbles ->
+                        val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(1)
+                        val firstComm = visibleBubbles.first().comm
+                        val firstSender = firstComm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEach
+                        val firstReceiver = firstComm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEach
+                        val firstEdge =
+                            activeLayout.edges.firstOrNull {
+                                (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
+                                    (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
+                            }
 
-                // In-flight comms and speech bubbles
-                bubblesByEdge.values.forEach { edgeBubbles ->
-                    val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(1)
-                    val firstComm = visibleBubbles.first().comm
-                    val firstSender = firstComm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEach
-                    val firstReceiver = firstComm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEach
-                    val firstEdge =
-                        activeLayout.edges.firstOrNull {
-                            (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
-                                (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
-                        }
+                        val edgeFromX = firstEdge?.fromX ?: firstSender.x
+                        val edgeFromY = firstEdge?.fromY ?: firstSender.bottom
+                        val edgeToX = firstEdge?.toX ?: firstReceiver.x
+                        val edgeToY = firstEdge?.toY ?: firstReceiver.top
+                        val midpoint =
+                            firstEdge?.let { pointAlongEdge(it, 0.5f) }
+                                ?: Offset((edgeFromX + edgeToX) / 2f, (edgeFromY + edgeToY) / 2f)
+                        val midpointX = midpoint.x
 
-                    val edgeFromX = firstEdge?.fromX ?: firstSender.x
-                    val edgeFromY = firstEdge?.fromY ?: firstSender.bottom
-                    val edgeToX = firstEdge?.toX ?: firstReceiver.x
-                    val edgeToY = firstEdge?.toY ?: firstReceiver.top
-                    val midpoint =
-                        firstEdge?.let { pointAlongEdge(it, 0.5f) }
-                            ?: Offset((edgeFromX + edgeToX) / 2f, (edgeFromY + edgeToY) / 2f)
-                    val midpointX = midpoint.x
+                        visibleBubbles.forEach bubbleLoop@{ bubble ->
+                            val comm = bubble.comm
+                            val sender = comm.fromAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
+                            val receiver = comm.toAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
+                            val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
+                            val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
 
-                    visibleBubbles.forEach bubbleLoop@{ bubble ->
-                        val comm = bubble.comm
-                        val sender = comm.fromAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
-                        val receiver = comm.toAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
-                        val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
-                        val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
+                            // Travelling comm particle
+                            if (!reducedMotion) {
+                                val point =
+                                    firstEdge?.let { pointAlongEdge(it, progress) }
+                                        ?: Offset(
+                                            edgeFromX + (edgeToX - edgeFromX) * progress,
+                                            edgeFromY + (edgeToY - edgeFromY) * progress,
+                                        )
+                                paint.reset()
+                                paint.isAntiAlias = true
+                                paint.color = scheme.primary.copy(alpha = 0.25f).toArgb()
+                                nativeCanvas.drawCircle(point.x, point.y, 5f, paint)
+                                paint.color = scheme.primary.toArgb()
+                                nativeCanvas.drawCircle(point.x, point.y, 2.5f, paint)
+                            }
 
-                        // Travelling comm particle
-                        if (!reducedMotion) {
-                            val point =
-                                firstEdge?.let { pointAlongEdge(it, progress) }
-                                    ?: Offset(
-                                        edgeFromX + (edgeToX - edgeFromX) * progress,
-                                        edgeFromY + (edgeToY - edgeFromY) * progress,
-                                    )
-                            paint.reset()
-                            paint.isAntiAlias = true
-                            paint.color = scheme.primary.copy(alpha = 0.25f).toArgb()
-                            nativeCanvas.drawCircle(point.x, point.y, 5f, paint)
-                            paint.color = scheme.primary.toArgb()
-                            nativeCanvas.drawCircle(point.x, point.y, 2.5f, paint)
-                        }
-
-                        // Speech bubble with message preview positioned clear of every card.
-                        val bubbleText = formatMeshCommText(comm.text)
-                        val bubbleHalfWidth = speechBubbleHalfWidth(bubbleText, textPaint)
-                        val upperNode = if (sender.y <= receiver.y) sender else receiver
-                        val lowerNode = if (sender.y <= receiver.y) receiver else sender
-                        val safeMidpointY =
-                            safeCommBubbleCenterY(
-                                midpointY = midpoint.y,
-                                senderBottom = upperNode.bottom,
-                                receiverTop = lowerNode.top,
-                                otherCards = canvasCardBounds,
-                                bubbleCenterX = midpointX,
-                                bubbleHalfWidth = bubbleHalfWidth,
+                            // Speech bubble with message preview positioned clear of every card.
+                            val bubbleText = formatMeshCommText(comm.text)
+                            val bubbleHalfWidth = speechBubbleHalfWidth(bubbleText, textPaint)
+                            val upperNode = if (sender.y <= receiver.y) sender else receiver
+                            val lowerNode = if (sender.y <= receiver.y) receiver else sender
+                            val safeMidpointY =
+                                safeCommBubbleCenterY(
+                                    midpointY = midpoint.y,
+                                    senderBottom = upperNode.bottom,
+                                    receiverTop = lowerNode.top,
+                                    otherCards = canvasCardBounds,
+                                    bubbleCenterX = midpointX,
+                                    bubbleHalfWidth = bubbleHalfWidth,
+                                )
+                            drawSpeechBubble(
+                                nativeCanvas,
+                                midpointX,
+                                safeMidpointY,
+                                bubbleText,
+                                bubbleHalfWidth * 2f,
+                                paint,
+                                textPaint,
+                                scheme.surfaceVariant,
+                                scheme.onSurfaceVariant,
                             )
-                        drawSpeechBubble(
-                            nativeCanvas,
-                            midpointX,
-                            safeMidpointY,
-                            bubbleText,
-                            bubbleHalfWidth * 2f,
-                            paint,
-                            textPaint,
-                            scheme.surfaceVariant,
-                            scheme.onSurfaceVariant,
-                        )
+                        }
                     }
                 }
             }
-        }
 
-        // Render interactive Agent Cards and Leaf Items in DP space with full legibility
-        activeLayout?.nodes?.values?.forEach { positioned ->
-            val node = positioned.node
-            if (positioned.displayMode == NodeDisplayMode.LEAF_ITEM) {
-                val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
-                MeshLeafItem(
-                    node = node,
-                    modifier =
-                        Modifier
-                            .offset {
-                                val cardZoom = effectiveZoom
-                                val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
-                                val cardTopDp =
-                                    meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
-                                IntOffset(
-                                    x = (cardLeftDp * density.density).roundToInt(),
-                                    y = (cardTopDp * density.density).roundToInt(),
-                                )
-                            }.width(positioned.width.dp)
-                            .wrapContentHeight()
-                            .onSizeChanged { size ->
-                                val measuredHeight = size.height / density.density
-                                if (cardHeights[node.agentId] != measuredHeight) {
-                                    cardHeights[node.agentId] = measuredHeight
-                                }
-                            }.graphicsLayer {
-                                val cardZoom = effectiveZoom
-                                scaleX = cardZoom
-                                scaleY = cardZoom
-                                transformOrigin = TransformOrigin(0f, 0f)
-                            },
-                    allNodes = allNodes,
-                    parentNode = parentNode,
-                    onClick = { onNodeClick(node.agentId) },
-                )
-            } else {
-                val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
-                MeshAgentCard(
-                    node = node,
-                    modifier =
-                        Modifier
-                            .offset {
-                                val cardZoom = effectiveZoom
-                                val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
-                                val cardTopDp =
-                                    meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
-                                IntOffset(
-                                    x = (cardLeftDp * density.density).roundToInt(),
-                                    y = (cardTopDp * density.density).roundToInt(),
-                                )
-                            }.width(positioned.width.dp)
-                            .wrapContentHeight()
-                            .onSizeChanged { size ->
-                                val measuredHeight = size.height / density.density
-                                if (cardHeights[node.agentId] != measuredHeight) {
-                                    cardHeights[node.agentId] = measuredHeight
-                                }
-                            }.graphicsLayer {
-                                val cardZoom = effectiveZoom
-                                scaleX = cardZoom
-                                scaleY = cardZoom
-                                transformOrigin = TransformOrigin(0f, 0f)
-                            },
-                    allNodes = allNodes,
-                    parentNode = parentNode,
-                    onClick = { onNodeClick(node.agentId) },
-                    reducedMotion = reducedMotion,
-                )
+            // Render interactive Agent Cards and Leaf Items in DP space with full legibility
+            activeLayout?.nodes?.values?.forEach { positioned ->
+                val node = positioned.node
+                if (positioned.displayMode == NodeDisplayMode.LEAF_ITEM) {
+                    val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
+                    MeshLeafItem(
+                        node = node,
+                        modifier =
+                            Modifier
+                                .offset {
+                                    val cardZoom = effectiveZoom
+                                    val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
+                                    val cardTopDp =
+                                        meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
+                                    IntOffset(
+                                        x = (cardLeftDp * density.density).roundToInt(),
+                                        y = (cardTopDp * density.density).roundToInt(),
+                                    )
+                                }.width(positioned.width.dp)
+                                .wrapContentHeight()
+                                .onSizeChanged { size ->
+                                    val measuredHeight = size.height / density.density
+                                    if (cardHeights[node.agentId] != measuredHeight) {
+                                        cardHeights[node.agentId] = measuredHeight
+                                    }
+                                }.graphicsLayer {
+                                    val cardZoom = effectiveZoom
+                                    scaleX = cardZoom
+                                    scaleY = cardZoom
+                                    transformOrigin = TransformOrigin(0f, 0f)
+                                },
+                        allNodes = allNodes,
+                        parentNode = parentNode,
+                        onClick = { onNodeClick(node.agentId) },
+                    )
+                } else {
+                    val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
+                    MeshAgentCard(
+                        node = node,
+                        modifier =
+                            Modifier
+                                .offset {
+                                    val cardZoom = effectiveZoom
+                                    val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
+                                    val cardTopDp =
+                                        meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
+                                    IntOffset(
+                                        x = (cardLeftDp * density.density).roundToInt(),
+                                        y = (cardTopDp * density.density).roundToInt(),
+                                    )
+                                }.width(positioned.width.dp)
+                                .wrapContentHeight()
+                                .onSizeChanged { size ->
+                                    val measuredHeight = size.height / density.density
+                                    if (cardHeights[node.agentId] != measuredHeight) {
+                                        cardHeights[node.agentId] = measuredHeight
+                                    }
+                                }.graphicsLayer {
+                                    val cardZoom = effectiveZoom
+                                    scaleX = cardZoom
+                                    scaleY = cardZoom
+                                    transformOrigin = TransformOrigin(0f, 0f)
+                                },
+                        allNodes = allNodes,
+                        parentNode = parentNode,
+                        onClick = { onNodeClick(node.agentId) },
+                        reducedMotion = reducedMotion,
+                    )
+                }
             }
-        }
         }
     }
 }

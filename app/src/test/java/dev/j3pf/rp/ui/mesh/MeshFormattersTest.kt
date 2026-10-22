@@ -139,6 +139,41 @@ class MeshFormattersTest {
     }
 
     @Test
+    fun `formatMeshLeafCompactStatus formats working with todos or simple status`() {
+        val workingWithTodos =
+            MeshNode(
+                agentId = "w1",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Worker",
+                status = "working",
+                todos = MeshTodos(total = 4, done = 2),
+            )
+        assertEquals("Trabajando · 2/4", formatMeshLeafCompactStatus(workingWithTodos))
+
+        val idleNode =
+            MeshNode(
+                agentId = "w2",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Worker",
+                status = "idle",
+            )
+        assertEquals("Inactivo", formatMeshLeafCompactStatus(idleNode))
+
+        val offlineNode =
+            MeshNode(
+                agentId = "w3",
+                machineId = "m1",
+                machineName = "PC",
+                name = "Worker",
+                status = "offline",
+                online = false,
+            )
+        assertEquals("Desconectado", formatMeshLeafCompactStatus(offlineNode))
+    }
+
+    @Test
     fun `formatMeshDisplayName filters out raw IDs and falls back to cwd basename or Agente`() {
         val uuidNode =
             MeshNode(

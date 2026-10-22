@@ -164,6 +164,18 @@ fun formatMeshTodos(
     total: Int,
 ): String = "$done de $total tareas"
 
+fun formatMeshLeafCompactStatus(node: MeshNode): String {
+    val status = formatMeshStatus(node.status)
+    val todos = node.todos
+    return if (todos != null && todos.total > 0 && node.status == "working") {
+        "$status · ${todos.done}/${todos.total}"
+    } else {
+        status
+    }
+}
+
+fun formatMeshNodeReportsTo(parentDisplayName: String): String = ", reporta a $parentDisplayName"
+
 fun formatMeshNodeContentDescription(
     node: MeshNode,
     allNodes: List<MeshNode> = emptyList(),
@@ -172,7 +184,7 @@ fun formatMeshNodeContentDescription(
     val role = formatMeshRole(node.role)
     val name = formatMeshDisplayName(node, allNodes)
     val status = formatMeshStatus(node.status)
-    val reportsTo = parentNode?.let { ", reporta a ${formatMeshDisplayName(it, allNodes)}" }.orEmpty()
+    val reportsTo = parentNode?.let { formatMeshNodeReportsTo(formatMeshDisplayName(it, allNodes)) }.orEmpty()
     val todos = node.todos?.let { ", ${formatMeshTodos(it.done, it.total)}" }.orEmpty()
     return "$role $name, $status$reportsTo$todos"
 }

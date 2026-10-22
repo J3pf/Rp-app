@@ -180,16 +180,21 @@ class MeshLayoutEngine(
         val leafHeight = config.leafItemHeight
         val leafSpacingY = config.leafSpacingY
 
-        val allLeavesSet = leafGroupChildren.values.flatten().map { it.agentId }.toSet()
+        val allLeavesSet =
+            leafGroupChildren.values
+                .flatten()
+                .map { it.agentId }
+                .toSet()
         val rowHeights = mutableMapOf<Int, Float>()
         for (d in 0..maxDepth) {
             val cardsAtLevel = orderedNodes.filter { levels[it.agentId] == d && it.agentId !in allLeavesSet }
             val cardMaxHeight = cardsAtLevel.maxOfOrNull { nodeHeights.getValue(it.agentId) } ?: baseCardHeight
             // C3: reserve row height for leaf groups hanging from parent at d - 1
             val leafGroupsAtLevel = leafGroupChildren.filter { (pId, leaves) -> levels[pId] == d - 1 && leaves.isNotEmpty() }
-            val leafGroupMaxHeight = leafGroupsAtLevel.values.maxOfOrNull { leaves ->
-                leaves.size * leafHeight + (leaves.size - 1).coerceAtLeast(0) * leafSpacingY
-            } ?: 0f
+            val leafGroupMaxHeight =
+                leafGroupsAtLevel.values.maxOfOrNull { leaves ->
+                    leaves.size * leafHeight + (leaves.size - 1).coerceAtLeast(0) * leafSpacingY
+                } ?: 0f
             rowHeights[d] = max(baseCardHeight, max(cardMaxHeight, leafGroupMaxHeight))
         }
 
