@@ -68,6 +68,7 @@ class PushRouter
 
                 PushKind.SETTLED -> {
                     val s = decode(PushSettledBody.serializer(), body) ?: return false
+                    factory.cancelWorking(s.agentId)
                     // pushId o agentId+preview: un mismo "terminó" sólo se avisa una vez.
                     val key = "settled:${pushId ?: (s.agentId + ":" + (s.preview ?: "").hashCode())}"
                     if (!deduper.firstSeen(key)) return true

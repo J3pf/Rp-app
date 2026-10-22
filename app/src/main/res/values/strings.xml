@@ -20,4 +20,8 @@
     <string name="mesh_recenter_desc">Recentrar organigrama</string>
     <string name="chat_msg_failed">Error al enviar</string>
     <string name="chat_msg_retry">Reintentar</string>
+    <string name="action_voice_input">Entrada por voz</string>
+    <string name="voice_listening">Escuchando…</string>
+    <string name="action_abort">Abortar</string>
+    <string name="agent_working_desc">Trabajando en segundo plano…</string>
 </resources>

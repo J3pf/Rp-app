@@ -17,8 +17,10 @@ import dev.j3pf.rp.R
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.ReconnectingSocket
+import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.secure.SecretStore
+import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AppHello
 import dev.j3pf.rp.protocol.AppInfo
 import dev.j3pf.rp.protocol.Envelope
@@ -52,6 +54,10 @@ class DirectPushService : LifecycleService() {
     @Inject lateinit var channels: NotificationChannels
 
     @Inject lateinit var machines: MachinesRepository
+
+    @Inject lateinit var agents: AgentsRepository
+
+    @Inject lateinit var factory: NotificationFactory
 
     @Inject lateinit var baseClient: OkHttpClient
 
@@ -91,6 +97,26 @@ class DirectPushService : LifecycleService() {
                 val n = buildNotification(ms.size, st == ConnState.Connected)
                 runCatching { notify(n) }
                 if (st is ConnState.Fatal) stopSelf()
+            }
+        }
+
+        lifecycleScope.launch {
+            val currentlyWorking = mutableSetOf<String>()
+            agents.agents.collect { list ->
+                val working = list.filter { it.status == AgentStatus.WORKING }
+                val workingIds = working.map { it.agentId }.toSet()
+
+                val stopped = currentlyWorking - workingIds
+                for (id in stopped) {
+                    factory.cancelWorking(id)
+                }
+
+                for (a in working) {
+                    factory.showWorking(a)
+                }
+
+                currentlyWorking.clear()
+                currentlyWorking.addAll(workingIds)
             }
         }
     }

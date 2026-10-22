@@ -275,6 +275,49 @@ class NotificationFactory
             nm.notify(SIMPLE_TAG, id, n)
         }
 
+        /** Agente en ejecución: notificación ongoing con cronómetro y barra de progreso indeterminada. */
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
+        suspend fun showWorking(agent: dev.j3pf.rp.protocol.AgentSummary) {
+            if (!canNotify()) return
+            val machineId = agent.machineId.ifEmpty { "default" }
+            val machineName = agent.machineName.ifEmpty { "RP" }
+            channels.ensureMachine(machineId, machineName, agent.machineContext)
+            val channel = channels.channelId(machineId, NotifyCategory.TERMINAL)
+            val id = stableId("working:${agent.agentId}")
+            val open = openIntent(null, agent.agentId, id)
+            val label = agent.sessionName ?: agent.agentId
+            val title = "${contextEmoji(agent.machineContext)} $machineName · $label"
+            val text = agent.activeTask ?: context.getString(R.string.agent_working_desc)
+
+            val builder =
+                NotificationCompat
+                    .Builder(context, channel)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setContentIntent(open)
+                    .setOngoing(true)
+                    .setOnlyAlertOnce(true)
+                    .setProgress(0, 0, true)
+                    .setUsesChronometer(true)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                    .addAction(
+                        NotificationCompat.Action
+                            .Builder(
+                                0,
+                                context.getString(R.string.action_open),
+                                open,
+                            ).build(),
+                    )
+            nm.notify(WORKING_TAG, id, builder.build())
+        }
+
+        fun cancelWorking(agentId: String) {
+            nm.cancel(WORKING_TAG, stableId("working:$agentId"))
+        }
+
         // ───────────────────────────── Estado desde el receiver ─────────────────────────────
 
         /** Feedback inmediato tras pulsar una acción: "Enviando…" sin botones. */
@@ -412,6 +455,7 @@ class NotificationFactory
             const val SETTLED_TAG = "rp.settled"
             const val SIMPLE_TAG = "rp.simple"
             const val SUMMARY_TAG = "rp.summary"
+            const val WORKING_TAG = "rp.working"
 
             /** id = hash de `promptId`. */
             fun notificationId(promptId: String) = stableId(promptId)

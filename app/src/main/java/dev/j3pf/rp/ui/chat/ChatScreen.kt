@@ -40,6 +40,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -79,6 +81,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -88,6 +91,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.j3pf.rp.R
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.repo.AttachmentUi
@@ -857,6 +861,26 @@ internal fun Composer(
             }
         }
 
+    var baseVoiceText by remember { mutableStateOf("") }
+    val voiceInput =
+        rememberVoiceInputState(
+            onPartialResult = { partial ->
+                val prefix = if (baseVoiceText.isNotEmpty() && !baseVoiceText.endsWith(" ")) "$baseVoiceText " else baseVoiceText
+                onText(prefix + partial)
+            },
+            onFinalResult = { final ->
+                val prefix = if (baseVoiceText.isNotEmpty() && !baseVoiceText.endsWith(" ")) "$baseVoiceText " else baseVoiceText
+                onText(prefix + final)
+            },
+        )
+    val recordAudioPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                baseVoiceText = text
+                voiceInput.startListening()
+            }
+        }
+
     val canSendNow = ui.canSend && (text.isNotBlank() || ui.attachments.isNotEmpty())
 
     Surface(
@@ -1070,47 +1094,77 @@ internal fun Composer(
                     onValueChange = onText,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(22.dp),
-                    placeholder = { Text("Escribe a tu agente…") },
+                    placeholder = {
+                        Text(
+                            if (voiceInput.isListening) {
+                                stringResource(R.string.voice_listening)
+                            } else {
+                                "Escribe a tu agente…"
+                            },
+                        )
+                    },
                     maxLines = 6,
                 )
+                val isVoiceMode = !canSendNow && !ui.sending && voiceInput.isAvailable
                 Surface(
                     shape = CircleShape,
                     color =
-                        if (canSendNow) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                        when {
+                            voiceInput.isListening -> MaterialTheme.colorScheme.errorContainer
+                            canSendNow -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
                         },
                     contentColor =
-                        if (canSendNow) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.outline
+                        when {
+                            voiceInput.isListening -> MaterialTheme.colorScheme.onErrorContainer
+                            canSendNow -> MaterialTheme.colorScheme.onPrimary
+                            else -> MaterialTheme.colorScheme.outline
                         },
                     border =
-                        if (!canSendNow) {
+                        if (!canSendNow && !voiceInput.isListening) {
                             BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         } else {
                             null
                         },
                 ) {
                     val haptic = LocalHapticFeedback.current
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onSend()
-                        },
-                        enabled = canSendNow && !ui.sending,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        if (ui.sending) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
+                    if (isVoiceMode || voiceInput.isListening) {
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (voiceInput.isListening) {
+                                    voiceInput.stopListening()
+                                } else {
+                                    baseVoiceText = text
+                                    recordAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            },
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Icon(
+                                if (voiceInput.isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
+                                contentDescription = stringResource(R.string.action_voice_input),
+                                modifier = Modifier.size(20.dp),
                             )
-                        } else {
-                            Icon(Icons.AutoMirrored.Filled.Send, "Enviar", modifier = Modifier.size(20.dp))
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSend()
+                            },
+                            enabled = canSendNow && !ui.sending,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            if (ui.sending) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            } else {
+                                Icon(Icons.AutoMirrored.Filled.Send, "Enviar", modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
                 }
