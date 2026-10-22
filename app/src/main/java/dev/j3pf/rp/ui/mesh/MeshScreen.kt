@@ -131,11 +131,12 @@ internal fun MeshScreenContent(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (!uiState.isListView && !uiState.isEmpty && uiState.snapshot != null) {
+                        val recenterDesc = stringResource(R.string.mesh_recenter_desc)
                         TextButton(
                             onClick = { recenterTrigger++ },
                             modifier =
                                 Modifier.heightIn(min = 48.dp).semantics {
-                                    contentDescription = "Recentrar organigrama"
+                                    contentDescription = recenterDesc
                                 },
                         ) {
                             Icon(
