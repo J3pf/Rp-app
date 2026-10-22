@@ -24,4 +24,8 @@
     <string name="voice_listening">Escuchando…</string>
     <string name="action_abort">Abortar</string>
     <string name="agent_working_desc">Trabajando en segundo plano…</string>
+    <string name="diff_title">Revisión de cambios</string>
+    <string name="diff_no_changes">Sin cambios pendientes</string>
+    <string name="diff_request_adjustment">Pedir ajuste</string>
+    <string name="diff_discard">Descartar</string>
 </resources>

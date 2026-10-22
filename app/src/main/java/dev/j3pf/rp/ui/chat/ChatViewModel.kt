@@ -16,6 +16,8 @@ import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.ChatRepository
+import dev.j3pf.rp.data.repo.HostRepository
+import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.LocalAttachment
 import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.repo.SendResult
@@ -25,6 +27,7 @@ import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
+import dev.j3pf.rp.protocol.HostGitDiffResult
 import dev.j3pf.rp.ui.nav.ChatRoute
 import dev.j3pf.rp.util.BiometricGate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +68,10 @@ data class ChatUiState(
     val interactiveUnavailable: Boolean = false,
     val message: String? = null,
     val unreadCount: Int = 0,
+    val diffResult: HostGitDiffResult? = null,
+    val loadingDiff: Boolean = false,
+    val showDiffSheet: Boolean = false,
+    val selectedDiffFile: String? = null,
 ) {
     val isAuto get() = agent?.gentleMode == "auto"
     val canSend get() = !sending && attachments.none { it.state != UploadState.DONE && it.state != UploadState.ERROR }
@@ -80,6 +87,7 @@ class ChatViewModel
         private val settingsRepo: SettingsRepository,
         private val prompts: PromptsRepository,
         private val attachmentsRepo: AttachmentsRepository,
+        private val hostRepo: HostRepository,
         connection: RelayConnection,
         val gate: BiometricGate,
     ) : ViewModel() {
@@ -135,6 +143,44 @@ class ChatViewModel
 
         fun setChatMessageSpacing(spacing: String) {
             viewModelScope.launch { settingsRepo.setChatMessageSpacing(spacing) }
+        }
+
+        fun openDiffSheet(targetFile: String? = null) {
+            val agent = state.value.agent ?: return
+            val cwd = agent.cwd ?: return
+            extra.update { it.copy(showDiffSheet = true, loadingDiff = true, selectedDiffFile = targetFile) }
+            viewModelScope.launch {
+                when (val r = hostRepo.gitDiff(agent.machineId, cwd, targetFile)) {
+                    is HostResult.Ok ->
+                        extra.update {
+                            val fileToSelect =
+                                targetFile ?: it.selectedDiffFile ?: r.value.files
+                                    .firstOrNull()
+                                    ?.path
+                            it.copy(diffResult = r.value, loadingDiff = false, selectedDiffFile = fileToSelect)
+                        }
+                    is HostResult.Failed -> extra.update { it.copy(loadingDiff = false, message = r.message) }
+                }
+            }
+        }
+
+        fun closeDiffSheet() {
+            extra.update { it.copy(showDiffSheet = false) }
+        }
+
+        fun selectDiffFile(path: String) {
+            extra.update { it.copy(selectedDiffFile = path) }
+        }
+
+        fun discardDiffFile(path: String) {
+            val agent = state.value.agent ?: return
+            val cwd = agent.cwd ?: return
+            viewModelScope.launch {
+                when (val r = hostRepo.gitDiscard(agent.machineId, cwd, path)) {
+                    is HostResult.Ok -> openDiffSheet(null)
+                    is HostResult.Failed -> extra.update { it.copy(message = r.message) }
+                }
+            }
         }
 
         /** Olvida un agente desconectado (`agent.forget`). */

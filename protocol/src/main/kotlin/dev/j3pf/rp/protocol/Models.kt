@@ -599,3 +599,40 @@ data class SubagentInfo(
     val result: String? = null,
     val tools: List<String> = emptyList(),
 )
+
+@Serializable
+data class HostGitDiff(
+    val machineId: String,
+    val cwd: String,
+    val path: String? = null,
+)
+
+@Serializable
+data class HostGitDiffFile(
+    val path: String,
+    val status: String,
+    val additions: Int = 0,
+    val deletions: Int = 0,
+    val patch: String = "",
+)
+
+@Serializable
+data class HostGitDiffResult(
+    val branch: String? = null,
+    val files: List<HostGitDiffFile> = emptyList(),
+    val totalAdditions: Int = 0,
+    val totalDeletions: Int = 0,
+)
+
+@Serializable
+data class HostGitDiscard(
+    val machineId: String,
+    val cwd: String,
+    val path: String,
+)
+
+@Serializable
+data class HostGitDiscardResult(
+    val ok: Boolean = true,
+    val path: String,
+)

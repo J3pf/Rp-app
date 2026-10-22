@@ -9,6 +9,10 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HerdrTarget
 import dev.j3pf.rp.protocol.HostDirs
+import dev.j3pf.rp.protocol.HostGitDiff
+import dev.j3pf.rp.protocol.HostGitDiffResult
+import dev.j3pf.rp.protocol.HostGitDiscard
+import dev.j3pf.rp.protocol.HostGitDiscardResult
 import dev.j3pf.rp.protocol.HostInfo
 import dev.j3pf.rp.protocol.HostListDirs
 import dev.j3pf.rp.protocol.HostMachineRef
@@ -73,6 +77,19 @@ class HostRepository
 
         suspend fun spawn(req: HostSpawn): HostResult<HostSpawned> =
             ask(MsgType.HOST_SPAWN, req, timeoutMs = 30_000) { it.body<HostSpawned>() }
+
+        suspend fun gitDiff(
+            machineId: String,
+            cwd: String,
+            path: String? = null,
+        ): HostResult<HostGitDiffResult> = ask(MsgType.HOST_GIT_DIFF, HostGitDiff(machineId, cwd, path)) { it.body<HostGitDiffResult>() }
+
+        suspend fun gitDiscard(
+            machineId: String,
+            cwd: String,
+            path: String,
+        ): HostResult<HostGitDiscardResult> =
+            ask(MsgType.HOST_GIT_DISCARD, HostGitDiscard(machineId, cwd, path)) { it.body<HostGitDiscardResult>() }
 
         suspend fun resumeAgent(agent: AgentSummary): HostResult<HostSpawned> {
             val sessionId = agent.agentId.substringAfter(':')

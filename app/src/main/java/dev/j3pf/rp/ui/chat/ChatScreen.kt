@@ -141,6 +141,7 @@ fun ChatContent(
     onForget: () -> Unit = {},
     onSwitchToNormal: () -> Unit = {},
     onRetryUserMessage: (UserMsg) -> Unit = {},
+    onOpenDiff: () -> Unit = {},
     busyPromptId: String? = null,
     listState: androidx.compose.foundation.lazy.LazyListState =
         androidx.compose.foundation.lazy
@@ -193,13 +194,37 @@ fun ChatContent(
                                 }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 StatusChip(effectiveAgent)
-                                val branch = agent.gitBranch?.takeIf { it.isNotBlank() }?.let { "⎇ $it" }
+                                val hasChanges = ui.diffResult?.files?.isNotEmpty() == true
+                                if (!agent.gitBranch.isNullOrBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color =
+                                            if (hasChanges) {
+                                                MaterialTheme.colorScheme.tertiaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                            },
+                                        modifier = Modifier.clickable { onOpenDiff() },
+                                    ) {
+                                        Text(
+                                            "⎇ ${agent.gitBranch}${if (hasChanges) " *" else ""}",
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color =
+                                                if (hasChanges) {
+                                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                    }
+                                }
                                 val modelText = (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
                                 val thinkingText = ui.chat.thinkingLevel?.takeIf { it.isNotBlank() }
                                 val subtitle =
                                     listOfNotNull(
                                         folder.takeIf { it.isNotBlank() },
-                                        branch,
                                         modelText,
                                         thinkingText,
                                     ).joinToString(" · ")
@@ -221,9 +246,31 @@ fun ChatContent(
                     if (working) {
                         IconButton(onClick = onAbort) { Icon(Icons.Filled.Stop, "Interrumpir", tint = MaterialTheme.colorScheme.error) }
                     }
+                    if (ui.diffResult?.files?.isNotEmpty() == true) {
+                        AssistChip(
+                            onClick = onOpenDiff,
+                            label = { Text("Diff (${ui.diffResult.files.size})", style = MaterialTheme.typography.labelSmall) },
+                            colors =
+                                AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                ),
+                            border = null,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                    }
                     var menu by remember { mutableStateOf(false) }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
                     DropdownMenu(menu, { menu = false }) {
+                        if (agent != null) {
+                            DropdownMenuItem(
+                                text = { Text("Revisar cambios Git (Diff)") },
+                                onClick = {
+                                    menu = false
+                                    onOpenDiff()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = {
                                 Row(
@@ -516,9 +563,26 @@ fun ChatScreen(
         onForget = { vm.forget(onBack) },
         onSwitchToNormal = vm::switchToNormal,
         onRetryUserMessage = vm::retryUserMessage,
+        onOpenDiff = vm::openDiffSheet,
         busyPromptId = busyPrompt,
         snackbarHostState = snackbar,
     )
+
+    if (ui.showDiffSheet) {
+        DiffSheet(
+            diff = ui.diffResult,
+            selectedFile = ui.selectedDiffFile,
+            isLoading = ui.loadingDiff,
+            onSelectFile = vm::selectDiffFile,
+            onDiscardFile = vm::discardDiffFile,
+            onRequestAdjustment = { filePath ->
+                val prefix = if (text.isBlank()) "Ajusta en $filePath: " else "$text\nAjusta en $filePath: "
+                text = prefix
+                vm.closeDiffSheet()
+            },
+            onDismiss = vm::closeDiffSheet,
+        )
+    }
 }
 
 @Composable
