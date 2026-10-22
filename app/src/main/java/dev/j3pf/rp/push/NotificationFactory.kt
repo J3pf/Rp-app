@@ -24,6 +24,7 @@ import dev.j3pf.rp.protocol.PushKind
 import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.PushSettledBody
 import dev.j3pf.rp.protocol.str
+import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.stableId
 import dev.j3pf.rp.util.truncate
@@ -285,7 +286,7 @@ class NotificationFactory
             val channel = channels.channelId(machineId, NotifyCategory.TERMINAL)
             val id = stableId("working:${agent.agentId}")
             val open = openIntent(null, agent.agentId, id)
-            val label = agent.sessionName ?: agent.agentId
+            val label = agentTitle(agent.sessionName, agent.cwd, agent.agentId)
             val title = "${contextEmoji(agent.machineContext)} $machineName · $label"
             val text = agent.activeTask ?: context.getString(R.string.agent_working_desc)
 
@@ -298,19 +299,23 @@ class NotificationFactory
                     .setStyle(NotificationCompat.BigTextStyle().bigText(text))
                     .setContentIntent(open)
                     .setOngoing(true)
+                    .setSilent(true)
                     .setOnlyAlertOnce(true)
                     .setProgress(0, 0, true)
                     .setUsesChronometer(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-                    .addAction(
-                        NotificationCompat.Action
-                            .Builder(
-                                0,
-                                context.getString(R.string.action_open),
-                                open,
-                            ).build(),
-                    )
+            agent.gitBranch?.takeIf { it.isNotBlank() }?.let { branch ->
+                builder.setSubText("⎇ $branch")
+            }
+            builder.addAction(
+                NotificationCompat.Action
+                    .Builder(
+                        0,
+                        context.getString(R.string.action_open),
+                        open,
+                    ).build(),
+            )
             nm.notify(WORKING_TAG, id, builder.build())
         }
 

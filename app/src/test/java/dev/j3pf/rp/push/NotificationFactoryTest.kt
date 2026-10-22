@@ -12,6 +12,7 @@ import dev.j3pf.rp.protocol.PromptKind
 import dev.j3pf.rp.protocol.PromptOption
 import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.PushSettledBody
+import dev.j3pf.rp.util.stableId
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -178,6 +179,36 @@ class NotificationFactoryTest {
                     .toString(),
             )
             assertEquals("rp.01MACH.finished", n.channelId)
+        }
+    }
+
+    @Test
+    fun `showWorking publica notificacion ongoing con abrir y cancelWorking la retira`() {
+        runBlocking {
+            val agent =
+                dev.j3pf.rp.protocol.AgentSummary(
+                    agentId = "m:s1",
+                    machineId = "01MACH",
+                    machineName = "PC Empresa",
+                    machineContext = "work",
+                    sessionName = "Refactor UI",
+                    gitBranch = "feature/live",
+                    status = dev.j3pf.rp.protocol.AgentStatus.WORKING,
+                    activeTask = "Corriendo tests",
+                )
+            factory.showWorking(agent)
+            val id = stableId("working:m:s1")
+            val n = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
+            assertNotNull(n)
+            assertTrue((n.flags and Notification.FLAG_ONGOING_EVENT) != 0)
+            assertEquals(listOf("Abrir"), titles(n))
+            assertTrue(n.extras.getString(Notification.EXTRA_TITLE)!!.contains("PC Empresa"))
+            assertTrue(n.extras.getString(Notification.EXTRA_TITLE)!!.contains("Refactor UI"))
+            assertEquals("Corriendo tests", n.extras.getString(Notification.EXTRA_TEXT))
+            assertEquals("⎇ feature/live", n.extras.getString(Notification.EXTRA_SUB_TEXT))
+
+            factory.cancelWorking("m:s1")
+            assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id))
         }
     }
 

@@ -21,8 +21,10 @@ import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.protocol.AgentStatus
+import dev.j3pf.rp.protocol.AgentsUpdate
 import dev.j3pf.rp.protocol.AppHello
 import dev.j3pf.rp.protocol.AppInfo
+import dev.j3pf.rp.protocol.AppWelcome
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.PushAck
@@ -103,7 +105,7 @@ class DirectPushService : LifecycleService() {
         lifecycleScope.launch {
             val currentlyWorking = mutableSetOf<String>()
             agents.agents.collect { list ->
-                val working = list.filter { it.status == AgentStatus.WORKING }
+                val working = list.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING }
                 val workingIds = working.map { it.agentId }.toSet()
 
                 val stopped = currentlyWorking - workingIds
@@ -151,6 +153,31 @@ class DirectPushService : LifecycleService() {
                     n.pushId?.let { socket.send(Envelope.of(MsgType.PUSH_ACK, PushAck(it)).encode()) }
                 }
             MsgType.PROMPT_OPENED, MsgType.PROMPT_RESOLVED -> bus.publish(env)
+            MsgType.AGENTS_UPDATE ->
+                lifecycleScope.launch {
+                    val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@launch
+                    for (a in u.upsert) {
+                        if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
+                            factory.showWorking(a)
+                        } else {
+                            factory.cancelWorking(a.agentId)
+                        }
+                    }
+                    for (id in u.remove) {
+                        factory.cancelWorking(id)
+                    }
+                }
+            MsgType.APP_WELCOME ->
+                lifecycleScope.launch {
+                    val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@launch
+                    for (a in w.agents) {
+                        if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
+                            factory.showWorking(a)
+                        } else {
+                            factory.cancelWorking(a.agentId)
+                        }
+                    }
+                }
         }
     }
 
