@@ -16,6 +16,13 @@ An Android app (Kotlin + Jetpack Compose) for viewing and controlling your [Pi](
 
 ## Main features
 
+- **Corporate Org-Chart Layout for Agent Mesh (v0.5.0)**:
+  - **Tidy-Tree Layout Engine**: Pure Reingold–Tilford tree algorithm in `MeshLayoutEngine` with horizontal parent centering over subtrees, strict row alignment (`same depth = same row`), multi-root side-by-side positioning on depth 0 with running right contour separation, and no connectors between sibling roots.
+  - **Orthogonal Bus Connectors**: Hierarchical parent-to-child connections routed through row channels with vertical drop lines and horizontal buses.
+  - **Compact Leaf Bullet Lists**: Subordinate leaf agents hanging under manager nodes cluster into a clean vertical list with status dots and compact progress text when leaves exceed threshold, preventing horizontal viewport overflow.
+  - **Mobile Usability & Recentering**: 2D pan and pinch-zoom (0.4x to 2.5x) with sane bounding clamps, top-anchored initial viewport fitting, and a visible "Recentrar" action button in the top bar.
+  - **Accessibility & Long Names**: TalkBack hierarchy semantics ("X, reporta a Y"), 2-line wrapped agent names without truncation, and Roborazzi golden coverage across themes and device configurations.
+  - Requires **Rp-relay >= 0.5.5** and **Rp-plugin >= 0.2.8**.
 - **Agent Mesh Screen Redesign (v0.4.0)**:
   - **Interactive Agent Cards (S2)**: Replaces bare circles with rich cards featuring a machine-tinted avatar showing the first alphanumeric display-name character in uppercase (or `A` if none), a clean display name, secondary line (`machine · branch/model`), live status dot, single-line activity preview, TODO progress bar, and attached subagent chips with real-time execution spinners. Only the orchestrator card displays a role badge; subordinate and solo-agent cards do not. `Subagente` is a role label, and subagents render as attached chips.
   - **Hierarchical Top-Down Layout (S2, S3)**: Replaces radial rings with a top-down hierarchy (orchestrator at the top, subordinates in balanced rows below) and bounding-box collision avoidance for 1–12 agents.
@@ -72,13 +79,13 @@ An Android app (Kotlin + Jetpack Compose) for viewing and controlling your [Pi](
 You can install the app directly on your device without building it:
 
 1. **Download the APK:**
-   - 📦 **[RP App v0.4.1 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.4.1)**
-   - Official direct-channel release (no Google services): **[rp-v0.4.1-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.4.1/rp-v0.4.1-direct.apk)**.
+   - 📦 **[RP App v0.5.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.5.0)**
+   - Official direct-channel release (no Google services): **[rp-v0.5.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.5.0/rp-v0.5.0-direct.apk)**.
 2. **Install on your phone:**
    - **On the phone:** Open the downloaded file and allow your browser or file manager to install unknown apps if prompted.
    - **Over USB with ADB:** Connect a phone with USB debugging enabled and run:
      ```bash
-     adb install -r rp-v0.4.1-direct.apk
+     adb install -r rp-v0.5.0-direct.apk
      ```
 3. **Pair with your relay:**
    - On the relay server, run:

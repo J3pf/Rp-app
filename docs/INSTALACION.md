@@ -9,7 +9,7 @@ This guide explains how to install the **RP** Android app, pair it with your **R
 - **Mobile device:**
   - Android 8.0 (API 26) or later.
   - Android 12+ (API 31+) recommended for biometric authentication on notification actions.
-- **Connectivity:** Network access to the **RP Relay** server (same local network, VPN/Tailscale, or a public HTTPS domain).
+- **Connectivity:** Network access to the **RP Relay** server (same local network, VPN/Tailscale, or a public HTTPS domain). Requires **Rp-relay >= 0.5.5** and **Rp-plugin >= 0.2.8**.
 - **Optional build environment:**
   - JDK 17 or later (`openjdk-17-jdk` / `openjdk-21-jdk`).
   - Android SDK platform 36 and `build-tools 36.0.0` (managed automatically by `scripts/build-apk.sh`).
@@ -21,9 +21,9 @@ This guide explains how to install the **RP** Android app, pair it with your **R
 ### Option A: Direct download from the official release (recommended)
 
 1. Open the official GitHub release on your phone or computer:
-   👉 **[RP App v0.4.1 — Download APK](https://github.com/J3pf/Rp-app/releases/tag/v0.4.1)**
+   👉 **[RP App v0.5.0 — Download APK](https://github.com/J3pf/Rp-app/releases/tag/v0.5.0)**
 2. Download the official installer:
-   - **[rp-v0.4.1-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.4.1/rp-v0.4.1-direct.apk)**: the official release without Google services, using the `remoteMessaging` WebSocket push channel.
+   - **[rp-v0.5.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.5.0/rp-v0.5.0-direct.apk)**: the official release without Google services, using the `remoteMessaging` WebSocket push channel.
 
 #### Install on your phone
 - **From the phone browser:**
@@ -34,7 +34,7 @@ This guide explains how to install the **RP** Android app, pair it with your **R
   1. Enable **Developer options** and **USB debugging** on the phone.
   2. Run:
      ```bash
-     adb install -r rp-v0.4.1-direct.apk
+     adb install -r rp-v0.5.0-direct.apk
      ```
 
 ### Option B: Build locally from source

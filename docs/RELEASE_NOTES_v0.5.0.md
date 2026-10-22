@@ -49,10 +49,10 @@ Version **v0.5.0** delivers a major visual refactor of the **Agent Mesh ("Red de
   - 0 Android lint warnings/errors (`./gradlew lintDirectDebug`).
   - 0 deprecated APIs.
   - 100% green unit test suite across protocol and app modules.
-  - Roborazzi visual test suite updated with new multi-root and deep-tree scenarios across all 3 themes (Cute, Sexy, Omarchy × Light/Dark). Contact sheet generated at `docs/screenshots/mesh_org_chart_contact_sheet.png`.
+  - Roborazzi visual test suite updated with new multi-root and deep-tree scenarios across all 3 themes (Cute, Sexy, Omarchy × Light/Dark). Contact sheets generated on demand to `~/.cache/rp-verify/`.
 
 ---
 
 ## Compatibility
-- Requires **Rp-relay >= 0.5.0** and **Rp-plugin >= 0.2.1**.
+- Requires **Rp-relay >= 0.5.5** and **Rp-plugin >= 0.2.8**.
 - Application signed with official release keystore (Certificate SHA-256: `6a7ef9a237db4483fbdacae7a323859df3e98198ae9bd6fb0a16229aecd62bc0`).
