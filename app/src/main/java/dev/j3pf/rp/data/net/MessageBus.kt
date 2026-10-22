@@ -1,10 +1,8 @@
 package dev.j3pf.rp.data.net
 
+import dev.j3pf.rp.client.ws.RelayMessageBus
 import dev.j3pf.rp.protocol.Envelope
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,10 +15,10 @@ import javax.inject.Singleton
 class MessageBus
     @Inject
     constructor() {
-        private val _messages = MutableSharedFlow<Envelope>(extraBufferCapacity = 512, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-        val messages: SharedFlow<Envelope> = _messages.asSharedFlow()
+        internal val shared = RelayMessageBus()
+        val messages: SharedFlow<Envelope> = shared.messages
 
         fun publish(env: Envelope) {
-            _messages.tryEmit(env)
+            shared.publish(env)
         }
     }

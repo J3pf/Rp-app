@@ -6,44 +6,24 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.BuildConfig
+import dev.j3pf.rp.client.ws.RelayWsClient
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.protocol.AppHello
 import dev.j3pf.rp.protocol.AppInfo
 import dev.j3pf.rp.protocol.Envelope
-import dev.j3pf.rp.protocol.ErrorBody
 import dev.j3pf.rp.protocol.MsgType
-import dev.j3pf.rp.protocol.PROTOCOL_VERSION
 import dev.j3pf.rp.protocol.Ulid
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-
-/** Resultado de una petición con `id` sobre el WS. */
-sealed interface WsReply {
-    data class Ok(
-        val envelope: Envelope,
-    ) : WsReply
-
-    data class Error(
-        val code: String,
-        val message: String,
-    ) : WsReply
-
-    data object Timeout : WsReply
-
-    data object NotConnected : WsReply
-}
 
 /**
  * WebSocket completo `/ws/app?mode=foreground` mientras la app está en primer plano (`ProcessLifecycleOwner`).
@@ -60,9 +40,7 @@ class RelayConnection
         client: OkHttpClient,
         @AppScope private val scope: CoroutineScope,
     ) {
-        private val pending = ConcurrentHashMap<String, CompletableDeferred<WsReply>>()
-
-        private val socket =
+        private val socket: ReconnectingSocket =
             ReconnectingSocket(
                 context = context,
                 client = client,
@@ -87,12 +65,20 @@ class RelayConnection
                             ).encode(),
                     )
                 },
-                onSocketText = ::onText,
-                onSocketClosed = { failPending(WsReply.NotConnected) },
+                onSocketText = { core.onText(it) },
+                onSocketClosed = { core.failPending(WsReply.NotConnected) },
+            )
+
+        private val core: RelayWsClient =
+            RelayWsClient(
+                isConnected = { socket.isConnected },
+                sendText = socket::send,
+                newId = { Ulid.new() },
+                bus = bus.shared,
             )
 
         val state: StateFlow<ConnState> get() = socket.state
-        val messages: SharedFlow<Envelope> get() = bus.messages
+        val messages: SharedFlow<Envelope> get() = core.messages
         val isConnected: Boolean get() = socket.isConnected
 
         /** Engancha el ciclo de vida del proceso y reinicia al cambiar la sesión. Llamar una vez desde `RpApp`. */
@@ -128,51 +114,11 @@ class RelayConnection
         fun retryNow() = socket.retryNow()
 
         /** Envía sin esperar respuesta. */
-        fun send(env: Envelope): Boolean = socket.send(env.encode())
+        fun send(env: Envelope): Boolean = core.send(env)
 
         /** Envía y espera la respuesta cuyo `re` coincide con el `id` (timeout 10 s). */
         suspend fun request(
             env: Envelope,
             timeoutMs: Long = 10_000,
-        ): WsReply {
-            if (!socket.isConnected) return WsReply.NotConnected
-            val id = env.id ?: Ulid.new()
-            val withId = if (env.id == null) env.copy(id = id) else env
-            val deferred = CompletableDeferred<WsReply>()
-            pending[id] = deferred
-            if (!socket.send(withId.encode())) {
-                pending.remove(id)
-                return WsReply.NotConnected
-            }
-            val reply = withTimeoutOrNull(timeoutMs) { deferred.await() } ?: WsReply.Timeout
-            pending.remove(id)
-            return reply
-        }
-
-        private fun onText(text: String) {
-            val env = Envelope.parseOrNull(text) ?: return
-            if (env.v > PROTOCOL_VERSION) return
-            val re = env.re
-            if (re != null) {
-                val d = pending[re]
-                if (d != null) {
-                    if (env.t == MsgType.ERROR) {
-                        val e = runCatching { env.body<ErrorBody>() }.getOrNull()
-                        d.complete(WsReply.Error(e?.code ?: "internal", e?.message.orEmpty()))
-                    } else {
-                        d.complete(WsReply.Ok(env))
-                    }
-                }
-            }
-            bus.publish(env)
-        }
-
-        private fun failPending(reply: WsReply) {
-            val it = pending.entries.iterator()
-            while (it.hasNext()) {
-                val e = it.next()
-                e.value.complete(reply)
-                it.remove()
-            }
-        }
+        ): WsReply = core.request(env, timeoutMs)
     }

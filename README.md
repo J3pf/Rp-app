@@ -109,7 +109,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ./gradlew :protocol:compileCommonMainKotlinMetadata # shared Kotlin metadata (Linux-compatible)
 ./gradlew :protocol:test                       # shared + JVM protocol, chat, and crypto tests
 ./gradlew :protocol:jvmTest                     # KMP JVM test entry point
-./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP policy
+./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP/WS policy
 ./gradlew :app:testDirectDebugUnitTest         # Robolectric, MockWebServer, and Compose tests
 ./gradlew :app:assembleDirectDebug             # APK without Google services (direct channel)
 ./gradlew :app:assembleFcmDebug                # APK with optional FCM (requires app/google-services.json)
@@ -124,7 +124,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 
 ```
 protocol/   Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
-relay-client/ Kotlin Multiplatform: shared HTTP endpoint, credential-access, and reply policy
+relay-client/ Kotlin Multiplatform: shared HTTP, WS correlation/bus, and reconnect policy
 app/        Compose + Hilt + Room: data/{net,db,repo,secure}, push/, ui/{agents,chat,pending,promptsheet,settings,…}
 ```
 
@@ -172,5 +172,24 @@ Common tests run through `:relay-client:jvmTest`; reports are in
 `relay-client/build/reports/tests/jvmTest`. Linux common metadata/JVM/Android checks
 are not iOS certification: there is no iOS HTTP transport yet. macOS compilation
 (`:relay-client:compileKotlinIosArm64`) and simulator/iPhone transport tests remain
-unverified. WebSocket, reconnect, pairing lifecycle, and chat synchronization policy
-remain native in this HTTP-only extraction.
+unverified. Pairing lifecycle and chat synchronization policy remain native.
+
+### Shared WebSocket policy
+
+`RelayWsClient` owns envelope/version filtering, request correlation/timeouts, and
+pending failure; `RelayMessageBus` preserves the shared foreground/direct-push
+512-message DROP_OLDEST bus. `WsReply` and `ConnState` keep their existing packages.
+`ReconnectingSocketPolicy` owns generation fencing, fatal closes, immediate restart,
+and 1–30-second exponential backoff with ±20% jitter. Its generic
+`RelaySocketDriver<Request, Socket>` keeps native requests opaque (no credential DTO
+or request logging); coroutine scope and jitter are injectable for deterministic tests.
+
+Android's unchanged `RelayConnection`/`ReconnectingSocket` APIs delegate to those
+policies. OkHttp transport/timeouts, secure `Ulid.new()`, device/version hello data,
+session/process lifecycle, and connectivity callback ownership stay native. A shared
+reentrant `RelayLock` serializes concurrent JVM socket/connectivity callbacks and
+protects pending requests; iOS uses `NSRecursiveLock` but is not compiled or tested
+on Linux. No iOS socket driver is supplied. Duplicate explicit request IDs and
+cancelled-request pending cleanup retain their existing hazards; they are not fixed
+by this extraction. T4 can consume the shared `request`, `send`, `messages`, and
+connection state contracts without taking over native lifecycle or persistence.
