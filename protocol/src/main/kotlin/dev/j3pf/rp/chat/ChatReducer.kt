@@ -139,17 +139,16 @@ object ChatReducer {
         )
     }
 
-    /** Registra un texto enviado desde el móvil (burbuja optimista inmediata + estado pensando). */
+    /** Registra un texto enviado desde el móvil (burbuja optimista inmediata + estado pensando) con su [clientMsgId] (ULID). */
     fun markLocalSent(
         state: ChatState,
         text: String,
+        clientMsgId: String,
         at: Long = System.currentTimeMillis(),
         imageCount: Int = 0,
-        clientMsgId: String? = null,
     ): ChatState {
         val trimmed = text.trim()
-        val cId = clientMsgId ?: "$at:${trimmed.hashCode()}"
-        val optimisticKey = if (cId.startsWith("local:")) cId else "local:$cId"
+        val optimisticKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
         val optimisticItem =
             UserMsg(
                 key = optimisticKey,
@@ -157,7 +156,7 @@ object ChatReducer {
                 at = at,
                 fromMobile = true,
                 imageCount = imageCount,
-                clientMsgId = cId,
+                clientMsgId = clientMsgId,
             )
         val nextLocalSent = if (trimmed.isNotBlank()) state.localSent + trimmed else state.localSent
         return state.copy(
@@ -165,6 +164,24 @@ object ChatReducer {
             items = state.items + optimisticItem,
             working = true,
         )
+    }
+
+    /** Reconcilia el ack emitido por el plugin (`{ clientMsgId, disposition, error }`). */
+    fun applyUserMessageAck(
+        state: ChatState,
+        ack: dev.j3pf.rp.protocol.UserMessageAck,
+    ): ChatState {
+        val isFailure = ack.isFailure || ack.disposition == "rejected"
+        val nextItems =
+            state.items.map { item ->
+                if (item is UserMsg && (item.clientMsgId == ack.clientMsgId || item.key == "local:${ack.clientMsgId}")) {
+                    item.copy(failed = isFailure)
+                } else {
+                    item
+                }
+            }
+        val hasPending = nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
+        return state.copy(items = nextItems, working = hasPending)
     }
 
     /** Marca como fallido un envío local que no pudo completarse. */
@@ -699,7 +716,7 @@ object ChatReducer {
     ): ChatState {
         val (text, images) = userContent(msg["content"])
         val trimmed = text.trim()
-        val cId = msg.str("clientMsgId") ?: msg.str("client_id") ?: msg.str("clientId")
+        val cId = msg.str("clientMsgId")
         val mobile =
             msg.bool("rp") == true ||
                 msg.str("origin") in setOf("rp", "mobile") ||

@@ -418,6 +418,29 @@ class ChatReducerTest {
     }
 
     @Test
+    fun `applyUserMessageAck reconciles plugin ack with typed or rejected disposition`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "Prompt", clientMsgId = "ack-1")
+        assertTrue(s.working)
+
+        // Success ack (typed)
+        val ackSuccess = dev.j3pf.rp.protocol.UserMessageAck(clientMsgId = "ack-1", disposition = "typed")
+        s = ChatReducer.applyUserMessageAck(s, ackSuccess)
+        val itemSuccess = s.items.single() as UserMsg
+        assertFalse(itemSuccess.failed)
+        assertFalse(s.working)
+
+        // Rejected ack
+        var s2 = ChatState()
+        s2 = ChatReducer.markLocalSent(s2, text = "Failing", clientMsgId = "ack-fail")
+        val ackFail = dev.j3pf.rp.protocol.UserMessageAck(clientMsgId = "ack-fail", disposition = "rejected", error = "agent_blocked")
+        s2 = ChatReducer.applyUserMessageAck(s2, ackFail)
+        val itemFail = s2.items.single() as UserMsg
+        assertTrue(itemFail.failed)
+        assertFalse(s2.working)
+    }
+
+    @Test
     fun `expireOptimisticSends expires stale pending messages after timeout`() {
         var s = ChatState()
         s = ChatReducer.markLocalSent(s, text = "Old message", at = 1000L, clientMsgId = "stale-1")
