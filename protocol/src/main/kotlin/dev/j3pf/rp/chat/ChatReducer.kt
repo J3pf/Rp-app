@@ -145,9 +145,11 @@ object ChatReducer {
         text: String,
         at: Long = System.currentTimeMillis(),
         imageCount: Int = 0,
+        clientMsgId: String? = null,
     ): ChatState {
         val trimmed = text.trim()
-        val optimisticKey = "local:$at:${trimmed.hashCode()}"
+        val cId = clientMsgId ?: "$at:${trimmed.hashCode()}"
+        val optimisticKey = if (cId.startsWith("local:")) cId else "local:$cId"
         val optimisticItem =
             UserMsg(
                 key = optimisticKey,
@@ -155,12 +157,53 @@ object ChatReducer {
                 at = at,
                 fromMobile = true,
                 imageCount = imageCount,
+                clientMsgId = cId,
             )
+        val nextLocalSent = if (trimmed.isNotBlank()) state.localSent + trimmed else state.localSent
         return state.copy(
-            localSent = state.localSent + trimmed,
+            localSent = nextLocalSent,
             items = state.items + optimisticItem,
             working = true,
         )
+    }
+
+    /** Marca como fallido un envío local que no pudo completarse. */
+    fun markLocalFailed(
+        state: ChatState,
+        clientMsgId: String,
+    ): ChatState {
+        val targetKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
+        val nextItems =
+            state.items.map { item ->
+                if (item is UserMsg && (item.key == targetKey || item.clientMsgId == clientMsgId)) {
+                    item.copy(failed = true)
+                } else {
+                    item
+                }
+            }
+        val hasOtherPending = nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
+        return state.copy(items = nextItems, working = hasOtherPending)
+    }
+
+    /** Vence burbujas optimistas que no recibieron confirmación tras [timeoutMs]. */
+    fun expireOptimisticSends(
+        state: ChatState,
+        now: Long = System.currentTimeMillis(),
+        timeoutMs: Long = 30_000L,
+    ): ChatState {
+        var modified = false
+        val nextItems =
+            state.items.map { item ->
+                if (item is UserMsg && item.key.startsWith("local:") && !item.failed && (now - item.at) > timeoutMs) {
+                    modified = true
+                    item.copy(failed = true)
+                } else {
+                    item
+                }
+            }
+        if (!modified) return state
+        val hasOtherPending = nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
+        return state.copy(items = nextItems, working = hasOtherPending)
     }
 
     // ───────────────────────────── Eventos ─────────────────────────────
@@ -656,10 +699,12 @@ object ChatReducer {
     ): ChatState {
         val (text, images) = userContent(msg["content"])
         val trimmed = text.trim()
+        val cId = msg.str("clientMsgId") ?: msg.str("client_id") ?: msg.str("clientId")
         val mobile =
             msg.bool("rp") == true ||
                 msg.str("origin") in setOf("rp", "mobile") ||
-                s.localSent.contains(trimmed)
+                s.localSent.contains(trimmed) ||
+                (cId != null && s.items.any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId") })
         val item =
             UserMsg(
                 key = keyOf(msg, "user", fallback),
@@ -667,11 +712,17 @@ object ChatReducer {
                 at = msg.long("timestamp") ?: at,
                 fromMobile = mobile,
                 imageCount = images,
+                clientMsgId = cId,
             )
         if (s.items.any { it.key == item.key }) return s
         val localIdx =
             if (mobile) {
-                s.items.indexOfFirst { it is UserMsg && it.key.startsWith("local:") && it.text.trim() == trimmed }
+                s.items.indexOfFirst {
+                    it is UserMsg && it.key.startsWith("local:") &&
+                        ((cId != null && (it.clientMsgId == cId || it.key == "local:$cId")) ||
+                            (trimmed.isNotBlank() && it.text.trim() == trimmed) ||
+                            (trimmed.isBlank() && images > 0 && it.imageCount == images))
+                }
             } else {
                 -1
             }
@@ -681,7 +732,8 @@ object ChatReducer {
             } else {
                 s.items + item
             }
-        return s.copy(items = nextItems, localSent = s.localSent - trimmed)
+        val nextLocalSent = if (trimmed.isNotBlank()) s.localSent - trimmed else s.localSent
+        return s.copy(items = nextItems, localSent = nextLocalSent)
     }
 
     private fun assistantFrom(

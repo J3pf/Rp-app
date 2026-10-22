@@ -383,6 +383,54 @@ class ChatReducerTest {
     }
 
     @Test
+    fun `markLocalSent reconciles by clientMsgId even with text modification or image sends`() {
+        var s = ChatState()
+        // Optimistic send with clientMsgId
+        s = ChatReducer.markLocalSent(s, text = "Original prompt", at = 1000L, imageCount = 1, clientMsgId = "client-msg-123")
+        assertEquals(1, s.items.size)
+        assertTrue(s.working)
+        val opt = s.items.single() as UserMsg
+        assertEquals("client-msg-123", opt.clientMsgId)
+        assertEquals("Original prompt", opt.text)
+
+        // Remote message comes with trimmed/rewritten text but matching clientMsgId
+        val json =
+            """{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"Rewritten prompt"}],"clientMsgId":"client-msg-123"}}"""
+        s = ChatReducer.reduce(s, ev(1, json))
+
+        // Reconciled into a single message without duplicates
+        assertEquals(1, s.items.size)
+        val reconciled = s.items.single() as UserMsg
+        assertEquals("Rewritten prompt", reconciled.text)
+        assertTrue(reconciled.fromMobile)
+    }
+
+    @Test
+    fun `markLocalFailed marks optimistic bubble as failed and clears working state`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "Test", clientMsgId = "fail-123")
+        assertTrue(s.working)
+
+        s = ChatReducer.markLocalFailed(s, "fail-123")
+        val item = s.items.single() as UserMsg
+        assertTrue(item.failed)
+        assertFalse(s.working)
+    }
+
+    @Test
+    fun `expireOptimisticSends expires stale pending messages after timeout`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "Old message", at = 1000L, clientMsgId = "stale-1")
+        assertTrue(s.working)
+
+        // After 31 seconds, message has timed out
+        s = ChatReducer.expireOptimisticSends(s, now = 32_000L, timeoutMs = 30_000L)
+        val item = s.items.single() as UserMsg
+        assertTrue(item.failed)
+        assertFalse(s.working)
+    }
+
+    @Test
     fun `cambio de epoch limpia todos y subagents`() {
         var s = ChatState()
         s = ChatReducer.reduce(s, ev(1, """{"type":"todo_update","tasks":[{"id":1,"title":"T","status":"done"}]}""", epoch = "E1"))

@@ -18,6 +18,8 @@ data class UserMsg(
     /** Mensaje enviado desde esta app (se muestra con 📱). */
     val fromMobile: Boolean = false,
     val imageCount: Int = 0,
+    val failed: Boolean = false,
+    val clientMsgId: String? = null,
 ) : ChatItem
 
 sealed interface Block {
