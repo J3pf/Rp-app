@@ -17,7 +17,6 @@
     <string name="notif_retrying">Sin conexión · se reintentará</string>
     <string name="notif_reply_hint">Escribe tu respuesta</string>
     <string name="mesh_title">Red de agentes</string>
-    <string name="mesh_recenter">Recentrar</string>
     <string name="mesh_recenter_desc">Recentrar organigrama</string>
     <string name="chat_msg_failed">Error al enviar</string>
     <string name="chat_msg_retry">Reintentar</string>
