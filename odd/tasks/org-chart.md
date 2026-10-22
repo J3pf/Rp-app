@@ -78,3 +78,15 @@ Target: v0.5.0 release
   - a3c1224: T16 (visual test goldens updated)
 - L10: Fixed Roborazzi hang on screenshotChatScrolledUp: gated ConnectionBanner pulsing transition and CircularProgressIndicator infinite transitions in WorkingIndicator/UserBubble with LocalReducedMotion, removed state mutation loop in prevItemsSize, added Gradle test timeout of 3 minutes in build.gradle.kts (f0f0d31). Both chat screenshot tests now record cleanly in ~30-45s.
 - L11: Passed full quality gates: ktlint (0 violations), 0 compiler warnings, Android lint (0 errors, 0 warnings), Roborazzi verify 100% green, 305/305 unit tests passing. Built signed release APK app-direct-release.apk (SHA-256: 4bde34fd27b4b4328df2c27a6fd5dcd4937e2d3a3e83d287d7de8ce69b79031e) verified with certificate 6a7ef9a237db4483fbdacae7a323859df3e98198ae9bd6fb0a16229aecd62bc0.
+- L12: Resolved orchestrator review defects V1–V6 and R1–R2:
+  - Commits: f314b39 (build timeout watchdog), ed0e247 (chat idempotent retry), ed92727 (mesh layout and canvas fixes), a872b01 (mesh viewport render tests), 70e7892 (roborazzi goldens refresh).
+  - R1: Chat message retry preserves original ULID clientMsgId and attachments in ChatRepository.retry and ChatViewModel.retryUserMessage; 30s timeout checks outboxDao before expiring optimistic sends.
+  - R2: Set Gradle test task timeout to 30 minutes in app/build.gradle.kts; replaced prevItemsSize mutable array with documented RefHolder; added 90s per-test Timeout watchdog rule across test suites.
+  - V1: Auto-fit scale in MeshCanvas.kt scales down to min 0.40x so full diagram fits horizontally and vertically without clipping in portrait and landscape.
+  - V2: Top bar recenter action changed to icon-only IconButton with contentDescription to prevent header text wrapping at fontScale 1.3 and 2.0.
+  - V3 & V4: Fixed leaf list routing in MeshLayoutEngine.kt so all leaf items share single busY = (parent.bottom + firstLeafTop) / 2f, eliminating the drop line cutting through leaf rows, parallel spines, and closed rectangle outlines above leaf groups.
+  - V5: Centered edge communication label pills precisely on the connector drop lines (upperNode.x).
+  - V6: Ensured sibling roots at level 0 render no tree connector or squiggle.
+  - Added MeshViewportRenderTest with 11 Compose tests asserting boundsInRoot fit inside the viewport across 1, 4, 12, multiroot, and deep tree layouts on 360dp, landscape, and tablet, plus header wrap verification at fontScale 1.3/2.0.
+  - Generated screen contact sheets in ~/.cache/rp-verify/ (mesh_contact_sheet.png, all_screens_contact_sheet.png).
+
