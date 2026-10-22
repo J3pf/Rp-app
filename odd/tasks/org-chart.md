@@ -1,6 +1,6 @@
 # Feature: org-chart (Corporate Org-Chart Layout for Agent Mesh)
 
-Status: Ready for Review
+Status: Done / Published
 Target: v0.5.0 release
 
 ## Specs
@@ -89,4 +89,11 @@ Target: v0.5.0 release
   - V6: Ensured sibling roots at level 0 render no tree connector or squiggle.
   - Added MeshViewportRenderTest with 11 Compose tests asserting boundsInRoot fit inside the viewport across 1, 4, 12, multiroot, and deep tree layouts on 360dp, landscape, and tablet, plus header wrap verification at fontScale 1.3/2.0.
   - Generated screen contact sheets in ~/.cache/rp-verify/ (mesh_contact_sheet.png, all_screens_contact_sheet.png).
+- L13: Published v0.5.0:
+  - F1-F3 resolved in commits eead623 (unused string removed), eb8198f (Gradle 9.8.2 upgrade with verified checksum), b9ecc79 (providers.exec for config cache).
+  - Main pushed fast-forward to b9ecc79; annotated tag v0.5.0 created on b9ecc79 (tag object d23b7a0).
+  - Signed release APK rp-v0.5.0-direct.apk built (versionCode=190, versionName=0.5.0, SHA-256: 4deed743cf3c36add0a468443533f2eebf7a424a54237e80191cd2db6081f8db, cert: 6a7ef9a237db4483fbdacae7a323859df3e98198ae9bd6fb0a16229aecd62bc0).
+  - GitHub Release published: https://github.com/J3pf/Rp-app/releases/tag/v0.5.0
+  - Asset re-downloaded to guarded scratch directory, verified with SHA-256 match and apksigner.
+
 
