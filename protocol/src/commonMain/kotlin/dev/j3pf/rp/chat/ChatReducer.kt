@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.time.Clock
 
 /**
  * Reductor puro `reduce(state, event) → state` del chat (PLAN-APP §4.3).
@@ -144,7 +145,7 @@ object ChatReducer {
         state: ChatState,
         text: String,
         clientMsgId: String,
-        at: Long = System.currentTimeMillis(),
+        at: Long = Clock.System.now().toEpochMilliseconds(),
         imageCount: Int = 0,
     ): ChatState {
         val trimmed = text.trim()
@@ -210,7 +211,7 @@ object ChatReducer {
     /** Vence burbujas optimistas que no recibieron confirmación tras [timeoutMs]. */
     fun expireOptimisticSends(
         state: ChatState,
-        now: Long = System.currentTimeMillis(),
+        now: Long = Clock.System.now().toEpochMilliseconds(),
         timeoutMs: Long = 30_000L,
     ): ChatState {
         var modified = false

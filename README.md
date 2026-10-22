@@ -106,7 +106,9 @@ The project uses the ktlint Gradle plugin 14.2.0. Run `./gradlew ktlintCheck` to
 Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Maven and Maven Central.
 
 ```bash
-./gradlew :protocol:test                       # protocol, chat reducer, and push cryptography (pure JVM)
+./gradlew :protocol:compileCommonMainKotlinMetadata # shared Kotlin metadata (Linux-compatible)
+./gradlew :protocol:test                       # shared + JVM protocol, chat, and crypto tests
+./gradlew :protocol:jvmTest                     # KMP JVM test entry point
 ./gradlew :app:testDirectDebugUnitTest         # Robolectric, MockWebServer, and Compose tests
 ./gradlew :app:assembleDirectDebug             # APK without Google services (direct channel)
 ./gradlew :app:assembleFcmDebug                # APK with optional FCM (requires app/google-services.json)
@@ -120,6 +122,31 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ## Repository structure
 
 ```
-protocol/   Pure Kotlin: protocol v1 @Serializable types, PushCrypto (AES-GCM), ULID, and ChatReducer (+ tests)
+protocol/   Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
 app/        Compose + Hilt + Room: data/{net,db,repo,secure}, push/, ui/{agents,chat,pending,promptsheet,settings,…}
 ```
+
+### Kotlin Multiplatform foundation
+
+`protocol` targets JVM (consumed by the existing Android app), `iosArm64`, and
+`iosSimulatorArm64`. Its source sets are:
+
+- `commonMain`: wire models, JSON serializers, chat state/reducer, and formatting.
+- `commonTest`: portable serialization and protocol compatibility tests.
+- `jvmMain`: unchanged AES-GCM `PushCrypto` and secure `Ulid`, plus JVM logging.
+- `jvmTest`: resource-based fixture/chat tests and JVM crypto tests. Fixtures remain
+  in `src/test/resources` so `scripts/sync-fixtures.sh` keeps its existing behavior.
+- `iosMain`: the native logging adapter; it still needs compilation on macOS.
+
+The legacy `:protocol:test` task remains a JVM test task, including support for
+`--tests`. KMP JVM reports are under `protocol/build/reports/tests/jvmTest`;
+legacy reports remain under `protocol/build/reports/tests/test`.
+
+This is **not an iOS app yet**. No screens, pairing client, APNs, Keychain, native
+crypto, or native secure ID generator have been ported. There is no iOS framework
+export or application target in this unit. Linux metadata compilation and JVM tests
+check the shared foundation, not the iOS adapter or an iPhone application.
+On macOS, the next compilation checks are
+`./gradlew :protocol:compileKotlinIosArm64 :protocol:iosSimulatorArm64Test` with
+compatible Xcode/simulator installed; device and push testing remain later work.
+Android UI, Hilt, Room, and push behavior are unchanged.

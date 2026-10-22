@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlin.time.Clock
 
 const val PROTOCOL_VERSION = 1
 
@@ -45,13 +46,13 @@ data class Envelope(
             body: T,
             id: String? = null,
             re: String? = null,
-            ts: Long = System.currentTimeMillis(),
+            ts: Long = Clock.System.now().toEpochMilliseconds(),
         ): Envelope = Envelope(t = type, id = id, re = re, ts = ts, d = RpJson.encodeToJsonElement(body))
 
         fun empty(
             type: String,
             id: String? = null,
-        ) = Envelope(t = type, id = id, ts = System.currentTimeMillis())
+        ) = Envelope(t = type, id = id, ts = Clock.System.now().toEpochMilliseconds())
     }
 }
 

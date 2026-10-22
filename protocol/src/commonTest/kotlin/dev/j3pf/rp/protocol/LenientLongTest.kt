@@ -2,7 +2,7 @@ package dev.j3pf.rp.protocol
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
-import org.junit.Test
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull

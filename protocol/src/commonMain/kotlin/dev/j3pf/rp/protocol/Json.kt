@@ -20,6 +20,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlin.math.roundToLong
 
 /** Configuración JSON única del protocolo: tolerante a campos desconocidos, sin nulos explícitos. */
 val RpJson: Json =
@@ -65,14 +66,14 @@ fun JsonElement?.lenientLong(): Long? {
     if (p.isString) return null
     val d = p.doubleOrNull ?: return null
     if (!d.isFinite()) return null
-    return p.longOrNull ?: Math.round(d)
+    return p.longOrNull ?: d.roundToLong()
 }
 
 fun JsonObject.lenientLong(key: String): Long? = this[key].lenientLong()
 
 /**
  * Serializador tolerante de Long: acepta enteros JSON y números decimales (ej. 47725510.340108 o 1.0),
- * redondeando con Math.round (half-up) a Long. Rechaza no-números (cadenas, booleanos, objetos).
+ * redondeando al Long más cercano (empates hacia infinito positivo, como Math.round). Rechaza no-números (cadenas, booleanos, objetos).
  */
 object LenientLongSerializer : KSerializer<Long> {
     override val descriptor: SerialDescriptor =
@@ -93,7 +94,7 @@ object LenientLongSerializer : KSerializer<Long> {
             }
             val d = element.doubleOrNull
             if (d != null && d.isFinite()) {
-                element.longOrNull ?: Math.round(d)
+                element.longOrNull ?: d.roundToLong()
             } else {
                 throw SerializationException("Invalid number literal for Long: ${element.content}")
             }
@@ -137,9 +138,7 @@ open class TolerantListSerializer<T>(
             try {
                 result.add(decoder.json.decodeFromJsonElement(s, item))
             } catch (e: Exception) {
-                java.util.logging.Logger
-                    .getLogger("RpProtocol")
-                    .log(java.util.logging.Level.WARNING, "Error al decodificar elemento tolerante, omitiendo: $item", e)
+                logDecodeFailure(item, e)
             }
         }
         return result
