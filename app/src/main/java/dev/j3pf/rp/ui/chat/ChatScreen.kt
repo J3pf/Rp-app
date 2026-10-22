@@ -579,7 +579,8 @@ internal fun MessageList(
     val isScrolledUp by remember {
         derivedStateOf {
             val maxBottomIndex = if (isAgentWorking) 1 else 0
-            listState.firstVisibleItemIndex > maxBottomIndex
+            listState.firstVisibleItemIndex > maxBottomIndex ||
+                (listState.firstVisibleItemIndex == maxBottomIndex && listState.firstVisibleItemScrollOffset > 48)
         }
     }
 
@@ -616,10 +617,12 @@ internal fun MessageList(
         prevItemsSize = items.size
 
         if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
-            if (isNewItem) {
-                listState.animateScrollToItem(0)
-            } else {
-                listState.scrollToItem(0)
+            if (!listState.isScrollInProgress) {
+                if (isNewItem) {
+                    listState.animateScrollToItem(0)
+                } else if (!isScrolledUp) {
+                    listState.scrollToItem(0)
+                }
             }
         }
     }
