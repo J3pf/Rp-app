@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.chat.Block
+import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.protocol.AgentSummary
@@ -133,6 +134,7 @@ fun ChatContent(
     onQuit: () -> Unit = {},
     onForget: () -> Unit = {},
     onSwitchToNormal: () -> Unit = {},
+    onRetryUserMessage: (UserMsg) -> Unit = {},
     busyPromptId: String? = null,
     listState: androidx.compose.foundation.lazy.LazyListState =
         androidx.compose.foundation.lazy
@@ -349,6 +351,7 @@ fun ChatContent(
                     modifier = Modifier.fillMaxSize(),
                     busyPromptId = busyPromptId,
                     onAnswerPrompt = onAnswerPrompt,
+                    onRetryUserMessage = onRetryUserMessage,
                     listState = listState,
                 )
             }
@@ -506,6 +509,7 @@ fun ChatScreen(
         onQuit = { vm.quit(onBack) },
         onForget = { vm.forget(onBack) },
         onSwitchToNormal = vm::switchToNormal,
+        onRetryUserMessage = vm::retryUserMessage,
         busyPromptId = busyPrompt,
         snackbarHostState = snackbar,
     )
@@ -517,6 +521,7 @@ internal fun MessageList(
     modifier: Modifier,
     busyPromptId: String?,
     onAnswerPrompt: (dev.j3pf.rp.protocol.Prompt, dev.j3pf.rp.protocol.Answer) -> Unit,
+    onRetryUserMessage: (UserMsg) -> Unit = {},
     listState: androidx.compose.foundation.lazy.LazyListState =
         androidx.compose.foundation.lazy
             .rememberLazyListState(),
@@ -736,6 +741,7 @@ internal fun MessageList(
                             busyPromptId = busyPromptId,
                             onAnswerPrompt = onAnswerPrompt,
                             spacingMode = ui.chatMessageSpacing,
+                            onRetryUserMessage = onRetryUserMessage,
                         )
                     }
                 }

@@ -3,6 +3,7 @@ package dev.j3pf.rp.data.repo
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
+import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
@@ -11,19 +12,17 @@ import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.AgentHistory
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
+import dev.j3pf.rp.protocol.UserMessageAck
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -109,7 +108,7 @@ class ChatRepositoryTest {
         server.shutdown()
     }
 
-    private fun acceptSocket() {
+    private fun acceptSocket(sendHistory: Boolean = true) {
         server.enqueue(
             MockResponse().withWebSocketUpgrade(
                 object : WebSocketListener() {
@@ -118,7 +117,14 @@ class ChatRepositoryTest {
                         response: okhttp3.Response,
                     ) {
                         sockets.add(webSocket)
-                        webSocket.send(Envelope.of(MsgType.APP_WELCOME, dev.j3pf.rp.protocol.AppWelcome()).encode())
+                        webSocket.send(
+                            Envelope
+                                .of(
+                                    MsgType.APP_WELCOME,
+                                    dev.j3pf.rp.protocol
+                                        .AppWelcome(),
+                                ).encode(),
+                        )
                     }
 
                     override fun onMessage(
@@ -129,29 +135,51 @@ class ChatRepositoryTest {
                         val env = runCatching { Envelope.parse(text) }.getOrNull()
                         if (env?.t == MsgType.AGENT_SUBSCRIBE) {
                             webSocket.send(Envelope(t = "ok", re = env.id).encode())
-                            val msgJson =
-                                kotlinx.serialization.json.JsonObject(
-                                    mapOf(
-                                        "content" to
-                                            kotlinx.serialization.json.JsonArray(
-                                                listOf(
-                                                    kotlinx.serialization.json.JsonObject(
-                                                        mapOf(
-                                                            "type" to kotlinx.serialization.json.JsonPrimitive("text"),
-                                                            "text" to kotlinx.serialization.json.JsonPrimitive("hello"),
+                            if (sendHistory) {
+                                val msgJson =
+                                    kotlinx.serialization.json.JsonObject(
+                                        mapOf(
+                                            "content" to
+                                                kotlinx.serialization.json.JsonArray(
+                                                    listOf(
+                                                        kotlinx.serialization.json.JsonObject(
+                                                            mapOf(
+                                                                "type" to kotlinx.serialization.json.JsonPrimitive("text"),
+                                                                "text" to kotlinx.serialization.json.JsonPrimitive("hello"),
+                                                            ),
                                                         ),
                                                     ),
                                                 ),
+                                        ),
+                                    )
+                                val history =
+                                    AgentHistory(
+                                        agentId = "test-agent",
+                                        epoch = "E1",
+                                        entries =
+                                            listOf(
+                                                dev.j3pf.rp.protocol
+                                                    .Entry(eid = "1", kind = dev.j3pf.rp.protocol.EntryKind.USER, msg = msgJson),
                                             ),
-                                    ),
+                                    )
+                                webSocket.send(Envelope.of(MsgType.AGENT_HISTORY, history).encode())
+                            }
+                        } else if (env?.t == MsgType.USER_MESSAGE) {
+                            val userMsg = runCatching { env.body<dev.j3pf.rp.protocol.UserMessage>() }.getOrNull()
+                            val ack =
+                                UserMessageAck(
+                                    clientMsgId = userMsg?.clientMsgId ?: "unknown",
+                                    disposition = "rejected",
+                                    error = "agent_blocked",
                                 )
-                            val history =
-                                AgentHistory(
-                                    agentId = "test-agent",
-                                    epoch = "E1",
-                                    entries = listOf(dev.j3pf.rp.protocol.Entry(eid = "1", kind = dev.j3pf.rp.protocol.EntryKind.USER, msg = msgJson)),
-                                )
-                            webSocket.send(Envelope.of(MsgType.AGENT_HISTORY, history).encode())
+                            webSocket.send(
+                                Envelope
+                                    .of(
+                                        MsgType.USER_MESSAGE_ACK,
+                                        ack,
+                                        re = env.id,
+                                    ).encode(),
+                            )
                         }
                     }
                 },
@@ -167,7 +195,7 @@ class ChatRepositoryTest {
     @Test
     fun `resync cancels previous timeout timer so stale timer cannot clear syncing during newer resync`() =
         runBlocking {
-            acceptSocket()
+            acceptSocket(sendHistory = false)
             connect()
 
             val session = repository.open("test-agent")
@@ -207,5 +235,39 @@ class ChatRepositoryTest {
                 session.syncing.first { !it }
             }
             assertFalse(session.syncing.value, "Syncing should be false once history arrives")
+        }
+
+    @Test
+    fun `user message ack updates state to rejected failed and removeLocal cleans it up`() =
+        runBlocking {
+            acceptSocket()
+            connect()
+
+            val session = repository.open("test-agent")
+            withTimeout(5_000) { session.syncing.first { !it } }
+
+            val result = session.send("Hello world")
+            assertTrue(result is SendResult.Failed, "Rejected ack should produce SendResult.Failed")
+
+            val failedItem =
+                session
+                    .state
+                    .value
+                    .items
+                    .filterIsInstance<UserMsg>()
+                    .firstOrNull { it.key.startsWith("local:") }
+            assertTrue(failedItem != null, "Failed optimistic bubble should be present in state")
+            assertTrue(failedItem.failed, "Optimistic bubble must be marked as failed")
+
+            val cId = failedItem.clientMsgId ?: failedItem.key.removePrefix("local:")
+            session.removeLocal(cId)
+
+            val hasItem =
+                session
+                    .state
+                    .value
+                    .items
+                    .any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId") }
+            assertFalse(hasItem, "removeLocal must remove the failed item from state")
         }
 }

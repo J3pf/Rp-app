@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.chat.ChatState
+import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.net.AnswerOutcome
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.ConnState
@@ -149,6 +150,13 @@ class ChatViewModel
                 session.send("/quit", emptyList(), Delivery.AUTO, DeliveryMethod.AUTO, asCommand = true)
                 onDone()
             }
+        }
+
+        /** Reintenta el envío de un mensaje que falló. */
+        fun retryUserMessage(msg: UserMsg) {
+            val cId = msg.clientMsgId ?: msg.key.removePrefix("local:")
+            session.removeLocal(cId)
+            send(msg.text) {}
         }
 
         /** Reintenta la subida de un adjunto que falló. */

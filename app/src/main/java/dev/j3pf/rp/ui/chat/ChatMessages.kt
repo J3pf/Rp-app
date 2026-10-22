@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,12 +35,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.j3pf.rp.R
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatItem
@@ -71,9 +74,10 @@ fun ChatItemView(
     busyPromptId: String?,
     onAnswerPrompt: (Prompt, Answer) -> Unit,
     spacingMode: String = "normal",
+    onRetryUserMessage: ((UserMsg) -> Unit)? = null,
 ) {
     when (item) {
-        is UserMsg -> UserBubble(item, spacingMode)
+        is UserMsg -> UserBubble(item, spacingMode, onRetryUserMessage)
         is AssistantMsg -> AssistantBubble(item, tools, spacingMode)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item, spacingMode)
@@ -85,6 +89,7 @@ fun ChatItemView(
 private fun UserBubble(
     m: UserMsg,
     spacingMode: String = "normal",
+    onRetry: ((UserMsg) -> Unit)? = null,
 ) {
     val hPad =
         when (spacingMode) {
@@ -104,19 +109,67 @@ private fun UserBubble(
             "spacious" -> 21.sp
             else -> 19.sp
         }
+    val isFailed = m.failed
+    val containerColor =
+        if (isFailed) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        }
+    val contentColor =
+        if (isFailed) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        }
+    val borderColor =
+        if (isFailed) {
+            MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+        }
+
     Row(Modifier.fillMaxWidth().padding(start = 40.dp), horizontalArrangement = Arrangement.End) {
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = containerColor,
+            contentColor = contentColor,
             shape = RpShapes.bubbleUser,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+            border = BorderStroke(1.dp, borderColor),
         ) {
             Column(
                 Modifier.padding(horizontal = hPad, vertical = vPad),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 val isOptimistic = m.key.startsWith("local:")
-                if (isOptimistic) {
+                if (isFailed) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = stringResource(R.string.chat_msg_failed),
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                        Text(
+                            stringResource(R.string.chat_msg_failed),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        if (onRetry != null) {
+                            Text(
+                                stringResource(R.string.chat_msg_retry),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier =
+                                    Modifier
+                                        .clickable { onRetry(m) }
+                                        .padding(start = 4.dp),
+                            )
+                        }
+                    }
+                } else if (isOptimistic) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -124,19 +177,19 @@ private fun UserBubble(
                         CircularProgressIndicator(
                             modifier = Modifier.size(10.dp),
                             strokeWidth = 1.5.dp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            color = contentColor.copy(alpha = 0.7f),
                         )
                         Text(
                             "enviando…",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            color = contentColor.copy(alpha = 0.7f),
                         )
                     }
                 } else if (m.fromMobile) {
                     Text(
                         "móvil",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        color = contentColor.copy(alpha = 0.7f),
                     )
                 }
                 if (m.text.isNotBlank()) {

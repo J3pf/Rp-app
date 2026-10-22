@@ -19,6 +19,7 @@ import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.ui.theme.RpTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -282,5 +283,40 @@ class ChatBottomAnchorTest {
         rule.onNodeWithText("Más recientes (2)").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Nuevo mensaje en vivo 2").assertIsDisplayed()
+    }
+
+    @Test
+    fun `failed user message shows error indicator and retry action that invokes callback`() {
+        val failedMsg =
+            UserMsg(
+                key = "local:failed-1",
+                text = "Mensaje que falló",
+                failed = true,
+                clientMsgId = "failed-1",
+            )
+        var retriedMsg: UserMsg? = null
+
+        rule.setContent {
+            RpTheme {
+                MessageList(
+                    ui = ChatUiState(chat = ChatState(items = listOf(failedMsg))),
+                    modifier = Modifier.fillMaxSize(),
+                    busyPromptId = null,
+                    onAnswerPrompt = { _: dev.j3pf.rp.protocol.Prompt, _: dev.j3pf.rp.protocol.Answer -> },
+                    onRetryUserMessage = { retriedMsg = it },
+                )
+            }
+        }
+
+        // Visible failed indicator & message text
+        rule.onNodeWithText("Error al enviar").assertIsDisplayed()
+        rule.onNodeWithText("Mensaje que falló").assertIsDisplayed()
+
+        // Visible retry action
+        rule.onNodeWithText("Reintentar").assertIsDisplayed()
+        rule.onNodeWithText("Reintentar").performClick()
+
+        rule.waitForIdle()
+        assertEquals(failedMsg, retriedMsg)
     }
 }

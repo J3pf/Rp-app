@@ -180,8 +180,13 @@ object ChatReducer {
                     item
                 }
             }
-        val hasPending = nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
-        return state.copy(items = nextItems, working = hasPending)
+        val nextWorking =
+            if (isFailure) {
+                nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
+            } else {
+                state.working
+            }
+        return state.copy(items = nextItems, working = nextWorking)
     }
 
     /** Marca como fallido un envío local que no pudo completarse. */
@@ -221,6 +226,17 @@ object ChatReducer {
         if (!modified) return state
         val hasOtherPending = nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
         return state.copy(items = nextItems, working = hasOtherPending)
+    }
+
+    /** Elimina un mensaje local / optimista (p. ej. para reintentar el envío tras fallo). */
+    fun removeLocal(
+        state: ChatState,
+        clientMsgId: String,
+    ): ChatState {
+        val targetKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
+        val nextItems = state.items.filterNot { it is UserMsg && (it.clientMsgId == clientMsgId || it.key == targetKey) }
+        val hasPending = nextItems.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
+        return state.copy(items = nextItems, working = hasPending)
     }
 
     // ───────────────────────────── Eventos ─────────────────────────────
@@ -735,10 +751,13 @@ object ChatReducer {
         val localIdx =
             if (mobile) {
                 s.items.indexOfFirst {
-                    it is UserMsg && it.key.startsWith("local:") &&
-                        ((cId != null && (it.clientMsgId == cId || it.key == "local:$cId")) ||
-                            (trimmed.isNotBlank() && it.text.trim() == trimmed) ||
-                            (trimmed.isBlank() && images > 0 && it.imageCount == images))
+                    it is UserMsg &&
+                        it.key.startsWith("local:") &&
+                        (
+                            (cId != null && (it.clientMsgId == cId || it.key == "local:$cId")) ||
+                                (trimmed.isNotBlank() && it.text.trim() == trimmed) ||
+                                (trimmed.isBlank() && images > 0 && it.imageCount == images)
+                        )
                 }
             } else {
                 -1

@@ -269,6 +269,11 @@ class ChatRepository
                         _state.update { ChatReducer.applyPromptResolved(it, r) }
                     }
 
+                    MsgType.USER_MESSAGE_ACK -> {
+                        val ack = runCatching { env.body<UserMessageAck>() }.getOrNull() ?: return
+                        _state.update { ChatReducer.applyUserMessageAck(it, ack) }
+                    }
+
                     MsgType.TERMINAL_WAIT -> {
                         if (env.d.obj()?.str("agentId") != agentId) return
                         val w = runCatching { env.body<TerminalWait>() }.getOrNull() ?: return
@@ -380,6 +385,10 @@ class ChatRepository
                         now,
                     ),
                 )
+                scope.launch {
+                    delay(30_000L)
+                    _state.update { ChatReducer.expireOptimisticSends(it, now = System.currentTimeMillis()) }
+                }
                 return deliver(msg)
             }
 
@@ -446,6 +455,11 @@ class ChatRepository
                 scope.launch {
                     connection.request(Envelope.of(MsgType.AGENT_ABORT, AgentRef(agentId), id = Ulid.new()))
                 }
+            }
+
+            fun removeLocal(clientMsgId: String) {
+                scope.launch { outboxDao.delete(clientMsgId) }
+                _state.update { ChatReducer.removeLocal(it, clientMsgId) }
             }
         }
 

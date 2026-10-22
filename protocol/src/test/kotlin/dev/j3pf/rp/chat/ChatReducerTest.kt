@@ -8,6 +8,7 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptResolved
 import dev.j3pf.rp.protocol.RpJson
+import dev.j3pf.rp.protocol.UserMessageAck
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
@@ -221,7 +222,7 @@ class ChatReducerTest {
 
     @Test
     fun `mensaje enviado desde el movil se marca`() {
-        var s = ChatReducer.markLocalSent(ChatState(), "  haz X ")
+        var s = ChatReducer.markLocalSent(ChatState(), "  haz X ", clientMsgId = "local-1")
         s = ChatReducer.reduce(s, ev(1, """{"type":"message_end","message":{"role":"user","timestamp":5,"content":"haz X"}}"""))
         val u = s.items.single() as UserMsg
         assertTrue(u.fromMobile)
@@ -424,16 +425,21 @@ class ChatReducerTest {
         assertTrue(s.working)
 
         // Success ack (typed)
-        val ackSuccess = dev.j3pf.rp.protocol.UserMessageAck(clientMsgId = "ack-1", disposition = "typed")
+        val ackSuccess = UserMessageAck(clientMsgId = "ack-1", disposition = "typed")
         s = ChatReducer.applyUserMessageAck(s, ackSuccess)
         val itemSuccess = s.items.single() as UserMsg
         assertFalse(itemSuccess.failed)
-        assertFalse(s.working)
+        assertTrue(s.working)
 
         // Rejected ack
         var s2 = ChatState()
         s2 = ChatReducer.markLocalSent(s2, text = "Failing", clientMsgId = "ack-fail")
-        val ackFail = dev.j3pf.rp.protocol.UserMessageAck(clientMsgId = "ack-fail", disposition = "rejected", error = "agent_blocked")
+        val ackFail =
+            UserMessageAck(
+                clientMsgId = "ack-fail",
+                disposition = "rejected",
+                error = "agent_blocked",
+            )
         s2 = ChatReducer.applyUserMessageAck(s2, ackFail)
         val itemFail = s2.items.single() as UserMsg
         assertTrue(itemFail.failed)
@@ -451,6 +457,45 @@ class ChatReducerTest {
         val item = s.items.single() as UserMsg
         assertTrue(item.failed)
         assertFalse(s.working)
+    }
+
+    @Test
+    fun `removeLocal removes optimistic message by clientMsgId`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "To remove", clientMsgId = "rem-1")
+        assertEquals(1, s.items.size)
+        assertTrue(s.working)
+
+        s = ChatReducer.removeLocal(s, "rem-1")
+        assertTrue(s.items.isEmpty())
+        assertFalse(s.working)
+    }
+
+    @Test
+    fun `applyUserMessageAck with duplicate, command, typed_after_dialog does not mark as failed`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "Command or dialog", clientMsgId = "ack-disp")
+        assertTrue(s.working)
+
+        // typed_after_dialog ack
+        s = ChatReducer.applyUserMessageAck(s, UserMessageAck(clientMsgId = "ack-disp", disposition = "typed_after_dialog"))
+        val item = s.items.single() as UserMsg
+        assertFalse(item.failed)
+        assertTrue(s.working)
+
+        // command ack
+        var s2 = ChatReducer.markLocalSent(ChatState(), text = "/model", clientMsgId = "ack-cmd")
+        s2 = ChatReducer.applyUserMessageAck(s2, UserMessageAck(clientMsgId = "ack-cmd", disposition = "command"))
+        val itemCmd = s2.items.single() as UserMsg
+        assertFalse(itemCmd.failed)
+        assertTrue(s2.working)
+
+        // duplicate ack
+        var s3 = ChatReducer.markLocalSent(ChatState(), text = "Dup", clientMsgId = "ack-dup")
+        s3 = ChatReducer.applyUserMessageAck(s3, UserMessageAck(clientMsgId = "ack-dup", disposition = "duplicate"))
+        val itemDup = s3.items.single() as UserMsg
+        assertFalse(itemDup.failed)
+        assertTrue(s3.working)
     }
 
     @Test
