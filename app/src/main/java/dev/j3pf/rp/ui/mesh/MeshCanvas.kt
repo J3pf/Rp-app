@@ -195,14 +195,13 @@ fun MeshCanvas(
 
         // Fit-to-content scaling in DP space (Specs S5, D5)
         val padding = 20f
+        val topPaddingDp = 16f
         val contentWidth = maxOf(bounds.width + 2f * padding, 100f)
-        val contentHeight = maxOf(bounds.height + 2f * padding, 100f)
+        val contentHeight = maxOf(bounds.height + 2f * padding + topPaddingDp, 100f)
         val widthFitScale = if (bounds.width > 0f) widthDp / contentWidth else 1f
         val heightFitScale = if (bounds.height > 0f) heightDp / contentHeight else 1f
         val naturalFitScale = minOf(widthFitScale, heightFitScale)
-        val isLandscape = widthDp > heightDp && widthDp >= 600f
-        val autoFitScale = if (isLandscape) 1f else minOf(1f, naturalFitScale).coerceIn(0.585f, 1f)
-        val topPaddingDp = 16f
+        val autoFitScale = minOf(1f, naturalFitScale).coerceIn(MIN_ZOOM, 1f)
         val effectiveZoom = (zoom * autoFitScale).coerceIn(MIN_ZOOM, MAX_ZOOM)
 
         // C9: Transform gestures on parent Box so dragging on cards or empty space works seamlessly
@@ -302,6 +301,11 @@ fun MeshCanvas(
 
                     // Draw edge curves in DP space
                     activeLayout.edges.forEach { positioned ->
+                        val fromNode = activeLayout.nodes[positioned.edge.a]
+                        val toNode = activeLayout.nodes[positioned.edge.b]
+                        // Sibling roots on top row have no hierarchy connector (V6, D4)
+                        if (fromNode?.level == 0 && toNode?.level == 0) return@forEach
+
                         val edge = positioned.edge
                         path.reset()
                         if (positioned.routePoints.size >= 2) {
@@ -365,10 +369,17 @@ fun MeshCanvas(
                         val edgeFromY = firstEdge?.fromY ?: firstSender.bottom
                         val edgeToX = firstEdge?.toX ?: firstReceiver.x
                         val edgeToY = firstEdge?.toY ?: firstReceiver.top
-                        val midpoint =
-                            firstEdge?.let { pointAlongEdge(it, 0.5f) }
-                                ?: Offset((edgeFromX + edgeToX) / 2f, (edgeFromY + edgeToY) / 2f)
-                        val midpointX = midpoint.x
+
+                        val upperNode = if (firstSender.y <= firstReceiver.y) firstSender else firstReceiver
+                        val lowerNode = if (firstSender.y <= firstReceiver.y) firstReceiver else firstSender
+
+                        // Edge label pills must be centered precisely on the connector drop lines (V5)
+                        val busY = firstEdge?.routePoints?.getOrNull(1)?.y ?: ((upperNode.bottom + lowerNode.top) / 2f)
+                        val dropLineMidpointX = upperNode.x
+                        val dropLineMidpointY = (upperNode.bottom + busY) / 2f
+
+                        val midpointX = if (firstEdge?.routePoints?.isNotEmpty() == true) dropLineMidpointX else (edgeFromX + edgeToX) / 2f
+                        val midpointY = if (firstEdge?.routePoints?.isNotEmpty() == true) dropLineMidpointY else (edgeFromY + edgeToY) / 2f
 
                         visibleBubbles.forEach bubbleLoop@{ bubble ->
                             val comm = bubble.comm
@@ -396,11 +407,9 @@ fun MeshCanvas(
                             // Speech bubble with message preview positioned clear of every card.
                             val bubbleText = formatMeshCommText(comm.text)
                             val bubbleHalfWidth = speechBubbleHalfWidth(bubbleText, textPaint)
-                            val upperNode = if (sender.y <= receiver.y) sender else receiver
-                            val lowerNode = if (sender.y <= receiver.y) receiver else sender
                             val safeMidpointY =
                                 safeCommBubbleCenterY(
-                                    midpointY = midpoint.y,
+                                    midpointY = midpointY,
                                     senderBottom = upperNode.bottom,
                                     receiverTop = lowerNode.top,
                                     otherCards = canvasCardBounds,

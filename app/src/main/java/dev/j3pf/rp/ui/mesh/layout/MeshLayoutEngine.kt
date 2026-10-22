@@ -472,7 +472,7 @@ class MeshLayoutEngine(
 
         val routePoints =
             parentAndChild?.let { (p, c) ->
-                orthogonalBusRoute(p, c, rowsByY, rowCenters, minLeft)
+                orthogonalBusRoute(p, c, rowsByY, rowCenters, minLeft, nodes)
             } ?: emptyList()
 
         val endpoints =
@@ -527,11 +527,15 @@ class MeshLayoutEngine(
         rowsByY: Map<Float, List<PositionedNode>>,
         rowCenters: List<Float>,
         minLeft: Float,
+        nodes: Map<String, PositionedNode>,
     ): List<EdgePoint> {
         if (child.displayMode == NodeDisplayMode.LEAF_ITEM) {
-            val childRow = rowsByY[child.y].orEmpty()
-            val minChildTop = childRow.minOfOrNull { it.top } ?: child.top
-            val busY = (parent.bottom + minOf(minChildTop, child.top)) / 2f
+            val siblingLeaves =
+                nodes.values.filter {
+                    it.displayMode == NodeDisplayMode.LEAF_ITEM && it.parentId == parent.node.agentId
+                }
+            val firstLeafTop = siblingLeaves.minOfOrNull { it.top } ?: child.top
+            val busY = (parent.bottom + firstLeafTop) / 2f
             // D1: One vertical spine at the LEFT of the rows, short horizontal tick into bullet
             val spineX = child.left - 16f
             val points = mutableListOf<EdgePoint>()

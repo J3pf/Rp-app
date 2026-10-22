@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +44,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -121,38 +123,51 @@ internal fun MeshScreenContent(
 
         Column(Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 20.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 64.dp)
+                        .padding(start = 20.dp, end = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(stringResource(R.string.mesh_title), style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    text = stringResource(R.string.mesh_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (!uiState.isListView && !uiState.isEmpty && uiState.snapshot != null) {
                         val recenterDesc = stringResource(R.string.mesh_recenter_desc)
-                        TextButton(
+                        IconButton(
                             onClick = { recenterTrigger++ },
                             modifier =
-                                Modifier.heightIn(min = 48.dp).semantics {
+                                Modifier.size(48.dp).semantics {
                                     contentDescription = recenterDesc
                                 },
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                contentDescription = recenterDesc,
+                                modifier = Modifier.size(20.dp),
                             )
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.mesh_recenter))
                         }
                     }
                     TextButton(
                         onClick = onToggleListView,
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) {
-                        Text(if (uiState.isListView) "Vista de diagrama" else "Vista de lista")
+                        Text(
+                            text = if (uiState.isListView) "Vista de diagrama" else "Vista de lista",
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                 }
             }
