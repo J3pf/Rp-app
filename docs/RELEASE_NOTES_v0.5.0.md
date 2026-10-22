@@ -24,7 +24,7 @@ Version **v0.5.0** delivers a major visual refactor of the **Agent Mesh ("Red de
   - Cross-hierarchy edges bypass intermediate cards through lateral channels.
 - **Canvas Usability & Re-Center Action**:
   - 2D pan and pinch-to-zoom with extended range (0.4x to 2.5x) and auto-fit scaling.
-  - New floating **"Recentrar"** pill button with icon in the bottom-right viewport corner for one-tap viewport reset, alongside double-tap gesture.
+  - Accessible **"Recentrar"** action in the top app bar for one-tap viewport reset without overlapping node cards, alongside double-tap gesture.
 
 #### 2. Chat Density, Navigation & Slash Command Catalog (Contributed by Luis Eduardo Chacón Wilches)
 - **Dynamic Slash Command Catalogs**:
