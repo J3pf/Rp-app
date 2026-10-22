@@ -86,6 +86,9 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "es-rES-w411dp-h891dp-xxhdpi")
 class RoborazziScreenshotTest {
+    @get:org.junit.Rule
+    val testWatchdog: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(90)
+
     @org.junit.Before
     fun setUpLocale() {
         java.util.Locale.setDefault(java.util.Locale.forLanguageTag("es-ES"))

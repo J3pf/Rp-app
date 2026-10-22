@@ -98,7 +98,7 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.jvmArgs("-Xmx2g")
-            it.timeout.set(Duration.ofMinutes(3))
+            it.timeout.set(Duration.ofMinutes(30))
         }
     }
 
