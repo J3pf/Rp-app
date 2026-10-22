@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -615,11 +617,11 @@ internal fun MessageList(
     val lastItemKey = lastItem?.key
     val streamingTextLength = (lastItem as? dev.j3pf.rp.chat.AssistantMsg)?.plainText?.length ?: 0
 
-    var prevItemsSize by remember { mutableIntStateOf(items.size) }
+    val prevItemsSize = remember { intArrayOf(items.size) }
 
     LaunchedEffect(lastItemKey, items.size, streamingTextLength) {
-        val isNewItem = items.size != prevItemsSize || lastItemKey?.startsWith("local:") == true
-        prevItemsSize = items.size
+        val isNewItem = items.size != prevItemsSize[0] || lastItemKey?.startsWith("local:") == true
+        prevItemsSize[0] = items.size
 
         if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
             if (!listState.isScrollInProgress) {
@@ -694,11 +696,21 @@ internal fun MessageList(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
+                                    val reducedMotion = LocalReducedMotion.current
+                                    if (reducedMotion) {
+                                        CircularProgressIndicator(
+                                            progress = { 0.75f },
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    } else {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
                                     val runningTool =
                                         ui.chat.tools.values
                                             .lastOrNull { it.status == dev.j3pf.rp.chat.ToolStatus.RUNNING }
@@ -748,10 +760,24 @@ internal fun MessageList(
             }
         }
 
+        val reducedMotion = LocalReducedMotion.current
+        val enterTransition =
+            if (reducedMotion) {
+                EnterTransition.None
+            } else {
+                fadeIn() + slideInVertically { it / 2 }
+            }
+        val exitTransition =
+            if (reducedMotion) {
+                ExitTransition.None
+            } else {
+                fadeOut() + slideOutVertically { it / 2 }
+            }
+
         AnimatedVisibility(
             visible = isScrolledUp,
-            enter = fadeIn() + slideInVertically { it / 2 },
-            exit = fadeOut() + slideOutVertically { it / 2 },
+            enter = enterTransition,
+            exit = exitTransition,
             modifier =
                 Modifier
                     .align(Alignment.BottomCenter)

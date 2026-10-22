@@ -1,3 +1,4 @@
+import java.time.Duration
 import java.util.Properties
 
 plugins {
@@ -97,6 +98,7 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.jvmArgs("-Xmx2g")
+            it.timeout.set(Duration.ofMinutes(3))
         }
     }
 

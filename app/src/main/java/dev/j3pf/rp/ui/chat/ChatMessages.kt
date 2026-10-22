@@ -64,6 +64,7 @@ import dev.j3pf.rp.ui.components.RpMarkdown
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.promptsheet.PromptContent
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
 
@@ -174,11 +175,21 @@ private fun UserBubble(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(10.dp),
-                            strokeWidth = 1.5.dp,
-                            color = contentColor.copy(alpha = 0.7f),
-                        )
+                        val reducedMotion = LocalReducedMotion.current
+                        if (reducedMotion) {
+                            CircularProgressIndicator(
+                                progress = { 0.75f },
+                                modifier = Modifier.size(10.dp),
+                                strokeWidth = 1.5.dp,
+                                color = contentColor.copy(alpha = 0.7f),
+                            )
+                        } else {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(10.dp),
+                                strokeWidth = 1.5.dp,
+                                color = contentColor.copy(alpha = 0.7f),
+                            )
+                        }
                         Text(
                             "enviando…",
                             style = MaterialTheme.typography.labelSmall,

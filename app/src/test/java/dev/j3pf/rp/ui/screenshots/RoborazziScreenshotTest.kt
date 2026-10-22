@@ -357,7 +357,12 @@ class RoborazziScreenshotTest {
                 ),
             )
 
-        val uiState = ChatUiState(agent = agentWorking, chat = ChatState(items = chatMessages))
+        val uiState =
+            ChatUiState(
+                agent = agentWorking,
+                chat = ChatState(items = chatMessages),
+                conn = ConnState.Connected,
+            )
 
         captureScreen("chat_streaming") {
             ChatContent(
@@ -381,7 +386,13 @@ class RoborazziScreenshotTest {
             (1..20).map { i ->
                 UserMsg(key = "hist-$i", text = "Mensaje histórico #$i en la conversación previa", at = 1000L + i)
             }
-        val uiState = ChatUiState(agent = agentWorking, chat = ChatState(items = historyMessages), unreadCount = 5)
+        val uiState =
+            ChatUiState(
+                agent = agentWorking,
+                chat = ChatState(items = historyMessages),
+                conn = ConnState.Connected,
+                unreadCount = 5,
+            )
 
         captureScreen("chat_scrolled_up") {
             val listState = rememberLazyListState(initialFirstVisibleItemIndex = 6, initialFirstVisibleItemScrollOffset = 50)

@@ -992,9 +992,18 @@ fun ConnectionBanner(
     val isVisible = state !is ConnState.Connected
     val text =
         when (state) {
-            ConnState.Connected -> null
-            ConnState.Connecting -> "Conectando con el relay…"
-            ConnState.Disconnected -> "Sin conexión con el relay · reintentando"
+            ConnState.Connected -> {
+                null
+            }
+
+            ConnState.Connecting -> {
+                "Conectando con el relay…"
+            }
+
+            ConnState.Disconnected -> {
+                "Sin conexión con el relay · reintentando"
+            }
+
             is ConnState.Fatal -> {
                 when (state.code) {
                     4001 -> "Token revocado · Vuelve a emparejar el dispositivo"
@@ -1057,12 +1066,22 @@ fun ConnectionBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    val reducedMotion = LocalReducedMotion.current
                     if (connecting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(12.dp),
-                            strokeWidth = 1.6.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        if (reducedMotion) {
+                            CircularProgressIndicator(
+                                progress = { 0.75f },
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.6.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.6.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     } else if (fatal) {
                         Box(
                             modifier =
@@ -1073,16 +1092,20 @@ fun ConnectionBanner(
                         )
                     } else {
                         val infiniteTransition = rememberInfiniteTransition(label = "connPulsing")
-                        val pulseAlpha by infiniteTransition.animateFloat(
-                            initialValue = 0.35f,
-                            targetValue = 1f,
-                            animationSpec =
-                                infiniteRepeatable(
-                                    animation = tween(800, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Reverse,
-                                ),
-                            label = "pulseAlpha",
-                        )
+                        val pulseAlpha by if (reducedMotion) {
+                            remember { mutableFloatStateOf(1f) }
+                        } else {
+                            infiniteTransition.animateFloat(
+                                initialValue = 0.35f,
+                                targetValue = 1f,
+                                animationSpec =
+                                    infiniteRepeatable(
+                                        animation = tween(800, easing = LinearEasing),
+                                        repeatMode = RepeatMode.Reverse,
+                                    ),
+                                label = "pulseAlpha",
+                            )
+                        }
                         Box(
                             modifier =
                                 Modifier
