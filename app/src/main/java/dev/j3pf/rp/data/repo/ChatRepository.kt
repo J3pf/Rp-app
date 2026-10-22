@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.chat.ChatReducer
 import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.TerminalWaitInfo
+import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.db.AgentDao
 import dev.j3pf.rp.data.db.ChatDao
 import dev.j3pf.rp.data.db.ChatRecordEntity
@@ -358,12 +359,14 @@ class ChatRepository
                 delivery: String = Delivery.AUTO,
                 method: String = DeliveryMethod.AUTO,
                 asCommand: Boolean = false,
+                clientMsgId: String? = null,
             ): SendResult {
                 val s = secrets.current() ?: return SendResult.Failed("sin sesión")
+                val cId = clientMsgId ?: Ulid.new()
                 val msg =
                     UserMessage(
                         agentId = agentId,
-                        clientMsgId = Ulid.new(),
+                        clientMsgId = cId,
                         text = text,
                         attachments = attachments,
                         delivery = delivery,
@@ -373,7 +376,22 @@ class ChatRepository
                     )
                 val now = System.currentTimeMillis()
                 val imgCount = attachments.count { it.mime.startsWith("image/") }
-                _state.update { ChatReducer.markLocalSent(it, text, clientMsgId = msg.clientMsgId, at = now, imageCount = imgCount) }
+                _state.update {
+                    if (clientMsgId != null) {
+                        val targetKey = if (cId.startsWith("local:")) cId else "local:$cId"
+                        val nextItems =
+                            it.items.map { item ->
+                                if (item is UserMsg && (item.clientMsgId == cId || item.key == targetKey)) {
+                                    item.copy(failed = false)
+                                } else {
+                                    item
+                                }
+                            }
+                        it.copy(items = nextItems, working = true)
+                    } else {
+                        ChatReducer.markLocalSent(it, text, clientMsgId = msg.clientMsgId, at = now, imageCount = imgCount)
+                    }
+                }
                 agentDao.touch(s.relayId, agentId, now)
                 outboxDao.put(
                     OutboxEntity(
@@ -387,7 +405,10 @@ class ChatRepository
                 )
                 scope.launch {
                     delay(30_000L)
-                    _state.update { ChatReducer.expireOptimisticSends(it, now = System.currentTimeMillis()) }
+                    val stillPending = outboxDao.all(s.relayId).any { it.clientMsgId == msg.clientMsgId }
+                    if (!stillPending) {
+                        _state.update { ChatReducer.expireOptimisticSends(it, now = System.currentTimeMillis()) }
+                    }
                 }
                 return deliver(msg)
             }
@@ -458,6 +479,45 @@ class ChatRepository
             fun removeLocal(clientMsgId: String) {
                 scope.launch { outboxDao.delete(clientMsgId) }
                 _state.update { ChatReducer.removeLocal(it, clientMsgId) }
+            }
+
+            /**
+             * Retries sending a failed message using the identical clientMsgId and original attachments
+             * to preserve protocol idempotency (the plugin deduplicates repeated deliveries).
+             */
+            suspend fun retry(clientMsgId: String): SendResult {
+                val s = secrets.current() ?: return SendResult.Failed("sin sesión")
+                val outboxItem = outboxDao.all(s.relayId).firstOrNull { it.clientMsgId == clientMsgId }
+                if (outboxItem != null) {
+                    val msg = runCatching { RpJson.decodeFromString(UserMessage.serializer(), outboxItem.json) }.getOrNull()
+                    if (msg != null) {
+                        _state.update { state ->
+                            val targetKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
+                            val nextItems =
+                                state.items.map { item ->
+                                    if (item is UserMsg && (item.clientMsgId == clientMsgId || item.key == targetKey)) {
+                                        item.copy(failed = false)
+                                    } else {
+                                        item
+                                    }
+                                }
+                            state.copy(items = nextItems, working = true)
+                        }
+                        return deliver(msg)
+                    }
+                }
+                val localMsg =
+                    _state.value.items.filterIsInstance<UserMsg>().firstOrNull {
+                        it.clientMsgId == clientMsgId || it.key == "local:$clientMsgId"
+                    }
+                if (localMsg != null) {
+                    return send(
+                        text = localMsg.text,
+                        attachments = emptyList(),
+                        clientMsgId = clientMsgId,
+                    )
+                }
+                return SendResult.Failed("Mensaje no encontrado")
             }
         }
 

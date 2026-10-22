@@ -35,6 +35,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.LinkedBlockingQueue
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -42,6 +43,9 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ChatRepositoryTest {
+    @get:org.junit.Rule
+    val testWatchdog: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(90)
+
     private lateinit var server: MockWebServer
     private lateinit var testScheduler: TestCoroutineScheduler
     private lateinit var repoScope: CoroutineScope
@@ -52,6 +56,7 @@ class ChatRepositoryTest {
 
     private val sockets = LinkedBlockingQueue<WebSocket>()
     private val outgoing = LinkedBlockingQueue<String>()
+    private val receivedClientMsgIds = mutableListOf<String>()
 
     @Before
     fun setUp() {
@@ -166,6 +171,7 @@ class ChatRepositoryTest {
                             }
                         } else if (env?.t == MsgType.USER_MESSAGE) {
                             val userMsg = runCatching { env.body<dev.j3pf.rp.protocol.UserMessage>() }.getOrNull()
+                            userMsg?.clientMsgId?.let { receivedClientMsgIds.add(it) }
                             val ack =
                                 UserMessageAck(
                                     clientMsgId = userMsg?.clientMsgId ?: "unknown",
@@ -269,5 +275,24 @@ class ChatRepositoryTest {
                     .items
                     .any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId") }
             assertFalse(hasItem, "removeLocal must remove the failed item from state")
+        }
+
+    @Test
+    fun `retry re-sends with identical clientMsgId preserving idempotency`() =
+        runBlocking {
+            acceptSocket()
+            connect()
+
+            val session = repository.open("test-agent")
+            withTimeout(5_000) { session.syncing.first { !it } }
+
+            session.send("Message to retry")
+            assertEquals(1, receivedClientMsgIds.size)
+            val originalId = receivedClientMsgIds[0]
+
+            // Now call retry with that same clientMsgId
+            session.retry(originalId)
+            assertEquals(2, receivedClientMsgIds.size)
+            assertEquals(originalId, receivedClientMsgIds[1], "Retry MUST send the exact same clientMsgId")
         }
 }

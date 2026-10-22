@@ -617,11 +617,17 @@ internal fun MessageList(
     val lastItemKey = lastItem?.key
     val streamingTextLength = (lastItem as? dev.j3pf.rp.chat.AssistantMsg)?.plainText?.length ?: 0
 
-    val prevItemsSize = remember { intArrayOf(items.size) }
+    // Plain mutable holder avoiding SnapshotState mutation inside LaunchedEffect to prevent recomposition loops
+    val prevItemsSize =
+        remember {
+            object {
+                var value = items.size
+            }
+        }
 
     LaunchedEffect(lastItemKey, items.size, streamingTextLength) {
-        val isNewItem = items.size != prevItemsSize[0] || lastItemKey?.startsWith("local:") == true
-        prevItemsSize[0] = items.size
+        val isNewItem = items.size != prevItemsSize.value || lastItemKey?.startsWith("local:") == true
+        prevItemsSize.value = items.size
 
         if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
             if (!listState.isScrollInProgress) {

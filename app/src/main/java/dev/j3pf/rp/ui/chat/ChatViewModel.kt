@@ -152,11 +152,12 @@ class ChatViewModel
             }
         }
 
-        /** Reintenta el envío de un mensaje que falló. */
+        /** Retries sending a failed user message preserving original clientMsgId (idempotent). */
         fun retryUserMessage(msg: UserMsg) {
             val cId = msg.clientMsgId ?: msg.key.removePrefix("local:")
-            session.removeLocal(cId)
-            send(msg.text) {}
+            viewModelScope.launch {
+                session.retry(cId)
+            }
         }
 
         /** Reintenta la subida de un adjunto que falló. */
