@@ -76,3 +76,4 @@ Target: v0.5.0 release
   - 719cb69: T14 (C13 retry, visible failed state, bus ack, removeLocal)
   - f4255eb: T15 (C6, D9)
   - a3c1224: T16 (visual test goldens updated)
+- L10: Fixed Roborazzi hang on screenshotChatScrolledUp: gated ConnectionBanner pulsing transition and CircularProgressIndicator infinite transitions in WorkingIndicator/UserBubble with LocalReducedMotion, removed state mutation loop in prevItemsSize, added Gradle test timeout of 3 minutes in build.gradle.kts (f0f0d31). Both chat screenshot tests now record cleanly in ~30-45s.
