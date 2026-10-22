@@ -1,6 +1,6 @@
 # Feature: org-chart (Corporate Org-Chart Layout for Agent Mesh)
 
-Status: In Progress
+Status: Ready for Review
 Target: v0.5.0 release
 
 ## Specs
@@ -31,7 +31,7 @@ Target: v0.5.0 release
 - [x] T13 (C5, C11, D3, D7, D8): Fix UI, accessibility & threshold: card name 2-line wrap without truncation, compact status text in leaf items with TalkBack, extract hardcoded strings to strings.xml, leaf threshold unit test [inline] [851adcd]
 - [x] T14 (C12, C13, C14): Fix Luis's chat regressions: near-bottom auto-scroll offset in ChatScreen [d594565], stale sync timer [64e94e7], optimistic message reconciliation by ULID clientMsgId with visible failed state and retry [inline] [719cb69]
 - [x] T15 (C6, D9): Update docs & remove derived binaries: remove docs/screenshots/*contact_sheet.png, update README and docs/INSTALACION.md to v0.5.0 and accurate minimums (relay 0.5.5, plugin 0.2.8) [inline] [f4255eb]
-- [ ] T16 (S7, S8, S10): Re-record Roborazzi screenshots [a3c1224], verify quality gates (ktlint, 0 lint, 0 compiler warnings), rebuild signed APK, and report via intercom [inline]
+- [x] T16 (S7, S8, S10): Re-record Roborazzi screenshots [a3c1224, cd2ffd1], verify quality gates (ktlint, 0 lint, 0 compiler warnings), rebuild signed APK, and report via intercom [inline] [b821f4e, 5dc8a32]
 
 ## Log
 - L1: User verbatim: "refactor visual a la pantalla de red de agentes para que sea estilo organigrama empresarial"
@@ -77,3 +77,4 @@ Target: v0.5.0 release
   - f4255eb: T15 (C6, D9)
   - a3c1224: T16 (visual test goldens updated)
 - L10: Fixed Roborazzi hang on screenshotChatScrolledUp: gated ConnectionBanner pulsing transition and CircularProgressIndicator infinite transitions in WorkingIndicator/UserBubble with LocalReducedMotion, removed state mutation loop in prevItemsSize, added Gradle test timeout of 3 minutes in build.gradle.kts (f0f0d31). Both chat screenshot tests now record cleanly in ~30-45s.
+- L11: Passed full quality gates: ktlint (0 violations), 0 compiler warnings, Android lint (0 errors, 0 warnings), Roborazzi verify 100% green, 305/305 unit tests passing. Built signed release APK app-direct-release.apk (SHA-256: 4bde34fd27b4b4328df2c27a6fd5dcd4937e2d3a3e83d287d7de8ce69b79031e) verified with certificate 6a7ef9a237db4483fbdacae7a323859df3e98198ae9bd6fb0a16229aecd62bc0.
