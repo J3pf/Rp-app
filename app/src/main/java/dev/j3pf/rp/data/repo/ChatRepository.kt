@@ -146,6 +146,7 @@ class ChatRepository
             private val _syncing = MutableStateFlow(true)
             val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
             private var job: Job? = null
+            private var syncTimeoutJob: Job? = null
             private var persisted = 0
 
             fun start() {
@@ -194,6 +195,7 @@ class ChatRepository
             suspend fun subscribe() {
                 val st = _state.value
                 if (st.items.isEmpty()) _syncing.value = true
+                syncTimeoutJob?.cancel()
                 val req =
                     Envelope.of(
                         MsgType.AGENT_SUBSCRIBE,
@@ -204,22 +206,31 @@ class ChatRepository
                 while (attempts < 3) {
                     when (connection.request(req)) {
                         is WsReply.Ok -> {
-                            scope.launch {
-                                delay(6_000L)
-                                _syncing.value = false
+                            syncTimeoutJob?.cancel()
+                            syncTimeoutJob = null
+                            if (_syncing.value) {
+                                syncTimeoutJob =
+                                    scope.launch {
+                                        delay(6_000L)
+                                        _syncing.value = false
+                                    }
                             }
                             return
                         }
+
                         is WsReply.Error -> {
+                            syncTimeoutJob?.cancel()
                             _syncing.value = false
                             return // p. ej. not_found: nada que reintentar
                         }
+
                         else -> {
                             attempts++
                             delay(1500L * attempts)
                         }
                     }
                 }
+                syncTimeoutJob?.cancel()
                 _syncing.value = false
             }
 
@@ -230,9 +241,12 @@ class ChatRepository
                         val h = runCatching { env.body<AgentHistory>() }.getOrNull() ?: return
                         val epochChanged = h.epoch != null && h.epoch != _state.value.epoch
                         _state.update { ChatReducer.applyHistory(it, h, System.currentTimeMillis()) }
+                        syncTimeoutJob?.cancel()
+                        syncTimeoutJob = null
                         _syncing.value = false
                         persistHistory(h, epochChanged)
                     }
+
                     MsgType.AGENT_EVENT -> {
                         if (env.d.obj()?.str("agentId") != agentId) return
                         val ev = runCatching { env.body<AgentEvent>() }.getOrNull() ?: return
@@ -243,15 +257,18 @@ class ChatRepository
                         if (after.lastSeq != before.lastSeq && ev.e.str("type") in PERSISTED_EVENTS) persistEvent(ev)
                         if (after.needsResync && !before.needsResync) scope.launch { subscribe() }
                     }
+
                     MsgType.PROMPT_OPENED -> {
                         if (env.d.obj()?.str("agentId") != agentId) return
                         val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return
                         onPromptOpened(p)
                     }
+
                     MsgType.PROMPT_RESOLVED -> {
                         val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return
                         _state.update { ChatReducer.applyPromptResolved(it, r) }
                     }
+
                     MsgType.TERMINAL_WAIT -> {
                         if (env.d.obj()?.str("agentId") != agentId) return
                         val w = runCatching { env.body<TerminalWait>() }.getOrNull() ?: return
@@ -351,7 +368,7 @@ class ChatRepository
                     )
                 val now = System.currentTimeMillis()
                 val imgCount = attachments.count { it.mime.startsWith("image/") }
-                _state.update { ChatReducer.markLocalSent(it, text, at = now, imageCount = imgCount) }
+                _state.update { ChatReducer.markLocalSent(it, text, clientMsgId = msg.clientMsgId, at = now, imageCount = imgCount) }
                 agentDao.touch(s.relayId, agentId, now)
                 outboxDao.put(
                     OutboxEntity(
@@ -374,19 +391,29 @@ class ChatRepository
                         is WsReply.Ok -> {
                             val ack = runCatching { reply.envelope.body<UserMessageAck>() }.getOrNull()
                             outboxDao.delete(msg.clientMsgId)
-                            return if (ack?.isFailure == true) SendResult.Failed(ack.error ?: "rechazado") else SendResult.Delivered(ack)
+                            if (ack != null) {
+                                _state.update { ChatReducer.applyUserMessageAck(it, ack) }
+                                return if (ack.isFailure) SendResult.Failed(ack.error ?: "rechazado") else SendResult.Delivered(ack)
+                            }
+                            return SendResult.Delivered(null)
                         }
+
                         is WsReply.Error -> {
                             if (reply.code == ErrorCodes.AGENT_OFFLINE) {
                                 outboxDao.delete(msg.clientMsgId)
+                                _state.update { ChatReducer.markLocalFailed(it, msg.clientMsgId) }
                                 return SendResult.Failed("El agente está desconectado")
                             }
                             if (reply.code == ErrorCodes.BAD_REQUEST || reply.code == ErrorCodes.TOO_LARGE) {
                                 outboxDao.delete(msg.clientMsgId)
+                                _state.update { ChatReducer.markLocalFailed(it, msg.clientMsgId) }
                                 return SendResult.Failed(reply.message.ifEmpty { reply.code })
                             }
                         }
-                        else -> Unit
+
+                        else -> {
+                            Unit
+                        }
                     }
                     delay(1000)
                 }
@@ -396,14 +423,18 @@ class ChatRepository
                         outboxDao.delete(msg.clientMsgId)
                         SendResult.Delivered(null)
                     }
-                    is ApiResult.Http ->
+
+                    is ApiResult.Http -> {
                         if (r.code in 400..499 && r.code != 429 && r.code != 401 && r.code != 403) {
                             outboxDao.delete(msg.clientMsgId)
+                            _state.update { ChatReducer.markLocalFailed(it, msg.clientMsgId) }
                             SendResult.Failed(if (r.code == 404) "El agente ya no existe" else "HTTP ${r.code}")
                         } else {
                             enqueueSend(context)
                             SendResult.Queued
                         }
+                    }
+
                     is ApiResult.Network -> {
                         enqueueSend(context)
                         SendResult.Queued
@@ -429,8 +460,11 @@ class ChatRepository
                     continue
                 }
                 when (val r = api.sendMessage(msg)) {
-                    is ApiResult.Ok -> outboxDao.delete(o.clientMsgId)
-                    is ApiResult.Http ->
+                    is ApiResult.Ok -> {
+                        outboxDao.delete(o.clientMsgId)
+                    }
+
+                    is ApiResult.Http -> {
                         if (r.code in 400..499 &&
                             r.code != 429 &&
                             r.code != 401 &&
@@ -440,7 +474,11 @@ class ChatRepository
                         } else {
                             allDone = false
                         }
-                    is ApiResult.Network -> allDone = false
+                    }
+
+                    is ApiResult.Network -> {
+                        allDone = false
+                    }
                 }
             }
             return allDone
