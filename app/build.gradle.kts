@@ -28,13 +28,14 @@ val keystoreProps =
 // versionCode = nº de commits; versionName = semver (PLAN-APP §10)
 fun gitCommitCount(): Int =
     runCatching {
-        val p = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).redirectErrorStream(true).start()
-        p.inputStream
-            .bufferedReader()
-            .readText()
+        providers
+            .exec {
+                workingDir = rootDir
+                commandLine("git", "rev-list", "--count", "HEAD")
+            }.standardOutput.asText
+            .get()
             .trim()
             .toInt()
-            .also { p.waitFor() }
     }.getOrDefault(1)
 
 android {
@@ -91,7 +92,7 @@ android {
     }
 
     sourceSets {
-        getByName("debug").assets.srcDirs("$projectDir/schemas")
+        getByName("debug").assets.directories.add("$projectDir/schemas")
     }
 
     testOptions {
