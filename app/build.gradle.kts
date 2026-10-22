@@ -134,6 +134,7 @@ ksp {
 
 dependencies {
     implementation(project(":protocol"))
+    implementation(project(":relay-client"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

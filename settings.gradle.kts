@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "rp-app"
-include(":app", ":protocol")
+include(":app", ":protocol", ":relay-client")

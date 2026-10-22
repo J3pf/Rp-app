@@ -109,6 +109,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ./gradlew :protocol:compileCommonMainKotlinMetadata # shared Kotlin metadata (Linux-compatible)
 ./gradlew :protocol:test                       # shared + JVM protocol, chat, and crypto tests
 ./gradlew :protocol:jvmTest                     # KMP JVM test entry point
+./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP policy
 ./gradlew :app:testDirectDebugUnitTest         # Robolectric, MockWebServer, and Compose tests
 ./gradlew :app:assembleDirectDebug             # APK without Google services (direct channel)
 ./gradlew :app:assembleFcmDebug                # APK with optional FCM (requires app/google-services.json)
@@ -123,6 +124,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 
 ```
 protocol/   Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
+relay-client/ Kotlin Multiplatform: shared HTTP endpoint, credential-access, and reply policy
 app/        Compose + Hilt + Room: data/{net,db,repo,secure}, push/, ui/{agents,chat,pending,promptsheet,settings,…}
 ```
 
@@ -142,11 +144,33 @@ The legacy `:protocol:test` task remains a JVM test task, including support for
 `--tests`. KMP JVM reports are under `protocol/build/reports/tests/jvmTest`;
 legacy reports remain under `protocol/build/reports/tests/test`.
 
-This is **not an iOS app yet**. No screens, pairing client, APNs, Keychain, native
-crypto, or native secure ID generator have been ported. There is no iOS framework
+This is **not an iOS app yet**. No screens, native pairing/session workflow, APNs,
+Keychain, native crypto, or native secure ID generator have been ported. There is no iOS framework
 export or application target in this unit. Linux metadata compilation and JVM tests
 check the shared foundation, not the iOS adapter or an iPhone application.
 On macOS, the next compilation checks are
 `./gradlew :protocol:compileKotlinIosArm64 :protocol:iosSimulatorArm64Test` with
 compatible Xcode/simulator installed; device and push testing remain later work.
 Android UI, Hilt, Room, and push behavior are unchanged.
+
+### Shared HTTP relay client
+
+`relay-client` targets JVM 17 (used by Android), `iosArm64`, and `iosSimulatorArm64`.
+Its `commonMain` owns the existing health/pairing HTTP calls, device/push preferences,
+machines, mesh queries, prompt answers, message requests, and reply/error decoding.
+`ApiResult` and `AnswerOutcome` retain their existing `dev.j3pf.rp.data.net` package.
+
+`RelayHttpClient` takes an injected `RelayHttpTransport`, a request-local
+`RelayCredentials` provider, a query encoder, and an invalid-response exception
+factory. Android's `RelayApi` delegates to it, reading `SecretStore.current()` per
+request and supplying the existing UTF-8 `URLEncoder` and `IOException` behavior.
+`OkHttpRelayTransport` retains cancellable OkHttp calls and the 8-second quick-action
+timeout. Multipart `uploadBlob(RequestBody, onProgress)` stays native and streaming,
+without a global upload call timeout; only its response decoding is shared.
+
+Common tests run through `:relay-client:jvmTest`; reports are in
+`relay-client/build/reports/tests/jvmTest`. Linux common metadata/JVM/Android checks
+are not iOS certification: there is no iOS HTTP transport yet. macOS compilation
+(`:relay-client:compileKotlinIosArm64`) and simulator/iPhone transport tests remain
+unverified. WebSocket, reconnect, pairing lifecycle, and chat synchronization policy
+remain native in this HTTP-only extraction.
