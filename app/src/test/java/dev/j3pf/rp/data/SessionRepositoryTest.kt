@@ -19,6 +19,11 @@ class SessionRepositoryTest {
         )
         assertNull(SessionRepository.parsePairingUri("https://otra.cosa"))
         assertNull(SessionRepository.parsePairingUri("rp://pair?u=https://x"))
+        assertNull(SessionRepository.parsePairingUri("rp://pair?c=ABCDEF"))
+        assertEquals(
+            "https://relay.example.com/path" to "ab-cd ef",
+            SessionRepository.parsePairingUri(" rp://pair?u=https%3A%2F%2Frelay.example.com%2Fpath&c=ab-cd%20ef "),
+        )
     }
 
     @Test
@@ -33,5 +38,13 @@ class SessionRepositoryTest {
         assertNull(SessionRepository.normalizeUrl("https://user:pass@relay.example.com"))
         assertNull(SessionRepository.normalizeUrl("https://..."))
         assertNull(SessionRepository.normalizeUrl(""))
+        assertEquals("http://localhost:8080", SessionRepository.normalizeUrl("http://localhost:8080///"))
+        assertEquals("https://relay.example.com/path", SessionRepository.normalizeUrl("HTTPS://RELAY.EXAMPLE.COM/path/"))
+        assertNull(SessionRepository.normalizeUrl("https://user@relay.example.com"))
+        assertNull(SessionRepository.normalizeUrl("https://relay.example.com?code=ABCDEF"))
+        assertNull(SessionRepository.normalizeUrl("https://relay.example.com#fragment"))
+        assertNull(SessionRepository.normalizeUrl("https://.relay.example.com"))
+        assertNull(SessionRepository.normalizeUrl("https://relay.example.com."))
+        assertNull(SessionRepository.normalizeUrl("ftp://relay.example.com"))
     }
 }

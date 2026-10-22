@@ -109,7 +109,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ./gradlew :protocol:compileCommonMainKotlinMetadata # shared Kotlin metadata (Linux-compatible)
 ./gradlew :protocol:test                       # shared + JVM protocol, chat, and crypto tests
 ./gradlew :protocol:jvmTest                     # KMP JVM test entry point
-./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP/WS policy
+./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP/WS/session policy
 ./gradlew :app:testDirectDebugUnitTest         # Robolectric, MockWebServer, and Compose tests
 ./gradlew :app:assembleDirectDebug             # APK without Google services (direct channel)
 ./gradlew :app:assembleFcmDebug                # APK with optional FCM (requires app/google-services.json)
@@ -124,7 +124,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 
 ```
 protocol/   Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
-relay-client/ Kotlin Multiplatform: shared HTTP, WS correlation/bus, and reconnect policy
+relay-client/ Kotlin Multiplatform: shared HTTP, pairing/session, WS correlation/bus, and reconnect policy
 app/        Compose + Hilt + Room: data/{net,db,repo,secure}, push/, ui/{agents,chat,pending,promptsheet,settings,…}
 ```
 
@@ -172,7 +172,28 @@ Common tests run through `:relay-client:jvmTest`; reports are in
 `relay-client/build/reports/tests/jvmTest`. Linux common metadata/JVM/Android checks
 are not iOS certification: there is no iOS HTTP transport yet. macOS compilation
 (`:relay-client:compileKotlinIosArm64`) and simulator/iPhone transport tests remain
-unverified. Pairing lifecycle and chat synchronization policy remain native.
+unverified. Chat synchronization policy remains native.
+
+### Shared pairing/session policy
+
+`SessionPolicy` owns code normalization, health-before-pair sequencing, existing
+Spanish failure messages, successful session replacement, push registration, and
+best-effort logout revocation. `Session` and `PairResult` keep their existing
+packages and fields; `Session.wsBase` retains its existing conversion behavior.
+
+Android's `SessionRepository` delegates through `SessionPlatform`: URL validation
+and QR parsing, `Build.MODEL`, FCM token acquisition, encrypted `SecretStore`,
+settings, WorkManager, Room/cache cleanup, notification channels, direct push,
+and connection start/stop remain native. Rejected pairing leaves the old session
+and its work/channels/socket untouched. On success, old-relay cleanup precedes
+new relay ID generation and credential save, then push registration and connection
+startup; push HTTP/network failures remain ignored. Common callback event traces
+cover initial/replacement ordering and logout; native regression probes cover
+old-session preservation and the storage/lifecycle adapter.
+
+There is no iOS session adapter or encrypted storage implementation. Linux common
+metadata/JVM/Android checks do not compile iOS or verify macOS/iPhone behavior.
+Chat subscription/synchronization and retry/delivery extraction remains T4 scope.
 
 ### Shared WebSocket policy
 

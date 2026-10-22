@@ -5,8 +5,9 @@ import android.os.Build
 import androidx.core.net.toUri
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.j3pf.rp.client.session.SessionPlatform
+import dev.j3pf.rp.client.session.SessionPolicy
 import dev.j3pf.rp.data.db.DedupDao
-import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.secure.SecretStore
@@ -17,14 +18,6 @@ import dev.j3pf.rp.push.PushTokenProvider
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
-
-sealed interface PairResult {
-    data object Success : PairResult
-
-    data class Failure(
-        val message: String,
-    ) : PairResult
-}
 
 /** Emparejamiento (PLAN-APP §6), registro de canales de push y cierre de sesión. */
 @Singleton
@@ -46,96 +39,65 @@ class SessionRepository
         private val tokens: PushTokenProvider,
         private val channels: NotificationChannels,
     ) {
-        /**
-         * `POST /v1/pair/device {code, name, fcmToken?}` → guarda `deviceToken` y `pushKey` cifrados, registra
-         * `PUT /v1/devices/me/push {direct:true}` y arranca el canal directo. Comprueba `/healthz` antes.
-         */
+        private val shared =
+            SessionPolicy(
+                normalizeUrl = ::normalizeUrl,
+                healthz = api::healthz,
+                pairDevice = api::pairDevice,
+                putPush = api::putPush,
+                revokeDevice = api::revokeDevice,
+                platform =
+                    object : SessionPlatform {
+                        override fun currentSession(): Session? = secrets.current()
+
+                        override fun newRelayId(): String = secrets.newRelayId()
+
+                        override fun saveSession(session: Session) = secrets.save(session)
+
+                        override suspend fun clearLocalSession() {
+                            connection.stop()
+                            WorkManager.getInstance(context).cancelAllWork()
+                            clearLocalSessionData()
+                            channels.removeAll()
+                        }
+
+                        override suspend fun clearCredentialsAndSettings() {
+                            secrets.clear()
+                            settings.wipe()
+                        }
+
+                        override suspend fun currentToken(): String? = tokens.currentToken()
+
+                        override fun deviceName(): String = Build.MODEL ?: "Android"
+
+                        override suspend fun directPush(): Boolean = settings.current().directPush
+
+                        override suspend fun setDirectPush(direct: Boolean) {
+                            settings.setDirectPush(direct)
+                        }
+
+                        override fun startDirectPush() = DirectPushService.start(context)
+
+                        override fun stopDirectPush() = DirectPushService.stop(context)
+
+                        override fun startConnection() = connection.start()
+                    },
+            )
+
+        /** Health-before-pair handshake; native storage is replaced only after successful pairing. */
         suspend fun pair(
             rawUrl: String,
             rawCode: String,
-        ): PairResult {
-            val url = normalizeUrl(rawUrl) ?: return PairResult.Failure("URL del relay no válida (debe ser https://…)")
-            val code =
-                rawCode
-                    .trim()
-                    .uppercase()
-                    .replace(" ", "")
-                    .replace("-", "")
-            if (code.length < 6) return PairResult.Failure("El código es demasiado corto")
-
-            when (val h = api.healthz(url)) {
-                is ApiResult.Ok -> if (!h.value.ok) return PairResult.Failure("El relay no está listo")
-                is ApiResult.Http -> return PairResult.Failure("El relay respondió HTTP ${h.code}")
-                is ApiResult.Network -> return PairResult.Failure("No se pudo conectar con el relay: ${h.error.message}")
-            }
-
-            val fcm = tokens.currentToken()
-            val res = api.pairDevice(url, code, Build.MODEL ?: "Android", fcm)
-            val paired =
-                when (res) {
-                    is ApiResult.Ok -> res.value
-                    is ApiResult.Http -> return PairResult.Failure(
-                        when (res.code) {
-                            400, 404 -> "Código incorrecto o caducado"
-                            429 -> "Demasiados intentos. Espera un minuto"
-                            else -> "El relay rechazó el emparejamiento (HTTP ${res.code})"
-                        },
-                    )
-                    is ApiResult.Network -> return PairResult.Failure("Error de red: ${res.error.message}")
-                }
-
-            if (secrets.current() != null) {
-                connection.stop()
-                WorkManager.getInstance(context).cancelAllWork()
-                clearLocalSessionData()
-                channels.removeAll()
-            }
-
-            secrets.save(
-                Session(
-                    relayId = secrets.newRelayId(),
-                    relayUrl = url,
-                    relayName = paired.relayName.ifEmpty { url.removePrefix("https://") },
-                    deviceId = paired.deviceId,
-                    deviceToken = paired.deviceToken,
-                    pushKey = paired.pushKey,
-                ),
-            )
-            val direct = settings.current().directPush
-            api.putPush(fcm, direct)
-            if (direct) DirectPushService.start(context)
-            connection.start()
-            return PairResult.Success
-        }
+        ): PairResult = shared.pair(rawUrl, rawCode)
 
         /** Aplica el interruptor de canal directo/FCM en el relay y arranca/detiene el servicio. */
-        suspend fun applyPushChannels(direct: Boolean) {
-            settings.setDirectPush(direct)
-            api.putPush(tokens.currentToken(), direct)
-            if (direct) DirectPushService.start(context) else DirectPushService.stop(context)
-        }
+        suspend fun applyPushChannels(direct: Boolean) = shared.applyPushChannels(direct)
 
         /** `onNewToken` de FCM → `PUT /v1/devices/me/push`. */
-        suspend fun registerFcmToken(token: String?): Boolean {
-            if (secrets.current() == null) return true
-            return when (api.putPush(token, settings.current().directPush)) {
-                is ApiResult.Ok -> true
-                else -> false
-            }
-        }
+        suspend fun registerFcmToken(token: String?): Boolean = shared.registerFcmToken(token)
 
         /** Cerrar sesión: revoca (best-effort) el dispositivo, borra credenciales, base de datos y canales. */
-        suspend fun logout() {
-            val s = secrets.current()
-            if (s != null) runCatching { api.revokeDevice(s.deviceId) }
-            DirectPushService.stop(context)
-            connection.stop()
-            WorkManager.getInstance(context).cancelAllWork()
-            clearLocalSessionData()
-            channels.removeAll()
-            secrets.clear()
-            settings.wipe()
-        }
+        suspend fun logout() = shared.logout()
 
         private suspend fun clearLocalSessionData() {
             machines.clear()
