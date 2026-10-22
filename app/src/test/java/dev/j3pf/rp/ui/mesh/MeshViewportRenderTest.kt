@@ -37,7 +37,10 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MeshViewportRenderTest {
-    @get:Rule val testWatchdog: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(90)
+    @get:Rule val testWatchdog: org.junit.rules.Timeout =
+        org.junit.rules.Timeout
+            .seconds(90)
+
     @get:Rule val rule = createComposeRule()
 
     @Test

@@ -44,7 +44,9 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 class ChatRepositoryTest {
     @get:org.junit.Rule
-    val testWatchdog: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(90)
+    val testWatchdog: org.junit.rules.Timeout =
+        org.junit.rules.Timeout
+            .seconds(90)
 
     private lateinit var server: MockWebServer
     private lateinit var testScheduler: TestCoroutineScheduler
