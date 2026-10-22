@@ -87,7 +87,9 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "es-rES-w411dp-h891dp-xxhdpi")
 class RoborazziScreenshotTest {
     @get:org.junit.Rule
-    val testWatchdog = dev.j3pf.rp.WatchdogTimeout.seconds(90)
+    val testWatchdog =
+        dev.j3pf.rp.WatchdogTimeout
+            .seconds(90)
 
     @org.junit.Before
     fun setUpLocale() {
