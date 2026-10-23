@@ -2,6 +2,7 @@ package dev.j3pf.rp.ui.mesh
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -65,9 +66,7 @@ fun MeshConversationContent(
         }
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding =
-                androidx.compose.foundation.layout
-                    .PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (detail.nextBefore != null) {
