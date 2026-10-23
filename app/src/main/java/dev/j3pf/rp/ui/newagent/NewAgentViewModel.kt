@@ -6,11 +6,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.MachinesRepository
-import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HerdrTarget
-import dev.j3pf.rp.protocol.HostInfo
 import dev.j3pf.rp.protocol.HostSpawn
-import dev.j3pf.rp.protocol.MachineSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,59 +17,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-/** Dónde crear el agente cuando la PC tiene herdr (PLAN-APP §3). */
-enum class HerdrPlacement { NEW_WORKSPACE, TAB, SPLIT }
-
-data class NewAgentForm(
-    val machineId: String? = null,
-    val path: String = "",
-    val dirs: List<String> = emptyList(),
-    val loadingDirs: Boolean = false,
-    val launcher: String? = null,
-    val backend: String? = null,
-    val placement: HerdrPlacement = HerdrPlacement.NEW_WORKSPACE,
-    val layout: HerdrLayout? = null,
-    val loadingLayout: Boolean = false,
-    val workspaceId: String? = null,
-    val paneId: String? = null,
-    val direction: String = "right",
-    val name: String = "",
-    val initialPrompt: String = "",
-    val spawning: Boolean = false,
-    val error: String? = null,
-    val created: Boolean = false,
-)
-
-data class NewAgentUi(
-    val machines: List<MachineSummary> = emptyList(),
-    val host: HostInfo? = null,
-    val form: NewAgentForm = NewAgentForm(),
-) {
-    val hasHerdr get() = host?.backends?.herdr != null
-    val backends: List<String>
-        get() =
-            buildList {
-                host?.backends?.let { b ->
-                    if (b.herdr != null) add("herdr")
-                    if (b.tmux != null) add("tmux")
-                    if (b.wt) add("wt")
-                    if (b.console) add("console")
-                }
-            }
-    val effectiveBackend get() = form.backend ?: host?.defaultBackend ?: backends.firstOrNull()
-    val canCreate
-        get() =
-            form.machineId != null &&
-                form.path.isNotBlank() &&
-                !form.spawning &&
-                (
-                    effectiveBackend != "herdr" ||
-                        form.placement == HerdrPlacement.NEW_WORKSPACE ||
-                        (form.placement == HerdrPlacement.TAB && form.workspaceId != null) ||
-                        (form.placement == HerdrPlacement.SPLIT && form.paneId != null)
-                )
-}
 
 /** Flujo "Nuevo agente": PC → carpeta → lanzador (gentle-shell/pi) → dónde (herdr/tmux/wt) → prompt inicial. */
 @HiltViewModel
