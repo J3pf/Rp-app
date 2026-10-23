@@ -93,12 +93,13 @@ class MeshViewModel
             val selected = machineId?.takeIf { id -> state.machineChips.any { it.machineId == id } }
             var updatedGroupId = state.selectedGroupId
             _uiState.update { current ->
-                val newGroupChips = buildGroupChips(current.snapshot, selected)
+                val snapshot = current.snapshot
+                val newGroupChips = buildGroupChips(snapshot, selected)
                 var nextGroup = current.selectedGroupId
-                if (current.snapshot != null) {
+                if (snapshot != null) {
                     if (nextGroup != null && newGroupChips.none { it.groupId == nextGroup }) nextGroup = null
                     if (nextGroup == null && newGroupChips.isNotEmpty()) {
-                        nextGroup = mostActiveGroup(current.snapshot, newGroupChips, selected)
+                        nextGroup = mostActiveGroup(snapshot, newGroupChips, selected)
                     }
                 }
                 updatedGroupId = nextGroup

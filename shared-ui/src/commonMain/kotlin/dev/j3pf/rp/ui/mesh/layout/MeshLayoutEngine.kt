@@ -427,8 +427,9 @@ class MeshLayoutEngine(
         }
 
         // Precompute layout row maps for O(1) orthogonal edge routing (C8 W3)
-        val rowsByY = positionedNodes.values.groupBy { it.y }.toSortedMap()
-        val sortedRowCenters = rowsByY.keys.toList()
+        val rawRows = positionedNodes.values.groupBy { it.y }
+        val sortedRowCenters = rawRows.keys.sorted()
+        val rowsByY = sortedRowCenters.associateWith { rawRows.getValue(it) }
         val minLeftBound = positionedNodes.values.minOfOrNull { it.left } ?: 0f
 
         // Position orthogonal bus edges

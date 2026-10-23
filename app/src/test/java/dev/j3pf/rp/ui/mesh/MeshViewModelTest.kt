@@ -394,7 +394,8 @@ class MeshViewModelTest {
             viewModel.loadMoreConversation()
             withTimeout(5_000) {
                 viewModel.uiState.first {
-                    it.conversationDetail?.items?.map(MeshComm::commKey) == listOf("new", "old") && !it.conversationDetail.isLoadingMore
+                    it.conversationDetail?.items?.map(MeshComm::commKey) == listOf("new", "old") &&
+                        it.conversationDetail?.isLoadingMore == false
                 }
             }
             assertEquals(

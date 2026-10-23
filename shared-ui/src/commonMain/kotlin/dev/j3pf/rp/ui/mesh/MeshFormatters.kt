@@ -1,13 +1,13 @@
 package dev.j3pf.rp.ui.mesh
 
-import androidx.core.graphics.toColorInt
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
+import dev.j3pf.rp.ui.util.formatPlatformDateTime
+import dev.j3pf.rp.ui.util.formatPlatformTime
+import dev.j3pf.rp.ui.util.parseColor
 
 private val UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}.*")
 private val TRUNCATED_UUID_REGEX = Regex(".*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{3,}.*")
@@ -109,12 +109,11 @@ fun formatMeshGroupChipLabel(
     return "Grupo de agentes"
 }
 
-@androidx.compose.runtime.Composable
-fun parseRelayColor(raw: String): androidx.compose.ui.graphics.Color =
+@Composable
+fun parseRelayColor(raw: String): Color =
     runCatching {
-        androidx.compose.ui.graphics
-            .Color(raw.toColorInt())
-    }.getOrElse { androidx.compose.material3.MaterialTheme.colorScheme.primary }
+        parseColor(raw)
+    }.getOrElse { MaterialTheme.colorScheme.primary }
 
 fun formatMeshRole(role: String): String =
     when (role.lowercase()) {
@@ -189,24 +188,6 @@ fun formatMeshNodeContentDescription(
     return "$role $name, $status$reportsTo$todos"
 }
 
-fun formatMeshDateTime(
-    at: Long,
-    locale: Locale = Locale.getDefault(),
-    zoneId: ZoneId = ZoneId.systemDefault(),
-): String =
-    DateTimeFormatter
-        .ofLocalizedDateTime(FormatStyle.SHORT)
-        .withLocale(locale)
-        .withZone(zoneId)
-        .format(Instant.ofEpochMilli(at))
+fun formatMeshDateTime(at: Long): String = formatPlatformDateTime(at)
 
-fun formatMeshTime(
-    at: Long,
-    locale: Locale = Locale.getDefault(),
-    zoneId: ZoneId = ZoneId.systemDefault(),
-): String =
-    DateTimeFormatter
-        .ofLocalizedTime(FormatStyle.SHORT)
-        .withLocale(locale)
-        .withZone(zoneId)
-        .format(Instant.ofEpochMilli(at))
+fun formatMeshTime(at: Long): String = formatPlatformTime(at)

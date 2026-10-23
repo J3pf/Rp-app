@@ -212,10 +212,11 @@ internal fun MeshScreenContent(
                 }
             }
 
+            val errorMessage = uiState.errorMessage
             when {
-                uiState.errorMessage != null -> {
+                errorMessage != null -> {
                     MeshErrorState(
-                        message = uiState.errorMessage,
+                        message = errorMessage,
                         onRetry = onRetry,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
