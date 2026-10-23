@@ -35,14 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.j3pf.rp.R
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatItem
@@ -149,18 +147,18 @@ private fun UserBubble(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Warning,
-                            contentDescription = stringResource(R.string.chat_msg_failed),
+                            contentDescription = "Error al enviar",
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.error,
                         )
                         Text(
-                            stringResource(R.string.chat_msg_failed),
+                            "Error al enviar",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
                         if (onRetry != null) {
                             Text(
-                                stringResource(R.string.chat_msg_retry),
+                                "Reintentar",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.error,
                                 modifier =
@@ -744,7 +742,7 @@ fun SubagentCard(
                 if (tok.total > 0) metricsList.add("${tok.total} tokens")
             }
             info.cost?.let { c ->
-                metricsList.add("$${String.format(java.util.Locale.US, "%.3f", c)}")
+                metricsList.add("$${dev.j3pf.rp.ui.util.formatCost(c)}")
             }
 
             if (metricsList.isNotEmpty()) {

@@ -68,3 +68,12 @@ fun truncate(
     s: String,
     max: Int,
 ): String = if (s.length <= max) s else s.take(max - 1) + "…"
+
+fun formatCost(cost: Double): String {
+    val sign = if (cost < 0) "-" else ""
+    val absVal = if (cost < 0) -cost else cost
+    val scaled = (absVal * 1000 + 0.5).toLong()
+    val intPart = scaled / 1000
+    val fracPart = (scaled % 1000).toString().padStart(3, '0')
+    return "$sign$intPart.$fracPart"
+}
