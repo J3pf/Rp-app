@@ -8,21 +8,16 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.data.net.ApiResult
-import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.AgentsRepository
-import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.SessionRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
-import dev.j3pf.rp.data.secure.Session
-import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.DeviceInfo
 import dev.j3pf.rp.protocol.MachinePatch
 import dev.j3pf.rp.protocol.MachinePrefs
-import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.NotifyPrefs
 import dev.j3pf.rp.protocol.QuietHours
 import dev.j3pf.rp.push.NotificationChannels
@@ -34,22 +29,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-/** Estado de las condiciones que hacen fiables las notificaciones (pantalla de Ajustes). */
-data class HealthState(
-    val notificationsEnabled: Boolean = true,
-    val approvalsMuted: Boolean = false,
-    val batteryExcluded: Boolean = false,
-)
-
-data class SettingsUiState(
-    val session: Session? = null,
-    val conn: ConnState = ConnState.Disconnected,
-    val settings: AppSettings = AppSettings(),
-    val machines: List<MachineSummary> = emptyList(),
-    val health: HealthState = HealthState(),
-    val agents: List<AgentSummary> = emptyList(),
-)
 
 @HiltViewModel
 class SettingsViewModel
