@@ -166,3 +166,11 @@ fun TagChip(
         )
     }
 }
+
+@Composable
+fun TagChip(
+    text: String,
+    color: Color,
+) {
+    TagChip(text = text, modifier = Modifier, color = color)
+}

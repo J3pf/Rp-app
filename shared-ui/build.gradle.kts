@@ -52,6 +52,8 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.materialIconsExtended)
+            implementation(libs.markdown.m3)
+            implementation(libs.markdown.code)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

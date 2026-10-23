@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -32,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -64,16 +62,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.isSpecified
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -519,91 +513,6 @@ fun MachineHeroDropdown(
         }
     }
 }
-
-/**
- * Desvanecimiento sutil derivado del tema en bordes horizontales para indicar scroll.
- */
-fun Modifier.horizontalEdgeFade(
-    scrollState: ScrollState? = null,
-    edgeColor: Color = Color.Unspecified,
-    length: Dp = 24.dp,
-): Modifier =
-    composed {
-        val resolvedColor = if (edgeColor.isSpecified) edgeColor else MaterialTheme.colorScheme.background
-        val density = LocalDensity.current
-        val lengthPx = with(density) { length.toPx() }
-
-        drawWithContent {
-            drawContent()
-            val canBackward = scrollState?.canScrollBackward ?: true
-            val canForward = scrollState?.canScrollForward ?: true
-
-            if (canBackward && size.width > lengthPx * 2f) {
-                drawRect(
-                    brush =
-                        Brush.horizontalGradient(
-                            colors = listOf(resolvedColor, resolvedColor.copy(alpha = 0f)),
-                            startX = 0f,
-                            endX = lengthPx,
-                        ),
-                    size = size.copy(width = lengthPx),
-                )
-            }
-            if (canForward && size.width > lengthPx * 2f) {
-                drawRect(
-                    brush =
-                        Brush.horizontalGradient(
-                            colors = listOf(resolvedColor.copy(alpha = 0f), resolvedColor),
-                            startX = size.width - lengthPx,
-                            endX = size.width,
-                        ),
-                    topLeft = Offset(size.width - lengthPx, 0f),
-                    size = size.copy(width = lengthPx),
-                )
-            }
-        }
-    }
-
-fun Modifier.horizontalEdgeFade(
-    lazyListState: LazyListState,
-    edgeColor: Color = Color.Unspecified,
-    length: Dp = 24.dp,
-): Modifier =
-    composed {
-        val resolvedColor = if (edgeColor.isSpecified) edgeColor else MaterialTheme.colorScheme.background
-        val density = LocalDensity.current
-        val lengthPx = with(density) { length.toPx() }
-
-        drawWithContent {
-            drawContent()
-            val canBackward = lazyListState.canScrollBackward
-            val canForward = lazyListState.canScrollForward
-
-            if (canBackward && size.width > lengthPx * 2f) {
-                drawRect(
-                    brush =
-                        Brush.horizontalGradient(
-                            colors = listOf(resolvedColor, resolvedColor.copy(alpha = 0f)),
-                            startX = 0f,
-                            endX = lengthPx,
-                        ),
-                    size = size.copy(width = lengthPx),
-                )
-            }
-            if (canForward && size.width > lengthPx * 2f) {
-                drawRect(
-                    brush =
-                        Brush.horizontalGradient(
-                            colors = listOf(resolvedColor.copy(alpha = 0f), resolvedColor),
-                            startX = size.width - lengthPx,
-                            endX = size.width,
-                        ),
-                    topLeft = Offset(size.width - lengthPx, 0f),
-                    size = size.copy(width = lengthPx),
-                )
-            }
-        }
-    }
 
 /**
  * Selector de PC persistente (chips horizontales para filtrado rápido).
