@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.data.net.ConnState
+import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
@@ -74,7 +75,7 @@ import dev.j3pf.rp.ui.theme.rpSkeleton
 import dev.j3pf.rp.ui.util.contextLabel
 import dev.j3pf.rp.ui.util.parseColor
 
-const val ALL_MACHINES = "all"
+const val ALL_MACHINES = AppSettings.ALL
 
 /**
  * Cabecera humana para pantallas principales (design.md §1 y §6).

@@ -239,7 +239,7 @@ fun MeshCanvas(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .pointerInput(layout, widthDp, heightDp, bounds, effectiveZoom) {
+                        .pointerInput(activeLayout, widthDp, heightDp, bounds, effectiveZoom) {
                             detectTapGestures(
                                 onDoubleTap = {
                                     zoom = 1f
@@ -247,7 +247,7 @@ fun MeshCanvas(
                                     panY = 0f
                                 },
                                 onTap = { tap ->
-                                    val curLayout = layout ?: return@detectTapGestures
+                                    val curLayout = activeLayout ?: return@detectTapGestures
                                     val tapDpX = tap.x / density.density
                                     val tapDpY = tap.y / density.density
                                     val tapContentOffsetX = meshContentOffsetX(bounds, widthDp, effectiveZoom)

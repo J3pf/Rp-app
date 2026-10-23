@@ -23,11 +23,18 @@ fun relativeTime(
     }
 }
 
+private fun formatOneDecimal(value: Double): String {
+    val tenths = kotlin.math.round(value * 10.0).toLong()
+    val intPart = tenths / 10
+    val fracPart = kotlin.math.abs(tenths % 10)
+    return "$intPart.$fracPart"
+}
+
 fun humanSize(bytes: Long): String =
     when {
         bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        else -> "${bytes / (1024 * 1024)} MB"
+        bytes < 1024 * 1024 -> "${formatOneDecimal(bytes / 1024.0)} KB"
+        else -> "${formatOneDecimal(bytes / (1024.0 * 1024.0))} MB"
     }
 
 /** `#RRGGBB` → [Color]; color por defecto si el valor es inválido. */

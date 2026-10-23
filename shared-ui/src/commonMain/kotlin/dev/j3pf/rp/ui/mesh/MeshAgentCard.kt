@@ -419,7 +419,6 @@ private fun Modifier.workingCardBorder(
             ),
         label = "workingBorderProgress",
     )
-    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     return this.drawWithCache {
         val strokePx = 1.5.dp.toPx()
         val cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())

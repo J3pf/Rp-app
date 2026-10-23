@@ -110,10 +110,7 @@ fun formatMeshGroupChipLabel(
 }
 
 @Composable
-fun parseRelayColor(raw: String): Color =
-    runCatching {
-        parseColor(raw)
-    }.getOrElse { MaterialTheme.colorScheme.primary }
+fun parseRelayColor(raw: String): Color = parseColor(raw, fallback = MaterialTheme.colorScheme.primary)
 
 fun formatMeshRole(role: String): String =
     when (role.lowercase()) {
