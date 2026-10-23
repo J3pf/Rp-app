@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "rp-app"
-include(":app", ":protocol", ":relay-client")
+include(":app", ":protocol", ":relay-client", ":shared-ui")
