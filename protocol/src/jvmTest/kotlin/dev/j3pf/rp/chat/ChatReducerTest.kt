@@ -510,4 +510,43 @@ class ChatReducerTest {
         assertTrue(s.todos.isEmpty())
         assertTrue(s.subagents.isEmpty())
     }
+
+    @Test
+    fun `subagent_update y message_end toleran metricas y timestamps con decimales`() {
+        var s = ChatState()
+        val subJson =
+            """
+            {
+                "type": "subagent_update",
+                "taskId": "task-dec",
+                "agent": "worker",
+                "status": "done",
+                "startedAt": 1000.4,
+                "endedAt": 1500.6,
+                "durationMs": 500.2,
+                "tokens": {
+                    "input": 100.4,
+                    "output": 50.6,
+                    "cacheRead": 10.0,
+                    "cacheWrite": 5.2,
+                    "total": 166.2
+                }
+            }
+            """.trimIndent()
+        s = ChatReducer.reduce(s, ev(1, subJson), now = 1500)
+        val sub = checkNotNull(s.subagents["task-dec"])
+        assertEquals(1000L, sub.startedAt)
+        assertEquals(1501L, sub.endedAt)
+        assertEquals(500L, sub.durationMs)
+        assertEquals(100L, sub.tokens?.input)
+        assertEquals(51L, sub.tokens?.output)
+        assertEquals(166L, sub.tokens?.total)
+
+        val msgJson =
+            """{"type":"message_end","message":{"role":"assistant","timestamp":2000.4,"content":[{"type":"text","text":"Listo"}]}}"""
+        s = ChatReducer.reduce(s, ev(2, msgJson))
+        val assistant = s.items.filterIsInstance<AssistantMsg>().single()
+        assertEquals("assistant:2000", assistant.key)
+        assertEquals(2000L, assistant.at)
+    }
 }

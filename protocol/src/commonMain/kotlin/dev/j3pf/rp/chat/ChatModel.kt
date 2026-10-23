@@ -1,6 +1,9 @@
 package dev.j3pf.rp.chat
 
 import dev.j3pf.rp.protocol.Answer
+import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.SubagentInfo
 import dev.j3pf.rp.protocol.TodoItem
@@ -20,6 +23,10 @@ data class UserMsg(
     val imageCount: Int = 0,
     val failed: Boolean = false,
     val clientMsgId: String? = null,
+    val attachments: List<AttachmentRef> = emptyList(),
+    val delivery: String = Delivery.AUTO,
+    val method: String = DeliveryMethod.AUTO,
+    val asCommand: Boolean = false,
 ) : ChatItem
 
 sealed interface Block {

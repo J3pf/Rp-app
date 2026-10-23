@@ -300,11 +300,22 @@ object EntryKind {
     const val MODEL_CHANGE = "model_change"
 }
 
+object TolerantEntryListSerializer : TolerantListSerializer<Entry>({ Entry.serializer() })
+
+object TolerantAgentEventListSerializer : TolerantListSerializer<AgentEvent>({ AgentEvent.serializer() })
+
+object TolerantMachineSummaryListSerializer : TolerantListSerializer<MachineSummary>({ MachineSummary.serializer() })
+
+object TolerantAgentSummaryListSerializer : TolerantListSerializer<AgentSummary>({ AgentSummary.serializer() })
+
+object TolerantPromptListSerializer : TolerantListSerializer<Prompt>({ Prompt.serializer() })
+
 /** Cuerpo de `agent.event` (relay → app) y de los eventos en `AgentHistory`. */
 @Serializable
 data class AgentEvent(
     val agentId: String = "",
     val epoch: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
     val seq: Long = 0,
     val e: JsonObject,
     @Serializable(with = LenientLongSerializer::class)
@@ -315,8 +326,11 @@ data class AgentEvent(
 data class AgentHistory(
     val agentId: String,
     val epoch: String? = null,
+    @Serializable(with = TolerantEntryListSerializer::class)
     val entries: List<Entry> = emptyList(),
+    @Serializable(with = TolerantAgentEventListSerializer::class)
     val events: List<AgentEvent> = emptyList(),
+    @Serializable(with = LenientLongSerializer::class)
     val liveFromSeq: Long? = null,
     val truncated: Boolean = false,
 )
@@ -335,19 +349,24 @@ data class AppInfo(
 
 @Serializable
 data class AppWelcome(
+    @Serializable(with = TolerantMachineSummaryListSerializer::class)
     val machines: List<MachineSummary> = emptyList(),
+    @Serializable(with = TolerantAgentSummaryListSerializer::class)
     val agents: List<AgentSummary> = emptyList(),
+    @Serializable(with = TolerantPromptListSerializer::class)
     val openPrompts: List<Prompt> = emptyList(),
 )
 
 @Serializable
 data class MachinesUpdate(
+    @Serializable(with = TolerantMachineSummaryListSerializer::class)
     val upsert: List<MachineSummary> = emptyList(),
     val remove: List<String> = emptyList(),
 )
 
 @Serializable
 data class AgentsUpdate(
+    @Serializable(with = TolerantAgentSummaryListSerializer::class)
     val upsert: List<AgentSummary> = emptyList(),
     val remove: List<String> = emptyList(),
 )

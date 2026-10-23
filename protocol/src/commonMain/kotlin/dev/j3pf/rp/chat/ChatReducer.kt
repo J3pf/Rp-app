@@ -2,6 +2,9 @@ package dev.j3pf.rp.chat
 
 import dev.j3pf.rp.protocol.AgentEvent
 import dev.j3pf.rp.protocol.AgentHistory
+import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.Entry
 import dev.j3pf.rp.protocol.EntryKind
 import dev.j3pf.rp.protocol.Prompt
@@ -13,7 +16,7 @@ import dev.j3pf.rp.protocol.arr
 import dev.j3pf.rp.protocol.bool
 import dev.j3pf.rp.protocol.double
 import dev.j3pf.rp.protocol.int
-import dev.j3pf.rp.protocol.long
+import dev.j3pf.rp.protocol.lenientLong
 import dev.j3pf.rp.protocol.obj
 import dev.j3pf.rp.protocol.str
 import kotlinx.serialization.json.Json
@@ -147,6 +150,10 @@ object ChatReducer {
         clientMsgId: String,
         at: Long = Clock.System.now().toEpochMilliseconds(),
         imageCount: Int = 0,
+        attachments: List<AttachmentRef> = emptyList(),
+        delivery: String = Delivery.AUTO,
+        method: String = DeliveryMethod.AUTO,
+        asCommand: Boolean = false,
     ): ChatState {
         val trimmed = text.trim()
         val optimisticKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
@@ -158,6 +165,10 @@ object ChatReducer {
                 fromMobile = true,
                 imageCount = imageCount,
                 clientMsgId = clientMsgId,
+                attachments = attachments,
+                delivery = delivery,
+                method = method,
+                asCommand = asCommand,
             )
         val nextLocalSent = if (trimmed.isNotBlank()) state.localSent + trimmed else state.localSent
         return state.copy(
@@ -597,11 +608,11 @@ object ChatReducer {
         val tokenUsage =
             if (tokensObj != null) {
                 TokenUsage(
-                    input = tokensObj.long("input") ?: 0L,
-                    output = tokensObj.long("output") ?: 0L,
-                    cacheRead = tokensObj.long("cacheRead") ?: 0L,
-                    cacheWrite = tokensObj.long("cacheWrite") ?: 0L,
-                    total = tokensObj.long("total") ?: 0L,
+                    input = tokensObj.lenientLong("input") ?: 0L,
+                    output = tokensObj.lenientLong("output") ?: 0L,
+                    cacheRead = tokensObj.lenientLong("cacheRead") ?: 0L,
+                    cacheWrite = tokensObj.lenientLong("cacheWrite") ?: 0L,
+                    total = tokensObj.lenientLong("total") ?: 0L,
                     cost = tokensObj.double("cost"),
                 )
             } else {
@@ -618,10 +629,10 @@ object ChatReducer {
                 status = e.str("status") ?: prev?.status ?: "running",
                 model = e.str("model") ?: prev?.model,
                 thinking = e.str("thinking") ?: prev?.thinking,
-                startedAt = e.long("startedAt") ?: prev?.startedAt ?: now,
-                endedAt = e.long("endedAt") ?: prev?.endedAt,
+                startedAt = e.lenientLong("startedAt") ?: prev?.startedAt ?: now,
+                endedAt = e.lenientLong("endedAt") ?: prev?.endedAt,
                 durationMs =
-                    e.long("durationMs") ?: prev?.durationMs
+                    e.lenientLong("durationMs") ?: prev?.durationMs
                         ?: (if (prev?.startedAt != null && now >= prev.startedAt) now - prev.startedAt else null),
                 turns = e.int("turns") ?: prev?.turns ?: 0,
                 toolCalls = e.int("toolCalls") ?: prev?.toolCalls ?: 0,
@@ -743,7 +754,7 @@ object ChatReducer {
             UserMsg(
                 key = keyOf(msg, "user", fallback),
                 text = text,
-                at = msg.long("timestamp") ?: at,
+                at = msg.lenientLong("timestamp") ?: at,
                 fromMobile = mobile,
                 imageCount = images,
                 clientMsgId = cId,
@@ -805,7 +816,7 @@ object ChatReducer {
         return AssistantMsg(
             key = key,
             blocks = blocks,
-            at = msg.long("timestamp") ?: at,
+            at = msg.lenientLong("timestamp") ?: at,
             model = msg.str("model"),
             stopReason = msg.str("stopReason"),
             error = msg.str("errorMessage"),
@@ -819,7 +830,7 @@ object ChatReducer {
         role: String,
         fallback: String,
     ): String {
-        val ts = msg.long("timestamp")
+        val ts = msg.lenientLong("timestamp")
         return if (ts != null) "$role:$ts" else "$role:$fallback"
     }
 

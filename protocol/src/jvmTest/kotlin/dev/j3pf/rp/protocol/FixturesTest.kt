@@ -249,4 +249,55 @@ class FixturesTest {
         arr.forEach { e -> RpJson.decodeFromJsonElement(AgentEvent.serializer(), e) }
         check(arr[0].jsonObject.containsKey("e"))
     }
+
+    @Test
+    fun `AppWelcome y AgentHistory descartan elementos corruptos y aceptan seq decimales`() {
+        val welcomeJson =
+            """
+            {
+                "machines": [
+                    {"machineId": "m1", "name": "DevBox", "online": true},
+                    {"invalid": true}
+                ],
+                "agents": [
+                    {"agentId": "a1", "machineId": "m1", "name": "Agent 1"},
+                    {"badAgent": 123}
+                ],
+                "openPrompts": [
+                    {"promptId": "p1", "agentId": "a1", "title": "Confirm?"},
+                    {"missingPromptId": "nope"}
+                ]
+            }
+            """.trimIndent()
+        val welcome = RpJson.decodeFromString(AppWelcome.serializer(), welcomeJson)
+        assertEquals(1, welcome.machines.size)
+        assertEquals("m1", welcome.machines.single().machineId)
+        assertEquals(1, welcome.agents.size)
+        assertEquals("a1", welcome.agents.single().agentId)
+        assertEquals(1, welcome.openPrompts.size)
+        assertEquals("p1", welcome.openPrompts.single().promptId)
+
+        val historyJson =
+            """
+            {
+                "agentId": "a1",
+                "epoch": "E1",
+                "liveFromSeq": 12.0,
+                "entries": [
+                    {"eid": "e1", "kind": "user", "at": 100.4},
+                    {"missingEid": true}
+                ],
+                "events": [
+                    {"agentId": "a1", "seq": 11.0, "e": {"type": "agent_start"}},
+                    {"agentId": "a1", "seq": "not-a-number", "e": {"type": "agent_settled"}}
+                ]
+            }
+            """.trimIndent()
+        val history = RpJson.decodeFromString(AgentHistory.serializer(), historyJson)
+        assertEquals(12L, history.liveFromSeq)
+        assertEquals(1, history.entries.size)
+        assertEquals(100L, history.entries.single().at)
+        assertEquals(1, history.events.size)
+        assertEquals(11L, history.events.single().seq)
+    }
 }
