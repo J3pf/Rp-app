@@ -110,6 +110,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ./gradlew :protocol:test                       # shared + JVM protocol, chat, and crypto tests
 ./gradlew :protocol:jvmTest                     # KMP JVM test entry point
 ./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP/WS/session policy
+./gradlew :shared-ui:compileCommonMainKotlinMetadata :shared-ui:jvmTest       # shared Compose Multiplatform UI
 ./gradlew :app:testDirectDebugUnitTest         # Robolectric, MockWebServer, and Compose tests
 ./gradlew :app:assembleDirectDebug             # APK without Google services (direct channel)
 ./gradlew :app:assembleFcmDebug                # APK with optional FCM (requires app/google-services.json)
@@ -123,9 +124,10 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ## Repository structure
 
 ```
-protocol/   Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
+protocol/     Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
 relay-client/ Kotlin Multiplatform: shared HTTP, pairing/session, WS correlation/bus, and reconnect policy
-app/        Compose + Hilt + Room: data/{net,db,repo,secure}, push/, ui/{agents,chat,pending,promptsheet,settings,…}
+shared-ui/    Compose Multiplatform: shared theme, design tokens, custom canvas, screens, routes, and iOS MainViewController
+app/          Compose + Hilt + Room: data/{net,db,repo,secure}, push/, Android host shell & services
 ```
 
 ### Kotlin Multiplatform foundation
@@ -214,3 +216,15 @@ on Linux. No iOS socket driver is supplied. Duplicate explicit request IDs and
 cancelled-request pending cleanup retain their existing hazards; they are not fixed
 by this extraction. T4 can consume the shared `request`, `send`, `messages`, and
 connection state contracts without taking over native lifecycle or persistence.
+
+### Compose Multiplatform shared UI
+
+`shared-ui` targets Android (via AGP 9 `com.android.kotlin.multiplatform.library`), JVM 17, `iosArm64`, and `iosSimulatorArm64`. It contains the complete mobile presentation layer:
+
+- **Theme & Design Tokens**: `RpSpacing`, `RpShapes`, `RpGlows`, `RpGradients`, `RpMotion`, and the 4 visual themes (`gentleCute`, `gentleSexy`, `omarchy`, `system`).
+- **Shared Components**: `RpMarkdown`, `StatusChip`, `SurfaceCard`, `QuotaDynamicIsland`, and `EdgeFade`.
+- **Presentation Screens**: Pure Compose Multiplatform implementations of `AgentsContent`, `ChatComponents`, `ChatMessages`, `DiffSheet`, `NewAgentContent`, `OnboardingContent`, `PendingContent`, `PromptContent`, and `SettingsContent`.
+- **Mesh Topology Canvas**: Replaced Android native `android.graphics.Canvas`/`Paint` with pure CMP `DrawScope` canvas (`MeshCanvas.kt`) supporting pan, pinch-zoom, orthogonal connector buses with animated packet pulses, and auto-fit calibration.
+- **Navigation & Shell**: Type-safe `@Serializable` navigation destinations (`Routes.kt`), `AppTab`, `AppBottomBar`, and `LockScreen`.
+- **iOS Entry Point**: Exports `MainViewController` via `ComposeUIViewController { RemotePiApp() }` for consuming in iOS application wrappers.
+

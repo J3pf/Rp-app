@@ -34,7 +34,7 @@ Android and Kotlin Multiplatform (KMP) client for the RemotePi system. Provides 
 ./gradlew :app:lintDirectDebug
 
 # Complete full verification suite
-./gradlew testDirectDebugUnitTest :protocol:test :relay-client:jvmTest :app:lintDirectDebug
+./gradlew testDirectDebugUnitTest :protocol:test :relay-client:jvmTest :shared-ui:jvmTest :app:lintDirectDebug
 ```
 
 ## Boundaries & Non-Obvious Conventions
@@ -53,4 +53,4 @@ Android and Kotlin Multiplatform (KMP) client for the RemotePi system. Provides 
 
 ## Verification Before Turn End
 
-Always execute `./gradlew :protocol:test :relay-client:jvmTest :app:testDirectDebugUnitTest` and confirm zero failures before marking any task as done.
+Always execute `./gradlew :protocol:test :relay-client:jvmTest :shared-ui:jvmTest :app:testDirectDebugUnitTest` and confirm zero failures before marking any task as done.
