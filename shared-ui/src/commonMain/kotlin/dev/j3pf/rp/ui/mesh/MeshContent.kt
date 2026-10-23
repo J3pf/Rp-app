@@ -1,0 +1,448 @@
+package dev.j3pf.rp.ui.mesh
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import dev.j3pf.rp.protocol.MeshComm
+import dev.j3pf.rp.protocol.MeshNode
+import dev.j3pf.rp.ui.components.horizontalEdgeFade
+import dev.j3pf.rp.ui.components.rememberShimmerBrush
+
+/** Stateless body shared with Compose tests; screen state and actions remain owned by the ViewModel. */
+@Composable
+fun MeshScreenContent(
+    uiState: MeshUiState,
+    onOpenChat: (String) -> Unit,
+    title: String = "Red de agentes",
+    recenterDesc: String = "Recentrar organigrama",
+    onToggleListView: () -> Unit = {},
+    onSelectMachine: (String?) -> Unit = {},
+    onSelectGroup: (String?) -> Unit = {},
+    onNodeClick: (String) -> Unit = {},
+    onEdgeClick: (String) -> Unit = {},
+    onViewportSizeChanged: (Float, Float) -> Unit = { _, _ -> },
+    onDismissNodeDetail: () -> Unit = {},
+    onViewConversation: (String) -> Unit = {},
+    onDismissConversation: () -> Unit = {},
+    onLoadMoreConversation: () -> Unit = {},
+    onRetry: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val compactFilters = maxHeight < 500.dp
+        var recenterTrigger by remember { mutableIntStateOf(0) }
+
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 64.dp)
+                        .padding(start = 20.dp, end = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (!uiState.isListView && !uiState.isEmpty && uiState.snapshot != null) {
+                        IconButton(
+                            onClick = { recenterTrigger++ },
+                            modifier =
+                                Modifier.size(48.dp).semantics {
+                                    contentDescription = recenterDesc
+                                },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = recenterDesc,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    TextButton(
+                        onClick = onToggleListView,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(
+                            text = if (uiState.isListView) "Vista de diagrama" else "Vista de lista",
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
+            }
+
+            if (!uiState.isConnected) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "Desconectado — mostrando datos locales",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reintentar") }
+                }
+            }
+
+            if (compactFilters) {
+                CompactSelectorRow {
+                    if (uiState.machineChips.isNotEmpty()) {
+                        Text("Máquinas", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MachineFilterChips(uiState, onSelectMachine)
+                    }
+                    if (uiState.groupChips.isNotEmpty()) {
+                        Text("Grupos", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        GroupFilterChips(uiState, onSelectGroup)
+                    }
+                }
+            } else {
+                if (uiState.machineChips.isNotEmpty()) {
+                    SelectorRow(label = "Máquinas") {
+                        MachineFilterChips(uiState, onSelectMachine)
+                    }
+                }
+                if (uiState.groupChips.isNotEmpty()) {
+                    SelectorRow(label = "Grupos") {
+                        GroupFilterChips(uiState, onSelectGroup)
+                    }
+                }
+            }
+
+            val errorMessage = uiState.errorMessage
+            when {
+                errorMessage != null -> {
+                    MeshErrorState(
+                        message = errorMessage,
+                        onRetry = onRetry,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
+
+                uiState.isLoading -> {
+                    LoadingSkeleton(Modifier.weight(1f).fillMaxWidth())
+                }
+
+                uiState.isEmpty || uiState.snapshot == null -> {
+                    EmptyMeshState(Modifier.weight(1f).fillMaxWidth())
+                }
+
+                uiState.isListView -> {
+                    MeshListView(
+                        snapshot = uiState.snapshot,
+                        layout = uiState.layoutResult,
+                        onNodeClick = onNodeClick,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
+
+                else -> {
+                    MeshCanvas(
+                        layout = uiState.layoutResult,
+                        activeBubbles = uiState.activeBubbles,
+                        recenterTrigger = recenterTrigger,
+                        onNodeClick = onNodeClick,
+                        onEdgeClick = onEdgeClick,
+                        onViewportSizeChanged = onViewportSizeChanged,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
+            }
+
+            LiveStrip(comms = uiState.liveComms, nodes = uiState.snapshot?.nodes.orEmpty())
+        }
+    }
+
+    uiState.nodeDetail?.let { detail ->
+        MeshNodeDetailSheet(
+            detail = detail,
+            onDismiss = onDismissNodeDetail,
+            onOpenChat = onOpenChat,
+            onViewConversation = onViewConversation,
+        )
+    }
+    uiState.conversationDetail?.let { detail ->
+        MeshConversationSheet(
+            detail = detail,
+            onDismiss = onDismissConversation,
+            onLoadOlder = onLoadMoreConversation,
+        )
+    }
+}
+
+@Composable
+fun MachineFilterChips(
+    uiState: MeshUiState,
+    onSelectMachine: (String?) -> Unit,
+) {
+    uiState.machineChips.forEach { machine ->
+        FilterChip(
+            selected = uiState.selectedMachineId == machine.machineId,
+            onClick = { onSelectMachine(machine.machineId) },
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (machine.machineId != null && machine.color.isNotBlank()) {
+                        Surface(Modifier.size(10.dp), shape = CircleShape, color = parseRelayColor(machine.color)) {}
+                    }
+                    Text(
+                        if (machine.machineId == null) {
+                            if (machine.agentCount > 0) "Todas · ${machine.agentCount}" else "Todas"
+                        } else {
+                            "${formatMeshMachineName(machine.name)} · ${machine.agentCount}"
+                        },
+                    )
+                }
+            },
+            modifier = Modifier.heightIn(min = 48.dp),
+        )
+    }
+}
+
+@Composable
+fun GroupFilterChips(
+    uiState: MeshUiState,
+    onSelectGroup: (String?) -> Unit,
+) {
+    val groupLabels =
+        remember(uiState.snapshot) {
+            val snapshot = uiState.snapshot
+            if (snapshot == null) {
+                emptyMap()
+            } else {
+                val nodesById = snapshot.nodes.associateBy { it.agentId }
+                snapshot.groups.associate { group ->
+                    val orchestratorNode = group.orchestratorAgentId?.let { nodesById[it] }
+                    group.groupId to formatMeshGroupChipLabel(group, orchestratorNode, snapshot.nodes)
+                }
+            }
+        }
+
+    uiState.groupChips.forEach { group ->
+        val groupLabel =
+            if (group.isSolo) {
+                "Sin grupo"
+            } else {
+                groupLabels[group.groupId]
+                    ?: if (!isIdLooking(group.label) && !group.label.equals("Mesh Group", ignoreCase = true)) {
+                        group.label
+                    } else {
+                        "Grupo de agentes"
+                    }
+            }
+        FilterChip(
+            selected = uiState.selectedGroupId == group.groupId,
+            onClick = { onSelectGroup(group.groupId) },
+            label = { Text("$groupLabel · ${group.memberCount}") },
+            modifier = Modifier.heightIn(min = 48.dp),
+        )
+    }
+}
+
+@Composable
+fun CompactSelectorRow(content: @Composable () -> Unit) {
+    val scrollState = rememberScrollState()
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .horizontalEdgeFade(scrollState, edgeColor = MaterialTheme.colorScheme.background)
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 12.dp)
+                .heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun SelectorRow(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp),
+        )
+        val scrollState = rememberScrollState()
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalEdgeFade(scrollState, edgeColor = MaterialTheme.colorScheme.background)
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun LoadingSkeleton(modifier: Modifier = Modifier) {
+    val shimmer = rememberShimmerBrush()
+    Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Cargando red de agentes…", style = MaterialTheme.typography.bodyMedium)
+        repeat(4) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(shimmer),
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyMeshState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("No hay agentes", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Abre Pi con el plugin rp en tus PCs para ver la red de agentes aquí.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+fun MeshErrorState(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Red de agentes no disponible", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = onRetry,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
+            Text("Reintentar")
+        }
+    }
+}
+
+@Composable
+fun LiveStrip(
+    comms: List<MeshComm>,
+    nodes: List<MeshNode> = emptyList(),
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClick = { expanded = !expanded })
+                .semantics { contentDescription = if (expanded) "Contraer mensajes en vivo" else "Expandir mensajes en vivo" },
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("En vivo", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            val visible = if (expanded) comms.take(5) else comms.take(1)
+            visible.forEach { comm ->
+                val fromNode = comm.fromAgentId?.let { id -> nodes.firstOrNull { it.agentId == id } }
+                val toNode = comm.toAgentId?.let { id -> nodes.firstOrNull { it.agentId == id } }
+                val fromName =
+                    fromNode?.let { formatMeshDisplayName(it, nodes) }
+                        ?: if (!isIdLooking(comm.fromName) && !comm.fromName.equals("Agent", ignoreCase = true)) comm.fromName else "Agente"
+                val toName =
+                    toNode?.let { formatMeshDisplayName(it, nodes) }
+                        ?: if (!isIdLooking(comm.toName) && !comm.toName.equals("Agent", ignoreCase = true)) comm.toName else "Agente"
+                Text(
+                    text = "$fromName → $toName: ${formatMeshCommText(comm.text)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            if (comms.isEmpty()) {
+                Text(
+                    text = "Sin mensajes recientes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}

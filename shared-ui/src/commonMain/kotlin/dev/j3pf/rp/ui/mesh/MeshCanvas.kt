@@ -1,7 +1,5 @@
 package dev.j3pf.rp.ui.mesh
 
-import android.graphics.DashPathEffect
-import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -10,7 +8,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
@@ -22,35 +19,46 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.withTranslation
+import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.ui.mesh.layout.LayoutBounds
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.NodeDisplayMode
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
+import dev.j3pf.rp.ui.util.currentTimeMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import android.graphics.Paint as AndroidPaint
-import android.graphics.Path as AndroidPath
 
 /**
  * Renders the agent mesh topology strictly within its viewport (Specs S2, S3).
@@ -68,16 +76,9 @@ fun MeshCanvas(
     onEdgeClick: (String) -> Unit,
     onViewportSizeChanged: (Float, Float) -> Unit = { _, _ -> },
 ) {
-    val context = LocalContext.current
     val density = LocalDensity.current
     val scheme = MaterialTheme.colorScheme
-    val localReducedMotion = LocalReducedMotion.current
-    val systemReducedMotion =
-        remember(context) {
-            runCatching { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
-                .getOrDefault(false)
-        }
-    val reducedMotion = localReducedMotion || systemReducedMotion
+    val reducedMotion = LocalReducedMotion.current
     var zoom by remember { mutableFloatStateOf(1f) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
@@ -88,10 +89,8 @@ fun MeshCanvas(
         panY = 0f
     }
 
-    val frameTime = remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val paint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
-    val textPaint = remember { AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG) }
-    val path = remember { AndroidPath() }
+    val frameTime = remember { mutableLongStateOf(currentTimeMillis()) }
+    val path = remember { Path() }
     val allNodes =
         remember(layout) {
             layout
@@ -101,16 +100,15 @@ fun MeshCanvas(
                 .orEmpty()
         }
 
-    val nowMs = System.currentTimeMillis()
+    val nowMs = frameTime.longValue
     val activeEdgeExpiresAt =
         layout
             ?.edges
-            .orEmpty()
-            .mapNotNull { edge ->
+            ?.mapNotNull { edge ->
                 edge.edge.lastAt
                     ?.plus(ACTIVE_EDGE_MS + 1)
                     ?.takeIf { it > nowMs }
-            }.minOrNull()
+            }?.minOrNull()
     val hasMovingContent =
         !reducedMotion &&
             (
@@ -119,23 +117,23 @@ fun MeshCanvas(
             )
 
     LaunchedEffect(hasMovingContent, activeEdgeExpiresAt) {
-        frameTime.longValue = System.currentTimeMillis()
+        frameTime.longValue = currentTimeMillis()
         if (hasMovingContent) {
             while (isActive) {
-                androidx.compose.runtime.withFrameNanos {
-                    frameTime.longValue = System.currentTimeMillis()
+                withFrameNanos {
+                    frameTime.longValue = currentTimeMillis()
                 }
             }
         } else if (activeEdgeExpiresAt != null) {
-            delay((activeEdgeExpiresAt - System.currentTimeMillis()).coerceAtLeast(1L))
-            frameTime.longValue = System.currentTimeMillis()
+            delay((activeEdgeExpiresAt - currentTimeMillis()).coerceAtLeast(1L))
+            frameTime.longValue = currentTimeMillis()
         }
     }
 
     val dashEffects =
         remember {
             val intervals = floatArrayOf(15f, 15f)
-            Array(30) { phase -> DashPathEffect(intervals, phase.toFloat()) }
+            Array(30) { phase -> PathEffect.dashPathEffect(intervals, phase.toFloat()) }
         }
     val bubblesByEdge =
         remember(activeBubbles, layout) {
@@ -153,6 +151,7 @@ fun MeshCanvas(
         }
 
     val cardHeights = remember { mutableStateMapOf<String, Float>() }
+    val textMeasurer = rememberTextMeasurer()
 
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
@@ -204,7 +203,6 @@ fun MeshCanvas(
         val autoFitScale = minOf(1f, naturalFitScale).coerceIn(MIN_ZOOM, 1f)
         val effectiveZoom = (zoom * autoFitScale).coerceIn(MIN_ZOOM, MAX_ZOOM)
 
-        // C9: Transform gestures on parent Box so dragging on cards or empty space works seamlessly
         Box(
             modifier =
                 Modifier
@@ -237,52 +235,51 @@ fun MeshCanvas(
                         }
                     },
         ) {
-            // Canvas for connectors, active glow, dashed lines, and comm particles/bubbles
             Canvas(
-                Modifier
-                    .fillMaxSize()
-                    .pointerInput(layout, widthDp, heightDp, bounds, effectiveZoom) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                zoom = 1f
-                                panX = 0f
-                                panY = 0f
-                            },
-                            onTap = { tap ->
-                                val curLayout = layout ?: return@detectTapGestures
-                                val tapDpX = tap.x / density.density
-                                val tapDpY = tap.y / density.density
-                                val tapContentOffsetX = meshContentOffsetX(bounds, widthDp, effectiveZoom)
-                                val tapContentOffsetY = meshContentOffsetY(bounds, effectiveZoom, topPaddingDp)
-                                val localTap =
-                                    Offset(
-                                        x = (tapDpX - tapContentOffsetX - panX) / effectiveZoom,
-                                        y = (tapDpY - tapContentOffsetY - panY) / effectiveZoom,
-                                    )
-                                // Check if tap hit any node card
-                                val hitNode =
-                                    curLayout.nodes.values.firstOrNull { node ->
-                                        localTap.x >= node.left &&
-                                            localTap.x <= node.right &&
-                                            localTap.y >= node.top &&
-                                            localTap.y <= node.bottom
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(layout, widthDp, heightDp, bounds, effectiveZoom) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    zoom = 1f
+                                    panX = 0f
+                                    panY = 0f
+                                },
+                                onTap = { tap ->
+                                    val curLayout = layout ?: return@detectTapGestures
+                                    val tapDpX = tap.x / density.density
+                                    val tapDpY = tap.y / density.density
+                                    val tapContentOffsetX = meshContentOffsetX(bounds, widthDp, effectiveZoom)
+                                    val tapContentOffsetY = meshContentOffsetY(bounds, effectiveZoom, topPaddingDp)
+                                    val localTap =
+                                        Offset(
+                                            x = (tapDpX - tapContentOffsetX - panX) / effectiveZoom,
+                                            y = (tapDpY - tapContentOffsetY - panY) / effectiveZoom,
+                                        )
+                                    // Check if tap hit any node card
+                                    val hitNode =
+                                        curLayout.nodes.values.firstOrNull { node ->
+                                            localTap.x >= node.left &&
+                                                localTap.x <= node.right &&
+                                                localTap.y >= node.top &&
+                                                localTap.y <= node.bottom
+                                        }
+                                    if (hitNode != null) {
+                                        onNodeClick(hitNode.node.agentId)
+                                        return@detectTapGestures
                                     }
-                                if (hitNode != null) {
-                                    onNodeClick(hitNode.node.agentId)
-                                    return@detectTapGestures
-                                }
-                                // Check edge tap
-                                val hitEdge =
-                                    curLayout.edges.firstOrNull { edge ->
-                                        distanceToCurve(localTap, edge) <= 20f
-                                    }
-                                hitEdge?.let { onEdgeClick(it.edge.edgeId) }
-                            },
-                        )
-                    },
+                                    // Check edge tap
+                                    val hitEdge =
+                                        curLayout.edges.firstOrNull { edge ->
+                                            distanceToCurve(localTap, edge) <= 20f
+                                        }
+                                    hitEdge?.let { onEdgeClick(it.edge.edgeId) }
+                                },
+                            )
+                        },
             ) {
                 val curLayout = activeLayout ?: return@Canvas
-                val nativeCanvas = drawContext.canvas.nativeCanvas
                 val currentTimeMs = frameTime.longValue
                 val drawEffectiveZoom = effectiveZoom
                 val drawContentOffsetX = meshContentOffsetX(bounds, widthDp, drawEffectiveZoom)
@@ -290,19 +287,21 @@ fun MeshCanvas(
                 val drawPanX = panX
                 val drawPanY = panY
 
-                nativeCanvas.withTranslation(
-                    (drawContentOffsetX + drawPanX) * density.density,
-                    (drawContentOffsetY + drawPanY) * density.density,
-                ) {
-                    nativeCanvas.scale(
-                        drawEffectiveZoom * density.density,
-                        drawEffectiveZoom * density.density,
+                withTransform({
+                    translate(
+                        left = (drawContentOffsetX + drawPanX) * density.density,
+                        top = (drawContentOffsetY + drawPanY) * density.density,
                     )
-
+                    scale(
+                        scaleX = drawEffectiveZoom * density.density,
+                        scaleY = drawEffectiveZoom * density.density,
+                        pivot = Offset.Zero,
+                    )
+                }) {
                     // Draw edge curves in DP space
-                    activeLayout.edges.forEach { positioned ->
-                        val fromNode = activeLayout.nodes[positioned.edge.a]
-                        val toNode = activeLayout.nodes[positioned.edge.b]
+                    curLayout.edges.forEach { positioned ->
+                        val fromNode = curLayout.nodes[positioned.edge.a]
+                        val toNode = curLayout.nodes[positioned.edge.b]
                         // Sibling roots on top row have no hierarchy connector (V6, D4)
                         if (fromNode?.level == 0 && toNode?.level == 0) return@forEach
 
@@ -317,7 +316,7 @@ fun MeshCanvas(
                             }
                         } else {
                             path.moveTo(positioned.fromX, positioned.fromY)
-                            path.quadTo(
+                            path.quadraticTo(
                                 positioned.controlX,
                                 positioned.controlY,
                                 positioned.toX,
@@ -329,38 +328,47 @@ fun MeshCanvas(
                         val edgeTint = if (edge.pendingAsk) scheme.tertiary else scheme.outlineVariant
 
                         if (active) {
-                            paint.reset()
-                            paint.isAntiAlias = true
-                            paint.style = AndroidPaint.Style.STROKE
-                            paint.strokeWidth = 3.5f
-                            paint.strokeCap = AndroidPaint.Cap.ROUND
-                            paint.color = scheme.primary.copy(alpha = 0.28f).toArgb()
-                            nativeCanvas.drawPath(path, paint)
+                            drawPath(
+                                path = path,
+                                color = scheme.primary.copy(alpha = 0.28f),
+                                style =
+                                    Stroke(
+                                        width = 3.5f,
+                                        cap = StrokeCap.Round,
+                                    ),
+                            )
                         }
 
-                        paint.reset()
-                        paint.isAntiAlias = true
-                        paint.style = AndroidPaint.Style.STROKE
-                        paint.strokeWidth = if (active) 2f else 1.2f
-                        paint.strokeCap = AndroidPaint.Cap.ROUND
                         val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
-                        paint.color = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f).toArgb()
-                        if (edge.pendingAsk) {
-                            val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
-                            paint.pathEffect = dashEffects[phaseIdx]
-                        }
-                        nativeCanvas.drawPath(path, paint)
-                        paint.pathEffect = null
+                        val edgeColor = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f)
+                        val edgePathEffect =
+                            if (edge.pendingAsk) {
+                                val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
+                                dashEffects[phaseIdx]
+                            } else {
+                                null
+                            }
+
+                        drawPath(
+                            path = path,
+                            color = edgeColor,
+                            style =
+                                Stroke(
+                                    width = if (active) 2f else 1.2f,
+                                    cap = StrokeCap.Round,
+                                    pathEffect = edgePathEffect,
+                                ),
+                        )
                     }
 
                     // In-flight comms and speech bubbles
                     bubblesByEdge.values.forEach { edgeBubbles ->
                         val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(1)
                         val firstComm = visibleBubbles.first().comm
-                        val firstSender = firstComm.fromAgentId?.let(activeLayout.nodes::get) ?: return@forEach
-                        val firstReceiver = firstComm.toAgentId?.let(activeLayout.nodes::get) ?: return@forEach
+                        val firstSender = firstComm.fromAgentId?.let(curLayout.nodes::get) ?: return@forEach
+                        val firstReceiver = firstComm.toAgentId?.let(curLayout.nodes::get) ?: return@forEach
                         val firstEdge =
-                            activeLayout.edges.firstOrNull {
+                            curLayout.edges.firstOrNull {
                                 (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
                                     (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
                             }
@@ -383,8 +391,6 @@ fun MeshCanvas(
 
                         visibleBubbles.forEach bubbleLoop@{ bubble ->
                             val comm = bubble.comm
-                            val sender = comm.fromAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
-                            val receiver = comm.toAgentId?.let(activeLayout.nodes::get) ?: return@bubbleLoop
                             val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
                             val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
 
@@ -396,17 +402,21 @@ fun MeshCanvas(
                                             edgeFromX + (edgeToX - edgeFromX) * progress,
                                             edgeFromY + (edgeToY - edgeFromY) * progress,
                                         )
-                                paint.reset()
-                                paint.isAntiAlias = true
-                                paint.color = scheme.primary.copy(alpha = 0.25f).toArgb()
-                                nativeCanvas.drawCircle(point.x, point.y, 5f, paint)
-                                paint.color = scheme.primary.toArgb()
-                                nativeCanvas.drawCircle(point.x, point.y, 2.5f, paint)
+                                drawCircle(
+                                    color = scheme.primary.copy(alpha = 0.25f),
+                                    radius = 5f,
+                                    center = point,
+                                )
+                                drawCircle(
+                                    color = scheme.primary,
+                                    radius = 2.5f,
+                                    center = point,
+                                )
                             }
 
                             // Speech bubble with message preview positioned clear of every card.
                             val bubbleText = formatMeshCommText(comm.text)
-                            val bubbleHalfWidth = speechBubbleHalfWidth(bubbleText, textPaint)
+                            val bubbleHalfWidth = speechBubbleHalfWidth(bubbleText, textMeasurer, density)
                             val safeMidpointY =
                                 safeCommBubbleCenterY(
                                     midpointY = midpointY,
@@ -417,15 +427,14 @@ fun MeshCanvas(
                                     bubbleHalfWidth = bubbleHalfWidth,
                                 )
                             drawSpeechBubble(
-                                nativeCanvas,
-                                midpointX,
-                                safeMidpointY,
-                                bubbleText,
-                                bubbleHalfWidth * 2f,
-                                paint,
-                                textPaint,
-                                scheme.surfaceVariant,
-                                scheme.onSurfaceVariant,
+                                textMeasurer = textMeasurer,
+                                density = density,
+                                centerX = midpointX,
+                                centerY = safeMidpointY,
+                                text = bubbleText,
+                                width = bubbleHalfWidth * 2f,
+                                background = scheme.surfaceVariant,
+                                foreground = scheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -554,38 +563,57 @@ private fun pointAlongEdge(
 
 private fun speechBubbleHalfWidth(
     text: String,
-    textPaint: AndroidPaint,
+    textMeasurer: TextMeasurer,
+    density: Density,
 ): Float {
-    textPaint.reset()
-    textPaint.isAntiAlias = true
-    textPaint.textSize = 10f
-    textPaint.textAlign = AndroidPaint.Align.CENTER
     val display = if (text.length > 25) text.take(24) + "…" else text
-    return (textPaint.measureText(display) + 16f) / 2f
+    val measured = textMeasurer.measure(display, TextStyle(fontSize = 10.sp))
+    return (measured.size.width / density.density + 16f) / 2f
 }
 
-private fun drawSpeechBubble(
-    canvas: android.graphics.Canvas,
+private fun DrawScope.drawSpeechBubble(
+    textMeasurer: TextMeasurer,
+    density: Density,
     centerX: Float,
     centerY: Float,
     text: String,
     width: Float,
-    paint: AndroidPaint,
-    textPaint: AndroidPaint,
     background: Color,
     foreground: Color,
 ) {
-    textPaint.reset()
-    textPaint.isAntiAlias = true
-    textPaint.textSize = 10f
-    textPaint.textAlign = AndroidPaint.Align.CENTER
-    textPaint.color = foreground.toArgb()
     val display = if (text.length > 25) text.take(24) + "…" else text
-    paint.reset()
-    paint.isAntiAlias = true
-    paint.color = background.toArgb()
-    canvas.drawRoundRect(centerX - width / 2f, centerY - 9f, centerX + width / 2f, centerY + 9f, 9f, 9f, paint)
-    canvas.drawText(display, centerX, centerY + 3.5f, textPaint)
+    val textLayoutResult =
+        textMeasurer.measure(
+            text = display,
+            style =
+                TextStyle(
+                    fontSize = 10.sp,
+                    color = foreground,
+                    textAlign = TextAlign.Center,
+                ),
+        )
+    drawRoundRect(
+        color = background,
+        topLeft = Offset(centerX - width / 2f, centerY - 9f),
+        size = Size(width, 18f),
+        cornerRadius = CornerRadius(9f, 9f),
+    )
+    withTransform({
+        scale(
+            scaleX = 1f / density.density,
+            scaleY = 1f / density.density,
+            pivot = Offset(centerX, centerY),
+        )
+    }) {
+        drawText(
+            textLayoutResult = textLayoutResult,
+            topLeft =
+                Offset(
+                    x = centerX * density.density - textLayoutResult.size.width / 2f,
+                    y = centerY * density.density - textLayoutResult.size.height / 2f,
+                ),
+        )
+    }
 }
 
 private fun pulse(nowMs: Long): Float = 0.5f + 0.5f * sin(nowMs / 700f * (2f * PI.toFloat()))
