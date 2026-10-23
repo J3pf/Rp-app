@@ -5,41 +5,27 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
@@ -54,7 +40,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -68,9 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,37 +66,27 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.R
-import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.UploadState
-import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.Prompt
-import dev.j3pf.rp.protocol.TodoItem
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.StatusChip
-import dev.j3pf.rp.ui.components.TagChip
 import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.components.rememberActivity
 import dev.j3pf.rp.ui.promptsheet.AnswerUi
 import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
-import dev.j3pf.rp.ui.theme.LocalReducedMotion
-import dev.j3pf.rp.ui.theme.RpColors
-import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.util.AuthResult
 import dev.j3pf.rp.util.agentTitle
-import dev.j3pf.rp.util.humanSize
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -427,7 +400,7 @@ fun ChatContent(
 
     if (showInfo && agent != null) {
         InfoDialog(
-            a = agent,
+            agent = agent,
             liveModel = ui.chat.model,
             liveThinking = ui.chat.thinkingLevel,
             onDismiss = { showInfo = false },
@@ -596,299 +569,30 @@ internal fun MessageList(
         androidx.compose.foundation.lazy
             .rememberLazyListState(),
 ) {
-    val scope = rememberCoroutineScope()
-    val rawItems = ui.chat.display
-    val items =
-        remember(rawItems) {
-            val inlineToolCallIds =
-                rawItems
-                    .asSequence()
-                    .filterIsInstance<dev.j3pf.rp.chat.AssistantMsg>()
-                    .flatMap { it.blocks.asSequence() }
-                    .filterIsInstance<Block.ToolCall>()
-                    .mapNotNull { it.toolCallId }
-                    .toSet()
-            if (inlineToolCallIds.isEmpty()) {
-                rawItems
-            } else {
-                rawItems.filterNot { it is dev.j3pf.rp.chat.SubagentCardItem && it.info.taskId in inlineToolCallIds }
-            }
-        }
-
-    if (items.isEmpty()) {
-        Column(
-            modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            if (
-                ui.syncingHistory ||
-                ui.refreshing ||
-                ui.conn is dev.j3pf.rp.data.net.ConnState.Connecting
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(32.dp),
-                    strokeWidth = 3.dp,
-                )
-                Text("Sincronizando historial…", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Descargando los mensajes recientes de la sesión.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            } else {
-                Text("Sin mensajes todavía", style = MaterialTheme.typography.titleMedium)
-                Text("Escribe abajo para hablar con este agente.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        return
-    }
-
-    val reversedItems = remember(items) { items.asReversed() }
-
-    val streamingMsg = ui.chat.streaming
-    val isAgentWorking =
-        (ui.sending || ui.agent?.status == "working" || ui.chat.working) &&
-            (streamingMsg == null || streamingMsg.blocks.isEmpty())
-
-    val isScrolledUp by remember {
-        derivedStateOf {
-            val maxBottomIndex = if (isAgentWorking) 1 else 0
-            listState.firstVisibleItemIndex > maxBottomIndex ||
-                (listState.firstVisibleItemIndex == maxBottomIndex && listState.firstVisibleItemScrollOffset > 48)
-        }
-    }
-
-    val itemsCountWhenScrolledUp = remember { mutableIntStateOf(items.size) }
-
-    LaunchedEffect(isScrolledUp) {
-        if (!isScrolledUp) {
-            itemsCountWhenScrolledUp.intValue = items.size
-        }
-    }
-
-    val unreadNewItems by remember(items.size, ui.unreadCount) {
-        derivedStateOf {
-            if (isScrolledUp) {
-                if (ui.unreadCount > 0) {
-                    ui.unreadCount
-                } else {
-                    (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
-                }
-            } else {
-                0
-            }
-        }
-    }
-
-    val lastItem = items.lastOrNull()
-    val lastItemKey = lastItem?.key
-    val streamingTextLength = (lastItem as? dev.j3pf.rp.chat.AssistantMsg)?.plainText?.length ?: 0
-
-    // Plain mutable holder avoiding SnapshotState mutation inside LaunchedEffect to prevent recomposition loops
-    val prevItemsSize =
-        remember {
-            object {
-                var value = items.size
-            }
-        }
-
-    LaunchedEffect(lastItemKey, items.size, streamingTextLength) {
-        val isNewItem = items.size != prevItemsSize.value || lastItemKey?.startsWith("local:") == true
-        prevItemsSize.value = items.size
-
-        if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
-            if (!listState.isScrollInProgress) {
-                if (isNewItem) {
-                    listState.animateScrollToItem(0)
-                } else if (!isScrolledUp) {
-                    listState.scrollToItem(0)
-                }
-            }
-        }
-    }
-
-    val baseDensity = androidx.compose.ui.platform.LocalDensity.current
-    val scaledDensity =
-        remember(baseDensity, ui.chatFontScale) {
-            androidx.compose.ui.unit.Density(
-                density = baseDensity.density,
-                fontScale = baseDensity.fontScale * ui.chatFontScale,
-            )
-        }
-
-    val itemSpacing =
-        when (ui.chatMessageSpacing) {
-            "compact" -> 2.dp
-            "spacious" -> 10.dp
-            else -> 4.dp
-        }
-    val verticalListPadding =
-        when (ui.chatMessageSpacing) {
-            "compact" -> 3.dp
-            "spacious" -> 10.dp
-            else -> 6.dp
-        }
-
-    Box(modifier = modifier.fillMaxWidth()) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalDensity provides scaledDensity,
-        ) {
-            LazyColumn(
-                state = listState,
-                reverseLayout = true,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = verticalListPadding),
-                verticalArrangement = Arrangement.spacedBy(itemSpacing, Alignment.Bottom),
-            ) {
-                if (isAgentWorking) {
-                    item(key = "working-indicator", contentType = "WorkingIndicator") {
-                        val indHPad =
-                            when (ui.chatMessageSpacing) {
-                                "compact" -> 8.dp
-                                "spacious" -> 14.dp
-                                else -> 10.dp
-                            }
-                        val indVPad =
-                            when (ui.chatMessageSpacing) {
-                                "compact" -> 4.dp
-                                "spacious" -> 9.dp
-                                else -> 6.dp
-                            }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                                shape = RpShapes.bubbleAgent,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = indHPad, vertical = indVPad),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    val reducedMotion = LocalReducedMotion.current
-                                    if (reducedMotion) {
-                                        CircularProgressIndicator(
-                                            progress = { 0.75f },
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    } else {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                    val runningTool =
-                                        ui.chat.tools.values
-                                            .lastOrNull { it.status == dev.j3pf.rp.chat.ToolStatus.RUNNING }
-                                    val statusText =
-                                        when {
-                                            ui.sending -> "Enviando mensaje…"
-                                            runningTool != null -> "Ejecutando ${runningTool.name}…"
-                                            else -> "Pensando…"
-                                        }
-                                    Text(
-                                        text = statusText,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Medium,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                items(
-                    reversedItems,
-                    key = { it.key },
-                    contentType = { it::class.simpleName },
-                ) { item ->
-                    val reducedMotion = LocalReducedMotion.current
-                    val itemModifier =
-                        if (reducedMotion) {
-                            Modifier
-                        } else {
-                            Modifier.animateItem(
-                                fadeInSpec = null,
-                                fadeOutSpec = null,
-                            )
-                        }
-                    Box(modifier = itemModifier) {
-                        ChatItemView(
-                            item = item,
-                            tools = ui.chat.tools,
-                            busyPromptId = busyPromptId,
-                            onAnswerPrompt = onAnswerPrompt,
-                            spacingMode = ui.chatMessageSpacing,
-                            onRetryUserMessage = onRetryUserMessage,
-                        )
-                    }
-                }
-            }
-        }
-
-        val reducedMotion = LocalReducedMotion.current
-        val enterTransition =
-            if (reducedMotion) {
-                EnterTransition.None
-            } else {
-                fadeIn() + slideInVertically { it / 2 }
-            }
-        val exitTransition =
-            if (reducedMotion) {
-                ExitTransition.None
-            } else {
-                fadeOut() + slideOutVertically { it / 2 }
-            }
-
-        AnimatedVisibility(
-            visible = isScrolledUp,
-            enter = enterTransition,
-            exit = exitTransition,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp),
-        ) {
-            Surface(
-                onClick = {
-                    scope.launch {
-                        listState.animateScrollToItem(0)
-                    }
-                },
-                shape = RpShapes.pill,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shadowElevation = 6.dp,
-                tonalElevation = 3.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.ArrowDownward,
-                        contentDescription = "Ir al más reciente",
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = if (unreadNewItems > 0) "Más recientes ($unreadNewItems)" else "Más recientes",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-        }
-    }
+    dev.j3pf.rp.ui.chat.MessageList(
+        displayItems = ui.chat.display,
+        tools = ui.chat.tools,
+        sending = ui.sending,
+        isWorking =
+            (ui.sending || ui.agent?.status == "working" || ui.chat.working) &&
+                (
+                    ui.chat.streaming == null ||
+                        ui.chat.streaming!!
+                            .blocks
+                            .isEmpty()
+                ),
+        syncingHistory = ui.syncingHistory,
+        refreshing = ui.refreshing,
+        conn = ui.conn,
+        chatFontScale = ui.chatFontScale,
+        chatMessageSpacing = ui.chatMessageSpacing,
+        unreadCount = ui.unreadCount,
+        busyPromptId = busyPromptId,
+        onAnswerPrompt = onAnswerPrompt,
+        onRetryUserMessage = onRetryUserMessage,
+        listState = listState,
+        modifier = modifier,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1243,164 +947,21 @@ private fun AttachmentChip(
     onRemove: () -> Unit,
     onRetry: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    a.name + if (a.size > 0) " · ${humanSize(a.size)}" else "",
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = 4.dp),
-                )
-                IconButton(onClick = onRemove, modifier = Modifier.size(20.dp)) { Icon(Icons.Filled.Close, "Quitar", Modifier.size(14.dp)) }
-            }
-            when (a.state) {
-                UploadState.UPLOADING -> {
-                    LinearProgressIndicator(progress = { a.progress }, modifier = Modifier.fillMaxWidth())
-                }
-
-                UploadState.PREPARING -> {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
-
-                UploadState.ERROR -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(a.error ?: "Error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                        TextButton(onClick = onRetry) { Text("Reintentar") }
-                    }
-                }
-
-                else -> {}
-            }
+    val state =
+        when (a.state) {
+            UploadState.PREPARING -> AttachmentUploadState.PREPARING
+            UploadState.READY -> AttachmentUploadState.READY
+            UploadState.UPLOADING -> AttachmentUploadState.UPLOADING
+            UploadState.DONE -> AttachmentUploadState.DONE
+            UploadState.ERROR -> AttachmentUploadState.ERROR
         }
-    }
-}
-
-@Composable
-private fun InfoDialog(
-    a: AgentSummary,
-    liveModel: String? = null,
-    liveThinking: String? = null,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
-        title = { Text("Información del agente") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(
-                    "PC" to a.machineName,
-                    "Carpeta" to a.cwd,
-                    "Rama" to a.gitBranch,
-                    "Modelo" to (liveModel ?: a.model?.label),
-                    "Razonamiento" to liveThinking,
-                    "Lanzador" to a.launcher,
-                    "herdr" to a.herdr?.let { listOfNotNull(it.workspaceId, it.tabId, it.paneId).joinToString(" / ") },
-                    "Modo gentle" to a.gentleMode,
-                    "Id" to a.agentId,
-                ).forEach { (k, v) -> if (!v.isNullOrBlank()) Text("$k: $v", style = MaterialTheme.typography.bodySmall) }
-                if (a.redacted) TagChip("Contenido oculto por la PC")
-            }
-        },
+    dev.j3pf.rp.ui.chat.AttachmentChip(
+        name = a.name,
+        size = a.size,
+        state = state,
+        progress = a.progress,
+        error = a.error,
+        onRemove = onRemove,
+        onRetry = onRetry,
     )
-}
-
-@Composable
-private fun TodoBanner(todos: List<TodoItem>) {
-    val (expanded, setExpanded) = rememberSaveable { mutableStateOf(false) }
-    val total = todos.size
-    val done = todos.count { it.status == "done" }
-    val inProgress = todos.firstOrNull { it.status == "in_progress" }
-    val percent = if (total > 0) (done * 100 / total) else 0
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                CircularProgressIndicator(
-                    progress = { if (total > 0) done.toFloat() / total else 0f },
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.5.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    "Tareas: $done/$total ($percent%)",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                inProgress?.let { curr ->
-                    Text(
-                        "· ${curr.title}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                } ?: Spacer(Modifier.weight(1f))
-                TextButton(
-                    onClick = { setExpanded(!expanded) },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) {
-                    Text(if (expanded) "Ocultar" else "Ver lista")
-                }
-            }
-            AnimatedVisibility(expanded) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                ) {
-                    todos.forEach { task ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            when (task.status) {
-                                "done" -> Text("✓", color = RpColors.success, fontWeight = FontWeight.Bold)
-                                "in_progress" -> Text("▶", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                "blocked" -> Text("⏸", color = RpColors.warning)
-                                "dropped" -> Text("✕", color = MaterialTheme.colorScheme.outline)
-                                else -> Text("○", color = MaterialTheme.colorScheme.outline)
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    task.title,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (task.status == "in_progress") FontWeight.Bold else FontWeight.Normal,
-                                    textDecoration = if (task.status == "dropped") TextDecoration.LineThrough else null,
-                                    color =
-                                        if (task.status ==
-                                            "dropped"
-                                        ) {
-                                            MaterialTheme.colorScheme.outline
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        },
-                                )
-                                task.note?.takeIf { it.isNotBlank() }?.let { note ->
-                                    Text(
-                                        note,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontStyle = FontStyle.Italic,
-                                        color = MaterialTheme.colorScheme.outline,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

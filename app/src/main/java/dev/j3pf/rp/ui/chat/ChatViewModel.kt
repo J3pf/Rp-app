@@ -39,16 +39,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Método de entrega elegido en el compositor (PLAN-APP §3). */
-enum class DeliveryChoice(
-    val label: String,
-) {
-    AUTO("Automático"),
-    TYPED("Como tecleado 🔒"),
-    EXTENSION("Mensaje de extensión"),
-    COMMAND("Comando /…"),
-}
-
 data class ChatUiState(
     val agent: AgentSummary? = null,
     val chat: ChatState = ChatState(),
