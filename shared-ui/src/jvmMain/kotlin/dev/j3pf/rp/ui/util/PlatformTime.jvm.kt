@@ -21,3 +21,5 @@ actual fun formatPlatformTime(epochMilli: Long): String =
         .withLocale(Locale.getDefault())
         .withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochMilli(epochMilli))
+
+actual fun parseIsoEpochSeconds(isoString: String): Long? = runCatching { Instant.parse(isoString).epochSecond }.getOrNull()

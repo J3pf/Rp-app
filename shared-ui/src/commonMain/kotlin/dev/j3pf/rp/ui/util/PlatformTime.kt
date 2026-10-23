@@ -5,3 +5,5 @@ expect fun currentTimeMillis(): Long
 expect fun formatPlatformDateTime(epochMilli: Long): String
 
 expect fun formatPlatformTime(epochMilli: Long): String
+
+expect fun parseIsoEpochSeconds(isoString: String): Long?

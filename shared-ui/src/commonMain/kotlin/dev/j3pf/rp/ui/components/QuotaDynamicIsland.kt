@@ -1,5 +1,7 @@
 package dev.j3pf.rp.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -44,9 +46,9 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.QuotaWindow
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
-import dev.j3pf.rp.util.parseColor
-import java.time.Instant
-import java.util.Locale
+import dev.j3pf.rp.ui.util.currentTimeMillis
+import dev.j3pf.rp.ui.util.parseColor
+import dev.j3pf.rp.ui.util.parseIsoEpochSeconds
 import kotlin.math.roundToInt
 
 /** Compact, optional quota island. Machines without a configured provider are omitted entirely. */
@@ -190,11 +192,9 @@ private fun QuotaProviderPill(
     val primaryWindow = quota.primaryWindow()
     val statusColor = quota.statusColor(primaryWindow?.usedPercent)
     val targetProgress = ((primaryWindow?.usedPercent ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
-    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+    val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec =
-            androidx.compose.animation.core
-                .tween(durationMillis = 350),
+        animationSpec = tween(durationMillis = 350),
         label = "quotaProgress",
     )
 
@@ -365,7 +365,7 @@ private data class SelectedQuota(
 private fun MachineQuota.primaryWindow(): QuotaWindow? = windows.firstOrNull { it.id == primaryWindowId } ?: windows.firstOrNull()
 
 private fun MachineQuota.displayLabel(): String =
-    label.takeIf { it.isNotBlank() } ?: when (family.lowercase(Locale.ROOT)) {
+    label.takeIf { it.isNotBlank() } ?: when (family.lowercase()) {
         "claude" -> "Claude"
         "codex" -> "Codex"
         "antigravity" -> "Antigravity"
@@ -386,15 +386,24 @@ private fun MachineQuota.statusColor(usedPercent: Double?): Color =
         else -> RpColors.success
     }
 
+fun formatQuotaPercent(value: Double): String = formatPercent(value)
+
 private fun formatPercent(value: Double): String {
     val rounded = value.coerceAtLeast(0.0)
-    return if (rounded % 1.0 == 0.0) "${rounded.roundToInt()}%" else "${"%.1f".format(Locale.getDefault(), rounded)}%"
+    if (rounded % 1.0 == 0.0) return "${rounded.roundToInt()}%"
+    val scaled = (rounded * 10 + 0.5).toLong()
+    val intPart = scaled / 10
+    val fracPart = scaled % 10
+    return "$intPart.$fracPart%"
 }
 
 private fun formatResetCountdown(window: QuotaWindow): String? {
     val remainingSeconds =
         window.resetsInSec?.takeIf { it >= 0 } ?: window.resetsAt?.let { resetAt ->
-            runCatching { (Instant.parse(resetAt).epochSecond - Instant.now().epochSecond).coerceAtLeast(0) }.getOrNull()
+            parseIsoEpochSeconds(resetAt)?.let { resetSec ->
+                val nowSec = currentTimeMillis() / 1000
+                (resetSec - nowSec).coerceAtLeast(0)
+            }
         } ?: return null
     val hours = remainingSeconds / 3600
     val minutes = (remainingSeconds % 3600) / 60
