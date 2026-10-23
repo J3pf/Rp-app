@@ -21,31 +21,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class MachineGroup(
-    val machine: MachineSummary,
-    val agents: List<AgentSummary>,
-)
-
-/** Ordena agentes dentro de una máquina: prompts abiertos primero, en línea antes que offline, working segundo, lastSeenAt más reciente después. */
-fun sortAgentsWithinGroup(agents: List<AgentSummary>): List<AgentSummary> =
-    agents.sortedWith(
-        compareByDescending<AgentSummary> { it.openPromptCount > 0 }
-            .thenByDescending { it.online }
-            .thenByDescending { it.status == "working" }
-            .thenByDescending { it.lastSeenAt ?: 0L },
-    )
-
-data class AgentsUiState(
-    val machines: List<MachineSummary> = emptyList(),
-    val allAgents: List<AgentSummary> = emptyList(),
-    val groups: List<MachineGroup> = emptyList(),
-    val selected: String = AppSettings.ALL,
-    val isLoading: Boolean = false,
-    /** Alguna PC visible tiene `rp-host` conectado → se puede crear agentes. */
-    val canSpawn: Boolean = false,
-    val refreshing: Boolean = false,
-)
-
 @HiltViewModel
 class AgentsViewModel
     @Inject
