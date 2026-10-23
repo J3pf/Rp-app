@@ -5,6 +5,7 @@ import dev.j3pf.rp.client.ws.RelayLock
 /** Active session reference counting policy. */
 class ChatSessionRegistry<S>(
     private val create: (agentId: String) -> S,
+    private val onStart: (S) -> Unit = {},
     private val onStop: (S) -> Unit,
 ) {
     private val lock = RelayLock()
@@ -16,15 +17,21 @@ class ChatSessionRegistry<S>(
 
     private val sessions = mutableMapOf<String, SessionEntry<S>>()
 
-    fun open(agentId: String): S =
-        lock.withLock {
-            val entry =
-                sessions.getOrPut(agentId) {
-                    SessionEntry(create(agentId), 0)
-                }
-            entry.refs++
-            entry.session
-        }
+    fun open(agentId: String): S {
+        var created = false
+        val session =
+            lock.withLock {
+                val entry =
+                    sessions.getOrPut(agentId) {
+                        created = true
+                        SessionEntry(create(agentId), 0)
+                    }
+                entry.refs++
+                entry.session
+            }
+        if (created) onStart(session)
+        return session
+    }
 
     fun release(agentId: String): S? {
         val toStop =

@@ -9,6 +9,7 @@ class ChatSessionRegistryTest {
     private class FakeSession(
         val id: String,
     ) {
+        var started = 0
         var stopped = false
     }
 
@@ -17,6 +18,7 @@ class ChatSessionRegistryTest {
         val registry =
             ChatSessionRegistry<FakeSession>(
                 create = { FakeSession(it) },
+                onStart = { it.started++ },
                 onStop = { it.stopped = true },
             )
 
@@ -24,6 +26,7 @@ class ChatSessionRegistryTest {
         val s2 = registry.open("agent-1")
 
         assertSame(s1, s2, "Subsequent open must return identical session instance")
+        assertEquals(1, s1.started, "onStart must be invoked only once on initial creation")
         assertEquals(mapOf("agent-1" to 2), registry.activeSessions())
     }
 

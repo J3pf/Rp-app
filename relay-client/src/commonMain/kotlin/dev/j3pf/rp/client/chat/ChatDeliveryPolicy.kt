@@ -61,14 +61,30 @@ class ChatDeliveryPolicy(
                 val nextItems =
                     it.items.map { item ->
                         if (item is UserMsg && (item.clientMsgId == cId || item.key == targetKey)) {
-                            item.copy(failed = false)
+                            item.copy(
+                                failed = false,
+                                attachments = attachments,
+                                delivery = delivery,
+                                method = method,
+                                asCommand = asCommand,
+                            )
                         } else {
                             item
                         }
                     }
                 it.copy(items = nextItems, working = true)
             } else {
-                ChatReducer.markLocalSent(it, text, clientMsgId = msg.clientMsgId, at = timestamp, imageCount = imgCount)
+                ChatReducer.markLocalSent(
+                    it,
+                    text,
+                    clientMsgId = msg.clientMsgId,
+                    at = timestamp,
+                    imageCount = imgCount,
+                    attachments = attachments,
+                    delivery = delivery,
+                    method = method,
+                    asCommand = asCommand,
+                )
             }
         }
         platform.touchAgent(s.relayId, agentId, timestamp)
@@ -178,7 +194,10 @@ class ChatDeliveryPolicy(
                 getState = getState,
                 updateState = updateState,
                 text = localMsg.text,
-                attachments = emptyList(),
+                attachments = localMsg.attachments,
+                delivery = localMsg.delivery,
+                method = localMsg.method,
+                asCommand = localMsg.asCommand,
                 clientMsgId = clientMsgId,
             )
         }

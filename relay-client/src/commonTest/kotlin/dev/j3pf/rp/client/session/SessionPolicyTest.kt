@@ -243,6 +243,7 @@ class SessionPolicyTest {
                     "health:https://new",
                     "token",
                     "pair:https://new:ABCDEF:Phone:fcm",
+                    "revoke:old-device",
                     "stopConnection",
                     "cancelWork",
                     "clearCache:old",

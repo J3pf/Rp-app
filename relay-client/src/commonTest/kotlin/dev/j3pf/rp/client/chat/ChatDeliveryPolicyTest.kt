@@ -8,6 +8,9 @@ import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentEvent
 import dev.j3pf.rp.protocol.AgentHistory
+import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.UserMessage
@@ -418,5 +421,66 @@ class ChatDeliveryPolicyTest {
             assertFalse(allDone, "flushOutbox returns false if any message failed to send")
             assertFalse(platform.outbox.containsKey("m-1"), "Succeeded message m-1 must be deleted")
             assertTrue(platform.outbox.containsKey("m-2"), "Failed message m-2 must remain in outbox")
+        }
+
+    @Test
+    fun retryAfterFailedSendPreservesAttachmentsAndDeliveryOptions() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+            val sentMessages = mutableListOf<UserMessage>()
+            var failFirst = true
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { true },
+                    requestWs = { env ->
+                        val userMsg = env.body<UserMessage>()
+                        sentMessages.add(userMsg)
+                        if (failFirst) {
+                            failFirst = false
+                            WsReply.Error(ErrorCodes.AGENT_OFFLINE, "offline")
+                        } else {
+                            val ack = UserMessageAck(clientMsgId = userMsg.clientMsgId, disposition = "accepted")
+                            WsReply.Ok(Envelope.of("ack", ack, re = env.id))
+                        }
+                    },
+                    httpSendMessage = { ApiResult.Ok(JsonObject(emptyMap())) },
+                    newId = { "retry-att-id" },
+                    now = { 1000L },
+                )
+
+            val att = AttachmentRef(blobId = "b-1", name = "photo.png", mime = "image/png", size = 1234L)
+            val firstRes =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "/deploy",
+                    attachments = listOf(att),
+                    delivery = Delivery.STEER,
+                    method = DeliveryMethod.INTERACTIVE,
+                    asCommand = true,
+                )
+            assertTrue(firstRes is SendResult.Failed)
+            assertFalse(platform.outbox.containsKey("retry-att-id"))
+
+            val retryRes =
+                policy.retry(
+                    agentId = "agent-1",
+                    clientMsgId = "retry-att-id",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                )
+            assertTrue(retryRes is SendResult.Delivered)
+            assertEquals(2, sentMessages.size)
+            val retried = sentMessages.last()
+            assertEquals("retry-att-id", retried.clientMsgId)
+            assertEquals(listOf(att), retried.attachments)
+            assertEquals(Delivery.STEER, retried.delivery)
+            assertEquals(DeliveryMethod.INTERACTIVE, retried.method)
+            assertTrue(retried.asCommand)
         }
 }

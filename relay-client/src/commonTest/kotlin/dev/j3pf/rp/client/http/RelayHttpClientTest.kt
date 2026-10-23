@@ -223,4 +223,24 @@ class RelayHttpClientTest {
                 RelayHttpClient({ throw CancellationException("cancelled") }, { session }, { it }, { IllegalStateException(it) })
             assertFailsWith<CancellationException> { cancelled.machines() }
         }
+
+    @Test
+    fun pathSegmentsEncodeSlashesSpacesAndDotSegmentsWhilePreservingColons() =
+        runTest {
+            client.revokeDevice("dev 1/2")
+            client.patchMachine("..", MachinePatch(name = "Desk"))
+            client.revokeMachine("m:1/sub")
+            client.answerPrompt("p 1/2", Answer.confirm(true))
+            client.sendMessage(UserMessage(agentId = "m:s/extra", clientMsgId = "c1", text = "hi"))
+            assertEquals(
+                listOf(
+                    "DELETE /v1/devices/dev%201%2F2",
+                    "PATCH /v1/machines/%2E%2E",
+                    "DELETE /v1/machines/m:1%2Fsub",
+                    "POST /v1/prompts/p%201%2F2/answer",
+                    "POST /v1/agents/m:s%2Fextra/messages",
+                ),
+                requests.map { "${it.method} ${it.url.removePrefix("https://first")}" },
+            )
+        }
 }

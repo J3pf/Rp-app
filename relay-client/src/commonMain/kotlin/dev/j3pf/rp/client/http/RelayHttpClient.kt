@@ -79,7 +79,8 @@ class RelayHttpClient(
         authed("GET", "/v1/devices", null, DevicesResponse.serializer())
             .map { it.devices.filterNot { d -> d.revoked } }
 
-    suspend fun revokeDevice(id: String): ApiResult<OkResponse> = authed("DELETE", "/v1/devices/$id", null, OkResponse.serializer())
+    suspend fun revokeDevice(id: String): ApiResult<OkResponse> =
+        authed("DELETE", "/v1/devices/${encodePathSegment(id)}", null, OkResponse.serializer())
 
     // ───────────────────────────── Máquinas ─────────────────────────────
 
@@ -91,9 +92,10 @@ class RelayHttpClient(
         id: String,
         patch: MachinePatch,
     ): ApiResult<MachineSummary> =
-        authed("PATCH", "/v1/machines/$id", encode(MachinePatch.serializer(), patch), MachineSummary.serializer())
+        authed("PATCH", "/v1/machines/${encodePathSegment(id)}", encode(MachinePatch.serializer(), patch), MachineSummary.serializer())
 
-    suspend fun revokeMachine(id: String): ApiResult<OkResponse> = authed("DELETE", "/v1/machines/$id", null, OkResponse.serializer())
+    suspend fun revokeMachine(id: String): ApiResult<OkResponse> =
+        authed("DELETE", "/v1/machines/${encodePathSegment(id)}", null, OkResponse.serializer())
 
     suspend fun createMachineCode(): ApiResult<PairCodeResponse> =
         authed("POST", "/v1/pair/codes", emptyBody(), PairCodeResponse.serializer())
@@ -141,7 +143,7 @@ class RelayHttpClient(
         val res =
             authed(
                 "POST",
-                "/v1/prompts/$promptId/answer",
+                "/v1/prompts/${encodePathSegment(promptId)}/answer",
                 encode(AnswerPromptRequest.serializer(), AnswerPromptRequest(answer)),
                 OkResponse.serializer(),
                 RelayHttpTimeout.QUICK,
@@ -169,7 +171,7 @@ class RelayHttpClient(
     suspend fun sendMessage(msg: UserMessage): ApiResult<JsonObject> =
         authed(
             "POST",
-            "/v1/agents/${msg.agentId}/messages",
+            "/v1/agents/${encodePathSegment(msg.agentId)}/messages",
             encode(UserMessage.serializer(), msg),
             JsonObject.serializer(),
             RelayHttpTimeout.QUICK,
@@ -238,7 +240,18 @@ class RelayHttpClient(
         return if (query.isEmpty()) path else "$path?$query"
     }
 
-    private fun encodePathSegment(value: String): String = encodeQueryComponent(value).replace("+", "%20")
+    private fun encodePathSegment(value: String): String {
+        val encoded =
+            encodeQueryComponent(value)
+                .replace("+", "%20")
+                .replace("%3A", ":")
+                .replace("%3a", ":")
+        return when (encoded) {
+            "." -> "%2E"
+            ".." -> "%2E%2E"
+            else -> encoded
+        }
+    }
 
     private fun url(
         base: String,

@@ -1,6 +1,7 @@
 package dev.j3pf.rp.client.chat
 
 import dev.j3pf.rp.chat.ChatState
+import dev.j3pf.rp.client.ws.RelayLock
 import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.protocol.AgentSubscribe
 import dev.j3pf.rp.protocol.Envelope
@@ -21,12 +22,20 @@ class ChatSyncPolicy(
     private val setSyncing: (Boolean) -> Unit,
     private val delayMs: suspend (Long) -> Unit = { delay(it) },
 ) {
+    private val lock = RelayLock()
     private var syncTimeoutJob: Job? = null
+    private var subscribeGeneration: Long = 0L
 
     suspend fun subscribe() {
+        val generation =
+            lock.withLock {
+                subscribeGeneration += 1L
+                syncTimeoutJob?.cancel()
+                syncTimeoutJob = null
+                subscribeGeneration
+            }
         val st = getState()
         if (st.items.isEmpty()) setSyncing(true)
-        cancelSyncTimeout()
         val req =
             Envelope.of(
                 MsgType.AGENT_SUBSCRIBE,
@@ -35,22 +44,38 @@ class ChatSyncPolicy(
             )
         var attempts = 0
         while (attempts < 3) {
+            if (lock.withLock { subscribeGeneration != generation }) return
             when (requestWs(req)) {
                 is WsReply.Ok -> {
-                    cancelSyncTimeout()
-                    if (isSyncing()) {
+                    lock.withLock {
+                        if (subscribeGeneration != generation) return@withLock
+                        syncTimeoutJob?.cancel()
                         syncTimeoutJob =
-                            scope.launch {
-                                delayMs(6_000L)
-                                setSyncing(false)
+                            if (isSyncing()) {
+                                scope.launch {
+                                    delayMs(6_000L)
+                                    val isCurrent = lock.withLock { subscribeGeneration == generation }
+                                    if (isCurrent) setSyncing(false)
+                                }
+                            } else {
+                                null
                             }
                     }
                     return
                 }
 
                 is WsReply.Error -> {
-                    cancelSyncTimeout()
-                    setSyncing(false)
+                    val isCurrent =
+                        lock.withLock {
+                            if (subscribeGeneration != generation) {
+                                false
+                            } else {
+                                syncTimeoutJob?.cancel()
+                                syncTimeoutJob = null
+                                true
+                            }
+                        }
+                    if (isCurrent) setSyncing(false)
                     return // p. ej. not_found: nada que reintentar
                 }
 
@@ -60,8 +85,17 @@ class ChatSyncPolicy(
                 }
             }
         }
-        cancelSyncTimeout()
-        setSyncing(false)
+        val isCurrent =
+            lock.withLock {
+                if (subscribeGeneration != generation) {
+                    false
+                } else {
+                    syncTimeoutJob?.cancel()
+                    syncTimeoutJob = null
+                    true
+                }
+            }
+        if (isCurrent) setSyncing(false)
     }
 
     fun onHistoryReceived() {
@@ -70,7 +104,9 @@ class ChatSyncPolicy(
     }
 
     fun cancelSyncTimeout() {
-        syncTimeoutJob?.cancel()
-        syncTimeoutJob = null
+        lock.withLock {
+            syncTimeoutJob?.cancel()
+            syncTimeoutJob = null
+        }
     }
 }

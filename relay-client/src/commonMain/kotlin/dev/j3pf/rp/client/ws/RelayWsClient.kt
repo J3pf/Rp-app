@@ -32,12 +32,22 @@ class RelayWsClient(
         val deferred = CompletableDeferred<WsReply>()
         lock.withLock { pending[id] = deferred }
         if (!sendText(withId.encode())) {
-            lock.withLock { pending.remove(id) }
+            lock.withLock {
+                if (pending[id] === deferred) {
+                    pending.remove(id)
+                }
+            }
             return WsReply.NotConnected
         }
-        val reply = withTimeoutOrNull(timeoutMs) { deferred.await() } ?: WsReply.Timeout
-        lock.withLock { pending.remove(id) }
-        return reply
+        return try {
+            withTimeoutOrNull(timeoutMs) { deferred.await() } ?: WsReply.Timeout
+        } finally {
+            lock.withLock {
+                if (pending[id] === deferred) {
+                    pending.remove(id)
+                }
+            }
+        }
     }
 
     fun onText(text: String) {

@@ -49,7 +49,11 @@ class SessionPolicy(
                 is ApiResult.Network -> return PairResult.Failure("Error de red: ${res.error.message}")
             }
 
-        if (platform.currentSession() != null) platform.clearLocalSession()
+        val previous = platform.currentSession()
+        if (previous != null) {
+            runCatching { revokeDevice(previous.deviceId) }
+            platform.clearLocalSession()
+        }
         platform.saveSession(
             Session(
                 relayId = platform.newRelayId(),
