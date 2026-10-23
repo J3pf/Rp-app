@@ -24,7 +24,7 @@ enum class RpThemeChoice(
 
 // ───────────────────────────── Paleta Gentle-Cute ─────────────────────────────
 
-internal val CuteLightColors =
+val CuteLightColors =
     lightColorScheme(
         primary = Color(0xFFD81B60),
         onPrimary = Color(0xFFFFFFFF),
@@ -43,7 +43,7 @@ internal val CuteLightColors =
         outline = Color(0xFF8A717B),
     )
 
-internal val CuteDarkColors =
+val CuteDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF80AB),
         onPrimary = Color(0xFF560027),
@@ -64,7 +64,7 @@ internal val CuteDarkColors =
 
 // ───────────────────────────── Paleta Gentle-Sexy ─────────────────────────────
 
-internal val SexyLightColors =
+val SexyLightColors =
     lightColorScheme(
         primary = Color(0xFFC2185B),
         onPrimary = Color(0xFFFFFFFF),
@@ -83,7 +83,7 @@ internal val SexyLightColors =
         outline = Color(0xFF89677B),
     )
 
-internal val SexyDarkColors =
+val SexyDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF2A85),
         onPrimary = Color(0xFF4A0022),
@@ -104,7 +104,7 @@ internal val SexyDarkColors =
 
 // ───────────────────────────── Paleta Omarchy / Gentle Shell ─────────────────────────────
 
-internal val OmarchyLightColors =
+val OmarchyLightColors =
     lightColorScheme(
         primary = Color(0xFF3D59A1),
         onPrimary = Color(0xFFFFFFFF),
@@ -123,7 +123,7 @@ internal val OmarchyLightColors =
         outline = Color(0xFF747783),
     )
 
-internal val OmarchyDarkColors =
+val OmarchyDarkColors =
     darkColorScheme(
         primary = Color(0xFF7AA2F7),
         onPrimary = Color(0xFF152238),
@@ -145,14 +145,14 @@ internal val OmarchyDarkColors =
 
 // ───────────────────────────── Paleta Material You / Default ─────────────────────────────
 
-internal val DefaultLightColors =
+val DefaultLightColors =
     lightColorScheme(
         primary = Color(0xFF4F378B),
         secondary = Color(0xFF625B71),
         tertiary = Color(0xFF7D5260),
     )
 
-internal val DefaultDarkColors =
+val DefaultDarkColors =
     darkColorScheme(
         primary = Color(0xFFCFBCFF),
         secondary = Color(0xFFCCC2DC),

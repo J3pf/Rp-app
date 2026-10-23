@@ -9,7 +9,7 @@ Android and Kotlin Multiplatform (KMP) client for the RemotePi system. Provides 
 - **Modular Architecture**:
   - `:protocol`: Pure Kotlin Multiplatform (targets JVM 17, `iosArm64`, `iosSimulatorArm64`). Contains `@Serializable` protocol types, `ChatReducer`, ULID generators, and domain models.
   - `:relay-client`: Pure Kotlin Multiplatform (JVM 17, `iosArm64`, `iosSimulatorArm64`). Handles shared HTTP requests, WebSocket correlation bus, session state management, and chat synchronization.
-  - `:shared-ui`: Compose Multiplatform (JVM 17 for desktop/Android consumption, `iosArm64`, `iosSimulatorArm64`). Hosts shared theme, screens, components, and exports `MainViewController` for iOS.
+  - `:shared-ui`: Compose Multiplatform (Android library via AGP 9 `com.android.kotlin.multiplatform.library`, JVM 17, `iosArm64`, `iosSimulatorArm64`). Hosts shared theme, screens, components, and exports `MainViewController` for iOS.
   - `:app`: Android application layer. Implements Jetpack Compose host, Hilt dependency injection, Room database persistence, WorkManager background tasks, OkHttp network adapters, and Android notification channels.
 
 ## Commands
@@ -21,8 +21,8 @@ Android and Kotlin Multiplatform (KMP) client for the RemotePi system. Provides 
 # Verify shared relay-client tests & iOS metadata
 ./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest
 
-# Verify Compose Multiplatform shared-ui (JVM tests & iOS metadata)
-./gradlew :shared-ui:compileCommonMainKotlinMetadata :shared-ui:compileKotlinIosSimulatorArm64 :shared-ui:jvmTest :shared-ui:ktlintCheck
+# Verify Compose Multiplatform shared-ui (Android, JVM tests & iOS metadata)
+./gradlew :shared-ui:compileCommonMainKotlinMetadata :shared-ui:compileAndroidMain :shared-ui:compileKotlinIosSimulatorArm64 :shared-ui:jvmTest :shared-ui:ktlintCheck
 
 # Run all unit and Compose tests for Android direct flavor
 ./gradlew :app:testDirectDebugUnitTest
