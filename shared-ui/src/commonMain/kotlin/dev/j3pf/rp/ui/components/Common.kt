@@ -1,12 +1,10 @@
 package dev.j3pf.rp.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -16,12 +14,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,8 +39,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -71,89 +64,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.data.net.ConnState
-import dev.j3pf.rp.data.repo.AppSettings
-import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
-import dev.j3pf.rp.ui.theme.RpMotion
 import dev.j3pf.rp.ui.theme.rpSkeleton
-import dev.j3pf.rp.util.contextLabel
-import dev.j3pf.rp.util.parseColor
-import dev.j3pf.rp.util.relativeTime
+import dev.j3pf.rp.ui.util.contextLabel
+import dev.j3pf.rp.ui.util.parseColor
 
-@Composable
-fun ColorDot(
-    color: Color,
-    modifier: Modifier = Modifier,
-    size: Int = 10,
-) {
-    Box(modifier.size(size.dp).clip(CircleShape).background(color))
-}
-
-@Composable
-fun ColorDot(
-    color: Color,
-    size: Int,
-) {
-    ColorDot(color = color, modifier = Modifier, size = size)
-}
-
-/**
- * Tarjeta base con radio de 20dp y sombra sutil según design.md.
- */
-@Composable
-fun SurfaceCard(
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    shape: Shape = RoundedCornerShape(20.dp),
-    color: Color = MaterialTheme.colorScheme.surface,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    tonalElevation: Dp = 1.dp,
-    border: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val reducedMotion = LocalReducedMotion.current
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed && onClick != null && !reducedMotion) RpMotion.PRESSED_SCALE else 1.0f,
-        animationSpec = RpMotion.springSnappy,
-        label = "cardPressScale",
-    )
-
-    val cardModifier =
-        modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-
-    if (onClick != null) {
-        Card(
-            onClick = onClick,
-            modifier = cardModifier,
-            shape = shape,
-            colors = CardDefaults.cardColors(containerColor = color, contentColor = contentColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = tonalElevation),
-            border = border,
-            interactionSource = interactionSource,
-            content = content,
-        )
-    } else {
-        Card(
-            modifier = cardModifier,
-            shape = shape,
-            colors = CardDefaults.cardColors(containerColor = color, contentColor = contentColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = tonalElevation),
-            border = border,
-            content = content,
-        )
-    }
-}
+const val ALL_MACHINES = "all"
 
 /**
  * Cabecera humana para pantallas principales (design.md §1 y §6).
@@ -194,12 +115,64 @@ fun AppHeader(
     }
 }
 
-private data class HeroInfo(
+data class MachineHeroState(
     val overlineLabel: String,
     val selectedTitle: String,
     val selectedSubtitle: String,
     val selectedColor: Color,
 )
+
+fun resolveMachineHeroState(
+    machines: List<MachineSummary>,
+    agents: List<AgentSummary>,
+    selected: String,
+    primaryColor: Color,
+): MachineHeroState {
+    val singleMachine = machines.singleOrNull()
+    val activeMachine =
+        when {
+            selected == ALL_MACHINES && singleMachine != null -> singleMachine
+            else -> machines.firstOrNull { it.machineId == selected }
+        }
+
+    return when {
+        activeMachine != null -> {
+            val m = activeMachine
+            val count = agents.count { it.machineId == m.machineId }
+            val onlineCount = agents.count { it.machineId == m.machineId && it.online }
+            val pcStatus = if (m.online) " · PC en línea" else " · PC desconectada"
+            MachineHeroState(
+                overlineLabel = "PC CONECTADA · ${contextLabel(m.context).uppercase()}",
+                selectedTitle = m.name,
+                selectedSubtitle = "$onlineCount de $count sesiones activas$pcStatus",
+                selectedColor = parseColor(m.color),
+            )
+        }
+
+        selected == ALL_MACHINES -> {
+            val total = agents.size
+            val online = machines.count { it.online }
+            val agentWord = if (total == 1) "agente" else "agentes"
+            val pcWord = if (online == 1) "PC activa" else "PCs activas"
+            MachineHeroState(
+                overlineLabel = "EQUIPOS VINCULADOS",
+                selectedTitle = "Todas las máquinas",
+                selectedSubtitle = "$total $agentWord · $online $pcWord",
+                selectedColor = primaryColor,
+            )
+        }
+
+        else -> {
+            val count = agents.count { it.machineContext == selected }
+            MachineHeroState(
+                overlineLabel = "CONTEXTO",
+                selectedTitle = contextLabel(selected),
+                selectedSubtitle = "$count ${if (count == 1) "agente" else "agentes"} en este contexto",
+                selectedColor = parseColor(machines.firstOrNull { it.context == selected }?.color),
+            )
+        }
+    }
+}
 
 /**
  * Hero Card interactivo para conmutar entre máquinas mediante un Dropdown estilizado (design.md §1 y §6).
@@ -217,46 +190,16 @@ fun MachineHeroDropdown(
     val singleMachine = machines.singleOrNull()
     val activeMachine =
         when {
-            selected == AppSettings.ALL && singleMachine != null -> singleMachine
+            selected == ALL_MACHINES && singleMachine != null -> singleMachine
             else -> machines.firstOrNull { it.machineId == selected }
         }
 
-    // Determinar la etiqueta y estado del elemento seleccionado
-    val (overlineLabel, selectedTitle, selectedSubtitle, selectedColor) =
-        when {
-            activeMachine != null -> {
-                val m = activeMachine
-                val count = agents.count { it.machineId == m.machineId }
-                val onlineCount = agents.count { it.machineId == m.machineId && it.online }
-                HeroInfo(
-                    "PC CONECTADA · ${contextLabel(m.context).uppercase()}",
-                    m.name,
-                    "$onlineCount de $count sesiones activas${if (m.online) " · PC en línea" else " · PC desconectada"}",
-                    parseColor(m.color),
-                )
-            }
-
-            selected == AppSettings.ALL -> {
-                val total = agents.size
-                val online = machines.count { it.online }
-                HeroInfo(
-                    "EQUIPOS VINCULADOS",
-                    "Todas las máquinas",
-                    "$total ${if (total == 1) "agente" else "agentes"} · $online ${if (online == 1) "PC activa" else "PCs activas"}",
-                    MaterialTheme.colorScheme.primary,
-                )
-            }
-
-            else -> {
-                val count = agents.count { it.machineContext == selected }
-                HeroInfo(
-                    "CONTEXTO",
-                    contextLabel(selected),
-                    "$count ${if (count == 1) "agente" else "agentes"} en este contexto",
-                    parseColor(machines.firstOrNull { it.context == selected }?.color),
-                )
-            }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val heroState =
+        remember(machines, agents, selected, primaryColor) {
+            resolveMachineHeroState(machines, agents, selected, primaryColor)
         }
+    val (overlineLabel, selectedTitle, selectedSubtitle, selectedColor) = heroState
 
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         SurfaceCard(
@@ -366,7 +309,6 @@ fun MachineHeroDropdown(
             onDismissRequest = { expanded = false },
             modifier = Modifier.fillMaxWidth(0.92f),
         ) {
-            // Opción "Todas las máquinas"
             val totalAgents = agents.size
             val totalPrompts = agents.sumOf { it.openPromptCount }
             DropdownMenuItem(
@@ -381,7 +323,7 @@ fun MachineHeroDropdown(
                             Column {
                                 Text(
                                     "Todas las máquinas",
-                                    fontWeight = if (selected == AppSettings.ALL) FontWeight.Bold else FontWeight.Normal,
+                                    fontWeight = if (selected == ALL_MACHINES) FontWeight.Bold else FontWeight.Normal,
                                 )
                                 Text(
                                     "$totalAgents agentes${if (totalPrompts > 0) " · $totalPrompts pendientes" else ""}",
@@ -390,18 +332,22 @@ fun MachineHeroDropdown(
                                 )
                             }
                         }
-                        if (selected == AppSettings.ALL) {
-                            Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        if (selected == ALL_MACHINES) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     }
                 },
                 onClick = {
-                    onSelect(AppSettings.ALL)
+                    onSelect(ALL_MACHINES)
                     expanded = false
                 },
             )
 
-            // Contextos o Máquinas individuales
             val contexts = machines.map { it.context }.distinct()
             if (contexts.size > 1) {
                 Text(
@@ -421,7 +367,10 @@ fun MachineHeroDropdown(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
                                     ColorDot(parseColor(ms.firstOrNull()?.color), size = 10)
                                     Column {
                                         Text(
@@ -429,7 +378,7 @@ fun MachineHeroDropdown(
                                             fontWeight = if (selected == ctx) FontWeight.Bold else FontWeight.Normal,
                                         )
                                         Text(
-                                            "$count agentes${if (prompts > 0) " · $prompts pendientes" else ""}",
+                                            "$count agentes${if (prompts > 0) " · $prompts" else ""}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -469,7 +418,10 @@ fun MachineHeroDropdown(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
                                     ColorDot(parseColor(m.color), size = 10)
                                     Column {
                                         Row(
@@ -486,8 +438,9 @@ fun MachineHeroDropdown(
                                                 color = if (m.online) RpColors.success else MaterialTheme.colorScheme.outline,
                                             )
                                         }
+                                        val hostBadge = if (m.hostOnline) " · rp-host ✓" else ""
                                         Text(
-                                            "${contextLabel(m.context)} · $count agentes${if (m.hostOnline) " · rp-host ✓" else ""}",
+                                            "${contextLabel(m.context)} · $count agentes$hostBadge",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -537,8 +490,8 @@ fun MachineFilterBar(
             val total = agents.size
             val prompts = agents.sumOf { it.openPromptCount }
             FilterChip(
-                selected = selected == AppSettings.ALL,
-                onClick = { onSelect(AppSettings.ALL) },
+                selected = selected == ALL_MACHINES,
+                onClick = { onSelect(ALL_MACHINES) },
                 shape = RoundedCornerShape(10.dp),
                 label = { Text("Todas ($total${if (prompts > 0) " · $prompts" else ""})") },
             )
@@ -558,128 +511,6 @@ fun MachineFilterBar(
             )
         }
     }
-}
-
-/** Chip de estado del agente: Trabajando / Esperando respuesta / Inactivo / Desconectado hace 3 h. */
-@Composable
-fun StatusChip(
-    agent: AgentSummary,
-    modifier: Modifier = Modifier,
-) {
-    val (text, targetColor) =
-        when {
-            !agent.online -> "Desconectado ${relativeTime(agent.lastSeenAt)}".trim() to MaterialTheme.colorScheme.outline
-            agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to RpColors.warning
-            agent.status == AgentStatus.WORKING -> "Trabajando" to MaterialTheme.colorScheme.primary
-            agent.status == AgentStatus.COMPACTING -> "Compactando" to MaterialTheme.colorScheme.primary
-            agent.status == AgentStatus.ERROR -> "Error" to RpColors.danger
-            else -> "Inactivo" to RpColors.success
-        }
-
-    val reducedMotion = LocalReducedMotion.current
-    val animatedColor by animateColorAsState(
-        targetValue = targetColor,
-        animationSpec = RpMotion.adaptiveSpec(reducedMotion, tween(durationMillis = 300)),
-        label = "statusColor",
-    )
-
-    val isWorking = (agent.status == AgentStatus.WORKING || agent.status == AgentStatus.COMPACTING) && agent.online
-    val infiniteTransition = rememberInfiniteTransition(label = "statusPulseTransition")
-    val pulseScale by if (isWorking && !reducedMotion) {
-        infiniteTransition.animateFloat(
-            initialValue = 1.0f,
-            targetValue = 2.2f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Restart,
-                ),
-            label = "pulseScale",
-        )
-    } else {
-        remember { mutableFloatStateOf(1.0f) }
-    }
-    val pulseAlpha by if (isWorking && !reducedMotion) {
-        infiniteTransition.animateFloat(
-            initialValue = 0.55f,
-            targetValue = 0.0f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Restart,
-                ),
-            label = "pulseAlpha",
-        )
-    } else {
-        remember { mutableFloatStateOf(0.0f) }
-    }
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        color = animatedColor.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, animatedColor.copy(alpha = 0.25f)),
-        contentColor = animatedColor,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(10.dp)) {
-                if (isWorking && !reducedMotion && pulseAlpha > 0f) {
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .graphicsLayer {
-                                scaleX = pulseScale
-                                scaleY = pulseScale
-                                alpha = pulseAlpha
-                            }.clip(CircleShape)
-                            .background(animatedColor),
-                    )
-                }
-                ColorDot(animatedColor, size = 6)
-            }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@Composable
-fun TagChip(
-    text: String,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.secondary,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.20f)),
-        contentColor = color,
-    ) {
-        Text(
-            text,
-            Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-fun TagChip(
-    text: String,
-    color: Color,
-) {
-    TagChip(text = text, modifier = Modifier, color = color)
 }
 
 /**
@@ -892,6 +723,20 @@ fun PrimaryButton(
     }
 }
 
+fun connectionBannerMessage(state: ConnState): String? =
+    when (state) {
+        ConnState.Connected -> null
+        ConnState.Connecting -> "Conectando con el relay…"
+        ConnState.Disconnected -> "Sin conexión con el relay · reintentando"
+        is ConnState.Fatal -> {
+            when (state.code) {
+                4001 -> "Token revocado · Vuelve a emparejar el dispositivo"
+                4002 -> "Protocolo incompatible · Actualiza la app"
+                else -> "Conexión cerrada (${state.code})"
+            }
+        }
+    }
+
 /** Banner flotante de estado de la conexión con el relay (cápsula animada y centrada). */
 @Composable
 fun ConnectionBanner(
@@ -899,28 +744,7 @@ fun ConnectionBanner(
     modifier: Modifier = Modifier,
 ) {
     val isVisible = state !is ConnState.Connected
-    val text =
-        when (state) {
-            ConnState.Connected -> {
-                null
-            }
-
-            ConnState.Connecting -> {
-                "Conectando con el relay…"
-            }
-
-            ConnState.Disconnected -> {
-                "Sin conexión con el relay · reintentando"
-            }
-
-            is ConnState.Fatal -> {
-                when (state.code) {
-                    4001 -> "Token revocado · Vuelve a emparejar el dispositivo"
-                    4002 -> "Protocolo incompatible · Actualiza la app"
-                    else -> "Conexión cerrada (${state.code})"
-                }
-            }
-        }
+    val text = connectionBannerMessage(state)
     val fatal = state is ConnState.Fatal
     val connecting = state is ConnState.Connecting
 

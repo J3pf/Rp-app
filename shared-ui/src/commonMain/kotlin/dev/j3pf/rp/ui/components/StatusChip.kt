@@ -148,20 +148,20 @@ fun StatusChip(
 fun TagChip(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.surfaceVariant,
+    color: Color = MaterialTheme.colorScheme.secondary,
 ) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.18f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
+        color = color.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.20f)),
+        contentColor = color,
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
-            color = color,
             maxLines = 1,
         )
     }
