@@ -1,6 +1,5 @@
 package dev.j3pf.rp.ui.theme
 
-import android.provider.Settings
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.AnimationSpec
@@ -17,32 +16,15 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 
 /** CompositionLocal para propagar si el usuario tiene activado "reducir movimiento". */
 val LocalReducedMotion = compositionLocalOf { false }
 
-/** Determina si el sistema tiene desactivadas las animaciones (animator_duration_scale == 0). */
+/** Determina si el sistema tiene desactivadas las animaciones. */
 @Composable
-fun rememberIsReducedMotion(): Boolean {
-    val context = LocalContext.current
-    return remember(context) {
-        try {
-            val scale =
-                Settings.Global.getFloat(
-                    context.contentResolver,
-                    Settings.Global.ANIMATOR_DURATION_SCALE,
-                    1.0f,
-                )
-            scale == 0.0f
-        } catch (_: Exception) {
-            false
-        }
-    }
-}
+expect fun rememberIsReducedMotion(): Boolean
 
 /** Tokens centralizados de movimiento con física de resortes (Spring). */
 object RpMotion {

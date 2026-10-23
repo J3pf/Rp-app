@@ -1,16 +1,12 @@
 package dev.j3pf.rp.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 
@@ -248,14 +244,18 @@ private fun themeForMachine(
     return RpThemeChoice.GENTLE_CUTE
 }
 
+/** Resuelve el esquema dinámico de la plataforma si está disponible. */
+@Composable
+expect fun platformDynamicColorScheme(darkTheme: Boolean): ColorScheme?
+
 /** Tema principal de RP con soporte para temas de Pi/Gentle Shell (Gentle-Cute, Gentle-Sexy, Omarchy). */
 @Composable
 fun RpTheme(
     themeChoice: RpThemeChoice = RpThemeChoice.AUTO,
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicScheme: ColorScheme? = platformDynamicColorScheme(darkTheme),
     content: @Composable () -> Unit,
 ) {
-    val ctx = LocalContext.current
     val scheme: ColorScheme =
         when (themeChoice) {
             RpThemeChoice.GENTLE_CUTE -> {
@@ -271,11 +271,7 @@ fun RpTheme(
             }
 
             RpThemeChoice.SYSTEM, RpThemeChoice.AUTO -> {
-                if (Build.VERSION.SDK_INT >= 31) {
-                    if (darkTheme) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-                } else {
-                    if (darkTheme) DefaultDarkColors else DefaultLightColors
-                }
+                dynamicScheme ?: if (darkTheme) DefaultDarkColors else DefaultLightColors
             }
         }
     MaterialTheme(colorScheme = scheme, content = content)
