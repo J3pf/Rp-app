@@ -334,6 +334,23 @@ class MeshViewModelTest {
                 viewModel.uiState.value.activeBubbles
                     .all { it.expiresAtMs > System.currentTimeMillis() },
             )
+
+            // Re-emitting the same commKey updates the existing bubble without duplicating it.
+            val duplicate = MeshComm("c20", fromName = "A", toName = "B", text = "updated 20", at = 999L)
+            bus.publish(Envelope.of(MsgType.MESH_COMM, MeshCommEvent(duplicate)))
+            withTimeout(3_000) {
+                viewModel.uiState.first {
+                    it.activeBubbles
+                        .firstOrNull()
+                        ?.comm
+                        ?.text == "updated 20"
+                }
+            }
+            assertEquals(
+                1,
+                viewModel.uiState.value.activeBubbles
+                    .count { it.comm.commKey == "c20" },
+            )
         }
     }
 

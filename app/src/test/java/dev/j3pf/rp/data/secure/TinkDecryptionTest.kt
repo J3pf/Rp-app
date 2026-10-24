@@ -7,7 +7,10 @@ import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.TinkJsonProtoKeysetFormat
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.aead.PredefinedAeadParameters
+import dev.j3pf.rp.util.BiometricGate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -36,5 +39,20 @@ class TinkDecryptionTest {
         val decrypted = String(decryptAead.decrypt(ciphertext, associatedData), Charsets.UTF_8)
 
         assertEquals(plaintext, decrypted)
+    }
+
+    @Test
+    fun `biometric gate is not fresh until explicit action authentication and respects monotonic validity`() {
+        val gate = BiometricGate()
+        assertFalse(gate.isFresh(now = 0L))
+        assertFalse(gate.isFresh(now = 1_000L))
+
+        gate.recordSuccessForTest(atElapsedRealtimeMs = 10_000L)
+        assertTrue(gate.isFresh(now = 10_000L))
+        assertTrue(gate.isFresh(now = 10_000L + BiometricGate.VALIDITY_MS - 1L))
+        assertFalse(gate.isFresh(now = 10_000L + BiometricGate.VALIDITY_MS))
+
+        gate.invalidate()
+        assertFalse(gate.isFresh(now = 10_001L))
     }
 }

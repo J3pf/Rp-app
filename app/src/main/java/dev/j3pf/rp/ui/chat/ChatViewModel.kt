@@ -8,7 +8,6 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.UserMsg
-import dev.j3pf.rp.data.net.AnswerOutcome
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.RelayConnection
@@ -19,12 +18,10 @@ import dev.j3pf.rp.data.repo.ChatRepository
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.LocalAttachment
-import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.protocol.AgentSummary
-import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HostGitDiffResult
@@ -75,7 +72,6 @@ class ChatViewModel
         private val chats: ChatRepository,
         private val agentsRepo: AgentsRepository,
         private val settingsRepo: SettingsRepository,
-        private val prompts: PromptsRepository,
         private val attachmentsRepo: AttachmentsRepository,
         private val hostRepo: HostRepository,
         connection: RelayConnection,
@@ -255,10 +251,9 @@ class ChatViewModel
                             return@launch
                         }
                     local[la.id] = la
-                    replaceId(
-                        tempId,
-                        la.id,
-                    ) { it.copy(id = la.id, name = la.name, mime = la.mime, size = la.size, state = UploadState.UPLOADING) }
+                    replace(tempId) {
+                        it.copy(id = la.id, name = la.name, mime = la.mime, size = la.size, state = UploadState.UPLOADING)
+                    }
                     when (val r = attachmentsRepo.upload(la) { p -> replace(la.id) { it.copy(progress = p) } }) {
                         is ApiResult.Ok -> {
                             replace(la.id) {
@@ -307,12 +302,6 @@ class ChatViewModel
             id: String,
             f: (AttachmentUi) -> AttachmentUi,
         ) = extra.update { s -> s.copy(attachments = s.attachments.map { if (it.id == id) f(it) else it }) }
-
-        private fun replaceId(
-            old: String,
-            new: String,
-            f: (AttachmentUi) -> AttachmentUi,
-        ) = extra.update { s -> s.copy(attachments = s.attachments.map { if (it.id == old) f(it) else it }) }
 
         // ───────────────────────────── Envío ─────────────────────────────
 
@@ -406,15 +395,6 @@ class ChatViewModel
                     )
                 }
             }
-        }
-
-        /** Respuesta desde una tarjeta de prompt incrustada. */
-        fun answerPrompt(
-            promptId: String,
-            answer: Answer,
-            onResult: (AnswerOutcome) -> Unit,
-        ) {
-            viewModelScope.launch { onResult(prompts.answer(promptId, answer)) }
         }
 
         override fun onCleared() {

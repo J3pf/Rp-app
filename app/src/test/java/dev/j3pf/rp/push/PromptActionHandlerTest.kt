@@ -116,6 +116,21 @@ class PromptActionHandlerTest {
     }
 
     @Test
+    fun `404 fallo no reintentable retira la notificacion sin encolar WorkManager`() {
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"not_found"}"""))
+            handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_NO))
+            assertNull(current())
+            val infos =
+                androidx.work.WorkManager
+                    .getInstance(ctx)
+                    .getWorkInfosForUniqueWork("answer-01PROMPT")
+                    .get()
+            assertEquals(0, infos.size)
+        }
+    }
+
+    @Test
     fun `sin red muestra reintento y encola WorkManager`() {
         runBlocking {
             server.shutdown()

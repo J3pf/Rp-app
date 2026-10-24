@@ -11,7 +11,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -58,7 +61,6 @@ import dev.j3pf.rp.ui.settings.SettingsScreen
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpMotion
 import dev.j3pf.rp.ui.theme.rememberIsReducedMotion
-import dev.j3pf.rp.util.BiometricGate
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -78,7 +80,6 @@ class BadgeViewModel
 @Composable
 fun RpRoot(
     mainVm: MainViewModel,
-    gate: BiometricGate,
     badgeVm: BadgeViewModel = hiltViewModel(),
 ) {
     val session by mainVm.session.collectAsStateWithLifecycle()
@@ -87,6 +88,7 @@ fun RpRoot(
     val target by mainVm.target.collectAsStateWithLifecycle()
     val pendingCount by badgeVm.pending.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    var pendingPairTarget by remember { mutableStateOf<NavTarget.Pair?>(null) }
 
     // Esperamos a que carguen los ajustes para no parpadear entre onboarding y agentes.
     val loaded = settings ?: return
@@ -114,7 +116,11 @@ fun RpRoot(
         val t = target ?: return@LaunchedEffect
         when (t) {
             is NavTarget.Pair -> {
-                nav.navigate(PairRoute(t.url, t.code))
+                if (session == null) {
+                    nav.navigate(PairRoute(t.url, t.code))
+                } else {
+                    pendingPairTarget = t
+                }
                 mainVm.consumeTarget()
             }
 
@@ -274,6 +280,33 @@ fun RpRoot(
     }
 
     sheetPrompt?.let { id -> PromptSheet(promptId = id, onDismiss = mainVm::closePrompt) }
+
+    pendingPairTarget?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingPairTarget = null },
+            title = { Text("Reemplazar sesión actual") },
+            text = {
+                Text(
+                    "Ya tienes una sesión activa. ¿Quieres reemplazarla y vincular este dispositivo con ${pending.url}?",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingPairTarget = null
+                        nav.navigate(PairRoute(pending.url, pending.code))
+                    },
+                ) {
+                    Text("Continuar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPairTarget = null }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
 }
 
 @Composable

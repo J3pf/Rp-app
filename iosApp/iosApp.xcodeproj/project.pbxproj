@@ -154,15 +154,22 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/../build.gradle.kts",
+				"$(SRCROOT)/../settings.gradle.kts",
+				"$(SRCROOT)/../gradle/libs.versions.toml",
+				"$(SRCROOT)/../protocol/build.gradle.kts",
+				"$(SRCROOT)/../relay-client/build.gradle.kts",
+				"$(SRCROOT)/../shared-ui/build.gradle.kts",
 			);
 			name = "Compile Kotlin Multiplatform Framework";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/SharedUi.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd \"$SRCROOT/..\"\n./gradlew :shared-ui:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "# ENABLE_USER_SCRIPT_SANDBOXING = NO is required by Kotlin Multiplatform's\n# embedAndSignAppleFrameworkForXcode task, which reads/writes ../build and ~/.gradle.\ncd \"$SRCROOT/..\"\n./gradlew :shared-ui:embedAndSignAppleFrameworkForXcode\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

@@ -128,6 +128,7 @@ protocol/     Kotlin Multiplatform: shared protocol v1 models and ChatReducer; J
 relay-client/ Kotlin Multiplatform: shared HTTP, pairing/session, WS correlation/bus, and reconnect policy
 shared-ui/    Compose Multiplatform: shared theme, design tokens, custom canvas, screens, routes, and iOS MainViewController
 app/          Compose + Hilt + Room: data/{net,db,repo,secure}, push/, Android host shell & services
+iosApp/       Xcode iOS host application wrapper embedding SharedUi.framework (MainViewController)
 ```
 
 ### Kotlin Multiplatform foundation
@@ -146,14 +147,14 @@ The legacy `:protocol:test` task remains a JVM test task, including support for
 `--tests`. KMP JVM reports are under `protocol/build/reports/tests/jvmTest`;
 legacy reports remain under `protocol/build/reports/tests/test`.
 
-This is **not an iOS app yet**. No screens, native pairing/session workflow, APNs,
-Keychain, native crypto, or native secure ID generator have been ported. There is no iOS framework
-export or application target in this unit. Linux metadata compilation and JVM tests
-check the shared foundation, not the iOS adapter or an iPhone application.
-On macOS, the next compilation checks are
-`./gradlew :protocol:compileKotlinIosArm64 :protocol:iosSimulatorArm64Test` with
-compatible Xcode/simulator installed; device and push testing remain later work.
-Android UI, Hilt, Room, and push behavior are unchanged.
+All shared UI screens, routes, theme tokens, and the `MeshCanvas` topology view live in
+`:shared-ui`, and `iosApp/` provides the Xcode application target that embeds
+`SharedUi.framework` via `MainViewController`. Native iOS adapters (URLSession HTTP/WebSocket
+drivers, Keychain storage, and APNs push) and full Xcode/Simulator compilation require macOS
+with Xcode installed (`./gradlew :shared-ui:embedAndSignAppleFrameworkForXcode`). On Linux,
+`:protocol:compileIosMainKotlinMetadata`, `:relay-client:compileIosMainKotlinMetadata`, and
+`:shared-ui:compileIosMainKotlinMetadata` verify the multiplatform Kotlin sources alongside
+the JVM and Android test suites.
 
 ### Shared HTTP relay client
 

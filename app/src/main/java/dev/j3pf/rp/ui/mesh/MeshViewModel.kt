@@ -419,8 +419,10 @@ class MeshViewModel
                 state.copy(
                     liveComms = (listOf(comm) + state.liveComms.filterNot { it.commKey == comm.commKey }).take(MAX_LIVE_COMMS),
                     activeBubbles =
-                        (listOf(LiveCommBubble(comm, expiresAt)) + state.activeBubbles)
-                            .filter { it.expiresAtMs > System.currentTimeMillis() }
+                        (
+                            listOf(LiveCommBubble(comm, expiresAt)) +
+                                state.activeBubbles.filterNot { it.comm.commKey == comm.commKey }
+                        ).filter { it.expiresAtMs > System.currentTimeMillis() }
                             .take(MAX_ACTIVE_BUBBLES),
                 )
             }

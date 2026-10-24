@@ -4,13 +4,14 @@ Android and Kotlin Multiplatform (KMP) client for the RemotePi system. Provides 
 
 ## Tech Stack & Architecture
 
-- **Language & Runtime**: Kotlin 2.1.20, Java 17.
-- **Android Target**: `compileSdk = 36`, `targetSdk = 36`, `minSdk = 26`.
+- **Language & Runtime**: Kotlin 2.4.21, Java 17.
+- **Android Target**: `compileSdk = 37`, `targetSdk = 36`, `minSdk = 29`.
 - **Modular Architecture**:
   - `:protocol`: Pure Kotlin Multiplatform (targets JVM 17, `iosArm64`, `iosSimulatorArm64`). Contains `@Serializable` protocol types, `ChatReducer`, ULID generators, and domain models.
   - `:relay-client`: Pure Kotlin Multiplatform (JVM 17, `iosArm64`, `iosSimulatorArm64`). Handles shared HTTP requests, WebSocket correlation bus, session state management, and chat synchronization.
   - `:shared-ui`: Compose Multiplatform (Android library via AGP 9 `com.android.kotlin.multiplatform.library`, JVM 17, `iosArm64`, `iosSimulatorArm64`). Hosts shared theme, screens, components, and exports `MainViewController` for iOS.
   - `:app`: Android application layer. Implements Jetpack Compose host, Hilt dependency injection, Room database persistence, WorkManager background tasks, OkHttp network adapters, and Android notification channels.
+  - `iosApp/`: Xcode project wrapping `:shared-ui`'s `MainViewController` (`SharedUi.framework`) for iOS 16+.
 
 ## Commands
 

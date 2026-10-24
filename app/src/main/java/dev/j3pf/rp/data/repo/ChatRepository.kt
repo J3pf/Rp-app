@@ -47,6 +47,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import dev.j3pf.rp.client.chat.ChatSession as SharedChatSession
@@ -66,7 +67,7 @@ class ChatRepository
         @AppScope private val scope: CoroutineScope,
         private val agentDao: AgentDao,
     ) {
-        private var persisted = 0
+        private val persisted = AtomicInteger(0)
 
         private val chatPlatform =
             object : ChatPlatform {
@@ -204,7 +205,7 @@ class ChatRepository
                             ),
                         ),
                     )
-                    if (++persisted % 100 == 0) chatDao.trim(relayId, agentId, 5000)
+                    if (persisted.incrementAndGet() % 100 == 0) chatDao.trim(relayId, agentId, 5000)
                 }
 
                 override suspend fun clearChat(relayId: String) {
@@ -243,7 +244,8 @@ class ChatRepository
 
         private val registry =
             ChatSessionRegistry<ChatSession>(
-                create = { agentId -> ChatSession(agentId).also { it.start() } },
+                create = { agentId -> ChatSession(agentId) },
+                onStart = { it.start() },
                 onStop = { it.stop() },
             )
 

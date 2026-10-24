@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -65,7 +66,7 @@ class MainViewModel
         /** Bloqueo biométrico de la app (fase 4). */
         private val _locked = MutableStateFlow(true)
         val locked: StateFlow<Boolean> = _locked.asStateFlow()
-        private var backgroundedAt = 0L
+        private var backgroundedAt = -1L
 
         fun post(t: NavTarget) = _target.update { t }
 
@@ -75,14 +76,15 @@ class MainViewModel
 
         fun closePrompt() = _sheetPrompt.update { null }
 
-        fun onAppStopped() {
-            backgroundedAt = System.currentTimeMillis()
+        fun onAppStopped(nowMs: Long = SystemClock.elapsedRealtime()) {
+            backgroundedAt = nowMs
         }
 
         /** Se bloquea tras 30 s en segundo plano (o en arranque en frío) si el ajuste está activo. */
-        fun onAppStarted() {
-            val away = System.currentTimeMillis() - backgroundedAt
-            if (backgroundedAt == 0L || away > LOCK_AFTER_MS) _locked.update { true }
+        fun onAppStarted(nowMs: Long = SystemClock.elapsedRealtime()) {
+            val stoppedAt = backgroundedAt
+            val away = nowMs - stoppedAt
+            if (stoppedAt < 0L || away > LOCK_AFTER_MS) _locked.update { true }
         }
 
         fun unlock() = _locked.update { false }

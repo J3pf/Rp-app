@@ -78,7 +78,14 @@ class MainActivity : FragmentActivity() {
 
                 fun unlock() {
                     scope.launch {
-                        when (gate.authenticate(this@MainActivity, "Desbloquear RP", force = true)) {
+                        when (
+                            gate.authenticate(
+                                this@MainActivity,
+                                "Desbloquear RP",
+                                force = true,
+                                recordAuthTimestamp = false,
+                            )
+                        ) {
                             AuthResult.OK -> {
                                 lockMessage = null
                                 vm.unlock()
@@ -99,7 +106,7 @@ class MainActivity : FragmentActivity() {
                 if (mustLock) {
                     LockScreen(onUnlock = ::unlock, message = lockMessage)
                 } else {
-                    RpRoot(vm, gate)
+                    RpRoot(vm)
                 }
             }
         }

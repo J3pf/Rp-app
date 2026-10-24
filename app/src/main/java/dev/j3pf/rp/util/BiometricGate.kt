@@ -1,6 +1,7 @@
 package dev.j3pf.rp.util
 
 import android.os.Build
+import android.os.SystemClock
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -22,12 +23,20 @@ enum class AuthResult { OK, FAILED, UNAVAILABLE }
 class BiometricGate
     @Inject
     constructor() {
+        @Volatile private var hasAuthenticated = false
+
         @Volatile private var lastAuthAt = 0L
 
-        fun isFresh(now: Long = System.currentTimeMillis()) = now - lastAuthAt < VALIDITY_MS
+        fun isFresh(now: Long = SystemClock.elapsedRealtime()) = hasAuthenticated && now >= lastAuthAt && now - lastAuthAt < VALIDITY_MS
 
         fun invalidate() {
+            hasAuthenticated = false
             lastAuthAt = 0L
+        }
+
+        internal fun recordSuccessForTest(atElapsedRealtimeMs: Long = SystemClock.elapsedRealtime()) {
+            lastAuthAt = atElapsedRealtimeMs
+            hasAuthenticated = true
         }
 
         private val authenticators: Int
@@ -46,6 +55,7 @@ class BiometricGate
             title: String,
             subtitle: String? = null,
             force: Boolean = false,
+            recordAuthTimestamp: Boolean = true,
         ): AuthResult {
             if (!force && isFresh()) return AuthResult.OK
             if (!isAvailable(activity)) return AuthResult.UNAVAILABLE
@@ -56,7 +66,10 @@ class BiometricGate
                         ContextCompat.getMainExecutor(activity),
                         object : BiometricPrompt.AuthenticationCallback() {
                             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                lastAuthAt = System.currentTimeMillis()
+                                if (recordAuthTimestamp) {
+                                    lastAuthAt = SystemClock.elapsedRealtime()
+                                    hasAuthenticated = true
+                                }
                                 if (cont.isActive) cont.resume(AuthResult.OK)
                             }
 

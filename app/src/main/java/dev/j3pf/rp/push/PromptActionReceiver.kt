@@ -144,7 +144,7 @@ class PromptActionHandler
                 }
 
                 is AnswerOutcome.Failed -> {
-                    factory.showRetrying(notifId, label)
+                    factory.cancelNotification(NotificationFactory.PROMPT_TAG, notifId)
                 }
             }
         }

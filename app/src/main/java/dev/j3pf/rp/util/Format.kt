@@ -1,65 +1,48 @@
 package dev.j3pf.rp.util
 
 import androidx.compose.ui.graphics.Color
-import androidx.core.graphics.toColorInt
+import dev.j3pf.rp.ui.util.agentTitle as sharedAgentTitle
+import dev.j3pf.rp.ui.util.contextEmoji as sharedContextEmoji
+import dev.j3pf.rp.ui.util.contextLabel as sharedContextLabel
+import dev.j3pf.rp.ui.util.humanSize as sharedHumanSize
+import dev.j3pf.rp.ui.util.lastSegment as sharedLastSegment
+import dev.j3pf.rp.ui.util.parseColor as sharedParseColor
+import dev.j3pf.rp.ui.util.relativeTime as sharedRelativeTime
+import dev.j3pf.rp.ui.util.stableId as sharedStableId
+import dev.j3pf.rp.ui.util.truncate as sharedTruncate
 
 /** Último segmento de una ruta (acepta `/` y `\`). */
-fun lastSegment(path: String?): String {
-    if (path.isNullOrBlank()) return ""
-    return path.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
-}
+fun lastSegment(path: String?): String = sharedLastSegment(path)
 
 /** "hace 3 h", "hace 5 min", "ahora". */
 fun relativeTime(
     thenMs: Long?,
     nowMs: Long = System.currentTimeMillis(),
-): String {
-    if (thenMs == null || thenMs <= 0) return ""
-    val s = ((nowMs - thenMs) / 1000).coerceAtLeast(0)
-    return when {
-        s < 45 -> "ahora"
-        s < 3600 -> "hace ${(s / 60).coerceAtLeast(1)} min"
-        s < 86_400 -> "hace ${s / 3600} h"
-        else -> "hace ${s / 86_400} d"
-    }
-}
+): String = sharedRelativeTime(thenMs, nowMs)
 
-fun humanSize(bytes: Long): String =
-    when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-        else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-    }
+fun humanSize(bytes: Long): String = sharedHumanSize(bytes)
 
 /** `#RRGGBB` → [Color]; color por defecto si el valor es inválido. */
 fun parseColor(
     hex: String?,
     fallback: Color = Color(0xFF6750A4),
-): Color =
-    runCatching {
-        Color(("#" + (hex ?: return fallback).trim().removePrefix("#")).toColorInt())
-    }.getOrDefault(fallback)
+): Color = sharedParseColor(hex, fallback)
 
-fun contextLabel(context: String): String =
-    when (context) {
-        "personal" -> "Personal"
-        "work" -> "Empresa"
-        else -> context.replaceFirstChar { it.uppercase() }
-    }
+fun contextLabel(context: String): String = sharedContextLabel(context)
 
-fun contextEmoji(context: String): String = ""
+fun contextEmoji(context: String): String = sharedContextEmoji(context)
 
 /** "api-gateway" etc. — nombre visible del agente. */
 fun agentTitle(
     sessionName: String?,
     cwd: String?,
     agentId: String,
-): String = sessionName?.takeIf { it.isNotBlank() } ?: lastSegment(cwd).ifEmpty { agentId.substringAfter(':').take(8) }
+): String = sharedAgentTitle(sessionName, cwd, agentId)
 
 /** Hash estable y positivo para ids de notificación. */
-fun stableId(s: String): Int = s.hashCode() and 0x7fffffff
+fun stableId(s: String): Int = sharedStableId(s)
 
 fun truncate(
     s: String,
     max: Int,
-): String = if (s.length <= max) s else s.take(max - 1) + "…"
+): String = sharedTruncate(s, max)
