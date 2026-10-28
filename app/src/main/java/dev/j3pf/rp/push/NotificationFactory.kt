@@ -40,6 +40,7 @@ import javax.inject.Singleton
  *  - input / allowFreeText → acción "Responder" con `RemoteInput`.
  *  - `setAuthenticationRequired(true)` en acciones de aprobación si el ajuste está activo (API 31+).
  *  - Agrupadas por agente con resumen; `setTimeoutAfter` = `expiresAt`.
+ *  - Al asentar un prompt ([cancelPrompt]) se retira el child, su resumen huérfano y la clave del deduper.
  */
 @Singleton
 class NotificationFactory
@@ -48,6 +49,7 @@ class NotificationFactory
         @ApplicationContext private val context: Context,
         private val channels: NotificationChannels,
         private val settings: SettingsRepository,
+        private val deduper: NotificationDeduper,
     ) {
         private val nm get() = NotificationManagerCompat.from(context)
 
@@ -56,6 +58,8 @@ class NotificationFactory
         @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         suspend fun showPrompt(p: PushPromptBody) {
             if (!canNotify()) return
+            // Si el agente está preguntando no está "terminado": el aviso anterior es basura en la bandeja.
+            nm.cancel(SETTLED_TAG, stableId("settled:${p.agentId}"))
             val s = settings.settings.first()
             val machineName = p.machineName.ifEmpty { "RP" }
             channels.ensureMachine(p.machineId.ifEmpty { "default" }, machineName, p.machineContext)
@@ -342,6 +346,7 @@ class NotificationFactory
                     ongoing = true,
                     channelId = channelId,
                     notifIdHint = notifId,
+                    timeoutMs = SENDING_TIMEOUT_MS,
                 ),
             )
         }
@@ -372,34 +377,57 @@ class NotificationFactory
             ongoing: Boolean,
             channelId: String?,
             notifIdHint: Int,
+            timeoutMs: Long? = null,
         ): Notification {
-            val channel = channelId ?: existingChannel(notifIdHint) ?: NotificationChannels.SERVICE_CHANNEL
-            return NotificationCompat
-                .Builder(context, channel)
-                .setSmallIcon(R.drawable.ic_stat_rp)
-                .setContentTitle(agentLabel.ifEmpty { "RP" })
-                .setContentText(text)
-                .setOngoing(ongoing)
-                .setOnlyAlertOnce(true)
-                .setProgress(0, 0, ongoing)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
+            val existing = existingNotification(notifIdHint)
+            val builder =
+                NotificationCompat
+                    .Builder(context, channelId ?: existing?.channelId ?: NotificationChannels.SERVICE_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle(agentLabel.ifEmpty { "RP" })
+                    .setContentText(text)
+                    .setOngoing(ongoing)
+                    .setOnlyAlertOnce(true)
+                    .setProgress(0, 0, ongoing)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+            // Conserva el grupo del prompt: si no, el resumen del agente queda huérfano al reemplazarlo.
+            existing?.group?.let { builder.setGroup(it) }
+            // "Enviando…" es transitorio: si el flujo muere a medias no puede quedarse ongoing para siempre.
+            timeoutMs?.let { builder.setTimeoutAfter(it) }
+            return builder.build()
         }
 
-        /** Canal de la notificación activa (para mantenerlo al reemplazarla por "Enviando…"). */
-        private fun existingChannel(id: Int): String? =
+        /** Notificación activa con ese id (para conservar canal y grupo al reemplazarla). */
+        private fun existingNotification(id: Int): Notification? =
             runCatching {
                 context
                     .getSystemService(android.app.NotificationManager::class.java)
                     .activeNotifications
                     .firstOrNull { it.id == id && it.tag == PROMPT_TAG }
                     ?.notification
-                    ?.channelId
             }.getOrNull()
 
-        /** Retira la notificación de un prompt (respondido en la terminal / otro dispositivo / cancelado). */
-        fun cancelPrompt(promptId: String) {
+        /**
+         * Asienta un prompt: retira el child, su resumen de grupo si quedó huérfano y la clave del deduper
+         * (para que un id reutilizado legítimamente se pueda volver a notificar).
+         */
+        suspend fun cancelPrompt(promptId: String) {
             nm.cancel(PROMPT_TAG, notificationId(promptId))
+            deduper.forget(NotificationDeduper.promptKey(promptId))
+            deduper.markAnswered(promptId)
+            pruneOrphanSummaries()
+        }
+
+        /**
+         * Retira los resúmenes de grupo que se quedaron sin hijos: respuesta desde la bandeja, respuesta en
+         * otro dispositivo, prompt cancelado por el relay o un proceso que murió a medias.
+         */
+        private fun pruneOrphanSummaries() {
+            val active = runCatching { nm.activeNotifications.toList() }.getOrNull() ?: return
+            val childGroups = active.filter { it.tag != SUMMARY_TAG }.mapNotNull { it.notification.group }.toSet()
+            active
+                .filter { it.tag == SUMMARY_TAG && it.notification.group !in childGroups }
+                .forEach { nm.cancel(SUMMARY_TAG, it.id) }
         }
 
         fun cancelNotification(
@@ -461,6 +489,9 @@ class NotificationFactory
             const val SIMPLE_TAG = "rp.simple"
             const val SUMMARY_TAG = "rp.summary"
             const val WORKING_TAG = "rp.working"
+
+            /** "Enviando…" nunca debe sobrevivir al flujo que lo publicó. */
+            private const val SENDING_TIMEOUT_MS = 30_000L
 
             /** id = hash de `promptId`. */
             fun notificationId(promptId: String) = stableId(promptId)

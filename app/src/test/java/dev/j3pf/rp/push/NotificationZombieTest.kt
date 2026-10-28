@@ -22,8 +22,10 @@ import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
 import dev.j3pf.rp.protocol.PromptOption
 import dev.j3pf.rp.protocol.PromptResolved
+import dev.j3pf.rp.protocol.PushKind
 import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.PushSettledBody
+import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import dev.j3pf.rp.util.stableId
@@ -33,6 +35,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -61,8 +64,10 @@ class NotificationZombieTest {
     private lateinit var server: MockWebServer
     private lateinit var db: RpDatabase
     private lateinit var secrets: FakeSecretStore
+    private lateinit var deduper: NotificationDeduper
     private lateinit var factory: NotificationFactory
     private lateinit var handler: PromptActionHandler
+    private lateinit var router: PushRouter
     private lateinit var repoScope: CoroutineScope
 
     private val agentId = "m:s"
@@ -84,6 +89,8 @@ class NotificationZombieTest {
             danger = Danger.HIGH,
         )
 
+    private fun pushJson() = RpJson.encodeToJsonElement(PushPromptBody.serializer(), promptBody()) as JsonObject
+
     @Before
     fun setUp() {
         runBlocking {
@@ -94,10 +101,14 @@ class NotificationZombieTest {
             nm = ctx.getSystemService(NotificationManager::class.java)
             db = inMemoryDb(ctx)
             secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
-            factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx))
+            deduper = NotificationDeduper(db.dedup())
+            factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
             handler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
+            router = PushRouter(factory, deduper, secrets, SettingsRepository(ctx))
             repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-            factory.showPrompt(promptBody())
+            // El push real entra por el router (deduplica); sembrar aquí es lo que hace que el
+            // deduper tenga la clave tomada, como en producción.
+            router.handleDirect(PushKind.PROMPT, pushJson(), pushId = null)
         }
     }
 
@@ -250,5 +261,17 @@ class NotificationZombieTest {
         }
     }
 
-    // ───────────────────────── S2/S4: deduper y replay ─────────────────────────
+    // ───────────────────────── S4: deduper ─────────────────────────
+
+    @Test
+    fun `al asentar un prompt se olvida la clave del deduper`() {
+        runBlocking {
+            assertTrue(!deduper.firstSeen("prompt:01PROMPT"), "la clave ya estaba tomada por el push original")
+
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            handler.handle(ctx, answerIntent(PromptActionReceiver.ANSWER_OPTION, "0"))
+
+            assertTrue(deduper.firstSeen("prompt:01PROMPT"), "un prompt legítimamente reabierto debe poder notificarse otra vez")
+        }
+    }
 }

@@ -61,6 +61,13 @@ data class AgentWithCounts(
 object PromptState {
     const val OPEN = "open"
     const val RESOLVED = "resolved"
+
+    /**
+     * Ventana durante la que un prompt ya respondido no puede resucitar: ni un `prompt.opened`
+     * repetido, ni un `app.welcome` generado antes de la respuesta, ni un push duplicado.
+     * Pasada la ventana, un id reutilizado legítimamente se vuelve a mostrar.
+     */
+    const val REPLAY_WINDOW_MS = 10 * 60_000L
 }
 
 @Entity(

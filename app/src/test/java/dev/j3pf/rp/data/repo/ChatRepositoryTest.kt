@@ -80,6 +80,8 @@ class ChatRepositoryTest {
                     dev.j3pf.rp.push
                         .NotificationChannels(context),
                     settingsRepo,
+                    dev.j3pf.rp.push
+                        .NotificationDeduper(db.dedup()),
                 )
         val promptsRepo =
             PromptsRepository(

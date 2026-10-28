@@ -133,9 +133,9 @@ class PromptActionHandler
             factory.showSending(notifId, label)
             when (val outcome = api.answerPrompt(promptId, answer)) {
                 AnswerOutcome.Sent, AnswerOutcome.AlreadyResolved -> {
-                    // 409 = ya respondido en otro lugar → también se quita.
+                    // 409 = ya respondido en otro lugar → también se asienta.
                     secrets.current()?.let { promptDao.markResolved(it.relayId, promptId, ResolvedBy.REMOTE, System.currentTimeMillis()) }
-                    factory.cancelNotification(NotificationFactory.PROMPT_TAG, notifId)
+                    factory.cancelPrompt(promptId)
                 }
 
                 AnswerOutcome.Queued -> {
@@ -144,7 +144,7 @@ class PromptActionHandler
                 }
 
                 is AnswerOutcome.Failed -> {
-                    factory.cancelNotification(NotificationFactory.PROMPT_TAG, notifId)
+                    factory.cancelPrompt(promptId)
                 }
             }
         }

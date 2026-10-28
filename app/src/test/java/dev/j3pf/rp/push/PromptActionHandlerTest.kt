@@ -49,9 +49,9 @@ class PromptActionHandlerTest {
             shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
             server = MockWebServer().also { it.start() }
             nm = ctx.getSystemService(NotificationManager::class.java)
-            factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx))
             val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
             val db = inMemoryDb(ctx)
+            factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
             handler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
             factory.showPrompt(
                 PushPromptBody(
