@@ -14,10 +14,12 @@ import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
+import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
+import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
 import dev.j3pf.rp.protocol.PromptOption
@@ -89,6 +91,15 @@ class NotificationZombieTest {
             danger = Danger.HIGH,
         )
 
+    private fun promptModel() =
+        Prompt(
+            promptId = "01PROMPT",
+            agentId = agentId,
+            kind = PromptKind.SELECT,
+            title = "¿Permitir?",
+            options = listOf(PromptOption("0", "Permitir"), PromptOption("2", "Denegar")),
+        )
+
     private fun pushJson() = RpJson.encodeToJsonElement(PushPromptBody.serializer(), promptBody()) as JsonObject
 
     @Before
@@ -104,7 +115,7 @@ class NotificationZombieTest {
             deduper = NotificationDeduper(db.dedup())
             factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
             handler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
-            router = PushRouter(factory, deduper, secrets, SettingsRepository(ctx))
+            router = PushRouter(factory, deduper, secrets, SettingsRepository(ctx), db.prompts())
             repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
             // El push real entra por el router (deduplica); sembrar aquí es lo que hace que el
             // deduper tenga la clave tomada, como en producción.
@@ -160,6 +171,8 @@ class NotificationZombieTest {
         }
         return probe() == null
     }
+
+    private suspend fun promptState(): String? = db.prompts().get("r1", "01PROMPT")?.state
 
     // ───────────────────────── S1: no zombie tras responder ─────────────────────────
 
@@ -261,7 +274,7 @@ class NotificationZombieTest {
         }
     }
 
-    // ───────────────────────── S4: deduper ─────────────────────────
+    // ───────────────────────── S2/S4: deduper y replay ─────────────────────────
 
     @Test
     fun `al asentar un prompt se olvida la clave del deduper`() {
@@ -273,5 +286,67 @@ class NotificationZombieTest {
 
             assertTrue(deduper.firstSeen("prompt:01PROMPT"), "un prompt legítimamente reabierto debe poder notificarse otra vez")
         }
+    }
+
+    @Test
+    fun `un push repetido de un prompt ya respondido no vuelve a mostrarse`() {
+        runBlocking {
+            server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+            handler.handle(ctx, answerIntent(PromptActionReceiver.ANSWER_OPTION, "0"))
+            assertTrue(awaitGone { promptNotif() })
+
+            val shown = router.handleDirect(PushKind.PROMPT, pushJson(), pushId = null)
+
+            assertTrue(shown)
+            assertTrue(awaitGone { promptNotif() }, "un replay no puede resucitar el prompt respondido")
+        }
+    }
+
+    @Test
+    fun `un prompt resuelto hace mucho si vuelve a mostrarse`() {
+        runBlocking {
+            val now = System.currentTimeMillis()
+            db.prompts().upsert(
+                listOf(promptModel().toEntity("r1", now - 11 * 60_000L).copy(state = "resolved", resolvedAt = now - 11 * 60_000L)),
+            )
+            nm.cancelAll()
+            deduper.forget("prompt:01PROMPT") // entrega nueva, no replay
+
+            router.handleDirect(PushKind.PROMPT, pushJson(), pushId = null)
+
+            assertNotNull(promptNotif(), "fuera de la ventana de replay se vuelve a mostrar")
+        }
+    }
+
+    @Test
+    fun `un replay de prompt abierto no reabre un prompt ya respondido`() {
+        runBlocking {
+            val bus = MessageBus()
+            val repo = repository(bus)
+            repo.start()
+
+            bus.publish(Envelope.of(MsgType.PROMPT_OPENED, promptModel()))
+            assertTrue(await { promptState() == "open" })
+            bus.publish(Envelope.of(MsgType.PROMPT_RESOLVED, PromptResolved("01PROMPT", "local")))
+            assertTrue(await { promptState() == "resolved" })
+
+            // Resync/replay de WS después de responder.
+            bus.publish(Envelope.of(MsgType.PROMPT_OPENED, promptModel()))
+            delay(600)
+
+            assertEquals("resolved", promptState(), "un replay no puede reabrir un prompt ya respondido")
+        }
+    }
+
+    private suspend fun await(
+        timeoutMs: Long = 2000,
+        probe: suspend () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (probe()) return true
+            delay(20)
+        }
+        return probe()
     }
 }

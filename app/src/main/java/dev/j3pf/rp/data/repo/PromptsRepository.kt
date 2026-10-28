@@ -105,7 +105,8 @@ class PromptsRepository
 
                         MsgType.PROMPT_OPENED -> {
                             val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return@onEach
-                            dao.upsert(listOf(p.toEntity(relayId, now)))
+                            // upsertOpen: un replay de prompt.opened no reabre un prompt ya respondido.
+                            dao.upsertOpen(relayId, listOf(p.toEntity(relayId, now)), now)
                         }
 
                         MsgType.PROMPT_RESOLVED -> {
