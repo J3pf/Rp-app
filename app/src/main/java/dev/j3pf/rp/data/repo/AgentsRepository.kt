@@ -3,11 +3,11 @@ package dev.j3pf.rp.data.repo
 import dev.j3pf.rp.data.db.AgentDao
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.domain.model.toModel
-import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.protocol.AgentArchivedList
 import dev.j3pf.rp.protocol.AgentArchivedRequest
 import dev.j3pf.rp.protocol.AgentRef
@@ -37,7 +37,9 @@ sealed interface CloseOutcome {
 
     data object Archived : CloseOutcome
 
-    data class Failed(val message: String) : CloseOutcome
+    data class Failed(
+        val message: String,
+    ) : CloseOutcome
 }
 
 sealed interface ArchivedAgentsResult {
@@ -46,7 +48,9 @@ sealed interface ArchivedAgentsResult {
         val nextBefore: Long?,
     ) : ArchivedAgentsResult
 
-    data class Failed(val message: String) : ArchivedAgentsResult
+    data class Failed(
+        val message: String,
+    ) : ArchivedAgentsResult
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
