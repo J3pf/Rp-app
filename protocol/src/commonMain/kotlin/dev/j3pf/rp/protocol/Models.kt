@@ -439,6 +439,34 @@ data class AgentRef(
     val agentId: String,
 )
 
+/**
+ * `agent.archived` (app→relay): lista paginada de agentes archivados.
+ * Réplica de `AgentArchived` en rp-relay (`app.ts`); todos los campos son opcionales en el contrato.
+ */
+@Serializable
+data class AgentArchivedRequest(
+    val machineId: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
+    val before: Long? = null,
+    val limit: Int? = null,
+)
+
+/** `host.git_diff` (app→relay): pide el diff del árbol de trabajo del host. */
+@Serializable
+data class GitDiffRequest(
+    val machineId: String,
+    val cwd: String,
+    val path: String? = null,
+)
+
+/** `host.git_discard` (app→relay): descarta los cambios de un path. */
+@Serializable
+data class GitDiscardRequest(
+    val machineId: String,
+    val cwd: String,
+    val path: String,
+)
+
 object Delivery {
     const val AUTO = "auto"
     const val STEER = "steer"
