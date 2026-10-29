@@ -451,6 +451,53 @@ data class AgentArchivedRequest(
     val limit: Int? = null,
 )
 
+/**
+ * `agent.archived.list` (relay→app): agentes archivados, paginados por `nextBefore`.
+ * Réplica de `ArchivedAgentSummary` / `AgentArchivedList` en rp-relay (`app.ts:54-65`).
+ */
+@Serializable
+data class ArchivedAgentSummary(
+    val agentId: String,
+    val machineId: String,
+    val machineName: String = "",
+    val sessionName: String? = null,
+    val cwd: String? = null,
+    @Serializable(with = LenientLongSerializer::class)
+    val archivedAt: Long,
+    @Serializable(with = LenientLongSerializer::class)
+    val lastSeenAt: Long,
+    val lastMessagePreview: String? = null,
+    val messageCount: Int = 0,
+)
+
+@Serializable
+data class AgentArchivedList(
+    val agents: List<ArchivedAgentSummary> = emptyList(),
+    @Serializable(with = LenientLongSerializer::class)
+    val nextBefore: Long? = null,
+)
+
+/** `agent.closed` (bridge→relay): un agente desaparece porque su pane de Herdr se cerró. */
+@Serializable
+data class AgentClosed(
+    val reason: String = "pane_closed",
+)
+
+/** `host.herdr_close` (relay→host): cierra el pane que aloja al agente. */
+@Serializable
+data class HerdrClose(
+    val machineId: String,
+    val paneId: String,
+)
+
+/** `host.herdr_closed` (host→relay): resultado del cierre del pane. */
+@Serializable
+data class HerdrClosed(
+    val paneId: String,
+    val ok: Boolean,
+    val error: String? = null,
+)
+
 /** `host.git_diff` (app→relay): pide el diff del árbol de trabajo del host. */
 @Serializable
 data class GitDiffRequest(

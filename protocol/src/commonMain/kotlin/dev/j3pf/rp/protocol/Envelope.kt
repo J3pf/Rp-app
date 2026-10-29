@@ -72,6 +72,7 @@ object ErrorCodes {
     const val TOO_LARGE = "too_large"
     const val RATE_LIMITED = "rate_limited"
     const val INTERNAL = "internal"
+    const val AGENT_CLOSE_UNSUPPORTED = "agent_close_unsupported"
 }
 
 /** Tipos de mensaje (`t`). */
@@ -92,6 +93,8 @@ object MsgType {
     const val HOST_HERDR_LAYOUT = "host.herdr_layout"
     const val HOST_SPAWN = "host.spawn"
     const val HOST_KILL = "host.kill"
+    const val HOST_HERDR_CLOSE = "host.herdr_close"
+    const val HOST_HERDR_CLOSED = "host.herdr_closed"
     const val HOST_GIT_DIFF = "host.git_diff"
     const val HOST_GIT_DISCARD = "host.git_discard"
     const val MESH_SUBSCRIBE = "mesh.subscribe"
@@ -115,6 +118,8 @@ object MsgType {
     const val HOST_SPAWNED = "host.spawned"
     const val HOST_GIT_DIFF_RESULT = "host.git_diff.result"
     const val HOST_GIT_DISCARD_RESULT = "host.git_discard.result"
+    const val AGENT_ARCHIVED_LIST = "agent.archived.list"
+    const val AGENT_CLOSED = "agent.closed"
     const val MESH_SNAPSHOT = "mesh.snapshot"
     const val MESH_UPDATE = "mesh.update"
     const val MESH_COMM = "mesh.comm"
