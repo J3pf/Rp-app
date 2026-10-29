@@ -4,8 +4,17 @@
 <dict>
 	<key>method</key>
 	<string>app-store-connect</string>
+	<!-- Firma manual: el export necesita saber qué perfil usar para este bundle id.
+	     Los dos marcadores se sustituyen en el runner (ver .github/workflows/testflight.yml). -->
 	<key>signingStyle</key>
 	<string>manual</string>
+	<key>teamID</key>
+	<string>__TEAM_ID__</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>dev.j3pf.rp.iosApp</key>
+		<string>__PROFILE_UUID__</string>
+	</dict>
 	<key>uploadSymbols</key>
 	<true/>
 </dict>
