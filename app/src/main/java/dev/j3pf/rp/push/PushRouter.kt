@@ -1,5 +1,6 @@
 package dev.j3pf.rp.push
 
+import dev.j3pf.rp.data.db.PromptDao
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.protocol.Danger
@@ -26,6 +27,7 @@ class PushRouter
         private val deduper: NotificationDeduper,
         private val secrets: SecretStore,
         private val settings: SettingsRepository,
+        private val promptDao: PromptDao,
     ) {
         /** FCM data: `{v,k,n,c}`. Falla de descifrado → se ignora (PLAN-APP §5.2.1). */
         suspend fun handleFcm(data: Map<String, String>): Boolean {
@@ -51,7 +53,12 @@ class PushRouter
             return when (k) {
                 PushKind.PROMPT -> {
                     val p = decode(PushPromptBody.serializer(), body) ?: return false
-                    if (!deduper.firstSeen("prompt:${p.promptId}")) return true
+                    // Un replay de un prompt ya respondido no puede volver a la bandeja: ni si lo respondió
+                    // este dispositivo (marca del deduper) ni si el relay lo cerró (fila resuelta).
+                    if (deduper.answeredRecently(p.promptId)) return true
+                    val relayId = secrets.current()?.relayId
+                    if (relayId != null && promptDao.recentlyResolved(relayId, p.promptId)) return true
+                    if (!deduper.firstSeen(NotificationDeduper.promptKey(p.promptId))) return true
                     // Silencio por agente (local); las autorizaciones críticas pueden saltárselo si el ajuste está activo.
                     val s = settings.current()
                     val critical = s.criticalAlways && p.danger == Danger.HIGH
