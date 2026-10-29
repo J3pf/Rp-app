@@ -42,12 +42,24 @@ jobs:
 
       - name: Exigir la versión de Xcode fijada
         run: |
-          if [ ! -d "$XCODE_APP" ]; then
-            echo "::error::Xcode $XCODE_VERSION no está en $XCODE_APP. Este job no se salta: ajusta XCODE_VERSION o la imagen del runner."
-            ls /Applications | grep -i '^Xcode' || echo "no hay ningún Xcode instalado"
+          set -uo pipefail
+          SELECCIONADA=""
+          for app in $(ls -d /Applications/Xcode_"$XCODE_VERSION"*.app /Applications/Xcode.app 2>/dev/null || true); do
+            echo "--- candidato: $app"
+            ls -ld "$app" || true
+            readlink "$app" || true
+            if [ -d "$app" ] && "$app/Contents/Developer/usr/bin/xcodebuild" -version >/dev/null 2>&1; then
+              SELECCIONADA="$app"
+              break
+            fi
+          done
+          if [ -z "$SELECCIONADA" ]; then
+            echo "::error::No hay ningún Xcode $XCODE_VERSION utilizable en esta imagen. Este job no se salta: ajusta XCODE_VERSION o la imagen del runner."
+            ls -1 /Applications | grep -i '^Xcode' || echo "no hay ningún Xcode instalado"
             exit 1
           fi
-          sudo xcode-select -s "$XCODE_APP"
+          echo "seleccionado: $SELECCIONADA"
+          sudo xcode-select -s "$SELECCIONADA"
           INSTALADO=$(xcodebuild -version | tr '\n' ' ')
           echo "Xcode instalado: $INSTALADO"
           if ! xcodebuild -version | head -1 | grep -q "Xcode $XCODE_VERSION"; then
