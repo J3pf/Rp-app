@@ -129,20 +129,22 @@ jobs:
           fi
 
           # Lanzar y no morir son cosas distintas: un crash en el primer frame devuelve pid igual.
-          # Se pregunta al simulador si la app sigue registrada, no si vive el pid concreto: el pid
-          # devuelto por `simctl launch` puede desaparecer si la escena se relanza, y eso no es un crash.
+          # Dos señales: el proceso (pid) y la aparición de un informe de fallo NUEVO. Se probó también
+          # `launchctl list` dentro del simulador y dio falsos negativos en CI con la app visiblemente
+          # viva, así que no se usa: una alarma que grita sin motivo se ignora a la semana.
           sleep 10
-          SIGUE_VIVA=no
-          if xcrun simctl spawn "$DISPOSITIVO" launchctl list 2>/dev/null | grep -q "$IOS_BUNDLE_ID"; then
-            SIGUE_VIVA=si
-          fi
           DESPUES=$(ls "$INFORMES" 2>/dev/null | grep -c "iosApp" || true)
-          if [ "$SIGUE_VIVA" = "no" ] || [ "$DESPUES" -gt "$ANTES" ]; then
-            echo "::error::La app no sobrevivió 10 s tras el lanzamiento (registrada=$SIGUE_VIVA, informes nuevos=$((DESPUES - ANTES)))."
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "::error::El proceso $PID ya no existe 10 s después de lanzar: la app murió al arrancar."
             echo "--- últimos informes de iosApp ---"
             ls -t "$INFORMES" 2>/dev/null | grep "iosApp" | head -3 || true
             echo "--- log del proceso ---"
             xcrun simctl spawn "$DISPOSITIVO" log show --last 2m --predicate 'process == "iosApp"' --style compact 2>/dev/null | tail -30 || true
             exit 1
           fi
-          echo "la app sigue registrada en el simulador 10 s después (pid inicial $PID) y no hay informe de fallo nuevo"
+          if [ "$DESPUES" -gt "$ANTES" ]; then
+            echo "::error::Apareció un informe de fallo de iosApp después del lanzamiento."
+            ls -t "$INFORMES" | grep "iosApp" | head -3
+            exit 1
+          fi
+          echo "el proceso $PID sigue vivo 10 s después y no hay informe de fallo nuevo"
