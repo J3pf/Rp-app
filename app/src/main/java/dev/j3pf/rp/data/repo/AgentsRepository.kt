@@ -3,15 +3,20 @@ package dev.j3pf.rp.data.repo
 import dev.j3pf.rp.data.db.AgentDao
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.domain.model.toModel
+import dev.j3pf.rp.protocol.AgentArchivedList
+import dev.j3pf.rp.protocol.AgentArchivedRequest
 import dev.j3pf.rp.protocol.AgentRef
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.AgentsUpdate
 import dev.j3pf.rp.protocol.AppWelcome
+import dev.j3pf.rp.protocol.ArchivedAgentSummary
 import dev.j3pf.rp.protocol.Envelope
+import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Ulid
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +31,27 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
+
+sealed interface CloseOutcome {
+    data object Closed : CloseOutcome
+
+    data object Archived : CloseOutcome
+
+    data class Failed(
+        val message: String,
+    ) : CloseOutcome
+}
+
+sealed interface ArchivedAgentsResult {
+    data class Ok(
+        val agents: List<ArchivedAgentSummary>,
+        val nextBefore: Long?,
+    ) : ArchivedAgentsResult
+
+    data class Failed(
+        val message: String,
+    ) : ArchivedAgentsResult
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -76,8 +102,71 @@ class AgentsRepository
                             if (u.upsert.isNotEmpty()) dao.upsert(u.upsert.map { it.toEntity(relayId) })
                             if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
                         }
+                        // `agent.closed` no se escucha a propósito: es un frame del puente hacia el relay
+                        // (rp-relay registry.ts, dirección plugin→relay) y no lleva agentId propio, así que
+                        // la app nunca lo recibe. La retirada llega como `agents.update.remove`.
                     }
                 }.launchIn(scope)
+        }
+
+        /** Cierra el pane de Herdr; cuando no hay pane vinculado, archiva el historial con `agent.forget`. */
+        suspend fun close(agentId: String): CloseOutcome {
+            val relayId = secrets.current()?.relayId ?: return CloseOutcome.Failed("Sin sesión con el relay")
+            val ref = AgentRef(agentId)
+            return when (val reply = connection.request(Envelope.of(MsgType.AGENT_CLOSE, ref, id = Ulid.new()))) {
+                is WsReply.Ok -> {
+                    dao.delete(relayId, listOf(agentId))
+                    CloseOutcome.Closed
+                }
+                is WsReply.Error -> {
+                    // El pane ya no existía: el plugin responde con un fallo tipado y el agente se ha ido
+                    // igual. No es un error que merezca banner, es el mismo resultado que cerrarlo.
+                    if (reply.code == ErrorCodes.NOT_FOUND) {
+                        dao.delete(relayId, listOf(agentId))
+                        CloseOutcome.Closed
+                    } else if (reply.code != ErrorCodes.AGENT_CLOSE_UNSUPPORTED) {
+                        CloseOutcome.Failed("No se pudo cerrar el agente")
+                    } else {
+                        when (connection.request(Envelope.of(MsgType.AGENT_FORGET, ref, id = Ulid.new()))) {
+                            is WsReply.Ok -> {
+                                dao.delete(relayId, listOf(agentId))
+                                CloseOutcome.Archived
+                            }
+                            else -> CloseOutcome.Failed("No se pudo archivar el agente")
+                        }
+                    }
+                }
+                WsReply.Timeout -> CloseOutcome.Failed("Tiempo de espera agotado al cerrar el agente")
+                WsReply.NotConnected -> CloseOutcome.Failed("Sin conexión con el relay")
+            }
+        }
+
+        /** Lista archivados desde el relay; el cursor pertenece al estado de pantalla, no a Room. */
+        suspend fun archived(
+            machineId: String? = null,
+            before: Long? = null,
+        ): ArchivedAgentsResult =
+            when (
+                val reply =
+                    connection.request(
+                        Envelope.of(MsgType.AGENT_ARCHIVED, AgentArchivedRequest(machineId = machineId, before = before), id = Ulid.new()),
+                    )
+            ) {
+                is WsReply.Ok ->
+                    runCatching { reply.envelope.body<AgentArchivedList>() }
+                        .fold(
+                            onSuccess = { ArchivedAgentsResult.Ok(it.agents, it.nextBefore) },
+                            onFailure = { ArchivedAgentsResult.Failed("No se pudieron cargar los agentes archivados") },
+                        )
+                is WsReply.Error -> ArchivedAgentsResult.Failed("No se pudieron cargar los agentes archivados")
+                WsReply.Timeout -> ArchivedAgentsResult.Failed("Se agotó el tiempo al cargar los agentes archivados")
+                WsReply.NotConnected -> ArchivedAgentsResult.Failed("Sin conexión para cargar los agentes archivados")
+            }
+
+        /** Elimina irreversiblemente el historial archivado en el relay. */
+        suspend fun purge(agentId: String): Boolean {
+            val reply = connection.request(Envelope.of(MsgType.AGENT_PURGE, AgentRef(agentId), id = Ulid.new()))
+            return reply is WsReply.Ok
         }
 
         /** `agent.forget`: borra un agente offline de la lista. */

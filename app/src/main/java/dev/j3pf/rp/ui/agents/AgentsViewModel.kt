@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.MachinesRepository
@@ -16,10 +17,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** Estado de la sección Archivados y del diálogo de cierre; vive en el view model, no en Room. */
+data class AgentsLifecycleState(
+    val forgetAgentId: String? = null,
+    val message: String? = null,
+)
 
 @HiltViewModel
 class AgentsViewModel
@@ -32,6 +41,8 @@ class AgentsViewModel
         private val hostRepo: HostRepository,
     ) : ViewModel() {
         private val isRefreshing = MutableStateFlow(false)
+        private val _lifecycleState = MutableStateFlow(AgentsLifecycleState())
+        val lifecycleState: StateFlow<AgentsLifecycleState> = _lifecycleState.asStateFlow()
 
         val state: StateFlow<AgentsUiState> =
             combine(
@@ -84,7 +95,28 @@ class AgentsViewModel
         }
 
         fun forget(agentId: String) {
-            viewModelScope.launch { agentsRepo.forget(agentId) }
+            _lifecycleState.update { it.copy(forgetAgentId = agentId, message = null) }
+        }
+
+        fun cancelForget() {
+            _lifecycleState.update { it.copy(forgetAgentId = null) }
+        }
+
+        fun confirmForget() {
+            val agentId = _lifecycleState.value.forgetAgentId ?: return
+            _lifecycleState.update { it.copy(forgetAgentId = null) }
+            viewModelScope.launch {
+                when (val result = agentsRepo.close(agentId)) {
+                    CloseOutcome.Closed -> Unit
+                    CloseOutcome.Archived ->
+                        _lifecycleState.update { it.copy(message = "No había un pane de Herdr vinculado; el historial quedó archivado.") }
+                    is CloseOutcome.Failed -> _lifecycleState.update { it.copy(message = result.message) }
+                }
+            }
+        }
+
+        fun consumeLifecycleMessage() {
+            _lifecycleState.update { it.copy(message = null) }
         }
 
         fun resumeAgent(

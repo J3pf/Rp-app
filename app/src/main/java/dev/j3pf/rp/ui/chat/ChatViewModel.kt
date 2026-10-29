@@ -15,6 +15,7 @@ import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.ChatRepository
+import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.LocalAttachment
@@ -59,6 +60,7 @@ data class ChatUiState(
     val loadingDiff: Boolean = false,
     val showDiffSheet: Boolean = false,
     val selectedDiffFile: String? = null,
+    val showForgetConfirmation: Boolean = false,
 ) {
     val isAuto get() = agent?.gentleMode == "auto"
     val canSend get() = !sending && attachments.none { it.state != UploadState.DONE && it.state != UploadState.ERROR }
@@ -82,6 +84,7 @@ class ChatViewModel
 
         private val local = java.util.concurrent.ConcurrentHashMap<String, LocalAttachment>()
         private val extra = MutableStateFlow(ChatUiState())
+        private var forgetOnDone: ((CloseOutcome) -> Unit)? = null
 
         val state: StateFlow<ChatUiState> =
             combine(
@@ -169,10 +172,26 @@ class ChatViewModel
             }
         }
 
-        /** Olvida un agente desconectado (`agent.forget`). */
-        fun forget(onDone: () -> Unit) {
+        /** Solicita confirmación antes de cerrar el agente o archivar su historial. */
+        fun forget(onDone: (CloseOutcome) -> Unit) {
+            forgetOnDone = onDone
+            extra.update { it.copy(showForgetConfirmation = true) }
+        }
+
+        fun cancelForget() {
+            forgetOnDone = null
+            extra.update { it.copy(showForgetConfirmation = false) }
+        }
+
+        fun confirmForget() {
+            if (!extra.value.showForgetConfirmation) return
+            extra.update { it.copy(showForgetConfirmation = false) }
             viewModelScope.launch {
-                if (agentsRepo.forget(agentId)) onDone() else extra.update { it.copy(message = "No se pudo olvidar el agente") }
+                when (val outcome = agentsRepo.close(agentId)) {
+                    CloseOutcome.Closed, CloseOutcome.Archived -> forgetOnDone?.invoke(outcome)
+                    is CloseOutcome.Failed -> extra.update { it.copy(message = outcome.message) }
+                }
+                forgetOnDone = null
             }
         }
 
