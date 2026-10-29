@@ -40,6 +40,7 @@ import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.ui.MainViewModel
 import dev.j3pf.rp.ui.NavTarget
 import dev.j3pf.rp.ui.agents.AgentsScreen
+import dev.j3pf.rp.ui.agents.ArchivedScreen
 import dev.j3pf.rp.ui.chat.ChatScreen
 import dev.j3pf.rp.ui.mesh.MeshScreen
 import dev.j3pf.rp.ui.newagent.NewAgentScreen
@@ -65,7 +66,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
+
+@Serializable
+private data object ArchivedAgentsRoute
+
+private const val ARCHIVED_READ_ONLY_AGENT = "archived_read_only_agent"
 
 @HiltViewModel
 class BadgeViewModel
@@ -241,7 +248,17 @@ fun RpRoot(
                     AgentsScreen(
                         onOpenChat = { nav.navigate(ChatRoute(it)) },
                         onNewAgent = { nav.navigate(NewAgentRoute) },
+                        onOpenArchived = { nav.navigate(ArchivedAgentsRoute) },
                         mainVm = mainVm,
+                    )
+                }
+                composable<ArchivedAgentsRoute> {
+                    ArchivedScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenChat = { agentId ->
+                            nav.currentBackStackEntry?.savedStateHandle?.set(ARCHIVED_READ_ONLY_AGENT, agentId)
+                            nav.navigate(ChatRoute(agentId))
+                        },
                     )
                 }
                 composable<MeshRoute> {
@@ -266,7 +283,11 @@ fun RpRoot(
                         onLoggedOut = {},
                     )
                 }
-                composable<ChatRoute> { ChatScreen(onBack = { nav.popBackStack() }) }
+                composable<ChatRoute> { entry ->
+                    val agentId = entry.toRoute<ChatRoute>().agentId
+                    val readOnly = nav.previousBackStackEntry?.savedStateHandle?.get<String>(ARCHIVED_READ_ONLY_AGENT) == agentId
+                    ChatScreen(onBack = { nav.popBackStack() }, readOnly = readOnly)
+                }
                 composable<NewAgentRoute> { NewAgentScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack() }) }
                 composable<DevicesRoute> { DevicesScreen(onBack = { nav.popBackStack() }) }
                 composable<MachinesRoute> { MachinesScreen(onBack = { nav.popBackStack() }) }

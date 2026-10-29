@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 fun AgentsScreen(
     onOpenChat: (String) -> Unit,
     onNewAgent: () -> Unit,
+    onOpenArchived: () -> Unit = {},
     mainVm: MainViewModel,
     vm: AgentsViewModel = hiltViewModel(),
 ) {
@@ -42,6 +43,9 @@ fun AgentsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
+        TextButton(onClick = onOpenArchived) {
+            Text(stringResource(R.string.archived_title), color = MaterialTheme.colorScheme.primary)
+        }
         AgentsContent(
             state = state,
             conn = conn,

@@ -6,12 +6,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.repo.ArchivedAgentsResult
 import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.HostResult
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.ArchivedAgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,10 @@ import javax.inject.Inject
 /** Estado de la sección Archivados y del diálogo de cierre; vive en el view model, no en Room. */
 data class AgentsLifecycleState(
     val forgetAgentId: String? = null,
+    val archivedAgents: List<ArchivedAgentSummary> = emptyList(),
+    val archivedNextBefore: Long? = null,
+    val archivedLoading: Boolean = false,
+    val archivedError: String? = null,
     val message: String? = null,
 )
 
@@ -111,6 +117,39 @@ class AgentsViewModel
                     CloseOutcome.Archived ->
                         _lifecycleState.update { it.copy(message = "No había un pane de Herdr vinculado; el historial quedó archivado.") }
                     is CloseOutcome.Failed -> _lifecycleState.update { it.copy(message = result.message) }
+                }
+            }
+        }
+
+        fun loadArchived(before: Long? = null) {
+            _lifecycleState.update { it.copy(archivedLoading = true, archivedError = null) }
+            viewModelScope.launch {
+                when (val result = agentsRepo.archived(before = before)) {
+                    is ArchivedAgentsResult.Ok ->
+                        _lifecycleState.update {
+                            it.copy(
+                                archivedAgents = if (before == null) result.agents else it.archivedAgents + result.agents,
+                                archivedNextBefore = result.nextBefore,
+                                archivedLoading = false,
+                                archivedError = null,
+                            )
+                        }
+                    is ArchivedAgentsResult.Failed ->
+                        _lifecycleState.update { it.copy(archivedLoading = false, archivedError = result.message) }
+                }
+            }
+        }
+
+        fun loadMoreArchived() {
+            lifecycleState.value.archivedNextBefore?.let(::loadArchived)
+        }
+
+        fun purgeArchived(agentId: String) {
+            viewModelScope.launch {
+                if (agentsRepo.purge(agentId)) {
+                    _lifecycleState.update { it.copy(archivedAgents = it.archivedAgents.filterNot { a -> a.agentId == agentId }) }
+                } else {
+                    _lifecycleState.update { it.copy(message = "No se pudo eliminar definitivamente el historial") }
                 }
             }
         }

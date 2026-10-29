@@ -319,7 +319,7 @@ fun ChatContent(
                                 onToggleMute()
                             },
                         )
-                        if (agent != null && agent.online) {
+                        if (!ui.readOnly && agent != null && agent.online) {
                             DropdownMenuItem(
                                 text = { Text("Cerrar agente (/quit)", color = MaterialTheme.colorScheme.error) },
                                 onClick = {
@@ -328,7 +328,7 @@ fun ChatContent(
                                 },
                             )
                         }
-                        if (agent != null && !agent.online) {
+                        if (!ui.readOnly && agent != null && !agent.online) {
                             DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
                                 menu = false
                                 onForget()
@@ -386,19 +386,30 @@ fun ChatContent(
                 )
             }
 
-            Composer(
-                ui = ui,
-                working = working,
-                text = text,
-                onText = onText,
-                onChoice = onChoice,
-                onWorkingDelivery = onWorkingDelivery,
-                onPicked = onPicked,
-                onRemoveAttachment = onRemoveAttachment,
-                onRetryAttachment = onRetryAttachment,
-                newCameraTarget = newCameraTarget,
-                onSend = onSend,
-            )
+            if (ui.readOnly) {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.archived_read_only),
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Composer(
+                    ui = ui,
+                    working = working,
+                    text = text,
+                    onText = onText,
+                    onChoice = onChoice,
+                    onWorkingDelivery = onWorkingDelivery,
+                    onPicked = onPicked,
+                    onRemoveAttachment = onRemoveAttachment,
+                    onRetryAttachment = onRetryAttachment,
+                    newCameraTarget = newCameraTarget,
+                    onSend = onSend,
+                )
+            }
         }
     }
 
@@ -437,6 +448,7 @@ fun ChatContent(
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
+    readOnly: Boolean = false,
     vm: ChatViewModel = hiltViewModel(),
     promptVm: PromptSheetViewModel = hiltViewModel(),
 ) {
@@ -479,7 +491,7 @@ fun ChatScreen(
     }
 
     ChatContent(
-        ui = ui,
+        ui = ui.copy(readOnly = readOnly),
         text = text,
         onText = { text = it },
         onBack = onBack,

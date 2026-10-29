@@ -24,6 +24,7 @@ import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.ArchivedAgentSummary
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorBody
 import dev.j3pf.rp.protocol.MsgType
@@ -150,6 +151,73 @@ class AgentsLifecycleTest {
             assertEquals(MsgType.AGENT_CLOSE, awaitRequest().t)
             assertNotNull(db!!.agents().get("r1", agent.agentId))
         }
+    }
+
+    @Test
+    fun `failed archived fetch shows an explicit error and retry instead of an empty state`() =
+        runBlocking {
+            initializeViewModelHarness()
+            responder = { request -> Envelope.of(MsgType.ERROR, ErrorBody("unauthorized", "No autorizado"), re = request.id) }
+            val viewModel = lifecycleViewModel
+            viewModel.loadArchived()
+            val failed = withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedError != null } }
+            assertTrue(failed.archivedAgents.isEmpty())
+
+            var retries = 0
+            rule.setContent {
+                RpTheme {
+                    ArchivedAgentsContent(
+                        agents = failed.archivedAgents,
+                        loading = false,
+                        error = failed.archivedError,
+                        onOpenChat = {},
+                        onPurge = {},
+                        onRetry = { retries++ },
+                    )
+                }
+            }
+            rule.onNodeWithText("No se pudieron cargar los agentes archivados", substring = true).assertIsDisplayed()
+            assertTrue(rule.onAllNodesWithText("No hay agentes archivados").fetchSemanticsNodes().isEmpty())
+            rule.onNodeWithText("Reintentar").performClick()
+            rule.runOnIdle { assertEquals(1, retries) }
+            assertEquals(MsgType.AGENT_ARCHIVED, awaitRequest(MsgType.AGENT_ARCHIVED).t)
+        }
+
+    @Test
+    fun `archived destructive action is gated by a named confirmation`() {
+        var purges = 0
+        val archived =
+            ArchivedAgentSummary(
+                agentId = "machine:archived",
+                machineId = "machine",
+                machineName = "PC principal",
+                sessionName = "Agente archivado",
+                archivedAt = 100L,
+                lastSeenAt = 90L,
+                messageCount = 4,
+            )
+        rule.setContent {
+            RpTheme {
+                ArchivedAgentsContent(
+                    agents = listOf(archived),
+                    loading = false,
+                    error = null,
+                    onOpenChat = {},
+                    onPurge = { purges++ },
+                )
+            }
+        }
+
+        rule.onNodeWithText("Agente archivado").assertIsDisplayed()
+        rule.onNodeWithText("PC principal", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Eliminar definitivamente").performClick()
+        // El nombre aparece en la fila y en el diálogo: lo que importa es que el diálogo esté abierto
+        // y que nada se haya purgado todavía.
+        rule.onNodeWithText("Esta acción no se puede deshacer", substring = true).assertIsDisplayed()
+        rule.runOnIdle { assertEquals(0, purges) }
+        rule.onNodeWithText("Conservar historial").assertIsDisplayed()
+        rule.onNodeWithText("Sí, eliminar definitivamente").performClick()
+        rule.runOnIdle { assertEquals(1, purges) }
     }
 
     private var responder: ((Envelope) -> Envelope?)? = null
