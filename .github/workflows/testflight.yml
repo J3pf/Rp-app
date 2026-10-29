@@ -89,8 +89,19 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          PERFIL=~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PERFIL"
+          # El UUID se lee del perfil instalado, no se escribe a mano: el día que el humano renueve el
+          # perfil, hardcodearlo fallaría en silencio con el UUID viejo.
+          PERFIL_UUID=$(security cms -D -i "$PERFIL" | plutil -extract UUID raw -)
+          PERFIL_NOMBRE=$(security cms -D -i "$PERFIL" | plutil -extract Name raw -)
+          echo "perfil instalado: $PERFIL_NOMBRE ($PERFIL_UUID)"
+          {
+            echo "### Firma"
+            echo ""
+            echo "Perfil \`$PERFIL_NOMBRE\` — UUID \`$PERFIL_UUID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "PROFILE_UUID=$PERFIL_UUID" >> "$GITHUB_ENV"
 
       - name: Archive
         run: |
@@ -102,6 +113,9 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/RemotePi.xcarchive" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             MARKETING_VERSION="${{ inputs.version }}" \
             CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
             archive
@@ -111,9 +125,16 @@ jobs:
           set -euo pipefail
           # El plist vive en el repo: dentro de un heredoc en YAML la indentación lo rompe,
           # y un plist roto falla recién al exportar, cuando ya gastaste el archive.
+          # La plantilla vive en el repo; los marcadores se sustituyen aquí porque el UUID del perfil
+          # solo se conoce en el runner. Con firma manual, el export necesita ese mapeo o falla igual
+          # que el archive.
+          sed -e "s/__TEAM_ID__/$APPLE_TEAM_ID/" \
+              -e "s/__PROFILE_UUID__/$PROFILE_UUID/" \
+              iosApp/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          plutil -lint "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/RemotePi.xcarchive" \
-            -exportOptionsPlist iosApp/ExportOptions.plist \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export"
 
       - name: Preparar la clave de App Store Connect
