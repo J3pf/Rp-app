@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RP · Dirección 03 — Nodos</title>
+<style>
+  :root{
+    --ink:#101413; --muted:#525A57; --line:#E1E8E4; --paper:#FAFCFA;
+    --night:#080C0A; --night-line:#22302A;
+    --accent:#0E9F6E; --accent-dark:#34D399;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .board{width:1440px;margin:0 auto;padding:44px 56px 56px}
+  .eyebrow{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0 0 10px}
+  h1{font-size:44px;line-height:1.1;letter-spacing:-.02em;margin:0 0 12px;font-weight:680}
+  .idea{margin:0;max-width:74ch;color:var(--muted);font-size:18px}
+  .tradeoff{display:inline-block;margin-top:14px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;font-size:14px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin:36px 0 0}
+  .tile{border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:20px;border:1px solid var(--line)}
+  .tile.dark{background:var(--night);border-color:var(--night-line);color:#EFF7F3}
+  .tile.light{background:#FFFFFF;color:var(--ink)}
+  .tile.mono{background:#E6EFEA;color:#24352E}
+  .tile h2{font-size:14px;letter-spacing:.08em;text-transform:uppercase;margin:0;font-weight:600;opacity:.72}
+  .stage{display:grid;place-items:center;height:188px}
+  .mark{width:168px;height:168px;display:block}
+  .scales{display:flex;align-items:flex-end;gap:20px;padding-top:16px;border-top:1px solid color-mix(in srgb, currentColor 16%, transparent)}
+  .scales figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .scales figcaption{font-size:11px;letter-spacing:.06em;opacity:.6}
+  .s48{width:48px;height:48px}.s32{width:32px;height:32px}.s24{width:24px;height:24px}.s16{width:16px;height:16px}
+  .context{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px}
+  .card{border-radius:22px;padding:22px 24px;border:1px solid var(--line);background:#FFFFFF}
+  .card.dark{background:var(--night);border-color:var(--night-line);color:#EFF7F3}
+  .bar{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent)}
+  .bar .name{font-size:17px;font-weight:640;letter-spacing:-.01em}
+  .bar .meta{margin-left:auto;font-size:12px;opacity:.6}
+  .mesh{position:relative;height:150px;margin-top:16px;border-radius:14px;background:color-mix(in srgb, currentColor 5%, transparent)}
+  .mesh svg{position:absolute;inset:0;width:100%;height:100%}
+  .notes{margin-top:34px;display:grid;grid-template-columns:1.15fr 1fr;gap:32px;border-top:1px solid var(--line);padding-top:24px}
+  .notes h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .notes p,.notes li{font-size:14.5px;color:var(--muted);margin:0}
+  .notes ul{margin:0;padding-left:18px;display:grid;gap:6px}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
+  @media (prefers-reduced-motion:no-preference){.tile{transition:transform .18s ease}.tile:hover{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+<main class="board">
+  <header>
+    <p class="eyebrow">Dirección 03 · Sistema</p>
+    <h1>Nodos</h1>
+    <p class="idea">Un agente que manda y dos que responden: cuadrado para el que orquesta, relleno para el que
+      corre, anillo para el que ya terminó. Es la marca que cuenta lo que hace el producto en su pantalla más
+      difícil — el diagrama de la malla — y por eso enlaza logo y producto sin explicación.</p>
+    <span class="tradeoff">Compra: cuenta la malla y los subagentes · Paga: es el más frágil a 24 px de los tres</span>
+  </header>
+
+  <section class="grid" aria-label="El logo sobre tres fondos y a tres tamaños">
+    <div class="tile dark">
+      <h2>Noche</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP: un agente orquestador y dos subagentes">
+          <rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/>
+          <path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="30" cy="76" r="10" fill="currentColor"/>
+          <circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="12" fill="currentColor"/><circle cx="78" cy="76" r="12" fill="none" stroke="currentColor" stroke-width="7"/></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+
+    <div class="tile light">
+      <h2>Día</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP: un agente orquestador y dos subagentes">
+          <rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/>
+          <path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="30" cy="76" r="10" fill="currentColor"/>
+          <circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="12" fill="currentColor"/><circle cx="78" cy="76" r="12" fill="none" stroke="currentColor" stroke-width="7"/></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+
+    <div class="tile mono">
+      <h2>Monocromo (icono temático)</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP en monocromo">
+          <rect x="40" y="18" width="30" height="30" rx="10" fill="currentColor"/>
+          <path d="M55 48v11M55 59H29v11M55 59h26v11" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="29" cy="79" r="11" fill="currentColor"/>
+          <circle cx="81" cy="79" r="11" fill="none" stroke="currentColor" stroke-width="6"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="18" width="30" height="30" rx="10" fill="currentColor"/><path d="M55 48v11M55 59H29v11M55 59h26v11" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="79" r="11" fill="currentColor"/><circle cx="81" cy="79" r="11" fill="none" stroke="currentColor" stroke-width="6"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="18" width="30" height="30" rx="10" fill="currentColor"/><path d="M55 48v11M55 59H29v11M55 59h26v11" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="79" r="11" fill="currentColor"/><circle cx="81" cy="79" r="11" fill="none" stroke="currentColor" stroke-width="6"/></svg><figcaption>24</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="context" aria-label="La marca dentro de la app">
+    <div class="card dark">
+      <div class="bar">
+        <svg width="26" height="26" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg>
+        <span class="name">Malla</span><span class="meta">3 agentes · 2 subagentes</span>
+      </div>
+      <div class="mesh">
+        <svg viewBox="0 0 400 150" aria-hidden="true" preserveAspectRatio="none">
+          <g fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="2">
+            <path d="M200 42v26M200 68H96v26M200 68h104v26"/>
+          </g>
+          <rect x="184" y="22" width="32" height="20" rx="7" fill="currentColor" fill-opacity=".9"/>
+          <circle cx="96" cy="104" r="9" fill="#34D399"/>
+          <circle cx="304" cy="104" r="9" fill="none" stroke="currentColor" stroke-width="3" stroke-opacity=".7"/>
+        </svg>
+      </div>
+    </div>
+    <div class="card">
+      <div class="bar">
+        <svg width="26" height="26" viewBox="0 0 108 108" aria-hidden="true"><rect x="40" y="20" width="28" height="28" rx="9" fill="currentColor"/><path d="M54 48v10M54 58H30v10M54 58h24v10" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="76" r="10" fill="currentColor"/><circle cx="78" cy="76" r="10" fill="none" stroke="currentColor" stroke-width="5"/></svg>
+        <span class="name">Agentes</span><span class="meta">en línea</span>
+      </div>
+      <div class="mesh">
+        <svg viewBox="0 0 400 150" aria-hidden="true" preserveAspectRatio="none">
+          <g fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2">
+            <path d="M110 40v22M110 62h-40v24M110 62h60v24"/>
+            <path d="M300 40v22M300 62h-40v24"/>
+          </g>
+          <rect x="94" y="20" width="32" height="20" rx="7" fill="currentColor" fill-opacity=".85"/>
+          <rect x="284" y="20" width="32" height="20" rx="7" fill="currentColor" fill-opacity=".85"/>
+          <circle cx="70" cy="98" r="9" fill="#0E9F6E"/>
+          <circle cx="170" cy="98" r="9" fill="none" stroke="currentColor" stroke-width="3" stroke-opacity=".6"/>
+          <circle cx="260" cy="98" r="9" fill="#0E9F6E"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h3>Construcción y problema</h3>
+      <p>Cuadrado redondeado (radio 9) para el orquestador, círculo relleno para el subagente que corre y anillo
+        para el que terminó; conectores de 5 unidades. A 24&nbsp;px el anillo se cierra y la marca se ensucia: la
+        versión pequeña tendría que reducirse a cuadrado + un nodo, y eso ya es otra marca. Es la dirección con
+        más historia y también la que más riesgo tiene en la barra de estado.</p>
+    </div>
+    <div>
+      <h3>Si se elige, la Fase E generaría</h3>
+      <ul>
+        <li>Dos geometrías: completa (&ge;32&nbsp;px) y reducida (16-24&nbsp;px), o se acepta la pérdida.</li>
+        <li>Adaptive icon con foreground reducido dentro de la zona segura de 66&nbsp;dp.</li>
+        <li>iOS 1024 px sin alfa, con la marca al 60&nbsp;% para no rozar la máscara.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+</body>
+</html>

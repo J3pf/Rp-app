@@ -1,0 +1,28 @@
+{
+  "title": "RP — rediseño del icono",
+  "brief": "El logo actual molesta: burbuja de chat con «RP» recortado sobre violeta. Se piden direcciones minimalistas y modernas para el icono de lanzador (Android adaptativo + iOS 1024) y para la marca dentro de la app.",
+  "feature": "odd/tasks/logo-rebrand.md",
+  "artboards": [
+    {
+      "file": "01-caret-nodo.html",
+      "title": "Caret + nodo",
+      "tradeoff": "Compra: se entiende de un vistazo · Paga: es el más literal de los tres",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "02-monograma-r.html",
+      "title": "Monograma R",
+      "tradeoff": "Compra: escala y elegancia impecables · Paga: no dice «agentes» sin el wordmark",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "03-nodos.html",
+      "title": "Nodos",
+      "tradeoff": "Compra: cuenta la malla y los subagentes · Paga: es el más frágil a 24 px de los tres",
+      "width": 1440,
+      "height": 900
+    }
+  ]
+}
