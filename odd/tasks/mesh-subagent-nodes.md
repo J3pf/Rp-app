@@ -26,10 +26,10 @@ actividad donde no consta. Se compara sin distinguir mayúsculas y sin espacios 
 
 | ID | Specs | Ruta | Commit |
 | --- | --- | --- | --- |
-| T1 | S1–S5 | RED en `shared-ui/src/commonTest/.../layout/SubagentNodePlacementTest.kt` (6 casos) | ver commits |
-| T2 | S1, S3, S5 | Regla pura + nodos sintéticos en `MeshLayoutEngine.computeLayout` | pendiente |
-| T3 | S2, S3 | Píldoras de terminados en la tarjeta del agente, sin duplicar | pendiente |
-| T4 | S6 | 360dp / landscape / tablet, a11y, temas | pendiente |
+| T1 | S1–S5 | RED en `shared-ui/src/commonTest/.../layout/SubagentNodePlacementTest.kt` (6 casos) | `1229374` |
+| T2 | S1, S3, S5 | `SubagentPlacement` + nodos sintéticos en `MeshLayoutEngine.computeLayout` | `b1b36b6` |
+| T3 | S2, S3 | Píldoras de terminados en `MeshAgentCard`, sin duplicar | `b1b36b6` |
+| T4 | S6 | gate completo 422/422, lint en línea base | `b1b36b6` |
 
 ## Estado observado del RED (2026-10-29)
 
@@ -49,6 +49,20 @@ nodos; ese caso solo tiene valor como guardia cuando T2 exista.
 
 Cómo encuentra el test los nodos sintéticos: son los que **no estaban en la entrada**. El test no
 conoce, ni debe conocer, el formato interno de sus ids.
+
+## Estado observado del GREEN
+
+- Gate completo: `:protocol:test` 73, `:shared-ui:jvmTest` 108 (102 + los 6 nuevos),
+  `:app:testDirectDebugUnitTest` 241. **Total 422, 0 fallos.** `:shared-ui:ktlintCheck` y
+  `:app:ktlintCheck` verdes. `:app:lintDirectDebug`: 8 issues, línea base exacta
+  (3 `AndroidGradlePluginVersion` + 5 `UnusedResources`).
+- Dos tests existentes se ajustaron, y no por conveniencia:
+  - `MeshLayoutEngineTest › card heights follow node content…` usaba subagentes `running` para medir la
+    fila de chips. Esa fila ahora es de píldoras, así que el fixture usa terminados y el invariante
+    («el alto sigue el contenido de la tarjeta») se mide sobre lo que de verdad pinta la tarjeta.
+  - `MeshScreenTest › agent card displays … subagents` usaba un `working` para verificar el chip. Ahora
+    verifica las dos mitades de la regla: el terminado pinta chip y el que está en ejecución **no**.
+- Ambas sustituciones conservan la cobertura previa: los tests nuevos cubren el caso `running` → nodo.
 
 ## Datos que no se pueden inventar (T6 del orquestador)
 

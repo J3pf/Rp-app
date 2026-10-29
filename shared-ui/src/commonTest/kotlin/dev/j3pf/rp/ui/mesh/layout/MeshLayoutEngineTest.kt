@@ -258,9 +258,16 @@ class MeshLayoutEngineTest {
     fun `card heights follow node content and row spacing uses the tallest card`() {
         val nodes =
             listOf(
-                node("root", role = "orchestrator").copy(todos = MeshTodos(total = 2, done = 1), subagents = listOf(subagent("root-task"))),
+                // Los subagentes van terminados a propósito: la fila que suma 30f es la de píldoras.
+                // Uno en ejecución es un nodo del diagrama y no suma alto a la tarjeta.
+                node("root", role = "orchestrator").copy(
+                    todos = MeshTodos(total = 2, done = 1),
+                    subagents = listOf(subagent("root-task", status = "done")),
+                ),
                 node("child-a", parent = "root", role = "subordinate").copy(todos = MeshTodos(total = 2, done = 0)),
-                node("child-b", parent = "root", role = "subordinate").copy(subagents = listOf(subagent("child-task"))),
+                node("child-b", parent = "root", role = "subordinate").copy(
+                    subagents = listOf(subagent("child-task", status = "done")),
+                ),
             )
         val result = engine.computeLayout(nodes, emptyList(), width = 411f, height = 750f)
         val root = result.nodes.getValue("root")
@@ -769,5 +776,8 @@ class MeshLayoutEngineTest {
         to: String,
     ) = MeshEdge(edgeId = id, a = from, b = to)
 
-    private fun subagent(id: String) = MeshSubagent(taskId = id, agent = "agent-$id", label = id, status = "running")
+    private fun subagent(
+        id: String,
+        status: String = "running",
+    ) = MeshSubagent(taskId = id, agent = "agent-$id", label = id, status = status)
 }
