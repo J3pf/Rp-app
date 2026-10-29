@@ -125,7 +125,10 @@ class AgentsRepository
                         dao.delete(relayId, listOf(agentId))
                         CloseOutcome.Closed
                     } else if (reply.code != ErrorCodes.AGENT_CLOSE_UNSUPPORTED) {
-                        CloseOutcome.Failed("No se pudo cerrar el agente")
+                        // Ni `not_found` ni `agent_close_unsupported`: el cierre falló de verdad y el panel
+                        // puede seguir vivo, así que NO se archiva. Pero la razón del relay se pinta tal
+                        // cual: descartarla convertía cualquier fallo en el mismo banner mudo.
+                        CloseOutcome.Failed(closeFailureMessage(reply.message))
                     } else {
                         when (connection.request(Envelope.of(MsgType.AGENT_FORGET, ref, id = Ulid.new()))) {
                             is WsReply.Ok -> {
@@ -140,6 +143,14 @@ class AgentsRepository
                 WsReply.NotConnected -> CloseOutcome.Failed("Sin conexión con el relay")
             }
         }
+
+        /**
+         * Mensaje del banner de cierre fallido: lleva la razón del relay cuando existe, porque es el único
+         * dato que permite diagnosticar desde el teléfono. Sin ella se queda el texto de siempre, sin dos
+         * puntos colgando al final.
+         */
+        internal fun closeFailureMessage(relayMessage: String): String =
+            if (relayMessage.isBlank()) "No se pudo cerrar el agente" else "No se pudo cerrar el agente: $relayMessage"
 
         /** Lista archivados desde el relay; el cursor pertenece al estado de pantalla, no a Room. */
         suspend fun archived(

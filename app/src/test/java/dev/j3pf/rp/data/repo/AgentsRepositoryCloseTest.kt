@@ -190,14 +190,44 @@ class AgentsRepositoryCloseTest {
         }
 
     @Test
-    fun `other close error fails with Spanish message and leaves local agent`() =
+    fun `other close error surfaces the relay reason and leaves the local agent`() =
         runBlocking {
             responder = { error(it, "internal", "relay failure") }
 
             val result = repository.close(agent.agentId)
             val failure = assertIs<CloseOutcome.Failed>(result)
-            assertTrue(failure.message.any { it in 'á'..'ú' } || failure.message.contains("No se pudo"))
+            // La razón del relay es el único dato que permite diagnosticar desde el teléfono. Descartarla
+            // obligaba a leer tres repos para entender un fallo que el relay ya había explicado.
+            assertEquals("No se pudo cerrar el agente: relay failure", failure.message)
             assertEquals(MsgType.AGENT_CLOSE, awaitRequest(MsgType.AGENT_CLOSE).t)
+            // Un cierre fallido no borra datos locales: el agente sigue ahí para reintentar.
+            assertAgentExists()
+        }
+
+    @Test
+    fun `herdr unavailable fails with the relay reason and never sends forget`() =
+        runBlocking {
+            // El panel puede seguir vivo. Archivar aquí crearía el agente fantasma que este ciclo de vida
+            // existe para evitar, así que este caso NO se ensancha: falla y no llama a agent.forget.
+            responder = { error(it, "herdr_unavailable", "herdr no pudo cerrar el panel: pane_not_found") }
+
+            val result = repository.close(agent.agentId)
+            val failure = assertIs<CloseOutcome.Failed>(result)
+            assertEquals(
+                "No se pudo cerrar el agente: herdr no pudo cerrar el panel: pane_not_found",
+                failure.message,
+            )
+            awaitRequest(MsgType.AGENT_CLOSE)
+            assertAgentExists()
+        }
+
+    @Test
+    fun `a close error with no relay message keeps the plain text`() =
+        runBlocking {
+            responder = { error(it, "internal", "") }
+
+            val failure = assertIs<CloseOutcome.Failed>(repository.close(agent.agentId))
+            assertEquals("No se pudo cerrar el agente", failure.message)
             assertAgentExists()
         }
 

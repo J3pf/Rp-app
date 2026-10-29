@@ -147,7 +147,8 @@ class AgentsLifecycleTest {
 
             viewModel.confirmForget()
             val failure = withTimeout(5_000) { viewModel.lifecycleState.first { it.message != null } }
-            assertEquals("No se pudo cerrar el agente", failure.message)
+            // El banner lleva la razón del relay, no una cadena genérica.
+            assertEquals("No se pudo cerrar el agente: relay failure", failure.message)
             assertEquals(MsgType.AGENT_CLOSE, awaitRequest().t)
             assertNotNull(db!!.agents().get("r1", agent.agentId))
         }
