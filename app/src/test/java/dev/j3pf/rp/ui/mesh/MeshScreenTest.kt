@@ -507,10 +507,18 @@ class MeshScreenTest {
         var clicked = false
         val subagents =
             listOf(
+                // La tarjeta solo lleva píldoras: el terminado se ve, el que está en ejecución no,
+                // porque vive en el diagrama como nodo propio (Fase D).
                 dev.j3pf.rp.protocol.MeshSubagent(
                     taskId = "task-1",
                     agent = "Worker UI",
                     label = "Pruebas UI",
+                    status = "done",
+                ),
+                dev.j3pf.rp.protocol.MeshSubagent(
+                    taskId = "task-2",
+                    agent = "Worker UI 2",
+                    label = "En curso",
                     status = "working",
                 ),
             )
@@ -548,6 +556,8 @@ class MeshScreenTest {
         rule.onNodeWithText("· Refactorizando UI", substring = true).assertIsDisplayed()
         rule.onNodeWithText("3/5").assertIsDisplayed()
         rule.onNodeWithText("Pruebas UI").assertIsDisplayed()
+        // Uno en ejecución no pinta chip en la tarjeta: su sitio es el diagrama.
+        rule.onNodeWithText("En curso").assertDoesNotExist()
 
         rule.onNodeWithText("Rp-app").performClick()
         kotlin.test.assertTrue(clicked)
