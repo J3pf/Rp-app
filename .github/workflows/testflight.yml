@@ -30,6 +30,7 @@ jobs:
     name: Archive y subida
     runs-on: macos-15
     env:
+      XCODE_MIN_VERSION: "26.5"
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -54,6 +55,24 @@ jobs:
             fi
           done
           [ "$faltan" -eq 0 ] || exit 1
+          mejor=""
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            version=$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -1 | awk '{print $2}')
+            [ -n "$version" ] || continue
+            cumple=$(printf '%s\n%s\n' "$XCODE_MIN_VERSION" "$version" | sort -V | head -1)
+            if [ "$cumple" = "$XCODE_MIN_VERSION" ] &&
+               { [ -z "$mejor" ] || [ "$(printf '%s\n%s\n' "$mejor_version" "$version" | sort -V | tail -1)" = "$version" ]; }; then
+              mejor="$app"; mejor_version="$version"
+            fi
+          done
+          if [ -z "$mejor" ]; then
+            echo "::error::Ningún Xcode instalado alcanza el mínimo $XCODE_MIN_VERSION; no se archiva a ciegas."
+            ls -1 /Applications | grep -i '^Xcode' || true
+            exit 1
+          fi
+          echo "Xcode elegido: $mejor ($mejor_version)"
+          sudo xcode-select -s "$mejor"
           xcodebuild -version
 
       - uses: actions/setup-java@v4

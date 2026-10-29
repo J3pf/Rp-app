@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
 
 env:
-  XCODE_VERSION: "26.5"
-  XCODE_BUILD: "17F42"
-  XCODE_APP: /Applications/Xcode_26.5.app
+  # Mínimo fijado, no minor exacta: el pool de runners rota y una máquina trae Xcode 26.5 y otra 16.4.
+  # El job falla en voz alta si ningún Xcode instalado alcanza este mínimo.
+  XCODE_MIN_VERSION: "26.5"
   IOS_BUNDLE_ID: dev.j3pf.rp.iosApp
 
 concurrency:
@@ -40,32 +40,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Exigir la versión de Xcode fijada
+      - name: Elegir Xcode (mínimo fijado) y fallar si no hay ninguno
         run: |
           set -uo pipefail
-          SELECCIONADA=""
-          for app in $(ls -d /Applications/Xcode_"$XCODE_VERSION"*.app /Applications/Xcode.app 2>/dev/null || true); do
-            echo "--- candidato: $app"
-            ls -ld "$app" || true
-            readlink "$app" || true
-            if [ -d "$app" ] && "$app/Contents/Developer/usr/bin/xcodebuild" -version >/dev/null 2>&1; then
-              SELECCIONADA="$app"
-              break
+          echo "instalados en la imagen:"
+          ls -1 /Applications | grep -i '^Xcode' || echo "ninguno"
+          mejor=""
+          mejor_version=""
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            version=$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -1 | awk '{print $2}')
+            [ -n "$version" ] || continue
+            cumple=$(printf '%s\n%s\n' "$XCODE_MIN_VERSION" "$version" | sort -V | head -1)
+            [ "$cumple" = "$XCODE_MIN_VERSION" ] || continue
+            if [ -z "$mejor_version" ] ||
+               [ "$(printf '%s\n%s\n' "$mejor_version" "$version" | sort -V | tail -1)" = "$version" ]; then
+              mejor="$app"
+              mejor_version="$version"
             fi
           done
-          if [ -z "$SELECCIONADA" ]; then
-            echo "::error::No hay ningún Xcode $XCODE_VERSION utilizable en esta imagen. Este job no se salta: ajusta XCODE_VERSION o la imagen del runner."
-            ls -1 /Applications | grep -i '^Xcode' || echo "no hay ningún Xcode instalado"
+          if [ -z "$mejor" ]; then
+            echo "::error::Ningún Xcode instalado alcanza el mínimo $XCODE_MIN_VERSION. Este job no se salta en silencio: cambia la imagen del runner o el mínimo."
             exit 1
           fi
-          echo "seleccionado: $SELECCIONADA"
-          sudo xcode-select -s "$SELECCIONADA"
-          INSTALADO=$(xcodebuild -version | tr '\n' ' ')
-          echo "Xcode instalado: $INSTALADO"
-          if ! xcodebuild -version | head -1 | grep -q "Xcode $XCODE_VERSION"; then
-            echo "::error::Se esperaba Xcode $XCODE_VERSION (build $XCODE_BUILD) y hay: $INSTALADO"
-            exit 1
-          fi
+          echo "elegido: $mejor ($mejor_version)"
+          {
+            echo "### Xcode"
+            echo ""
+            echo "\`$mejor\` — versión \`$mejor_version\` (mínimo exigido \`$XCODE_MIN_VERSION\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          sudo xcode-select -s "$mejor"
+          xcodebuild -version
 
       - name: Exigir el SDK de simulador de iOS
         run: |
