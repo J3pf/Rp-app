@@ -26,7 +26,7 @@ on:
 env:
   # Mínimo fijado, no minor exacta: el pool de runners rota y una máquina trae Xcode 26.5 y otra 16.4.
   # El job falla en voz alta si ningún Xcode instalado alcanza este mínimo.
-  XCODE_MIN_VERSION: "26.5"
+  XCODE_MIN_VERSION: "26.0"
   IOS_BUNDLE_ID: dev.j3pf.rp.iosApp
 
 concurrency:

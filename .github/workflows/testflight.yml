@@ -30,7 +30,7 @@ jobs:
     name: Archive y subida
     runs-on: macos-15
     env:
-      XCODE_MIN_VERSION: "26.5"
+      XCODE_MIN_VERSION: "26.0"
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
