@@ -50,6 +50,14 @@ S5 "una notificación «Terminó» obsoleta no sobrevive a un prompt nuevo del m
    podía descartar nunca.
 6. `showRetrying` reemplazaba el child del grupo por una notificación sin grupo: el resumen quedaba huérfano
    también en el estado "se reintentará".
+7. **Hueco que el análisis estático no vio y el verde destapó:** el push no siempre persiste la fila del
+   prompt (el canal directo solo pinta la notificación; la fila llega por `prompt.opened` vía WS). Por eso
+   una guarda basada solo en la BD no puede frenar un push duplicado. Se añade la marca `answered:<id>` en
+   la tabla del deduper, que sí existe aunque no haya fila.
+   **Por qué la ventana es de 10 minutos y no de 24 h:** 24 h es el TTL del deduper y silenciaría de más un
+   id reutilizado; 10 min cubre con holgura el replay real (reintento del relay, reconexión, reentrega de
+   WorkManager) sin convertir el silencio en permanente. La ventana vive en `PromptState.REPLAY_WINDOW_MS` y
+   la usan las dos guardas (marca del deduper y fila resuelta), así que no pueden desincronizarse.
 
 ## Log
 - L1: "1) que si uno elimina un agente de herdr el man también lo borre de la app 2) rediseñar el logo por que no me gusta para nada, debe ser minimalista y moderno 3) mejorar la gestion de las notificaciones (ejemplo: cuando se le da permitir o rechazar desde una push, funciona pero queda una notificacion zombie) 4) en la red de agentes, los sub agentes de cada agente deberian ser parte del diagrama, no pills dentro de cada agente, para optimizar el espacio, en pills mostrar los que ya terminaron y como parte de la organizacion los que estan corriendo en el momento 5) revisar la app para poderla compilar y publicar para ios tambien y obviamente para android"
