@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RP · Dirección 01 — Caret + nodo</title>
+<style>
+  :root{
+    --ink:#14121A; --muted:#57545F; --line:#E6E2EE; --paper:#FBFAFD;
+    --night:#0B0A0F; --night-tile:#17151D; --night-line:#2A2733;
+    --accent:#6C4BD6; --accent-ink:#4F378B;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .board{width:1440px;margin:0 auto;padding:44px 56px 56px}
+  .eyebrow{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin:0 0 10px}
+  h1{font-size:44px;line-height:1.1;letter-spacing:-.02em;margin:0 0 12px;font-weight:680}
+  .idea{margin:0;max-width:74ch;color:var(--muted);font-size:18px}
+  .tradeoff{display:inline-block;margin-top:14px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;font-size:14px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin:36px 0 0}
+  .tile{border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:20px;border:1px solid var(--line)}
+  .tile.dark{background:var(--night);border-color:var(--night-line);color:#F5F3F8}
+  .tile.light{background:#FFFFFF;color:var(--ink)}
+  .tile.mono{background:#E9E6F1;color:#3B3847}
+  .tile h2{font-size:14px;letter-spacing:.08em;text-transform:uppercase;margin:0;font-weight:600;opacity:.75}
+  .stage{display:grid;place-items:center;height:188px}
+  .mark{width:168px;height:168px;display:block}
+  .scales{display:flex;align-items:flex-end;gap:20px;padding-top:16px;border-top:1px solid currentColor;border-color:color-mix(in srgb, currentColor 16%, transparent)}
+  .scales figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .scales figcaption{font-size:11px;letter-spacing:.06em;opacity:.62}
+  .s48{width:48px;height:48px}.s32{width:32px;height:32px}.s24{width:24px;height:24px}
+  .context{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px}
+  .card{border-radius:22px;padding:22px 24px;border:1px solid var(--line);background:#FFFFFF}
+  .card.dark{background:var(--night);border-color:var(--night-line);color:#F5F3F8}
+  .bar{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent)}
+  .bar .name{font-size:17px;font-weight:640;letter-spacing:-.01em}
+  .bar .meta{margin-left:auto;font-size:12px;opacity:.6}
+  .perm{margin-top:16px;border-radius:14px;padding:14px 16px;background:color-mix(in srgb, currentColor 6%, transparent)}
+  .perm .ask{font-size:15px;font-weight:600;margin:0 0 4px}
+  .perm .detail{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.72;margin:0}
+  .actions{display:flex;gap:10px;margin-top:14px}
+  .btn{font-size:13px;font-weight:600;padding:9px 16px;border-radius:10px;border:1px solid transparent;background:var(--accent);color:#fff}
+  .btn.ghost{background:transparent;border-color:color-mix(in srgb, currentColor 22%, transparent);color:inherit}
+  .notes{margin-top:34px;display:grid;grid-template-columns:1.15fr 1fr;gap:32px;border-top:1px solid var(--line);padding-top:24px}
+  .notes h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .notes p,.notes li{font-size:14.5px;color:var(--muted);margin:0}
+  .notes ul{margin:0;padding-left:18px;display:grid;gap:6px}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
+  @media (prefers-reduced-motion:no-preference){.tile{transition:transform .18s ease}.tile:hover{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+<main class="board">
+  <header>
+    <p class="eyebrow">Dirección 01 · Pictograma</p>
+    <h1>Caret + nodo</h1>
+    <p class="idea">El signo de un prompt de terminal, con el vértice convertido en agente. Dos formas, una sola idea:
+      tú escribes, un agente responde. Se dibuja con un trazo de grosor constante y un punto, así que sobrevive a
+      16&nbsp;px, al icono monocromo y a cualquier máscara.</p>
+    <span class="tradeoff">Compra: se entiende de un vistazo · Paga: es el más literal de los tres</span>
+  </header>
+
+  <section class="grid" aria-label="El logo sobre tres fondos y a tres tamaños">
+    <div class="tile dark">
+      <h2>Noche</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP: caret de terminal con nodo de agente">
+          <path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="78" cy="54" r="8" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg><figcaption>24</figcaption></figure>
+      </div>
+    </div>
+
+    <div class="tile light">
+      <h2>Día</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP: caret de terminal con nodo de agente">
+          <path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="78" cy="54" r="8" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg><figcaption>24</figcaption></figure>
+      </div>
+    </div>
+
+    <div class="tile mono">
+      <h2>Monocromo (icono temático)</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP en monocromo">
+          <path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="78" cy="54" r="9" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="9" fill="currentColor"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="9" fill="currentColor"/></svg><figcaption>24</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="context" aria-label="La marca dentro de la app">
+    <div class="card dark">
+      <div class="bar">
+        <svg width="26" height="26" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg>
+        <span class="name">RP</span><span class="meta">2 pendientes</span>
+      </div>
+      <div class="perm">
+        <p class="ask">¿Permitir rm -rf dist?</p>
+        <p class="detail">~/proyectos/api · agente build</p>
+      </div>
+      <div class="actions"><button class="btn">Permitir</button><button class="btn ghost">Denegar</button></div>
+    </div>
+    <div class="card">
+      <div class="bar">
+        <svg width="26" height="26" viewBox="0 0 108 108" aria-hidden="true"><path d="M40 32 66 54 40 76" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="54" r="8" fill="currentColor"/></svg>
+        <span class="name">RP</span><span class="meta">en línea</span>
+      </div>
+      <div class="perm">
+        <p class="ask">Terminó el refactor de notificaciones</p>
+        <p class="detail">3 archivos · 2 min · sin errores</p>
+      </div>
+      <div class="actions"><button class="btn">Responder</button><button class="btn ghost">Ver chat</button></div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h3>Construcción</h3>
+      <p>Rejilla de 108&nbsp;dp (la misma del icono adaptativo) con la marca dentro de la zona segura de 66&nbsp;dp.
+        Trazo de 10 unidades, extremos y vértice redondeados; el punto cierra la lectura de «agente» y su centro
+        queda a la altura del vértice. Todo cabe en dos formas: nada que se pierda al reducir.</p>
+    </div>
+    <div>
+      <h3>Si se elige, la Fase E generaría</h3>
+      <ul>
+        <li>Adaptive icon: foreground (caret + punto) y background plano, más la capa <em>monochrome</em>.</li>
+        <li>iOS 1024 px a sangre, sin alfa; la marca al 62&nbsp;% del lienzo para no rozar la máscara.</li>
+        <li>Marca in-app como vector drawable, sustituyendo el burbuja+«RP» actual.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RP · Dirección 02 — Monograma R</title>
+<style>
+  :root{
+    --ink:#121218; --muted:#55535E; --line:#E5E3EC; --paper:#FAFAFC;
+    --night:#0A0A0E; --night-line:#26262F;
+    --accent:#3B36F0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .board{width:1440px;margin:0 auto;padding:44px 56px 56px}
+  .eyebrow{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0 0 10px}
+  h1{font-size:44px;line-height:1.1;letter-spacing:-.02em;margin:0 0 12px;font-weight:680}
+  .idea{margin:0;max-width:74ch;color:var(--muted);font-size:18px}
+  .tradeoff{display:inline-block;margin-top:14px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;font-size:14px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin:36px 0 0}
+  .tile{border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:20px;border:1px solid var(--line)}
+  .tile.dark{background:var(--night);border-color:var(--night-line);color:#F4F3F8}
+  .tile.light{background:#FFFFFF;color:var(--ink)}
+  .tile.mono{background:#E8E7F3;color:#34334A}
+  .tile h2{font-size:14px;letter-spacing:.08em;text-transform:uppercase;margin:0;font-weight:600;opacity:.72}
+  .stage{display:grid;place-items:center;height:188px}
+  .mark{width:168px;height:168px;display:block}
+  .scales{display:flex;align-items:flex-end;gap:20px;padding-top:16px;border-top:1px solid color-mix(in srgb, currentColor 16%, transparent)}
+  .scales figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .scales figcaption{font-size:11px;letter-spacing:.06em;opacity:.6}
+  .s48{width:48px;height:48px}.s32{width:32px;height:32px}.s24{width:24px;height:24px}.s16{width:16px;height:16px}
+  .context{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px}
+  .card{border-radius:22px;padding:22px 24px;border:1px solid var(--line);background:#FFFFFF}
+  .card.dark{background:var(--night);border-color:var(--night-line);color:#F4F3F8}
+  .bar{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent)}
+  .bar .name{font-size:17px;font-weight:640;letter-spacing:-.01em}
+  .bar .meta{margin-left:auto;font-size:12px;opacity:.6}
+  .row{margin-top:16px;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb, currentColor 6%, transparent)}
+  .row .dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.55;flex:none}
+  .row .txt{font-size:14.5px;margin:0}
+  .row .sub{font-size:12.5px;opacity:.62;margin:2px 0 0}
+  .notes{margin-top:34px;display:grid;grid-template-columns:1.15fr 1fr;gap:32px;border-top:1px solid var(--line);padding-top:24px}
+  .notes h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .notes p,.notes li{font-size:14.5px;color:var(--muted);margin:0}
+  .notes ul{margin:0;padding-left:18px;display:grid;gap:6px}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
+  @media (prefers-reduced-motion:no-preference){.tile{transition:transform .18s ease}.tile:hover{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+<main class="board">
+  <header>
+    <p class="eyebrow">Dirección 02 · Monograma</p>
+    <h1>Monograma R</h1>
+    <p class="idea">Una sola «R» dibujada a trazo continuo: asta, cuenco y pierna con el mismo grosor. No hay
+      pictograma, hay identidad. Es la dirección que mejor escala — a 16&nbsp;px sigue siendo una letra y no
+      una mancha — y la que convierte el icono monocromo en un detalle trivial.</p>
+    <span class="tradeoff">Compra: escala y elegancia impecables · Paga: no dice «agentes» sin el wordmark</span>
+  </header>
+
+  <section class="grid" aria-label="El logo sobre tres fondos y a tres tamaños">
+    <div class="tile dark">
+      <h2>Noche</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP: monograma R a trazo continuo">
+          <path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+
+    <div class="tile light">
+      <h2>Día</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP: monograma R a trazo continuo">
+          <path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+
+    <div class="tile mono">
+      <h2>Monocromo (icono temático)</h2>
+      <div class="stage">
+        <svg class="mark" viewBox="0 0 108 108" role="img" aria-label="Marca RP en monocromo">
+          <path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="scales">
+        <figure><svg class="s48" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s24" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>24</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="context" aria-label="La marca dentro de la app">
+    <div class="card dark">
+      <div class="bar">
+        <svg width="26" height="26" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="name">RP</span><span class="meta">2 pendientes</span>
+      </div>
+      <div class="row"><span class="dot"></span><div><p class="txt">¿Permitir rm -rf dist?</p><p class="sub">~/proyectos/api · agente build</p></div></div>
+      <div class="row"><span class="dot"></span><div><p class="txt">Esperando tu respuesta</p><p class="sub">portátil · hace 2 min</p></div></div>
+    </div>
+    <div class="card">
+      <div class="bar">
+        <svg width="26" height="26" viewBox="0 0 108 108" aria-hidden="true"><path d="M34 84V26h26a15 15 0 0 1 0 30H34m26 0 20 28" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="name">RP</span><span class="meta">en línea</span>
+      </div>
+      <div class="row"><span class="dot"></span><div><p class="txt">build · trabajando</p><p class="sub">corriendo tests · 4/9</p></div></div>
+      <div class="row"><span class="dot"></span><div><p class="txt">docs · terminó</p><p class="sub">3 archivos · sin errores</p></div></div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h3>Construcción</h3>
+      <p>Trazo único de 10 unidades sobre rejilla de 108&nbsp;dp: asta recta, cuenco de radio 15 y pierna diagonal que
+        sale del cuenco con el mismo grosor. Sin relleno, así que el icono adaptativo no necesita capa intermedia:
+        el foreground es la letra y el background el color de marca.</p>
+    </div>
+    <div>
+      <h3>Si se elige, la Fase E generaría</h3>
+      <ul>
+        <li>Adaptive icon: foreground = la «R» centrada al 62&nbsp;%, background plano, capa monochrome idéntica.</li>
+        <li>iOS 1024 px a sangre: la «R» al 58&nbsp;% para respetar la máscara y sin canal alfa.</li>
+        <li>Marca in-app en vector, más el wordmark «RP» al lado en la barra superior.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+</body>
+</html>
