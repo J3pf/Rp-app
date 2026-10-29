@@ -26,7 +26,7 @@ actividad donde no consta. Se compara sin distinguir mayúsculas y sin espacios 
 
 | ID | Specs | Ruta | Commit |
 | --- | --- | --- | --- |
-| T1 | S1–S5 | RED en `shared-ui/src/commonTest/.../layout/SubagentNodePlacementTest.kt` (6 casos) | `1229374` |
+| T1 | S1–S5 | RED en `shared-ui/src/commonTest/.../layout/SubagentNodePlacementTest.kt` (6 casos) | `239c910` |
 | T2 | S1, S3, S5 | `SubagentPlacement` + nodos sintéticos en `MeshLayoutEngine.computeLayout` | `b1b36b6` |
 | T3 | S2, S3 | Píldoras de terminados en `MeshAgentCard`, sin duplicar | `b1b36b6` |
 | T4 | S6 | gate completo 422/422, lint en línea base | `b1b36b6` |
@@ -94,3 +94,7 @@ Esperado hoy: `6 tests completed, 4 failed`. Después de T2: 6 de 6.
 - L1: «los sub agentes … parte del diagrama, no pills».
 - L2: el orquestador fija el límite de datos: solo Pi y agy emiten eventos de subagente; claude y codex ninguno; en Pi solo se conoce `subagent_run`; sin placeholders, sin inferencias, sin ids crudos.
 - L3: pausa por corte de red antes de implementar; el RED queda comprometido y el documento es la memoria.
+- L4: el squash de la PR #10 dejó un solo commit (`239c910`) con T1–T4. Los shas locales del RED y de la
+  implementación (`1229374`, `b1b36b6`) no existen en main: se anotan los del árbol fusionado para que
+  nadie busque un commit fantasma. `main` quedó verde en `b845afc`.
+
