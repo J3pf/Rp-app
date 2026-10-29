@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSubagent
+import dev.j3pf.rp.ui.mesh.layout.SubagentPlacement
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.ui.theme.RpSpacing
@@ -191,27 +192,29 @@ fun MeshAgentCard(
                 }
             }
 
-            // Attached Subagent Chips
-            if (node.subagents.isNotEmpty()) {
+            // Píldoras de subagentes: solo los terminados. Los que están en ejecución ya son nodos
+            // del diagrama, así que no se pintan también aquí (ni se cuentan dos veces).
+            val pildoras = SubagentPlacement.split(node.subagents).second
+            if (pildoras.isNotEmpty()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    node.subagents.take(3).forEach { subagent ->
+                    pildoras.take(3).forEach { subagent ->
                         MeshSubagentChip(
                             subagent = subagent,
                             reducedMotion = reducedMotion,
                             modifier = Modifier.weight(1f, fill = false),
                         )
                     }
-                    if (node.subagents.size > 3) {
+                    if (pildoras.size > 3) {
                         Surface(
                             shape = RpShapes.pill,
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.height(20.dp),
                         ) {
                             Text(
-                                text = "+${node.subagents.size - 3}",
+                                text = "+${pildoras.size - 3}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),

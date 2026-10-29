@@ -30,6 +30,7 @@ class MeshLayoutEngine(
                         { it.machineId },
                     ),
                 ).distinctBy { it.agentId }
+                .flatMap { nodo -> listOf(nodo) + nodosDeSubagentes(nodo) }
 
         if (orderedNodes.isEmpty()) {
             return MeshLayoutResult(
@@ -113,7 +114,7 @@ class MeshLayoutEngine(
                 val estimatedHeight =
                     baseCardHeight +
                         (if (node.todos?.total?.let { it > 0 } == true) 26f else 0f) +
-                        (if (node.subagents.isNotEmpty()) 30f else 0f)
+                        (if (SubagentPlacement.split(node.subagents).second.isNotEmpty()) 30f else 0f)
                 val measuredHeight = cardHeights[node.agentId]?.takeIf { it.isFinite() && it > 0f }
                 node.agentId to (measuredHeight ?: estimatedHeight)
             }
@@ -616,4 +617,28 @@ class MeshLayoutEngine(
         if (minX == Float.POSITIVE_INFINITY) return LayoutBounds(0f, 0f, 0f, 0f)
         return LayoutBounds(minX, minY, maxX, maxY)
     }
+
+    /**
+     * Un subagente **en ejecución** entra al diagrama como nodo real, un nivel por debajo de su agente
+     * (lo hace el árbol porque el nodo nace con `parentAgentId`). Los terminados no generan nodo: se
+     * quedan como píldoras en la tarjeta. Un subagente nunca se duplica porque cada uno cae en uno solo
+     * de los dos conjuntos de [SubagentPlacement.split].
+     */
+    private fun nodosDeSubagentes(agente: MeshNode): List<MeshNode> =
+        SubagentPlacement
+            .split(agente.subagents)
+            .first
+            .map { subagente ->
+                agente.copy(
+                    agentId = SubagentPlacement.nodeId(agente.agentId, subagente.taskId),
+                    name = SubagentPlacement.displayName(subagente),
+                    parentAgentId = agente.agentId,
+                    role = "subagent",
+                    status = subagente.status,
+                    subagents = emptyList(),
+                    todos = null,
+                    activity = null,
+                    openPromptCount = 0,
+                )
+            }
 }
