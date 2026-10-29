@@ -16,13 +16,20 @@ An Android app (Kotlin + Jetpack Compose) for viewing and controlling your [Pi](
 
 ## Main features
 
+- **Subagent Nodes and Remote Review Consent (v0.6.0)**:
+  - **Subagents in the diagram**: a subagent that is `running` or `working` is a node one level below its agent; finished ones collapse back to compact pills. Unrecognised statuses stay pills rather than inventing activity, and only Pi and agy report subagents at all.
+  - **Review consent surface**: `danger: high` provider prompts render the terminal body verbatim in monospace, keep the three options and their declared effects in order, label the session-wide grant, and send `{cancelled:true}` when dismissed.
+  - **Agent lifecycle**: closing an agent in Herdr closes it in the app; archived agents have their own screen with explicit purge and a real error-with-retry state.
+  - **Notification lifecycle**: answering a prompt from a push clears the notification instead of leaving a zombie copy.
+  - **iOS**: a macOS CI job pins a minimum Xcode, fails loudly when none qualifies, and proves compile, install and launch on an arm64 simulator.
+  - Requires **Rp-relay >= 0.6.0** and **Rp-plugin >= 0.3.0**, both installed from their GitHub releases; neither package exists on npm.
 - **Corporate Org-Chart Layout for Agent Mesh (v0.5.0)**:
   - **Tidy-Tree Layout Engine**: Pure Reingold–Tilford tree algorithm in `MeshLayoutEngine` with horizontal parent centering over subtrees, strict row alignment (`same depth = same row`), multi-root side-by-side positioning on depth 0 with running right contour separation, and no connectors between sibling roots.
   - **Orthogonal Bus Connectors**: Hierarchical parent-to-child connections routed through row channels with vertical drop lines and horizontal buses.
   - **Compact Leaf Bullet Lists**: Subordinate leaf agents hanging under manager nodes cluster into a clean vertical list with status dots and compact progress text when leaves exceed threshold, preventing horizontal viewport overflow.
   - **Mobile Usability & Recentering**: 2D pan and pinch-zoom (0.4x to 2.5x) with sane bounding clamps, top-anchored initial viewport fitting, and a visible "Recentrar" action button in the top bar.
   - **Accessibility & Long Names**: TalkBack hierarchy semantics ("X, reporta a Y"), 2-line wrapped agent names without truncation, and Roborazzi golden coverage across themes and device configurations.
-  - Requires **Rp-relay >= 0.5.5** and **Rp-plugin >= 0.2.8**.
+  - Requires the current minimums: **Rp-relay >= 0.6.0** and **Rp-plugin >= 0.3.0**.
 - **Agent Mesh Screen Redesign (v0.4.0)**:
   - **Interactive Agent Cards (S2)**: Replaces bare circles with rich cards featuring a machine-tinted avatar showing the first alphanumeric display-name character in uppercase (or `A` if none), a clean display name, secondary line (`machine · branch/model`), live status dot, single-line activity preview, TODO progress bar, and attached subagent chips with real-time execution spinners. Only the orchestrator card displays a role badge; subordinate and solo-agent cards do not. `Subagente` is a role label, and subagents render as attached chips.
   - **Hierarchical Top-Down Layout (S2, S3)**: Replaces radial rings with a top-down hierarchy (orchestrator at the top, subordinates in balanced rows below) and bounding-box collision avoidance for 1–12 agents.

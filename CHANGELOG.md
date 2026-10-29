@@ -3,6 +3,46 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-10-29
+
+### Added
+- **Subagent Nodes in the Agent Mesh**: A subagent that is `running` or `working` is now a real diagram
+  node, one level below its agent, positioned by the existing tidy-tree engine. Finished subagents
+  (`done`, `completed`, `error`, `stopped`) stay as compact pills on the card, and any unrecognised
+  status also stays a pill instead of inventing activity. Node ids are a stable hash of the task id, so
+  no raw id ever reaches the diagram.
+- **Review Consent Surface**: Provider review prompts with `danger: high` get their own surface: the
+  terminal body is rendered verbatim in monospace with horizontal scroll (no reflow, no truncation),
+  the three options keep their declared `Effect:` text in provider order, the session-wide option is
+  labelled as such, and dismissing sends `{cancelled:true}` instead of a silent rejection.
+- **Archived Agents**: Agents closed in Herdr are archived in the app and listed in their own screen;
+  purging is only ever an explicit human action, and a failed fetch renders an explicit error with
+  retry rather than an empty list.
+- **iOS CI and TestFlight Workflow**: A macOS job pins a minimum Xcode version, fails loudly when none
+  qualifies, and proves compile, install and launch on an arm64 simulator. A manual TestFlight workflow
+  documents its eight secrets and refuses to archive when one is missing.
+
+### Changed
+- **Notification lifecycle**: answering a prompt from a push removes the notification instead of
+  leaving a copy that reappears when the app opens.
+- **Identity**: new launcher and status-bar icon, a caret with a node.
+- **Agent lifecycle sync**: closing an agent in Herdr closes it in the app, because the app now
+  consumes the relay's lifecycle frames and not only snapshots.
+
+### Fixed
+- iOS simulator builds aborted with `Unknown iOS simulator arch: 'x86_64'` on every destination that has
+  no active architecture. The project now excludes the x86_64 simulator slice it never had, instead of
+  relying on arch flags per command.
+
+### Removed
+- Five unused string resources (`chat_msg_failed`, `chat_msg_retry`, `action_abort`, `diff_no_changes`,
+  `diff_request_adjustment`). `lintDirectDebug` goes from 8 issues to 3; the remaining three are the
+  AGP 9.4.1 to 9.5.0 notices, documented rather than silenced.
+
+### Requires
+- **Rp-relay >= 0.6.0** and **Rp-plugin >= 0.3.0**, both as GitHub releases. Neither package exists on
+  npm (`@j3pf/rp-relay` and `@j3pf/pi-rp` return 404), so pointing anyone at npm sends them to a 404.
+
 ## [0.5.0] - 2026-10-21
 
 ### Added
