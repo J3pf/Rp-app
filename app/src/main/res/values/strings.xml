@@ -28,4 +28,9 @@
     <string name="diff_no_changes">Sin cambios pendientes</string>
     <string name="diff_request_adjustment">Pedir ajuste</string>
     <string name="diff_discard">Descartar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="agent_close_title">¿Cerrar el agente?</string>
+    <string name="archived_fallback_notice">No había un pane de Herdr vinculado; el historial quedó archivado.</string>
+    <string name="agent_close_confirmation">Esto cerrará el pane en Herdr y detendrá el agente</string>
+    <string name="agent_close_confirm">Cerrar agente</string>
 </resources>

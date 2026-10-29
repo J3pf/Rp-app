@@ -75,10 +75,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.R
 import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.repo.AttachmentUi
+import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.ui.agents.AgentCloseConfirmationDialog
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.horizontalEdgeFade
@@ -112,6 +114,8 @@ fun ChatContent(
     onMessageSpacingChange: (String) -> Unit = {},
     onQuit: () -> Unit = {},
     onForget: () -> Unit = {},
+    onConfirmForget: () -> Unit = {},
+    onCancelForget: () -> Unit = {},
     onSwitchToNormal: () -> Unit = {},
     onRetryUserMessage: (UserMsg) -> Unit = {},
     onOpenDiff: () -> Unit = {},
@@ -406,6 +410,9 @@ fun ChatContent(
             onDismiss = { showInfo = false },
         )
     }
+    if (ui.showForgetConfirmation) {
+        AgentCloseConfirmationDialog(onConfirm = onConfirmForget, onDismiss = onCancelForget)
+    }
     if (showQuitDialog) {
         AlertDialog(
             onDismissRequest = { showQuitDialog = false },
@@ -434,6 +441,7 @@ fun ChatScreen(
     promptVm: PromptSheetViewModel = hiltViewModel(),
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
+    val archivedNotice = stringResource(R.string.archived_fallback_notice)
     val promptStatus by promptVm.status.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -533,7 +541,16 @@ fun ChatScreen(
         onFontScaleChange = vm::setChatFontScale,
         onMessageSpacingChange = vm::setChatMessageSpacing,
         onQuit = { vm.quit(onBack) },
-        onForget = { vm.forget(onBack) },
+        onForget = {
+            vm.forget { outcome ->
+                scope.launch {
+                    if (outcome == CloseOutcome.Archived) snackbar.showSnackbar(archivedNotice)
+                    onBack()
+                }
+            }
+        },
+        onConfirmForget = vm::confirmForget,
+        onCancelForget = vm::cancelForget,
         onSwitchToNormal = vm::switchToNormal,
         onRetryUserMessage = vm::retryUserMessage,
         onOpenDiff = vm::openDiffSheet,
