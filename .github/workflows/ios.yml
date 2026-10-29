@@ -45,31 +45,19 @@ jobs:
           set -uo pipefail
           echo "instalados en la imagen:"
           ls -1 /Applications | grep -i '^Xcode' || echo "ninguno"
-          mejor=""
-          mejor_version=""
-          for app in /Applications/Xcode*.app; do
-            [ -d "$app" ] || continue
-            version=$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -1 | awk '{print $2}')
-            [ -n "$version" ] || continue
-            cumple=$(printf '%s\n%s\n' "$XCODE_MIN_VERSION" "$version" | sort -V | head -1)
-            [ "$cumple" = "$XCODE_MIN_VERSION" ] || continue
-            if [ -z "$mejor_version" ] ||
-               [ "$(printf '%s\n%s\n' "$mejor_version" "$version" | sort -V | tail -1)" = "$version" ]; then
-              mejor="$app"
-              mejor_version="$version"
-            fi
-          done
-          if [ -z "$mejor" ]; then
+          ELEGIDO=$(python3 .github/scripts/select-xcode.py) || {
             echo "::error::Ningún Xcode instalado alcanza el mínimo $XCODE_MIN_VERSION. Este job no se salta en silencio: cambia la imagen del runner o el mínimo."
             exit 1
-          fi
-          echo "elegido: $mejor ($mejor_version)"
+          }
+          APP_XCODE="${ELEGIDO%%|*}"
+          VERSION_XCODE="${ELEGIDO##*|}"
+          echo "elegido: $APP_XCODE ($VERSION_XCODE)"
           {
             echo "### Xcode"
             echo ""
-            echo "\`$mejor\` — versión \`$mejor_version\` (mínimo exigido \`$XCODE_MIN_VERSION\`)"
+            echo "\`$APP_XCODE\` — versión \`$VERSION_XCODE\` (mínimo exigido \`$XCODE_MIN_VERSION\`)"
           } >> "$GITHUB_STEP_SUMMARY"
-          sudo xcode-select -s "$mejor"
+          sudo xcode-select -s "$APP_XCODE"
           xcodebuild -version
 
       - name: Exigir el SDK de simulador de iOS

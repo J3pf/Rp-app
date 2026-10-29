@@ -55,24 +55,14 @@ jobs:
             fi
           done
           [ "$faltan" -eq 0 ] || exit 1
-          mejor=""
-          for app in /Applications/Xcode*.app; do
-            [ -d "$app" ] || continue
-            version=$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -1 | awk '{print $2}')
-            [ -n "$version" ] || continue
-            cumple=$(printf '%s\n%s\n' "$XCODE_MIN_VERSION" "$version" | sort -V | head -1)
-            if [ "$cumple" = "$XCODE_MIN_VERSION" ] &&
-               { [ -z "$mejor" ] || [ "$(printf '%s\n%s\n' "$mejor_version" "$version" | sort -V | tail -1)" = "$version" ]; }; then
-              mejor="$app"; mejor_version="$version"
-            fi
-          done
-          if [ -z "$mejor" ]; then
+          ELEGIDO=$(python3 .github/scripts/select-xcode.py) || {
             echo "::error::Ningún Xcode instalado alcanza el mínimo $XCODE_MIN_VERSION; no se archiva a ciegas."
             ls -1 /Applications | grep -i '^Xcode' || true
             exit 1
-          fi
-          echo "Xcode elegido: $mejor ($mejor_version)"
-          sudo xcode-select -s "$mejor"
+          }
+          APP_XCODE="${ELEGIDO%%|*}"
+          echo "Xcode elegido: $APP_XCODE (${ELEGIDO##*|})"
+          sudo xcode-select -s "$APP_XCODE"
           xcodebuild -version
 
       - uses: actions/setup-java@v4
