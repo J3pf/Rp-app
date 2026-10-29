@@ -1,0 +1,72 @@
+# Feature: compilar y publicar para iOS y Android (Fase F)
+Branch: `feat/ios-release` (base `a8d7c91`).
+Estado: **CI de iOS y workflow de TestFlight escritos; falta configurar secretos y autorizar el release.**
+
+## Specs
+
+- **S1 — iOS y Android se compilan de verdad, no "deberían".** Pedido literal del humano:
+  «compilar y publicar para ios tambien y obviamente para android». Un job verde tiene que significar
+  que compiló; un paso que se salta en silencio convierte el verde en mentira.
+- **S2 — El CI de macOS fija la versión de Xcode y falla en voz alta si no está.** Sin
+  `continue-on-error` y sin `|| true` en las comprobaciones: si `Xcode_26.5.app` no existe, o la versión
+  instalada no es `26.5`, el job se cae con `::error::` y `exit 1`.
+- **S3 — La prueba de iOS llega hasta instalar y lanzar.** Compilar no basta: el job instala el `.app`
+  en un simulador arrancado y exige que `simctl launch` devuelva un pid para `dev.j3pf.rp.iosApp`.
+- **S4 — Publicación a TestFlight con secretos documentados, nunca credenciales en el repo.** Si falta
+  cualquiera de los ocho secretos, el job falla **antes** de archivar.
+- **S5 — Los mínimos de versión se expresan como releases de GitHub, jamás como versiones de npm.**
+  Relay `>= 0.6.0`, plugin `>= 0.3.0`; `@j3pf/rp-relay` y `@j3pf/pi-rp` dan 404 en npm.
+- **S6 — Nada de productos en el repo.** `build/`, `DerivedData/`, `*.ipa`, `*.xcarchive`, `*.app` y
+  `xcuserdata/` quedan ignorados.
+
+## Tasks
+
+| ID | Specs | Ruta | Commit |
+| --- | --- | --- | --- |
+| T1 | S2, S3, S5 | `.github/workflows/ios.yml` (Xcode 26.5 fijado, sin `continue-on-error`) | pendiente |
+| T2 | S4 | `.github/workflows/testflight.yml` + `iosApp/ExportOptions.plist` | pendiente |
+| T3 | S6 | `.gitignore` cubre los productos de Xcode y Gradle | pendiente |
+| T4 | S5 | `docs/RELEASE_NOTES_v0.6.0.md` (borrador, mínimos como releases) | pendiente |
+| T5 | — | Configurar secretos y autorizar `versionName` 0.6.0 | **humano** |
+
+## Estado observado de iOS (2026-10-29)
+
+Máquina: **MacBook Pro 16,1 (Intel, Core i9-9880H)**. Xcode **26.5 / 17F42**, runtime
+`iOS 26.5 (26.5 - 23F77)`; el simulador `iPhone 17 Pro` arranca correctamente.
+
+| Prueba | Comando | Resultado observado |
+| --- | --- | --- |
+| Framework simulador (arm64) | `./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64` | `BUILD SUCCESSFUL in 4m 9s` |
+| Framework dispositivo (arm64) | `./gradlew :shared-ui:linkDebugFrameworkIosArm64` | `BUILD SUCCESSFUL in 14m 37s`; `lipo -info` → `architecture: arm64` |
+| App para el simulador de esta máquina | `xcodebuild … -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` | `error: Unknown iOS simulator arch: 'x86_64'` (×3), `BUILD FAILED in 6s`, exit 65 |
+
+Causa, con evidencia: esta máquina solo tiene simulador **x86_64** (`ARCHS = x86_64`,
+`NATIVE_ARCH = x86_64` con `ONLY_ACTIVE_ARCH = YES`), y los tres módulos declaran solo
+`iosArm64` + `iosSimulatorArm64`. Añadir `iosX64` se probó y **es imposible** con el stack actual:
+
+```
+e: ❌ KMP Dependencies Resolution Failure
+Couldn't resolve dependency 'org.jetbrains.compose.runtime:runtime:1.12.2' in 'commonMain' for all target platforms.
+The dependency should target platforms: [android, iosArm64, iosSimulatorArm64, iosX64, jvm]
+Unresolved platforms: [iosX64]
+```
+
+Igual para `org.jetbrains.compose.foundation:foundation:1.12.2`, `org.jetbrains.compose.ui:ui:1.12.2` y
+`com.mikepenz:multiplatform-markdown-renderer-m3:0.46.0`. Compose Multiplatform ya no publica x86_64, así
+que el cambio de targets se revirtió y ningún `build.gradle.kts` quedó modificado.
+
+**Conclusión honesta**: iOS **compila** (dispositivo y simulador arm64) y **no se puede ejecutar** en
+esta máquina. Instalar y lanzar se prueba en el runner arm64 del workflow `iOS`.
+
+## Node de `.gitignore` (defecto encontrado y corregido)
+
+`.gitignore` ignoraba `build/` y `local.properties`, pero no `DerivedData/`, `*.ipa`, `*.xcarchive`,
+`*.app` ni `xcuserdata/`. Abrir el proyecto en Xcode habría dejado estado de usuario listo para
+commitear.
+
+## Log
+
+- L1: «compilar y publicar para ios tambien y obviamente para android».
+- L2: el orquestador fija los mínimos verificados contra etiquetas: relay `>= 0.6.0`, plugin `>= 0.3.0`, ambos como release de GitHub; ni relay ni plugin existen en npm (404).
+- L3: la licencia de Xcode se acepta y el runtime de iOS se instala; el esquema real del proyecto es `iosApp`.
+- L4: el build de la app falla en esta máquina por arquitectura: Intel x86_64 contra módulos que solo declaran arm64; `iosX64` es imposible con Compose Multiplatform 1.12.2. Decisión del humano primero y reversión después.
