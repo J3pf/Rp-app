@@ -1,0 +1,123 @@
+name: iOS
+
+# Prueba durable de compilación de iOS. Fija la versión de Xcode y FALLA EN VOZ ALTA si no está:
+# un job verde tiene que significar que iOS compiló, nunca que el paso se saltó.
+# Ningún paso usa continue-on-error, a propósito.
+#
+# La prueba de instalar y lanzar vive aquí y no en local porque el simulador de un Mac Intel es x86_64
+# y los módulos KMP solo declaran iosArm64 + iosSimulatorArm64 (Compose Multiplatform 1.12.2 ya no
+# publica artefactos x86_64). Los runners macos-15 son arm64, que es donde esto puede ejecutarse.
+on:
+  push:
+    branches: [main]
+    paths: &rutas
+      - "iosApp/**"
+      - "shared-ui/**"
+      - "protocol/**"
+      - "relay-client/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths: *rutas
+  workflow_dispatch:
+
+env:
+  # Mínimo fijado, no minor exacta: el pool de runners rota y una máquina trae Xcode 26.5 y otra 16.4.
+  # El job falla en voz alta si ningún Xcode instalado alcanza este mínimo.
+  XCODE_MIN_VERSION: "26.0"
+  IOS_BUNDLE_ID: dev.j3pf.rp.iosApp
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: iOS (compila, instala y lanza)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Elegir Xcode (mínimo fijado) y fallar si no hay ninguno
+        run: |
+          set -uo pipefail
+          echo "instalados en la imagen:"
+          ls -1 /Applications | grep -i '^Xcode' || echo "ninguno"
+          ELEGIDO=$(python3 .github/scripts/select-xcode.py) || {
+            echo "::error::Ningún Xcode instalado alcanza el mínimo $XCODE_MIN_VERSION. Este job no se salta en silencio: cambia la imagen del runner o el mínimo."
+            exit 1
+          }
+          APP_XCODE="${ELEGIDO%%|*}"
+          VERSION_XCODE="${ELEGIDO##*|}"
+          echo "elegido: $APP_XCODE ($VERSION_XCODE)"
+          {
+            echo "### Xcode"
+            echo ""
+            echo "\`$APP_XCODE\` — versión \`$VERSION_XCODE\` (mínimo exigido \`$XCODE_MIN_VERSION\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          sudo xcode-select -s "$APP_XCODE"
+          xcodebuild -version
+
+      - name: Exigir el SDK de simulador de iOS
+        run: |
+          xcodebuild -showsdks
+          if ! xcodebuild -showsdks | grep -q "iphonesimulator"; then
+            echo "::error::No hay SDK de simulador de iOS en esta imagen. No se compila a ciegas."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Framework KMP del simulador
+        run: ./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64 --console=plain
+
+      - name: Compilar la app para el simulador
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Instalar y lanzar en el simulador
+        run: |
+          set -euo pipefail
+          DISPOSITIVO=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          datos = json.load(sys.stdin)["devices"]
+          for runtime, dispositivos in datos.items():
+              if "iOS" not in runtime:
+                  continue
+              for d in dispositivos:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("no hay ningún simulador de iPhone disponible")
+          ')
+          echo "dispositivo: $DISPOSITIVO"
+          xcrun simctl boot "$DISPOSITIVO" 2>/dev/null || true
+          xcrun simctl bootstatus "$DISPOSITIVO" -b
+          APP=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::No se produjo ningún .app en DerivedData; el build no sirvió de nada."
+            exit 1
+          fi
+          echo "app: $APP"
+          xcrun simctl install "$DISPOSITIVO" "$APP"
+          SALIDA=$(xcrun simctl launch "$DISPOSITIVO" "$IOS_BUNDLE_ID")
+          echo "$SALIDA"
+          if ! echo "$SALIDA" | grep -qE "^$IOS_BUNDLE_ID: [0-9]+$"; then
+            echo "::error::El lanzamiento no devolvió un pid para $IOS_BUNDLE_ID: $SALIDA"
+            exit 1
+          fi

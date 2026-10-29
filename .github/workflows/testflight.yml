@@ -1,0 +1,140 @@
+name: TestFlight
+
+# Publicación manual a TestFlight. Las credenciales NO viven en el repo: se leen de secrets y el job
+# falla en voz alta si falta alguna, antes de archivar nada. Un archive sin firma correcta sube roto.
+#
+# Secrets documentados (configurar en Settings → Secrets and variables → Actions):
+#   APPLE_TEAM_ID                 Team ID de 10 caracteres (el mismo que va en Config.xcconfig)
+#   KEYCHAIN_PASSWORD             Contraseña cualquiera para el keychain temporal del runner
+#   DISTRIBUTION_CERT_P12_BASE64  Certificado de distribución Apple Distribution en base64
+#   DISTRIBUTION_CERT_PASSWORD    Contraseña del .p12
+#   PROVISIONING_PROFILE_BASE64   Perfil de aprovisionamiento App Store en base64
+#   APP_STORE_CONNECT_ISSUER_ID   Issuer ID de la clave de API de App Store Connect
+#   APP_STORE_CONNECT_KEY_ID      Key ID de la clave de API
+#   APP_STORE_CONNECT_KEY_P8      Contenido del AuthKey_<KEY_ID>.p8 (texto, no base64)
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión de marketing, por ejemplo 0.6.0"
+        required: true
+      build_number:
+        description: "Número de build: entero, único y creciente"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    name: Archive y subida
+    runs-on: macos-15
+    env:
+      XCODE_MIN_VERSION: "26.0"
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Exigir Xcode y todos los secretos antes de tocar nada
+        env:
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          DISTRIBUTION_CERT_P12_BASE64: ${{ secrets.DISTRIBUTION_CERT_P12_BASE64 }}
+          DISTRIBUTION_CERT_PASSWORD: ${{ secrets.DISTRIBUTION_CERT_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          faltan=0
+          for nombre in APPLE_TEAM_ID KEYCHAIN_PASSWORD DISTRIBUTION_CERT_P12_BASE64 \
+                        DISTRIBUTION_CERT_PASSWORD PROVISIONING_PROFILE_BASE64 \
+                        APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_KEY_P8; do
+            if [ -z "${!nombre}" ]; then
+              echo "::error::Falta el secret $nombre. Sin él, el archive subiría roto o no subiría."
+              faltan=1
+            fi
+          done
+          [ "$faltan" -eq 0 ] || exit 1
+          ELEGIDO=$(python3 .github/scripts/select-xcode.py) || {
+            echo "::error::Ningún Xcode instalado alcanza el mínimo $XCODE_MIN_VERSION; no se archiva a ciegas."
+            ls -1 /Applications | grep -i '^Xcode' || true
+            exit 1
+          }
+          APP_XCODE="${ELEGIDO%%|*}"
+          echo "Xcode elegido: $APP_XCODE (${ELEGIDO##*|})"
+          sudo xcode-select -s "$APP_XCODE"
+          xcodebuild -version
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Keychain temporal, certificado y perfil
+        env:
+          DISTRIBUTION_CERT_P12_BASE64: ${{ secrets.DISTRIBUTION_CERT_P12_BASE64 }}
+          DISTRIBUTION_CERT_PASSWORD: ${{ secrets.DISTRIBUTION_CERT_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo -n "$DISTRIBUTION_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" \
+            -P "$DISTRIBUTION_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+
+      - name: Archive
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/RemotePi.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            MARKETING_VERSION="${{ inputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
+            archive
+
+      - name: Exportar el IPA
+        run: |
+          set -euo pipefail
+          # El plist vive en el repo: dentro de un heredoc en YAML la indentación lo rompe,
+          # y un plist roto falla recién al exportar, cuando ya gastaste el archive.
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/RemotePi.xcarchive" \
+            -exportOptionsPlist iosApp/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Preparar la clave de App Store Connect
+        env:
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$APP_STORE_CONNECT_KEY_P8" \
+            > ~/.appstoreconnect/private_keys/AuthKey_"$APP_STORE_CONNECT_KEY_ID".p8
+
+      - name: Subir a TestFlight
+        run: |
+          set -euo pipefail
+          IPA=$(find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "::error::La exportación no produjo ningún .ipa"; exit 1; }
+          echo "ipa: $IPA"
+          # altool sigue aceptando clave de API; si Apple lo retira, se cambia el comando sin tocar los secrets.
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --verbose
