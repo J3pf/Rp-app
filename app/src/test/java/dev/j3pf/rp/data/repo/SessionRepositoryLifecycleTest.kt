@@ -19,6 +19,7 @@ import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.push.NotificationChannels
+import dev.j3pf.rp.push.NotificationDeduper
 import dev.j3pf.rp.push.NotificationFactory
 import dev.j3pf.rp.push.PushTokenProvider
 import dev.j3pf.rp.testClient
@@ -99,7 +100,7 @@ class SessionRepositoryLifecycleTest {
                     bus,
                     connection,
                     api,
-                    NotificationFactory(context, channels, settings),
+                    NotificationFactory(context, channels, settings, NotificationDeduper(db.dedup())),
                     scope,
                 )
             val chat = ChatRepository(context, db.chat(), db.outbox(), connection, bus, secrets, prompts, api, scope, db.agents())

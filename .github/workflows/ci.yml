@@ -21,11 +21,19 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - name: Fixtures del relay (contrato)
+        # La copia versionada se compara contra rp-relay main: si el relay publica un tipo nuevo y nadie
+        # sincroniza, este paso falla en vez de dejar el contrato podrido en silencio.
         run: |
-          git clone --depth 1 \
-            https://github.com/j3pf/rp-relay ../rp-relay || true
-          ./scripts/sync-fixtures.sh ../rp-relay || \
-            echo "sin fixtures del relay todavía"
+          if git clone --depth 1 https://github.com/j3pf/rp-relay ../rp-relay \
+             && [ -d ../rp-relay/packages/protocol/fixtures ]; then
+            ./scripts/sync-fixtures.sh ../rp-relay
+            if ! git diff --exit-code -- protocol/src/test/resources/fixtures/relay; then
+              echo "::error::Fixtures desactualizados respecto a rp-relay main: corre scripts/sync-fixtures.sh ../rp-relay y commitea el resultado."
+              exit 1
+            fi
+          else
+            echo "::warning::Sin acceso a rp-relay: se usan los fixtures versionados sin comprobar drift."
+          fi
       - run: ./gradlew :protocol:test
 
   app:

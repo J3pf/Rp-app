@@ -21,6 +21,7 @@ import dev.j3pf.rp.protocol.PromptAnswerResult
 import dev.j3pf.rp.protocol.PromptKind
 import dev.j3pf.rp.protocol.PromptOption
 import dev.j3pf.rp.push.NotificationChannels
+import dev.j3pf.rp.push.NotificationDeduper
 import dev.j3pf.rp.push.NotificationFactory
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
@@ -79,7 +80,7 @@ class PromptsRepositoryTest {
         val api = RelayApi(testClient(), secrets)
         conn = RelayConnection(ctx, secrets, bus, testClient(), scope)
         val db = inMemoryDb(ctx)
-        val factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx))
+        val factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
         repo = PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, factory, scope)
         repo.start()
     }

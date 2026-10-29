@@ -16,6 +16,19 @@ import kotlin.test.assertTrue
 class FixturesTest {
     private fun fixture(name: String): String = checkNotNull(javaClass.getResource("/fixtures/$name")) { "falta fixture $name" }.readText()
 
+    /**
+     * Forma canónica para comparar cuerpos: `RpJson` usa `explicitNulls = false` (el protocolo no emite nulos
+     * explícitos), así que una entrada `null` del fixture y su ausencia en el re-encoding son la misma cosa.
+     * Todo valor no nulo se compara tal cual: la igualdad del contrato no se relaja.
+     */
+    private fun canonical(el: JsonElement?): JsonElement? =
+        when (el) {
+            null, is kotlinx.serialization.json.JsonNull -> null
+            is JsonObject -> JsonObject(el.mapNotNull { (k, v) -> canonical(v)?.let { k to it } }.toMap())
+            is JsonArray -> JsonArray(el.mapNotNull { canonical(it) })
+            else -> el
+        }
+
     @Test
     fun `todos los fixtures JSON son JSON valido`() {
         val dir = File(checkNotNull(javaClass.getResource("/fixtures")).toURI())
@@ -85,8 +98,20 @@ class FixturesTest {
                         RpJson.encodeToJsonElement(AgentSubscribe.serializer(), env.body<AgentSubscribe>())
                     }
 
-                    MsgType.AGENT_UNSUBSCRIBE, MsgType.AGENT_ABORT, MsgType.AGENT_FORGET -> {
+                    MsgType.AGENT_UNSUBSCRIBE, MsgType.AGENT_ABORT, MsgType.AGENT_FORGET, MsgType.AGENT_CLOSE, MsgType.AGENT_PURGE -> {
                         RpJson.encodeToJsonElement(AgentRef.serializer(), env.body<AgentRef>())
+                    }
+
+                    MsgType.AGENT_ARCHIVED -> {
+                        RpJson.encodeToJsonElement(AgentArchivedRequest.serializer(), env.body<AgentArchivedRequest>())
+                    }
+
+                    MsgType.HOST_GIT_DIFF -> {
+                        RpJson.encodeToJsonElement(GitDiffRequest.serializer(), env.body<GitDiffRequest>())
+                    }
+
+                    MsgType.HOST_GIT_DISCARD -> {
+                        RpJson.encodeToJsonElement(GitDiscardRequest.serializer(), env.body<GitDiscardRequest>())
                     }
 
                     MsgType.USER_MESSAGE -> {
@@ -132,8 +157,8 @@ class FixturesTest {
 
             val expectedBody = (originalJson as JsonObject)["d"]
             assertEquals(
-                expectedBody,
-                reEncodedBody,
+                canonical(expectedBody),
+                canonical(reEncodedBody),
                 "El cuerpo re-codificado de ${f.name} debe coincidir exactamente con el fixture original",
             )
         }

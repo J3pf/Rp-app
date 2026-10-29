@@ -148,14 +148,38 @@ interface PromptDao {
         at: Long,
     )
 
+    /**
+     * Abre/actualiza prompts sin resucitar los respondidos hace menos de [PromptState.REPLAY_WINDOW_MS].
+     * Un replay de `prompt.opened` (o un `app.welcome` anterior a la respuesta) cae aquí y no revive la fila.
+     */
     @Transaction
-    suspend fun syncWelcome(
+    open suspend fun upsertOpen(
+        relayId: String,
+        items: List<PromptEntity>,
+        now: Long,
+    ) {
+        val fresh = items.filterNot { recentlyResolved(relayId, it.promptId, now) }
+        if (fresh.isNotEmpty()) upsert(fresh)
+    }
+
+    /** `true` si el prompt ya fue respondido dentro de la ventana de replay. */
+    suspend fun recentlyResolved(
+        relayId: String,
+        promptId: String,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
+        val row = get(relayId, promptId) ?: return false
+        return row.state == PromptState.RESOLVED && (row.resolvedAt ?: 0L) >= now - PromptState.REPLAY_WINDOW_MS
+    }
+
+    @Transaction
+    open suspend fun syncWelcome(
         relayId: String,
         items: List<PromptEntity>,
         openIds: List<String>,
         now: Long,
     ) {
-        upsert(items)
+        upsertOpen(relayId, items, now)
         resolveMissing(relayId, openIds, now)
     }
 
@@ -255,6 +279,29 @@ abstract class DedupDao {
 
     @Query("DELETE FROM notification_dedup")
     abstract suspend fun clear()
+
+    @Query("SELECT seenAt FROM notification_dedup WHERE `key` = :key")
+    abstract suspend fun seenAt(key: String): Long?
+
+    /** `true` si [key] se registró dentro de [windowMs]. */
+    open suspend fun seenSince(
+        key: String,
+        windowMs: Long,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
+        val at = seenAt(key) ?: return false
+        return at >= now - windowMs
+    }
+
+    /** Registra [key] con la marca de tiempo más reciente. */
+    @Transaction
+    open suspend fun mark(
+        key: String,
+        now: Long,
+    ) {
+        remove(key)
+        insert(DedupEntity(key, now))
+    }
 
     @Transaction
     open suspend fun firstSeen(

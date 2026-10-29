@@ -6,6 +6,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.data.repo.SettingsRepository
+import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
@@ -37,7 +38,13 @@ class NotificationFactoryTest {
         ctx = ApplicationProvider.getApplicationContext()
         shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         nm = ctx.getSystemService(NotificationManager::class.java)
-        factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx))
+        factory =
+            NotificationFactory(
+                ctx,
+                NotificationChannels(ctx),
+                SettingsRepository(ctx),
+                NotificationDeduper(inMemoryDb(ctx).dedup()),
+            )
     }
 
     private fun body(

@@ -262,6 +262,8 @@ class RelayConnectionTest {
                         .NotificationChannels(ctx),
                     dev.j3pf.rp.data.repo
                         .SettingsRepository(ctx),
+                    dev.j3pf.rp.push
+                        .NotificationDeduper(db.dedup()),
                 )
             val promptsRepo =
                 dev.j3pf.rp.data.repo
