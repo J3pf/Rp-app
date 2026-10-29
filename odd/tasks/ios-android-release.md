@@ -82,6 +82,24 @@ workflow `iOS`, que es donde puede ejecutarse.
 Lo aprendido, en una línea: **la imagen `macos-15-arm64` (20260907) trae Xcode 16.0–16.4 y 26.0–26.3, nunca 26.5.**
 Fijar una *minor* exacta contra un pool que rota produce fallos de imagen, no de proyecto.
 
+Quinto intento (40816504726) — **verde, con lanzamiento**:
+
+```
+elegido: /Applications/Xcode_26.3.app (26.3)
+** BUILD SUCCEEDED **
+dispositivo: DC4CD8B3-4457-4153-9087-A0D7A2F9BFD9
+app: /Users/runner/work/_temp/DerivedData/Build/Products/Debug-iphonesimulator/iosApp.app
+dev.j3pf.rp.iosApp: 18275
+```
+
+`https://github.com/J3pf/Rp-app/actions/runs/40816504726` → `success`, job «iOS (compila, instala y lanza)».
+
+La causa real del `Unknown iOS simulator arch: 'x86_64'` en el runner arm64 era el **destino genérico**:
+sin destino concreto no hay arquitectura activa, así que Xcode resuelve `ARCHS_STANDARD` (`arm64 x86_64`)
+y la tarea `syncComposeResourcesForIos` de Compose aborta al ver `x86_64`. Arreglado en el proyecto, no en
+cada comando: `"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;` en la configuración Debug. Verificado
+también en local: `BUILD SUCCEEDED` sin ningún flag de arquitectura en la línea de `xcodebuild`.
+
 Solución implementada: `.github/scripts/select-xcode.py` elige el Xcode instalado más nuevo que cumpla
 `XCODE_MIN_VERSION` (`26.0`), ignora bundles rotos y sale con 1 sin imprimir ruta cuando ninguno cumple.
 Probado en local: con `26.0` imprime `/Applications/Xcode.app|26.5`; con `99` sale 1; con `abc` sale 2.
