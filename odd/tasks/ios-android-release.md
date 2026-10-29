@@ -58,6 +58,22 @@ que el cambio de targets se revirtió y ningún `build.gradle.kts` quedó modifi
 **Conclusión honesta**: iOS **compila** (dispositivo y simulador arm64) y **no se puede ejecutar** en
 esta máquina. Instalar y lanzar se prueba en el runner arm64 del workflow `iOS`.
 
+## Intentos de CI de iOS (observados, uno por uno)
+
+| Run | Qué pasó | Consecuencia |
+| --- | --- | --- |
+| 40809613829 | `[ ! -d /Applications/Xcode_26.5.app ]` falló y el job cayó con `::error::` en 10 s | El pin exacto funcionó, pero **mi lectura de la lista fue errónea**: la cadena `Xcode_26.5.app` que vi en el log venía de mi propio `XCODE_APP` impreso, no de un listado del runner |
+| 40810493893 | Solo coincidió `/Applications/Xcode.app` → `Xcode 16.4`, y el chequeo de versión falló en voz alta | El glob no encontraba nada de la 26: la imagen no la tiene |
+| 40810867330 | `Process completed with exit code 134` (SIGABRT) | `sort -V` no existe en el `sort` de macOS; el paso murió antes de decidir |
+| 40811418435 | El listado real de la imagen llega a `Xcode_26.3.0.app`; el mínimo seguía en `26.5` | El mínimo tenía que bajar a la major 26 |
+
+Lo aprendido, en una línea: **la imagen `macos-15-arm64` (20260907) trae Xcode 16.0–16.4 y 26.0–26.3, nunca 26.5.**
+Fijar una *minor* exacta contra un pool que rota produce fallos de imagen, no de proyecto.
+
+Solución implementada: `.github/scripts/select-xcode.py` elige el Xcode instalado más nuevo que cumpla
+`XCODE_MIN_VERSION` (`26.0`), ignora bundles rotos y sale con 1 sin imprimir ruta cuando ninguno cumple.
+Probado en local: con `26.0` imprime `/Applications/Xcode.app|26.5`; con `99` sale 1; con `abc` sale 2.
+
 ## Node de `.gitignore` (defecto encontrado y corregido)
 
 `.gitignore` ignoraba `build/` y `local.properties`, pero no `DerivedData/`, `*.ipa`, `*.xcarchive`,
