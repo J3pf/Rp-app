@@ -3,6 +3,23 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-10-29
+
+### Fixed
+- **A failed close now says why.** Every close error that was neither `not_found` nor
+  `agent_close_unsupported` collapsed into the same mute banner and discarded the reason the relay had
+  already sent. The banner now carries it: `No se pudo cerrar el agente: herdr no pudo cerrar el panel:
+  pane_not_found`. The archive fallback is deliberately not widened: `herdr_unavailable` still fails,
+  because the pane may still be alive and archiving then creates the ghost agent this lifecycle work
+  exists to prevent. A failed close leaves the local row untouched.
+- **Forgetting an agent whose pane is already gone succeeds.** This is what unlocks it for the user,
+  and it needs **Rp-relay >= 0.6.1**: against relay 0.6.0 the relay turns `pane_not_found` into
+  `conflict`, so the agent stays impossible to forget.
+
+### Requires
+- **Rp-relay >= 0.6.1** and **Rp-plugin >= 0.3.0**, both as GitHub releases. Neither package exists on
+  npm (`@j3pf/rp-relay` and `@j3pf/pi-rp` return 404), so pointing anyone at npm sends them to a 404.
+
 ## [0.6.0] - 2026-10-29
 
 ### Added

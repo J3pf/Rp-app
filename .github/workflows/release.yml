@@ -52,4 +52,4 @@ jobs:
           files: dist/*.apk
           # Las notas viven en el repo porque llevan los mínimos y el aviso de que
           # los paquetes no existen en npm; autogenerarlas las perdería.
-          body_path: docs/RELEASE_NOTES_v0.6.0.md
+          body_path: docs/RELEASE_NOTES_v0.6.1.md
