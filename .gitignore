@@ -15,3 +15,11 @@ keystore.properties
 .pi/
 .kotlin/
 .pi-lens.json
+
+# Xcode / iOS: nada de productos ni de estado de usuario en el repo
+xcuserdata/
+*.xcuserstate
+DerivedData/
+*.ipa
+*.xcarchive
+*.app
