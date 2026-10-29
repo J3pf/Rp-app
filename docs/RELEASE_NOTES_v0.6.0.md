@@ -1,8 +1,5 @@
 # Release Notes — v0.6.0
 
-<!-- BORRADOR: la versión todavía no se sube ni se etiqueta. versionName sigue en 0.5.0 y CHANGELOG
-     no tiene sección 0.6.0; ambas cosas se hacen cuando el humano autorice el release. -->
-
 ## Summary
 
 Rp-app **v0.6.0** fixes the notification zombie when answering a prompt from a push, ships the new
@@ -66,8 +63,8 @@ Installing the plugin resolves to `git:github.com/J3pf/Rp-plugin@vX.Y.Z`.
   9.4.1 → 9.5.0. The five dead `UnusedResources` strings were deleted. Nothing is silenced with
   `tools:ignore` and AGP is not bumped.
 
-## Pending before publishing
+## Pending after publishing
 
-- Bump `versionName` to `0.6.0` and add the `CHANGELOG.md` section (not done: the version is not
-  authorized yet).
-- Fill `APPLE_TEAM_ID` and the eight TestFlight secrets listed in `.github/workflows/testflight.yml`.
+- **TestFlight is build-ready but unproven for upload**: the workflow and its eight documented secrets
+  exist, but the human has not supplied them and no upload has been attempted.
+- iOS ships without notifications (see Known limits).
