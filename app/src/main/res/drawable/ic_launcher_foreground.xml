@@ -1,15 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Marca RP — dirección 01 «Caret + nodo» (design/rp-icon/01-caret-nodo.html).
+
+  Geometría del artboard, sin redibujar: caret M40 32 L66 54 L40 76 con trazo de 10 y extremos
+  redondeados, más el nodo en (78,54) r 8. Se traslada dx = -6.5 para que la caja de la
+  composición quede centrada en la rejilla de 108dp: el artboard la pinta sobre una loseta
+  cuadrada, donde ese desfase no se ve, pero el icono adaptativo sí se recorta con máscara
+  circular y una marca descentrada se nota. Los tamaños, el trazo y la separación entre caret y
+  nodo son exactamente los del artboard.
+
+  Caja resultante: x 28.5..79.5, y 27..81; el punto más lejano al centro queda a 25.5 < 33
+  (radio de la zona segura de 66dp), así que ninguna máscara recorta la marca.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <!-- "RP": una burbuja de chat con una señal de aviso -->
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M33.5,32 L59.5,54 L33.5,76"
+        android:strokeColor="@color/rp_launcher_fg"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
         android:fillColor="@color/rp_launcher_fg"
-        android:pathData="M30,34 h48 a6,6 0 0 1 6,6 v22 a6,6 0 0 1 -6,6 H52 l-10,10 v-10 h-12 a6,6 0 0 1 -6,-6 V40 a6,6 0 0 1 6,-6 z" />
-    <path
-        android:fillColor="@color/rp_launcher_bg"
-        android:pathData="M40,44 h7 a5,5 0 0 1 0,10 h-3 v6 h-4 z M44,48 v2 h3 a1,1 0 0 0 0,-2 z" />
-    <path
-        android:fillColor="@color/rp_launcher_bg"
-        android:pathData="M56,44 h8 a5,5 0 0 1 0,10 h-4 v6 h-4 z M60,48 v2 h4 a1,1 0 0 0 0,-2 z" />
+        android:pathData="M63.5,54 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0 z" />
 </vector>
