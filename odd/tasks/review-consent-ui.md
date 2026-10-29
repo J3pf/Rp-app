@@ -65,3 +65,15 @@ Identificación de la forma, tomada del contrato: `kind = select`, `category = p
   `danger: high`) antes del header, con cuerpo monoespaciado sin reflow, tres opciones en orden con su
   `Effect:` completo, etiqueta visible de permiso de sesión en la opción 2 y `Cancelar` que envía
   `{cancelled:true}`. Gate verde y lint en línea base.
+## Revisión (2026-10-28)
+
+`gentle_review assess` sobre `origin/main..HEAD` (committed-only): `risk: medium`, `nativeRisk: medium`,
+`reviewDue: false`, `reviewDueReason: under_budget`, `changedPaths: 3`, `changedLines: 203`,
+`writerProfile: large (runtime)`. Plan devuelto: `writerSelfVerification: true`,
+`independentVerifier: false`.
+
+**No se inicia revisión nativa**: el contrato solo la arranca si `reviewDue` es verdadero o si el
+humano la pide para este candidato. Tampoco escalo a un ítem de alto riesgo: esta PR **pinta** permisos,
+no los concede ni los decide — los tokens de respuesta viajan sin mapeo y los tres están fijados por
+test. Un error aquí se ve como una etiqueta equivocada, no como un permiso concedido en silencio.
+
