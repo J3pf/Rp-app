@@ -61,6 +61,7 @@ data class ChatUiState(
     val showDiffSheet: Boolean = false,
     val selectedDiffFile: String? = null,
     val showForgetConfirmation: Boolean = false,
+    val readOnly: Boolean = false,
 ) {
     val isAuto get() = agent?.gentleMode == "auto"
     val canSend get() = !sending && attachments.none { it.state != UploadState.DONE && it.state != UploadState.ERROR }

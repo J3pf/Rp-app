@@ -29,8 +29,25 @@
     <string name="diff_request_adjustment">Pedir ajuste</string>
     <string name="diff_discard">Descartar</string>
     <string name="action_cancel">Cancelar</string>
+    <string name="action_back">Atrás</string>
+    <string name="action_retry">Reintentar</string>
     <string name="agent_close_title">¿Cerrar el agente?</string>
-    <string name="archived_fallback_notice">No había un pane de Herdr vinculado; el historial quedó archivado.</string>
     <string name="agent_close_confirmation">Esto cerrará el pane en Herdr y detendrá el agente</string>
     <string name="agent_close_confirm">Cerrar agente</string>
+    <string name="archived_title">Archivados</string>
+    <string name="archived_read_only">Historial archivado · solo lectura</string>
+    <string name="archived_empty">No hay agentes archivados</string>
+    <string name="archived_machine">Máquina: %1$s</string>
+    <string name="archived_last_seen">Última actividad: %1$s</string>
+    <plurals name="archived_message_count">
+        <item quantity="one">%1$d mensaje</item>
+        <item quantity="other">%1$d mensajes</item>
+    </plurals>
+    <string name="archived_load_more">Cargar más</string>
+    <string name="archived_purge_action">Eliminar definitivamente</string>
+    <string name="archived_purge_title">¿Eliminar historial de %1$s?</string>
+    <string name="archived_purge_confirmation">Se eliminará definitivamente el historial y todos los mensajes de %1$s. Esta acción no se puede deshacer.</string>
+    <string name="archived_keep_action">Conservar historial</string>
+    <string name="archived_purge_confirm">Sí, eliminar definitivamente</string>
+    <string name="archived_fallback_notice">No había un pane de Herdr vinculado; el historial quedó archivado.</string>
 </resources>
