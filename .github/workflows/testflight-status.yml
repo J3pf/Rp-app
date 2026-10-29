@@ -1,0 +1,38 @@
+name: TestFlight status
+
+# Consulta el estado de los últimos builds en App Store Connect y lo escribe en el resumen del job.
+# Sirve de alarma, no de panel: el código de salida distingue "listo" de "procesando" y de "rechazado".
+#   exit 0  el build más nuevo está VALID
+#   exit 1  el build más nuevo está INVALID o FAILED (Apple rechaza en silencio: esto no se puede perder)
+#   exit 2  sigue PROCESSING
+#   exit 3  no hay app o no hay builds
+#   exit 4  error de la API (401/403 se imprimen tal cual, sin adivinar alcances)
+#
+# Programado cada 15 minutos para poder dejarlo corriendo; `workflow_dispatch` para consultar a mano.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-status
+  cancel-in-progress: true
+
+jobs:
+  estado:
+    name: Estado de los builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Consultar App Store Connect
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        # El script firma el JWT con node:crypto; no imprime la clave ni el token en ningún camino.
+        run: node scripts/testflight-status.mjs
