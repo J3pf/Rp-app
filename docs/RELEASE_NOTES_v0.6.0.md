@@ -62,8 +62,9 @@ Installing the plugin resolves to `git:github.com/J3pf/Rp-plugin@vX.Y.Z`.
   declare `iosArm64` and `iosSimulatorArm64`; there is no `iosX64` slice, so no Intel simulator build
   exists in this release. Compose Multiplatform 1.12.2 publishes no `iosX64` artifacts either. An Intel
   host can compile the arm64 slices, but an arm64 binary cannot run in an x86_64 simulator.
-- 8 lint warnings are expected and documented: 3 `AndroidGradlePluginVersion` (AGP 9.4.1 → 9.5.0 notice)
-  and 5 `UnusedResources`. None are silenced.
+- 3 lint warnings are expected and documented: the `AndroidGradlePluginVersion` notice about AGP
+  9.4.1 → 9.5.0. The five dead `UnusedResources` strings were deleted. Nothing is silenced with
+  `tools:ignore` and AGP is not bumped.
 
 ## Pending before publishing
 
