@@ -154,6 +154,74 @@ class ComposeUiTest {
         assertEquals(listOf(Answer(confirmed = false, text = null)), answers)
     }
 
+    private val consentBody =
+        "Review consent\n" +
+            "  Value: this candidate touches stored data\n" +
+            "  Risk:  medium\n" +
+            "  Target: sha256:abc123\n" +
+            "    Projection: workspace"
+
+    private val reviewConsent =
+        Prompt(
+            promptId = "C1",
+            agentId = "m:a",
+            kind = PromptKind.SELECT,
+            category = PromptCategory.PERMISSION,
+            title = "Review consent: gentle-pi#42",
+            danger = Danger.HIGH,
+            message = consentBody,
+            options =
+                listOf(
+                    PromptOption("0", "Review this change", "Effect: reviews this exact candidate"),
+                    PromptOption("1", "Skip this time", "Effect: delivers this candidate without a review"),
+                    PromptOption(
+                        "2",
+                        "Review and allow this session",
+                        "Effect: Reviews this change and allows later reviews in this session and repository; revoke anytime.",
+                    ),
+                ),
+        )
+
+    @Test
+    fun `consentimiento de revision pinta el cuerpo literal y los tres efectos`() {
+        rule.setContent { RpTheme { PromptContent(reviewConsent, busy = false, onAnswer = {}) } }
+        // El cuerpo es texto de terminal: si se reflowara o se truncara, este nodo no existiria.
+        rule.onNodeWithText(consentBody).assertExists()
+        rule.onNodeWithText("Effect: reviews this exact candidate").assertExists()
+        rule.onNodeWithText("Effect: delivers this candidate without a review").assertExists()
+        val sessionEffect =
+            "Effect: Reviews this change and allows later reviews in this session and repository; revoke anytime."
+        rule.onNodeWithText(sessionEffect).assertExists()
+        // El titulo es de la app; el headline del proveedor no se convierte en titulo.
+        rule.onNodeWithText("Review consent: gentle-pi#42").assertDoesNotExist()
+    }
+
+    @Test
+    fun `consentimiento envia el token exacto de cada opcion`() {
+        val answers = mutableListOf<Answer>()
+        rule.setContent { RpTheme { PromptContent(reviewConsent, busy = false, onAnswer = { answers += it }) } }
+        // Las tres, en orden: con PermissionBody la opcion "1" no existe como tal y la lista no cuadra.
+        rule.onNodeWithText("Review this change").performClick()
+        rule.onNodeWithText("Skip this time").performClick()
+        rule.onNodeWithText("Review and allow this session").performClick()
+        assertEquals(listOf(Answer.option("0"), Answer.option("1"), Answer.option("2")), answers)
+    }
+
+    @Test
+    fun `descartar el consentimiento envia cancelled y no un rechazo`() {
+        val answers = mutableListOf<Answer>()
+        rule.setContent { RpTheme { PromptContent(reviewConsent, busy = false, onAnswer = { answers += it }) } }
+        rule.onNodeWithText("Cancelar").performClick()
+        assertEquals(listOf(Answer.Cancelled), answers)
+    }
+
+    @Test
+    fun `un permiso de herramienta no usa la superficie de consentimiento`() {
+        rule.setContent { RpTheme { PromptContent(permission, busy = false, onAnswer = {}) } }
+        rule.onNodeWithText("Denegar con motivo…").assertExists()
+        rule.onNodeWithText("Cancelar").assertDoesNotExist()
+    }
+
     @Test
     fun `cuestionario recorre las paginas y envia al final`() {
         val prompt =

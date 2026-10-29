@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.promptsheet
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,6 +65,11 @@ fun PromptContent(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (isReviewConsent(prompt)) {
+            // Superficie propia: no comparte header ni botones con la hoja de permisos de herramientas.
+            ReviewConsentBody(prompt, busy, onAnswer)
+            return@Column
+        }
         PromptHeader(prompt)
         when {
             prompt.kind == PromptKind.QUESTIONNAIRE && !prompt.questions.isNullOrEmpty() ->
@@ -388,4 +394,66 @@ private fun QuestionnaireBody(
             ) { Text("Enviar") }
         }
     }
+}
+
+// ───────────────────── Consentimiento de revisión ─────────────────────
+
+/**
+ * Forma exacta del prompt de consentimiento del proveedor de revisión: `select` + `permission` + `danger: high`.
+ * Un permiso de herramienta llega como `confirm` con `tool`, así que esta rama no lo alcanza.
+ */
+private fun isReviewConsent(p: Prompt): Boolean =
+    p.kind == PromptKind.SELECT && p.category == PromptCategory.PERMISSION && p.danger == Danger.HIGH
+
+@Composable
+private fun ReviewConsentBody(
+    p: Prompt,
+    busy: Boolean,
+    onAnswer: (Answer) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Consentimiento de revisión", style = MaterialTheme.typography.titleMedium)
+        TagChip("Peligro alto", RpColors.danger)
+    }
+
+    // Texto de terminal a ancho 80: monoespaciado, saltos y espacios iniciales intactos, sin reflow.
+    // Los dos scrolls existen para no truncar: una consecuencia ilegible es una decisión imposible.
+    val hScroll = rememberScrollState()
+    val vScroll = rememberScrollState()
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
+        Text(
+            p.message.orEmpty(),
+            Modifier
+                .padding(12.dp)
+                .heightIn(max = 320.dp)
+                .verticalScroll(vScroll)
+                .horizontalScroll(hScroll),
+            fontFamily = FontFamily.Monospace,
+            softWrap = false,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+
+    // Opciones en el orden del proveedor, con su efecto completo: nunca se reordenan ni se reinterpretan.
+    p.options.forEach { option ->
+        val sessionWide = option.id == "2"
+        OutlinedButton(
+            onClick = { onAnswer(Answer.option(option.id)) },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(option.label, style = MaterialTheme.typography.labelLarge)
+                    if (sessionWide) TagChip("Permiso para toda la sesión", RpColors.warning)
+                }
+                option.description?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+
+    // Descartar es cancelar, nunca un rechazo silencioso.
+    TextButton(onClick = { onAnswer(Answer.Cancelled) }, enabled = !busy) { Text("Cancelar") }
 }
