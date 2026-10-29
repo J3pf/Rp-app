@@ -189,9 +189,9 @@ class ComposeUiTest {
         rule.onNodeWithText(consentBody).assertExists()
         rule.onNodeWithText("Effect: reviews this exact candidate").assertExists()
         rule.onNodeWithText("Effect: delivers this candidate without a review").assertExists()
-        rule.onNodeWithText(
-            "Effect: Reviews this change and allows later reviews in this session and repository; revoke anytime.",
-        ).assertExists()
+        val sessionEffect =
+            "Effect: Reviews this change and allows later reviews in this session and repository; revoke anytime."
+        rule.onNodeWithText(sessionEffect).assertExists()
         // El titulo es de la app; el headline del proveedor no se convierte en titulo.
         rule.onNodeWithText("Review consent: gentle-pi#42").assertDoesNotExist()
     }

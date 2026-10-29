@@ -28,16 +28,30 @@ Identificación de la forma, tomada del contrato: `kind = select`, `category = p
 
 | ID | Specs | Ruta | Commit |
 | --- | --- | --- | --- |
-| T1 | S1–S6 | RED en `app/src/test/java/dev/j3pf/rp/ui/ComposeUiTest.kt` (4 casos) | pendiente |
-| T2 | S1–S4, S6 | `ReviewConsentBody` en `shared-ui` + ruteo antes de `PromptHeader` | pendiente |
-| T3 | S5 | Cancelar → `Answer.Cancelled` | pendiente |
-| T4 | todas | gate completo + lint sin ruido nuevo | pendiente |
+| T1 | S1–S6 | RED en `app/src/test/java/dev/j3pf/rp/ui/ComposeUiTest.kt` (4 casos) | `e7df15f` |
+| T2 | S1–S4, S6 | `ReviewConsentBody` en `shared-ui` + ruteo antes de `PromptHeader` | `3e2f5e8` (T2+T3+T4) |
+| T3 | S5 | Cancelar → `Answer.Cancelled` | `3e2f5e8` |
+| T4 | todas | gate completo + lint sin ruido nuevo | `3e2f5e8` |
 
 ## Estado observado
 
 - Contrato: plugin P6, PR https://github.com/J3pf/Rp-plugin/pull/2 (`ae701d2`, docs `2442fcc`).
   **Verificado por implementación, no aprobado por revisión**: su propia revisión quedó UNAVAILABLE
   (429, 5 intentos). No citarlo como aprobado.
+
+## Gates observados (2026-10-28)
+
+- RED: `11 tests completed, 3 failed` — fallan «pinta el cuerpo literal» (línea 190: falta el primer
+  `Effect:`), «envía el token exacto» y «cancelar envía cancelled»; el cuarto (permiso de herramienta
+  conserva su hoja) pasa, que es lo correcto. El primer intento de RED tenía un falso verde: el test de
+  tokens enviaba una sola opción y `PermissionBody` acertaba `"2"` por clasificar «Review and allow this
+  session» como allow-always; se corrigió el test, no la narrativa.
+- GREEN: `:shared-ui:jvmTest` 102/102 (XML 21:51), `:app:testDirectDebugUnitTest` 241/241 (XML 21:48),
+  `:protocol:test` 73/73 (UP-TO-DATE, módulo intacto). Total 416/416, 0 fallos.
+- `:app:ktlintCheck` y `:shared-ui:ktlintCheck` verdes tras dos correcciones de estilo: encadenado
+  multilínea (`chain-method-continuation`) y orden lexicográfico de imports.
+- `:app:lintDirectDebug`: **8 issues**, línea base exacta (3 `AndroidGradlePluginVersion` + 5
+  `UnusedResources`). Ningún aviso nuevo.
 
 ## Log
 
@@ -47,3 +61,7 @@ Identificación de la forma, tomada del contrato: `kind = select`, `category = p
 - L4: se descubre que `PromptContent` enruta toda `category = permission` a `PermissionBody`, que ofrece
   «Denegar con motivo…» (enviaría `text` en vez de `{optionIds:["1"]}`) y reflowa el cuerpo. Un consentimiento
   ahí sale mal por contrato, así que la rama propia se decide por la forma del prompt, no por su etiqueta.
+- L5: implementado y verificado. `ReviewConsentBody` se enruta por forma (`select` + `permission` +
+  `danger: high`) antes del header, con cuerpo monoespaciado sin reflow, tres opciones en orden con su
+  `Effect:` completo, etiqueta visible de permiso de sesión en la opción 2 y `Cancelar` que envía
+  `{cancelled:true}`. Gate verde y lint en línea base.
