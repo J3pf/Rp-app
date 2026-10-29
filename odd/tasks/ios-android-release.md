@@ -38,7 +38,8 @@ Máquina: **MacBook Pro 16,1 (Intel, Core i9-9880H)**. Xcode **26.5 / 17F42**, r
 | --- | --- | --- |
 | Framework simulador (arm64) | `./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64` | `BUILD SUCCESSFUL in 4m 9s` |
 | Framework dispositivo (arm64) | `./gradlew :shared-ui:linkDebugFrameworkIosArm64` | `BUILD SUCCESSFUL in 14m 37s`; `lipo -info` → `architecture: arm64` |
-| App para el simulador de esta máquina | `xcodebuild … -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` | `error: Unknown iOS simulator arch: 'x86_64'` (×3), `BUILD FAILED in 6s`, exit 65 |
+| App para el simulador, arquitectura nativa de este host | `xcodebuild … -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` | `error: Unknown iOS simulator arch: 'x86_64'` (×3), `BUILD FAILED in 6s`, exit 65 |
+| **App completa, arm64 forzado** | `xcodebuild … -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build` | `** BUILD SUCCEEDED **`, exit 0; `.app` en `/tmp/rp-dd-arm/Build/Products/Debug-iphonesimulator/iosApp.app`; `lipo -info` del binario → `architecture: arm64` |
 
 Causa, con evidencia: esta máquina solo tiene simulador **x86_64** (`ARCHS = x86_64`,
 `NATIVE_ARCH = x86_64` con `ONLY_ACTIVE_ARCH = YES`), y los tres módulos declaran solo
@@ -55,8 +56,19 @@ Igual para `org.jetbrains.compose.foundation:foundation:1.12.2`, `org.jetbrains.
 `com.mikepenz:multiplatform-markdown-renderer-m3:0.46.0`. Compose Multiplatform ya no publica x86_64, así
 que el cambio de targets se revirtió y ningún `build.gradle.kts` quedó modificado.
 
-**Conclusión honesta**: iOS **compila** (dispositivo y simulador arm64) y **no se puede ejecutar** en
-esta máquina. Instalar y lanzar se prueba en el runner arm64 del workflow `iOS`.
+**Conclusión honesta**: iOS **compila para dispositivo y para simulador de Apple silicon**; **no puede
+EJECUTARSE en este host Intel** porque el proyecto no tiene slice `iosX64` y un binario arm64 no corre
+sobre un simulador x86_64. Las pruebas que lo demuestran:
+
+- host: `uname -m` → `x86_64`; `Intel(R) Core(TM) i9-9880H`
+- `shared-ui/build.gradle.kts:38-39`: solo `iosArm64()` e `iosSimulatorArm64()`; no hay `iosX64`
+- `lipo -info …/iosSimulatorArm64/debugFramework/SharedUi.framework/SharedUi` → `Non-fat file … architecture: arm64`
+
+**`iosX64` NO se añade en esta entrega, por decisión explícita**, y el motivo queda escrito para que
+nadie lo "arregle" después: existiría solo para correr un simulador en una máquina Intel de desarrollo;
+añade una tercera compilación Kotlin/Native a cada build y a cada corrida de CI; y Apple está retirando
+el soporte de simulador en Intel. La prueba real de instalar y lanzar corresponde al runner arm64 del
+workflow `iOS`, que es donde puede ejecutarse.
 
 ## Intentos de CI de iOS (observados, uno por uno)
 

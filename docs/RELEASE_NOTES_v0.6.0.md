@@ -58,10 +58,10 @@ Installing the plugin resolves to `git:github.com/J3pf/Rp-plugin@vX.Y.Z`.
   `remote-notification` background mode in `iosApp/`: notifications are Android-only in this version.
 - **`TEAM_ID` is empty** in `iosApp/Configuration/Config.xcconfig`. Simulator builds do not need it;
   device signing and TestFlight archiving do.
-- **iOS runs on Apple Silicon only.** The modules declare `iosArm64` + `iosSimulatorArm64`, and Compose
-  Multiplatform 1.12.2 publishes no `iosX64` artifacts, so an Intel Mac can compile the framework but
-  cannot build or run the simulator app. The `iOS` workflow proves compile, install and launch on an
-  arm64 runner.
+- **iOS support matrix: arm64 devices and Apple-silicon simulators.** The Kotlin Multiplatform modules
+  declare `iosArm64` and `iosSimulatorArm64`; there is no `iosX64` slice, so no Intel simulator build
+  exists in this release. Compose Multiplatform 1.12.2 publishes no `iosX64` artifacts either. An Intel
+  host can compile the arm64 slices, but an arm64 binary cannot run in an x86_64 simulator.
 - 8 lint warnings are expected and documented: 3 `AndroidGradlePluginVersion` (AGP 9.4.1 → 9.5.0 notice)
   and 5 `UnusedResources`. None are silenced.
 
