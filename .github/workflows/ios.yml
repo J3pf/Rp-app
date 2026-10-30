@@ -215,3 +215,77 @@ jobs:
           path: ${{ runner.temp }}/ios-app.png
           if-no-files-found: warn
           retention-days: 7
+
+      # El negro se ve en un build de Release y aquí solo se probaba Debug: la misma app en Release para
+      # el simulador separa "defecto de configuración" de "defecto del dispositivo". Misma aserción, su
+      # propio artefacto, para comparar como con como sin perder la línea base de Debug.
+      - name: Compilar en Release para el simulador
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedDataRelease" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Lanzar el build de Release y capturar la pantalla
+        run: |
+          set -euo pipefail
+          DISPOSITIVO=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          datos = json.load(sys.stdin)["devices"]
+          for runtime, dispositivos in datos.items():
+              if "iOS" not in runtime:
+                  continue
+              for d in dispositivos:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("no hay ningún simulador de iPhone disponible")
+          ')
+          xcrun simctl boot "$DISPOSITIVO" 2>/dev/null || true
+          APP=$(find "$RUNNER_TEMP/DerivedDataRelease/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::No se produjo ningún .app de Release en DerivedDataRelease."
+            exit 1
+          fi
+          echo "app de Release: $APP"
+          xcrun simctl terminate "$DISPOSITIVO" "$IOS_BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl install "$DISPOSITIVO" "$APP"
+          SALIDA=$(xcrun simctl launch "$DISPOSITIVO" "$IOS_BUNDLE_ID")
+          echo "$SALIDA"
+          if ! echo "$SALIDA" | grep -qE "^$IOS_BUNDLE_ID: [0-9]+$"; then
+            echo "::error::El lanzamiento de Release no devolvió un pid: $SALIDA"
+            exit 1
+          fi
+          PID=$(echo "$SALIDA" | awk -F': ' '{print $2}')
+          sleep 10
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "::error::El build de Release murió 10 s después de lanzar (pid $PID)."
+            exit 1
+          fi
+          echo "Release: el proceso $PID sigue vivo 10 s después"
+          CAPTURA="$RUNNER_TEMP/ios-app-release.png"
+          xcrun simctl io "$DISPOSITIVO" screenshot "$CAPTURA"
+          ls -l "$CAPTURA"
+          python3 .github/scripts/pantalla-no-uniforme.py "$CAPTURA"
+
+      - name: Volcar el log del build de Release
+        if: always()
+        run: |
+          xcrun simctl spawn booted log show --last 4m --style compact 2>/dev/null \
+            | grep -iE "skiko|metal|mtl|compose|graphics|iosApp" \
+            | tail -60 || true
+
+      - name: Subir la captura de Release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-launch-screen-release
+          path: ${{ runner.temp }}/ios-app-release.png
+          if-no-files-found: warn
+          retention-days: 7
