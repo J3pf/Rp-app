@@ -90,7 +90,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Instalar y lanzar en el simulador
+      - name: Instalar, lanzar y comprobar que el proceso sobrevive
         run: |
           set -euo pipefail
           DISPOSITIVO=$(xcrun simctl list devices available -j | python3 -c '
@@ -115,9 +115,36 @@ jobs:
           fi
           echo "app: $APP"
           xcrun simctl install "$DISPOSITIVO" "$APP"
+
+          # Un informe de fallo previo no debe hacer fallar esta corrida; solo cuenta uno NUEVO.
+          INFORMES="$HOME/Library/Logs/DiagnosticReports"
+          ANTES=$(ls "$INFORMES" 2>/dev/null | grep -c "iosApp" || true)
+
           SALIDA=$(xcrun simctl launch "$DISPOSITIVO" "$IOS_BUNDLE_ID")
           echo "$SALIDA"
+          PID=$(echo "$SALIDA" | awk -F': ' '{print $2}')
           if ! echo "$SALIDA" | grep -qE "^$IOS_BUNDLE_ID: [0-9]+$"; then
             echo "::error::El lanzamiento no devolvió un pid para $IOS_BUNDLE_ID: $SALIDA"
             exit 1
           fi
+
+          # Lanzar y no morir son cosas distintas: un crash en el primer frame devuelve pid igual.
+          # Dos señales: el proceso (pid) y la aparición de un informe de fallo NUEVO. Se probó también
+          # `launchctl list` dentro del simulador y dio falsos negativos en CI con la app visiblemente
+          # viva, así que no se usa: una alarma que grita sin motivo se ignora a la semana.
+          sleep 10
+          DESPUES=$(ls "$INFORMES" 2>/dev/null | grep -c "iosApp" || true)
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "::error::El proceso $PID ya no existe 10 s después de lanzar: la app murió al arrancar."
+            echo "--- últimos informes de iosApp ---"
+            ls -t "$INFORMES" 2>/dev/null | grep "iosApp" | head -3 || true
+            echo "--- log del proceso ---"
+            xcrun simctl spawn "$DISPOSITIVO" log show --last 2m --predicate 'process == "iosApp"' --style compact 2>/dev/null | tail -30 || true
+            exit 1
+          fi
+          if [ "$DESPUES" -gt "$ANTES" ]; then
+            echo "::error::Apareció un informe de fallo de iosApp después del lanzamiento."
+            ls -t "$INFORMES" | grep "iosApp" | head -3
+            exit 1
+          fi
+          echo "el proceso $PID sigue vivo 10 s después y no hay informe de fallo nuevo"
