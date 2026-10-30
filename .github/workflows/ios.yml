@@ -182,3 +182,36 @@ jobs:
             exit 1
           fi
           echo "el proceso $PID sigue vivo 10 s después y no hay informe de fallo nuevo"
+
+      # Lanzar y sobrevivir no es dibujar: una app con la capa Metal adjunta y cero frames sigue viva y
+      # muestra negro. Esto captura la pantalla y exige que no sea uniforme, que es lo único que separa
+      # "no dibuja" de "dibuja algo".
+      - name: Capturar la pantalla y exigir que no sea uniforme
+        run: |
+          set -euo pipefail
+          DISPOSITIVO=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          datos = json.load(sys.stdin)["devices"]
+          for runtime, dispositivos in datos.items():
+              if "iOS" not in runtime:
+                  continue
+              for d in dispositivos:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("no hay ningún simulador de iPhone disponible")
+          ')
+          xcrun simctl boot "$DISPOSITIVO" 2>/dev/null || true
+          CAPTURA="$RUNNER_TEMP/ios-app.png"
+          xcrun simctl io "$DISPOSITIVO" screenshot "$CAPTURA"
+          ls -l "$CAPTURA"
+          python3 .github/scripts/pantalla-no-uniforme.py "$CAPTURA"
+
+      - name: Subir la captura de la pantalla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-launch-screen
+          path: ${{ runner.temp }}/ios-app.png
+          if-no-files-found: warn
+          retention-days: 7
