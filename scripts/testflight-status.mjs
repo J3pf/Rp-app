@@ -46,6 +46,79 @@ async function get(path, token) {
     return JSON.parse(body);
 }
 
+/**
+ * Igual que `get`, pero devuelve el rechazo en vez de lanzarlo: cuando la API se niega a servir una
+ * relación, lo útil es imprimir el estado y el cuerpo exactos, no adivinar alcances ni reintentar.
+ */
+async function getTolerante(path, token) {
+    const response = await fetch(`${API}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = await response.text();
+    if (!response.ok) {
+        return { error: `HTTP ${response.status} en ${path}\n${body.slice(0, 600)}` };
+    }
+    return { data: JSON.parse(body) };
+}
+
+/**
+ * Resuelve qué builds contiene realmente cada grupo de beta. Un build VALID no está en TestFlight si
+ * ningún grupo lo incluye: TestFlight le sirve al tester el más nuevo de su grupo, no el más nuevo de
+ * la cuenta. Por eso esto es evidencia, no inferencia.
+ */
+async function seccionGrupos(appId, numerosDeBuild, token) {
+    const grupos = await get(`/v1/betaGroups?filter[app]=${appId}&limit=50`, token);
+    const lista = grupos?.data ?? [];
+    if (lista.length === 0) {
+        return { texto: "La app no tiene ningún grupo de beta.", pertenencia: new Map() };
+    }
+
+    const filas = [];
+    const pertenencia = new Map();
+    for (const grupo of lista) {
+        const nombre = grupo.attributes?.name ?? "?";
+        const interno = grupo.attributes?.isInternalGroup === true ? "sí" : "no";
+        const respuesta = await getTolerante(
+            `/v1/betaGroups/${grupo.id}/builds?limit=200&fields[builds]=version,processingState`,
+            token,
+        );
+        if (respuesta.error) {
+            // Se imprime el rechazo tal cual y se corta aquí: sin esto, cualquier conclusión sería adivinada.
+            return {
+                texto: `No se pudo leer los builds del grupo "${nombre}":\n\n\`\`\`\n${respuesta.error}\n\`\`\``,
+                pertenencia: new Map(),
+            };
+        }
+        const numeros = (respuesta.data?.data ?? [])
+            .map((build) => build.attributes?.version ?? "?")
+            .sort((a, b) => Number(b) - Number(a));
+        for (const numero of numeros) {
+            if (!pertenencia.has(numero)) pertenencia.set(numero, []);
+            pertenencia.get(numero).push(nombre);
+        }
+        filas.push({ nombre, interno, builds: numeros.length === 0 ? "(ninguno)" : numeros.join(", ") });
+    }
+
+    const cabecera = ["Grupo", "Interno", "Builds que contiene"];
+    const tablaGrupos = [
+        `| ${cabecera.join(" | ")} |`,
+        `| ${cabecera.map(() => "---").join(" | ")} |`,
+        ...filas.map((f) => `| ${f.nombre} | ${f.interno} | ${f.builds} |`),
+    ].join("\n");
+
+    const veredicto = numerosDeBuild.map((numero) => {
+        const en = pertenencia.get(numero) ?? [];
+        return en.length === 0
+            ? `- Build **${numero}**: **no está en ningún grupo**. TestFlight nunca lo va a ofrecer.`
+            : `- Build **${numero}**: está en ${en.map((n) => `"${n}"`).join(", ")}.`;
+    });
+
+    return {
+        texto: [tablaGrupos, "", "Pertenencia a grupos:", ...veredicto].join("\n"),
+        pertenencia,
+    };
+}
+
 function tabla(filas) {
     const cabecera = ["Versión", "Build", "processingState", "Subido"];
     const lineas = [
@@ -115,6 +188,22 @@ async function main() {
     }
 
     await resumen(tabla(filas));
+
+    // Evidencia extra sobre la distribución. Si esto falla, el código de salida no cambia: la alarma
+    // sigue siendo el estado del build.
+    try {
+        const grupos = await seccionGrupos(
+            app.id,
+            filas.slice(0, 3).map((fila) => fila.build),
+            token,
+        );
+        await resumen(grupos.texto);
+    } catch (error) {
+        await resumen(
+            `No se pudieron leer los grupos de beta: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+
     const nuevo = filas[0];
     if (VALID.has(nuevo.estado)) {
         await resumen(`El build más nuevo (${nuevo.version} / ${nuevo.build}) está **VALID**: listo en TestFlight.`);
