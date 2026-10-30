@@ -190,6 +190,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = D3000001000000000000001A /* Config.xcconfig */;
 			buildSettings = {
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -241,7 +242,6 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -252,6 +252,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = D3000001000000000000001A /* Config.xcconfig */;
 			buildSettings = {
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
