@@ -62,4 +62,12 @@ Estado: **abierta. T1 hecho. T2 en curso: el simulador dibuja en Debug y en Rele
   Nota de camino: el build de Release para el simulador fallaba con `Unknown iOS simulator arch: 'x86_64'` porque
   `EXCLUDED_ARCHS[sdk=iphonesimulator*]` solo existía en la configuración Debug **del proyecto**; ahora está en las
   dos (`b71e864`), y el target no la repite.
+- **L5** — T2, segundo instrumento (build **244**): el negro es solo del dispositivo, y su pantalla y su `os_log` no
+  son alcanzables desde CI. `iosApp/iosApp/ContentView.swift` lleva ahora un contenedor temporal
+  (`RpDiagnosticHostController`, marcado como temporal) con dos cosas: un `UIView` de 80x80 en `systemRed` como
+  hermano por encima de la vista de Compose, y un volcado con prefijo `RPDIAG:` un turno de runloop después de
+  `viewDidAppear` — `screen.bounds`/`scale`, `scene.activationState`, `window.bounds`, `frame`/`bounds`/`isHidden`/
+  `alpha`/`window` de la vista de Compose, nombres de sus subcapas, cada `CAMetalLayer` con `contentsScale` y
+  `drawableSize`, y los `safeAreaInsets`. No cambia comportamiento. La lectura: cuadrado rojo visible → UIKit pinta
+  y Compose no; nada visible → no estamos mirando nuestra ventana.
 
