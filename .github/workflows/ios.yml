@@ -90,6 +90,40 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Exigir las claves del plist en el bundle construido
+        run: |
+          set -euo pipefail
+          APP=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::No se produjo ningún .app; no hay plist que verificar."
+            exit 1
+          fi
+          PLIST="$APP/Info.plist"
+          echo "--- claves relevantes del bundle ---"
+          plutil -p "$PLIST" | grep -E "CADisableMinimumFrameDurationOnPhone|ITSAppUsesNonExemptEncryption|CFBundleIcons" || true
+
+          # `raw` da el valor; `xml1` da el TIPO. Compose rechaza la cadena "YES" que parece un booleano.
+          CADI=$(plutil -extract CADisableMinimumFrameDurationOnPhone raw "$PLIST" 2>/dev/null || echo "(ausente)")
+          CADI_BOOL=$(plutil -extract CADisableMinimumFrameDurationOnPhone xml1 -o - "$PLIST" 2>/dev/null | grep -c "<true/>" || true)
+          ITSP=$(plutil -extract ITSAppUsesNonExemptEncryption raw "$PLIST" 2>/dev/null || echo "(ausente)")
+          ITSP_BOOL=$(plutil -extract ITSAppUsesNonExemptEncryption xml1 -o - "$PLIST" 2>/dev/null | grep -c "<false/>" || true)
+          echo "CADisableMinimumFrameDurationOnPhone=$CADI (booleano true: $CADI_BOOL)"
+          echo "ITSAppUsesNonExemptEncryption=$ITSP (booleano false: $ITSP_BOOL)"
+
+          if [ "$CADI" != "true" ] || [ "$CADI_BOOL" != "1" ]; then
+            echo "::error::El bundle no trae CADisableMinimumFrameDurationOnPhone como booleano true (valor=$CADI). Compose crashea al arrancar."
+            exit 1
+          fi
+          if [ "$ITSP" != "false" ] || [ "$ITSP_BOOL" != "1" ]; then
+            echo "::error::El bundle no trae ITSAppUsesNonExemptEncryption como booleano false (valor=$ITSP)."
+            exit 1
+          fi
+          if ! plutil -p "$PLIST" | grep -q "CFBundleIcons"; then
+            echo "::error::El bundle perdió CFBundleIcons: el catálogo de assets dejó de inyectar el icono."
+            exit 1
+          fi
+          echo "plist verificado en el bundle que se instala: booleanos correctos e icono presente"
+
       - name: Instalar, lanzar y comprobar que el proceso sobrevive
         run: |
           set -euo pipefail
