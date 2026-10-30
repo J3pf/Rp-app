@@ -182,3 +182,71 @@ jobs:
             exit 1
           fi
           echo "el proceso $PID sigue vivo 10 s después y no hay informe de fallo nuevo"
+
+      # Lanzar y sobrevivir no es dibujar: una app con la capa Metal adjunta y cero frames sigue viva y
+      # muestra negro. Esto captura la pantalla y exige que no sea uniforme, que es lo único que separa
+      # "no dibuja" de "dibuja algo".
+      - name: Capturar la pantalla y exigir que no sea uniforme
+        run: |
+          set -euo pipefail
+          DISPOSITIVO=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          datos = json.load(sys.stdin)["devices"]
+          for runtime, dispositivos in datos.items():
+              if "iOS" not in runtime:
+                  continue
+              for d in dispositivos:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("no hay ningún simulador de iPhone disponible")
+          ')
+          xcrun simctl boot "$DISPOSITIVO" 2>/dev/null || true
+          CAPTURA="$RUNNER_TEMP/ios-app.png"
+          xcrun simctl io "$DISPOSITIVO" screenshot "$CAPTURA"
+          ls -l "$CAPTURA"
+          sips -s format bmp "$CAPTURA" --out "$RUNNER_TEMP/ios-app.bmp" >/dev/null
+          python3 - "$RUNNER_TEMP/ios-app.bmp" <<'PY2'
+          import statistics
+          import struct
+          import sys
+
+          datos = open(sys.argv[1], "rb").read()
+          if datos[:2] != b"BM":
+              raise SystemExit("la conversión no produjo un BMP")
+          desplazamiento = struct.unpack_from("<I", datos, 10)[0]
+          ancho, alto = struct.unpack_from("<ii", datos, 18)
+          bits = struct.unpack_from("<H", datos, 28)[0]
+          compresion = struct.unpack_from("<I", datos, 30)[0]
+          print(f"BMP {ancho}x{alto}, {bits} bits, compresión {compresion}")
+          if compresion != 0:
+              raise SystemExit(f"compresión {compresion} no soportada: no se puede juzgar la uniformidad")
+          por_pixel = bits // 8
+          paso_fila = (ancho * por_pixel + 3) // 4 * 4
+          luminancias = []
+          for y in range(abs(alto)):
+              base = desplazamiento + y * paso_fila
+              for x in range(0, ancho, 8):
+                  i = base + x * por_pixel
+                  b, g, r = datos[i], datos[i + 1], datos[i + 2]
+                  luminancias.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
+          media = statistics.fmean(luminancias)
+          desviacion = statistics.pstdev(luminancias)
+          print(f"píxeles muestreados: {len(luminancias)}")
+          print(f"luminancia media: {media:.2f}   desviación típica: {desviacion:.2f}")
+          print(f"mínimo: {min(luminancias):.2f}   máximo: {max(luminancias):.2f}")
+          # Una pantalla negra y una blanca dan desviación 0. El umbral solo descarta la ausencia total
+          # de dibujo; no juzga el diseño ni el contraste.
+          if desviacion < 1.0:
+              print("::error::La pantalla capturada es uniforme: no se está dibujando ningún frame.")
+              raise SystemExit(1)
+          print("la pantalla tiene contenido: se está dibujando algo")
+
+      - name: Subir la captura de la pantalla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-launch-screen
+          path: ${{ runner.temp }}/ios-app.png
+          if-no-files-found: warn
+          retention-days: 7
