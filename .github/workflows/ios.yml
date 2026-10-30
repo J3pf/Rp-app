@@ -90,6 +90,70 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      # Diagnóstico acotado: el crash de arranque es intermitente, así que se lanza tres veces en la
+      # misma corrida y se recogen los informes del runner como artefacto. Es para responder una
+      # pregunta (¿por qué muere?), no para rediseñar la comprobación.
+      - name: Repetir el lanzamiento tres veces y recoger informes
+        if: always()
+        run: |
+          set -uo pipefail
+          DISPOSITIVO=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          datos = json.load(sys.stdin)["devices"]
+          for runtime, dispositivos in datos.items():
+              if "iOS" not in runtime:
+                  continue
+              for d in dispositivos:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("sin simulador")
+          ')
+          for intento in 1 2 3; do
+            SALIDA=$(xcrun simctl launch "$DISPOSITIVO" dev.j3pf.rp.iosApp 2>&1 || true)
+            PID=$(echo "$SALIDA" | awk -F': ' '{print $2}')
+            sleep 10
+            if [ -n "${PID:-}" ] && kill -0 "$PID" 2>/dev/null; then
+              echo "intento $intento: proceso $PID VIVO a los 10 s"
+              xcrun simctl terminate "$DISPOSITIVO" dev.j3pf.rp.iosApp 2>/dev/null || true
+            else
+              echo "intento $intento: proceso ${PID:-?} MUERTO a los 10 s"
+            fi
+            sleep 2
+          done
+          echo "=== informes en el runner ==="
+          ls -lt ~/Library/Logs/DiagnosticReports 2>/dev/null | head -10 || echo "directorio vacío o inexistente"
+
+      - name: Imprimir la excepción y los frames del fallo
+        if: always()
+        run: |
+          set -uo pipefail
+          INFORME=$(ls -t ~/Library/Logs/DiagnosticReports/* 2>/dev/null | head -1 || true)
+          if [ -n "${INFORME:-}" ]; then
+            echo "informe: $INFORME"
+            python3 - "$INFORME" <<'PY2'
+          import json, sys
+          crudo = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          # Los .ips llevan una cabecera JSON y luego el cuerpo JSON: se imprime lo útil.
+          print(crudo[:6000])
+          PY2
+          else
+            echo "no hay ningún informe en ~/Library/Logs/DiagnosticReports"
+            echo "--- log del simulador, líneas relevantes ---"
+            xcrun simctl spawn booted log show --last 5m --style compact 2>/dev/null \
+              | grep -iE "uncaught|exception|fatal|abort|signal|kotlin|iosApp.*(crash|terminat)" \
+              | tail -40 || true
+          fi
+
+      - name: Subir los informes de fallo como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-crash-reports
+          path: ~/Library/Logs/DiagnosticReports/**
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Instalar, lanzar y comprobar que el proceso sobrevive
         run: |
           set -euo pipefail
