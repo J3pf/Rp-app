@@ -52,10 +52,17 @@ class AgentsParityCharacterizationTest {
 
     @Test
     fun `quick filter En linea keeps only online agents and drops empty groups`() {
-        val groups = listOf(MachineGroup(machine, listOf(agent("a", "idle", online = true), agent("b", "idle", online = false))))
+        val offlineOnlyMachine = MachineSummary(machineId = "m2", name = "PC-B", context = "empresa", color = "#EF6C00")
+        val groups =
+            listOf(
+                MachineGroup(machine, listOf(agent("a", "idle", online = true), agent("b", "idle", online = false))),
+                MachineGroup(offlineOnlyMachine, listOf(agent("c", "idle", online = false))),
+            )
 
         val filtered = filterAgentGroups(groups, SessionQuickFilter.ACTIVE, "")
 
+        // The offline-only group disappears entirely (diropd empty groups, verificado).
+        assertEquals(listOf("m1"), filtered.map { it.machine.machineId })
         assertEquals(listOf("a"), filtered.single().agents.map { it.agentId })
     }
 
@@ -99,7 +106,13 @@ class AgentsParityCharacterizationTest {
         val idle = agent("i", "idle")
         val compacting = agent("c", "compacting")
         val error = agent("e", "error")
-        val offline = agent("o", "working", online = false)
+        val offline = AgentSummary(
+            agentId = "o",
+            machineId = "m1",
+            status = "working",
+            online = false,
+            lastSeenAt = null,
+        )
 
         rule.setContent {
             RpTheme {
@@ -119,6 +132,7 @@ class AgentsParityCharacterizationTest {
         rule.onAllNodesWithText("Inactivo")[0].assertIsDisplayed()
         rule.onNodeWithText("Compactando").assertIsDisplayed()
         rule.onNodeWithText("Error").assertIsDisplayed()
-        rule.onAllNodesWithText("Desconectado", substring = true).fetchSemanticsNodes().isNotEmpty()
+        // Offline wins over any work status, even with lastSeenAt == null (verifier probe).
+        rule.onAllNodesWithText("Desconectado", substring = true)[0].assertIsDisplayed()
     }
 }

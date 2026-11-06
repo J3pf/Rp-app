@@ -2,6 +2,7 @@ package dev.j3pf.rp.ui.agents
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -61,6 +62,24 @@ class ArchivedAndPairParityCharacterizationTest {
     }
 
     @Test
+    fun `load more button is hidden while an error is shown even with a cursor`() {
+        rule.setContent {
+            RpTheme {
+                ArchivedAgentsContent(
+                    agents = emptyList(),
+                    loading = false,
+                    error = "No se pudieron cargar los agentes archivados",
+                    nextBefore = 123L,
+                    onOpenChat = {},
+                    onPurge = {},
+                )
+            }
+        }
+        rule.onNodeWithText("Reintentar", substring = true).assertIsDisplayed()
+        rule.onAllNodesWithText("Cargar más").assertCountEquals(0)
+    }
+
+    @Test
     fun `parsePairingUri accepts the rp pair scheme with url and code and rejects everything else`() {
         val parsed = SessionRepository.parsePairingUri("rp://pair?u=https%3A%2F%2Fdrift.example%3A10000&c=ABCD1234")
         assertEquals("https://drift.example:10000" to "ABCD1234", parsed)
@@ -106,8 +125,8 @@ class ArchivedAndPairParityCharacterizationTest {
                 )
             }
         }
-        // Busy UI shows the progress indicator next to the disabled Emparejar button.
-        rule.onNodeWithText("Emparejar").assertIsDisplayed()
+        // Busy: the Emparejar button is actually disabled (verifier probe).
+        rule.onNodeWithText("Emparejar").assertIsNotEnabled()
         assertTrue(rule.onAllNodesWithText("URL del relay (https://…)").fetchSemanticsNodes().isNotEmpty())
         rule.onAllNodesWithText("Código de emparejamiento").assertCountEquals(1)
     }

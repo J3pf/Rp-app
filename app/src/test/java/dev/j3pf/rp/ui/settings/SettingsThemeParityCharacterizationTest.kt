@@ -20,7 +20,7 @@ class SettingsThemeParityCharacterizationTest {
     @get:Rule val rule = createComposeRule()
 
     @Test
-    fun `theme dialog shows exactly the four rp theme choices and reports the picked id`() {
+    fun `theme dialog shows exactly the five rp theme choices including auto and reports the picked id`() {
         val picked = mutableListOf<String>()
         rule.setContent {
             RpTheme {
@@ -35,10 +35,12 @@ class SettingsThemeParityCharacterizationTest {
 
         // Fila de la pantalla: muestra el tema actual con su etiqueta exacta.
         rule.onNodeWithText("Tema de la app").performClick()
+        // Five entries: 4 explicit + AUTO, which is absent only while the choice is set.
         rule.onNodeWithText("Gentle-Cute").assertIsDisplayed()
         rule.onNodeWithText("Gentle-Sexy").assertIsDisplayed()
         rule.onNodeWithText("Omarchy / Gentle Shell").assertIsDisplayed()
         rule.onNodeWithText("Material You / Sistema").assertIsDisplayed()
+        rule.onAllNodesWithText("Sincronizado con Pi (automático)")[0].assertIsDisplayed()
 
         rule.onNodeWithText("Gentle-Sexy").performClick()
         assertEquals(listOf("gentle-sexy"), picked)
