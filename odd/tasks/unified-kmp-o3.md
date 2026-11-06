@@ -78,6 +78,20 @@ specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
   CH39 page-chrome visual mentioned in its Notes. On any drift: revert first, then re-run the
   orchestrator's verdict with the evidence; no local `recordRoborazzi` ever runs.
 
+### T5 execution rules (binding, from the orchestrator and the user — seq 58)
+
+- Every T5 move MUST use the ODD subagents: (a) a `gentle-ai-explore` (read-only, path:line
+  evidence) mapping the callers of what is about to move, BEFORE each move; (b) each bounded
+  unit goes to a `gentle-ai-worker` with a non-empty `## Allowed edit surfaces` (disjoint
+  surfaces → parallel background launches); (c) high-risk parts get an independent
+  `gentle-ai-verify` naming `Risk: item N` — the S19 consent/discard confirmations and the
+  biometric gate are Risk item 2 (security/credentials/guards).
+- Launcher rules: the FIRST line of every task text is `Spec: odd/tasks/unified-kmp.md, T<n>`;
+  verify launches only with a named `Risk: item N`. Tiny edits may stay inline, but a move
+  without an explorer first or without a verifier on the S19/biometric piece is bounced.
+- Every READY report must list the subagent task ids used and what each returned.
+- The orchestrator still verifies from the sha and re-runs the mutation probes after M4.
+
 ## Log`). Branch `unify/o3-chat`,
 worktree `.worktrees/o3`. Mirror: Engram `odd/unified-kmp-o3/tasks`.
 
