@@ -5,7 +5,7 @@ Behavior oracle: current Android code. Baseline: `:app:testDirectDebugUnitTest` 
 
 Status legend: `covered` = automated proof exists; `char` = characterization test added on unchanged Android code (T1); `gap` = no automatic proof, reason stated (accepted per S15, port note required).
 
-Status summary (computed by script from the table after rev-3 commits): rows=84, proven=63, proof-added=16, partial=1, gap-with-reason=2, device-only=2.
+Status summary (COMPUTED BY SCRIPT over the final status cell of every matrix row): rows=84, proven=63, proof-added=16, partial=1, gap-with-reason=2, device-only=2.
 
 
 ## 1. Room database (entities, DAOs, migrations) — `data/db/`
