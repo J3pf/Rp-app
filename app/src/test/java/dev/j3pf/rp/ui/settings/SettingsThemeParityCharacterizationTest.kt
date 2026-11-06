@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.settings
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -40,12 +41,16 @@ class SettingsThemeParityCharacterizationTest {
         rule.onNodeWithText("Gentle-Sexy").assertIsDisplayed()
         rule.onNodeWithText("Omarchy / Gentle Shell").assertIsDisplayed()
         rule.onNodeWithText("Material You / Sistema").assertIsDisplayed()
-        rule.onAllNodesWithText("Sincronizado con Pi (automático)")[0].assertIsDisplayed()
+        // The string exists exactly twice: once as the screen row (current theme = auto), once inside
+        // the dialog's entry list. A mutation filtering AUTO out of `RpThemeChoice.entries` would drop
+        // the dialog entry and this count would fall to 1, so the test fails on it.
+        rule.onAllNodesWithText("Sincronizado con Pi (automático)").assertCountEquals(2)
 
         rule.onNodeWithText("Gentle-Sexy").performClick()
         assertEquals(listOf("gentle-sexy"), picked)
 
         // La preferencia aún no cambió (el ViewModel persiste aparte), y el diálogo se cierra.
-        rule.onAllNodesWithText("Material You / Sistema").fetchSemanticsNodes().isEmpty()
+        // After the pick the dialog is gone, so the fourth-op only string disappears entirely.
+        rule.onAllNodesWithText("Material You / Sistema").assertCountEquals(0)
     }
 }

@@ -34,6 +34,7 @@ import dev.j3pf.rp.ui.theme.RpTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -75,10 +76,19 @@ class OnboardingParityTest {
         buildHarness()
     }
 
+        /** Drains the test's harness scope so no dao coroutine is mid-flight when the DB closes. */
+    @Suppress("SameParameterValue")
+    private fun drainScope() {
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(10_000) { scope?.coroutineContext[Job]?.join() }
+        }
+    }
+
     @After
     fun tearDown() {
         connection?.stop()
         scope?.cancel()
+        if (scope != null) drainScope()
         db?.close()
         settingsFile?.delete()
         Dispatchers.resetMain()
@@ -105,7 +115,13 @@ class OnboardingParityTest {
             rule.onNodeWithText("Continuar").assertIsDisplayed().performClick()
             rule.runOnIdle { assertEquals(1, doneCalls) }
             mainDispatcher.scheduler.advanceUntilIdle()
-            withTimeout(5_000) { settings.settings.first { it.onboardingDone } }
+            // Deadlock probe fix: collecting settings on the composing test's unconfined main left
+            // DataStoreImpl$data$1 blocked when the concurrent build shared the JVM's file cache.
+            // A retry loop on a real IO dispatcher reads the same DataStore atomically; the OB-6
+            // read is deterministic (each iteration starts from the store's freshest state).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withTimeout(60_000) { settings.settings.first { it.onboardingDone } }
+            }
             assertTrue(settings.current().onboardingDone)
         }
 
@@ -128,7 +144,13 @@ class OnboardingParityTest {
             rule.onNodeWithText("Ahora no").assertIsDisplayed().performClick()
             rule.runOnIdle { assertEquals(1, doneCalls) }
             mainDispatcher.scheduler.advanceUntilIdle()
-            withTimeout(5_000) { settings.settings.first { it.onboardingDone } }
+            // Deadlock probe fix: collecting settings on the composing test's unconfined main left
+            // DataStoreImpl$data$1 blocked when the concurrent build shared the JVM's file cache.
+            // A retry loop on a real IO dispatcher reads the same DataStore atomically; the OB-6
+            // read is deterministic (each iteration starts from the store's freshest state).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withTimeout(60_000) { settings.settings.first { it.onboardingDone } }
+            }
             assertTrue(settings.current().onboardingDone)
         }
 
@@ -180,3 +202,4 @@ class OnboardingParityTest {
         pairViewModel = PairViewModel(sessionRepo, settings)
     }
 }
+

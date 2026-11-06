@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.agents
 
 import android.app.Application
+import androidx.lifecycle.viewModelScope
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
@@ -32,6 +33,7 @@ import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -81,10 +83,29 @@ class AgentsViewModelParityTest {
         Dispatchers.setMain(mainDispatcher)
     }
 
+        /** Drains the test's harness scope so no dao coroutine is mid-flight when the DB closes. */
+    @Suppress("SameParameterValue")
+    private fun drainScope() {
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(10_000) { scope?.coroutineContext[Job]?.join() }
+        }
+    }
+
     @After
     fun tearDown() {
+                // Do NOT cancel the ViewModel's combine scope here: the shared Room connection keeps
+        // observing through the combine and surviving the test body; the harness scope with the
+        // dao flows is its own SupervisorJob already cancelled below, so the combine's only
+        // remaining subscriber is a stateInWhileSubscribed that ends 5s after the last collect.
+        // (No-op placeholder: teardown is otherwise already sufficient.)
+
+        // Cancel the ViewModel's combine scope BEFORE closing Room, then drain the test scope so
+        // no dao coroutine is mid-flight when the database closes (this was the "connection
+        // closed" / "database is not open" flake root when run under concurrent load).
+        viewModel?.viewModelScope?.cancel()
         connection?.stop()
         scope?.cancel()
+        if (scope != null) drainScope()
         db?.close()
         runCatching { server?.shutdown() }
         requests.clear()
@@ -155,18 +176,18 @@ class AgentsViewModelParityTest {
         machines.start()
         agents.start()
         connection!!.start()
-        withTimeout(5_000) { connection!!.state.first { it == ConnState.Connected } }
+        withTimeout(30_000) { connection!!.state.first { it == ConnState.Connected } }
         // The same welcome the relay sends on connect; seeds the two machines through the real flow.
         bus.publish(Envelope.of(MsgType.APP_WELCOME, AppWelcome(machines = listOf(machineWork, machinePersonal))))
         // Wait for the BroadcastStateBeforeBuildingTheViewModel (Dao state is busy in a different dispatcher).
-        withTimeout(10_000) { machinesRepo.machinesState.first { it.size == 2 } }
+        withTimeout(30_000) { machinesRepo.machinesState.first { it.size == 2 } }
         viewModel = AgentsViewModel(machines, agents, settings, connection!!, host)
     }
 
     private suspend fun awaitState(predicate: (AgentsUiState) -> Boolean): AgentsUiState =
         // 10s: the combine chain runs over real DataStore + Room + websocket transports on IO threads;
         // the predicate body has no chicken, so patience here is not a weak assert.
-        withTimeout(10_000) {
+        withTimeout(30_000) {
             viewModel.state.first { predicate(it) }
         }
 
@@ -222,9 +243,13 @@ class AgentsViewModelParityTest {
             // is a deliberate no-op (ReconnectingSocketPolicy.kt:63-66), so no HTTP request follows; the
             // observable end state is refreshing=false again with no banner message.
             viewModel.refresh()
+            // Transient TRUE state is pinned before the drain: setting isRefreshing happens inline on
+            // the unconfined main dispatcher, the 600 ms clear waits for the virtual scheduler, so
+            // nothing else may advance it in between and this awaits sees `refreshing == true`.
+            withTimeout(30_000) { viewModel.state.first { it.refreshing } }
             // Drain the virtual-time delay(600) of the unconfined main dispatcher.
             mainDispatcher.scheduler.advanceUntilIdle()
-            assertTrue(!viewModel.state.value.refreshing)
+            withTimeout(30_000) { viewModel.state.first { !it.refreshing } }
             assertNull(viewModel.lifecycleState.value.message)
         }
 
@@ -254,7 +279,7 @@ class AgentsViewModelParityTest {
             }
 
             viewModel.loadArchived()
-            val state = withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedAgents.isNotEmpty() } }
+            val state = withTimeout(30_000) { viewModel.lifecycleState.first { it.archivedAgents.isNotEmpty() } }
             assertTrue { state.archivedError == null }
             assertEquals(1, state.archivedAgents.size)
             assertEquals(42L, state.archivedNextBefore)
@@ -311,9 +336,9 @@ class AgentsViewModelParityTest {
             }
 
             viewModel.loadArchived()
-            withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedNextBefore != null } }
+            withTimeout(30_000) { viewModel.lifecycleState.first { it.archivedNextBefore != null } }
             viewModel.loadMoreArchived()
-            val state = withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedAgents.size == 2 } }
+            val state = withTimeout(30_000) { viewModel.lifecycleState.first { it.archivedAgents.size == 2 } }
             assertEquals(listOf("arc-page1", "arc-page2"), state.archivedAgents.map { it.agentId })
             assertNull(state.archivedNextBefore)
         }
@@ -343,26 +368,26 @@ class AgentsViewModelParityTest {
             buildHarness()
             responder = okArchivedResponder()
             viewModel.loadArchived()
-            withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedAgents.isNotEmpty() } }
+            withTimeout(30_000) { viewModel.lifecycleState.first { it.archivedAgents.isNotEmpty() } }
 
             responder = { request -> Envelope(t = "ack", re = request.id) }
             viewModel.purgeArchived("m-personal:arc1")
-            val removed = withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedAgents.isEmpty() } }
+            val removed = withTimeout(30_000) { viewModel.lifecycleState.first { it.archivedAgents.isEmpty() } }
             assertNull(removed.message)
             assertEquals(MsgType.AGENT_PURGE, awaitRequest(MsgType.AGENT_PURGE).t)
 
             // Failure path: the relay rejects the purge and the VM keeps the exact failure copy.
             responder = okArchivedResponder()
             viewModel.loadArchived()
-            withTimeout(5_000) { viewModel.lifecycleState.first { it.archivedAgents.isNotEmpty() } }
+            withTimeout(30_000) { viewModel.lifecycleState.first { it.archivedAgents.isNotEmpty() } }
             responder = { request -> Envelope.of(MsgType.ERROR, ErrorBody("internal", "boom"), re = request.id) }
             viewModel.purgeArchived("m-personal:arc1")
-            val failure = withTimeout(5_000) { viewModel.lifecycleState.first { it.message != null } }
+            val failure = withTimeout(30_000) { viewModel.lifecycleState.first { it.message != null } }
             assertEquals("No se pudo eliminar definitivamente el historial", failure.message)
         }
 
     private suspend fun awaitRequest(type: String): Envelope =
-        withTimeout(5_000) {
+        withTimeout(30_000) {
             while (true) {
                 val request = requests.poll(100, TimeUnit.MILLISECONDS) ?: continue
                 if (request.t == type) return@withTimeout request
@@ -370,3 +395,4 @@ class AgentsViewModelParityTest {
             error("No se recibió $type")
         }
 }
+

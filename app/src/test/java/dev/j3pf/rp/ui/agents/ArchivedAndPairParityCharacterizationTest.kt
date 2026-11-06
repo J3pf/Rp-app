@@ -127,7 +127,7 @@ class ArchivedAndPairParityCharacterizationTest {
         }
         // Busy: the Emparejar button is actually disabled (verifier probe).
         rule.onNodeWithText("Emparejar").assertIsNotEnabled()
-        assertTrue(rule.onAllNodesWithText("URL del relay (https://…)").fetchSemanticsNodes().isNotEmpty())
+        rule.onAllNodesWithText("URL del relay (https://…)").assertCountEquals(1)
         rule.onAllNodesWithText("Código de emparejamiento").assertCountEquals(1)
     }
 }

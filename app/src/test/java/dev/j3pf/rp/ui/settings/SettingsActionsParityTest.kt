@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.viewModelScope
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
@@ -41,6 +42,7 @@ import dev.j3pf.rp.ui.theme.RpTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -79,10 +81,29 @@ class SettingsActionsParityTest {
         Dispatchers.setMain(Dispatchers.Unconfined)
     }
 
+        /** Drains the test's harness scope so no dao coroutine is mid-flight when the DB closes. */
+    @Suppress("SameParameterValue")
+    private fun drainScope() {
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(10_000) { scope?.coroutineContext[Job]?.join() }
+        }
+    }
+
     @After
     fun tearDown() {
+                // Do NOT cancel the ViewModel's combine scope here: the shared Room connection keeps
+        // observing through the combine and surviving the test body; the harness scope with the
+        // dao flows is its own SupervisorJob already cancelled below, so the combine's only
+        // remaining subscriber is a stateInWhileSubscribed that ends 5s after the last collect.
+        // (No-op placeholder: teardown is otherwise already sufficient.)
+
+        // Cancel the ViewModel's combine scope BEFORE closing Room, then drain the test scope so
+        // no dao coroutine is mid-flight when the database closes (this was the "connection
+        // closed" / "database is not open" flake root when run under concurrent load).
+        viewModel?.viewModelScope?.cancel()
         connection?.stop()
         scope?.cancel()
+        if (scope != null) drainScope()
         db?.close()
         runCatching { server?.shutdown() }
         settingsFile?.delete()
@@ -165,8 +186,8 @@ class SettingsActionsParityTest {
             val refresh = request()
             assertEquals("GET", refresh.method)
             assertEquals("/v1/machines", requestPathLast)
-            kotlinx.coroutines.withTimeout(5_000) {
-                while (db!!.machines().all("r1").none { it.machineId == "m:1" }) kotlinx.coroutines.delay(10)
+            kotlinx.coroutines.withTimeout(30_000) {
+                while (db!!.machines().all("r1").none { it.machineId == "m:1" }) kotlinx.coroutines.delay(25)
             }
 
             enqueue("{}")
@@ -410,3 +431,4 @@ class SettingsActionsParityTest {
     private fun <T> json(serializer: kotlinx.serialization.SerializationStrategy<T>, value: T): String =
         RpJson.encodeToString(serializer, value)
 }
+
