@@ -85,6 +85,9 @@ class ChatViewModelCharacterizationTest {
     /** Per-test reply for USER_MESSAGE envelopes; null (default) = silent. */
     private var ackReply: ((Envelope) -> Envelope?)? = null
 
+    /** When set, AGENT_CLOSE replies with this error instead of ok (close-failure path). */
+    private var agentCloseError: Pair<String, String>? = null
+
     private val agentId = "m:test"
     private val cwd = "/home/user/project"
     private val filePath = "app/src/main/java/dev/j3pf/rp/ui/chat/ChatViewModel.kt"
@@ -106,6 +109,7 @@ class ChatViewModelCharacterizationTest {
     @Before
     fun resetDefaults() {
         ackReply = null
+        agentCloseError = null
     }
 
     @After
@@ -218,7 +222,10 @@ class ChatViewModelCharacterizationTest {
     private fun defaultReply(env: Envelope): Envelope? =
         when (env.t) {
             MsgType.AGENT_SUBSCRIBE -> Envelope(t = "ok", re = env.id)
-            MsgType.AGENT_CLOSE -> Envelope(t = "ok", re = env.id)
+            MsgType.AGENT_CLOSE ->
+                agentCloseError?.let { (code, message) ->
+                    Envelope.of(MsgType.ERROR, dev.j3pf.rp.protocol.ErrorBody(code = code, message = message), re = env.id)
+                } ?: Envelope(t = "ok", re = env.id)
             MsgType.HOST_GIT_DIFF -> Envelope.of(MsgType.HOST_GIT_DIFF_RESULT, HostGitDiffResult(), re = env.id)
             MsgType.HOST_GIT_DISCARD ->
                 Envelope.of(
@@ -466,4 +473,17 @@ class ChatViewModelCharacterizationTest {
         }
         Unit
     }
+    @Test
+    fun `close failure surfaces the relay reason verbatim from the chat panel`() = runBlocking {
+        vm = connectHarness()
+        agentCloseError = "bad_request" to "branch has unmerged changes"
+        var completed: Boolean? = null
+        vm.forget { completed = true }
+        vm.confirmForget()
+        awaitRequest(MsgType.AGENT_CLOSE)
+        withTimeout(15_000) { vm.state.first { it.message == "No se pudo cerrar el agente: branch has unmerged changes" } }
+        assertTrue(completed == null, "onDone no corre cuando el cierre falló")
+        Unit
+    }
 }
+
