@@ -245,12 +245,10 @@ class ChatViewModelCharacterizationTest {
             error("No llegó $type")
         }
 
+    /** Destructive poll avoided: scanning does NOT consume; a matching envelope is a failure. */
     private suspend fun assertNoRequest(type: String) {
-        val deadline = System.currentTimeMillis() + 1_000
-        while (System.currentTimeMillis() < deadline) {
-            val env = requests.poll(100, TimeUnit.MILLISECONDS) ?: continue
-            if (env.t == type) error("No debía llegar $type")
-        }
+        kotlinx.coroutines.delay(1_000)
+        requests.filter { it.t == type }.forEach { error("No debía llegar $type, llegó ${it.encode().take(150)}") }
     }
 
     private fun tempImageUri(): android.net.Uri =
@@ -397,6 +395,8 @@ class ChatViewModelCharacterizationTest {
         assertEquals("m", wire.machineId)
         assertEquals(cwd, wire.cwd)
         assertEquals(filePath, wire.path)
+        // Solo una petición: no hay dobles descartes por la misma confirmación.
+        assertNoRequest(MsgType.HOST_GIT_DISCARD)
         // Al confirmar ok, el VM vuelve a abrir la diff para refrescar.
         awaitRequest(MsgType.HOST_GIT_DIFF)
         Unit

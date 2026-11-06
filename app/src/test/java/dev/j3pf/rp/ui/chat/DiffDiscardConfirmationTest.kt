@@ -12,6 +12,7 @@ import dev.j3pf.rp.ui.diff.DiffSheet
 import dev.j3pf.rp.ui.theme.RpTheme
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import androidx.test.espresso.Espresso
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -20,7 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Characterization tests for parity rows CH30/CH31 (diff discard confirmation, S19).
+ * Characterization tests for parity rows CH33 (diff discard confirmation, S19) and CH31.
  * Green-first on UNCHANGED Android code; every assertion pins exact strings and the
  * observable effect (discard reaches onDiscardFile only through the confirmation dialog,
  * exactly once, with the exact path; cancel/dismiss changes nothing and closes the dialog).

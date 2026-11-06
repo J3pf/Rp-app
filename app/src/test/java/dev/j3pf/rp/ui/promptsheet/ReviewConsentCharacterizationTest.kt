@@ -7,6 +7,8 @@ import kotlin.math.max
 import kotlin.math.min
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.j3pf.rp.protocol.Answer
@@ -30,7 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Characterization tests for the review consent surface (parity CH33; v0.6.0, danger: high).
+ * Characterization tests for the review consent surface (parity CH36; v0.6.0, danger: high).
  * Green-first on UNCHANGED code. Observable behavior pinned:
  *  - header `Consentimiento de revisión` + `Peligro alto`;
  *  - terminal body rendered verbatim (leading spaces/newlines intact) inside a NO-REFLOW
@@ -135,6 +137,43 @@ class ReviewConsentCharacterizationTest {
         assertTrue("El chip debe vivir en la fila de la opción 2", chip.top >= l2.top && chip.bottom <= e2.top)
         assertTrue("El chip no debe tocar la opción 1", overlapArea(chip, l1) == 0f)
         assertTrue("El chip no debe tocar la opción 0", overlapArea(chip, l0) == 0f)
+    }
+
+    /** Prompt with provider order whose OPTION IDS do not match their positions (id "2" goes first). */
+    private fun shuffledPrompt() =
+        Prompt(
+            promptId = "consent-shuffled",
+            agentId = "agent-1",
+            kind = PromptKind.SELECT,
+            category = PromptCategory.PERMISSION,
+            title = "Review authority - shuffled ids",
+            danger = Danger.HIGH,
+            message = body,
+            options =
+                listOf(
+                    PromptOption("2", "Skip review for this candidate", "Extra outside view is skipped only for this candidate"),
+                    PromptOption("0", "Start review with 4 lenses", "Long independent review of the whole candidate"),
+                    PromptOption("1", "Start review on a narrower slice", "Splits the candidate into smaller reviews"),
+                ),
+        )
+
+    @Test
+    fun `session wide chip binds to option id 2 even when it is the first row`() {
+        rule.setContent { RpTheme { PromptContent(prompt = shuffledPrompt(), busy = false, onAnswer = {}) } }
+
+        // The chip must live on the row labeled 'Skip review...' (that option's id is "2"),
+        // NOT on whatever row index happens to be second: kills an idx==2 binding.
+        val chip = bounds("Permiso para toda la sesión")
+        val idxRow = bounds("Skip review for this candidate")
+        val other = bounds("Start review on a narrower slice")
+        assertTrue("El chip vive en la fila del id 2, no por índice", idxRow.top <= chip.top && chip.top < other.top)
+    }
+
+    @Test
+    fun `verbatim edge cases survive with leading spaces and double spaces intact`() {
+        val p = reviewPrompt().copy(message = "\n  alineado con espacios  ")
+        rule.setContent { RpTheme { PromptContent(prompt = p, busy = false, onAnswer = {}) } }
+        rule.onAllNodesWithText("\n  alineado con espacios  ").assertCountEquals(1)
     }
 
     @Test
