@@ -123,7 +123,8 @@ Status legend: `covered` = automated proof exists; `char` = characterization tes
 
 | ID | Behavior | Android source | Proof test | Status |
 |---|---|---|---|---|
-| DI-01 | Singletons wired (`AppScope` external test `Scope CoroutineScope`), `Qualifiers`, `Room` singleton with `MIGRATION_1_2/2_3` and no destructive fallback, `DataStore` factory | `di/AppModule.kt`, `di/Qualifiers.kt` | compile-time (Hilt) , enforced at runtime by S20 suite on `testDirectDebugUnitTest` (Hilt injection in Robolectric tests) | covered |
+| DI-01 | Singletons wired (`AppScope` process-lifetime `CoroutineScope`), `Qualifiers`, Room singleton with `MIGRATION_1_2/2_3` and **`fallbackToDestructiveMigration(dropAllTables = true)`** — CORRECTED by verifier: the destructive fallback EXISTS (`di/AppModule.kt:48`); kept identical, pin-test of its trigger condition due in T3b | `di/AppModule.kt:46-52`, `di/Qualifiers.kt` | compile-time (Hilt), enforced at runtime by S20 suite (Hilt injection in Robolectric tests) | covered (with corrected wording; destructive-fallback trigger pin = T3b task) |
+| DI-02 | `fallbackToDestructiveMigration(dropAllTables = true)` trigger semantics: any schema the shipped migrations cannot reach (e.g. a downgrade or a missing path) wipes ALL tables and recreates at the current version — user data intentionally discarded rather than crashing | `di/AppModule.kt:48` | **no proof yet** | gap — T3b characterization test (`RoomDestructiveFallbackTest`: open a DB at an unreachable version, assert tables are dropped/recreated, data gone) |
 
 ## 13. AttachmentsRepository (Android upload base for chat composer)
 
