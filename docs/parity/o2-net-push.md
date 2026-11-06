@@ -93,7 +93,7 @@ Still-needed ports (requested to O1, cc orchestrator):
 
 | Status | Rows |
 |---|---|
-| proven | 18 |
+| proven | 18 (FcmTokenWorker counts run in the fcm flavor) |
 | proof-added | 11 |
 | partial | 3 (NET-01 lifecycle wiring, NET-04/NET-05 strings/fatal part, PUSH-01 channel coexistence) |
 | device-only | 3 (PUSH-14 enabled boot start, PUSH-15 battery, PUSH-17 biometric) |
