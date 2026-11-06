@@ -26,15 +26,21 @@ specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
    (lifecycle-viewmodel multiplatform).
    - Rows: CH31, CH32, CH33 (+ S19 wire chain), CH38, CH41, CH43; GamePad ChatViewModel tests stay on :app
      until M4.
-4. **M4 — ChatViewModel + PromptSheetViewModel migrate to :shared-ui as KMP ViewModels** (ADR §4)
-   with constructor injection of `ChatRepository`, `SettingsStore`, `AttachmentsRepository`,
+4. **M4 — ChatViewModel + PromptSheetViewModel migrate to :shared-ui as KMP ViewModels** (ADR §4),
+   constructor-injecting `ChatRepository`, `SettingsStore`, `AttachmentsRepository`,
    `HostRepository`, `BiometricAuthorizer`, `AttachmentsPlatformHost`, `VoiceInputHost`; the :app
    Hilt module binds the same implementations; the Android `SavedStateHandle.toRoute<ChatRoute>()`
-   seam is replaced by a plain `agentId` in a shared VM factory parameter (orchestrator decides the
-   exact navigation seam with O4). The characterization harness (ChatViewModelCharacterizationTest)
-   gets an androidTest twin for :app wiring; the core tests move to :shared-ui jvmTest against the
-   same :data-core fakes.
-   - Rows: CH17, CH18, CH19, CH21, CH22, CH24, CH25, CH26, CH31, CH33(S19 wire), CH48.
+   seam is replaced by a plain `agentId` factory parameter (exact navigation seam decided with O4).
+   **Copy-first rule (hard gate)**: the Gate-A harness/chat tests STAY WHERE THEY ARE and stay
+   green until the moved production code has ITS OWN passing copy with the SAME assertions
+   (copy first, delete the original only in a LATER commit — never in the same commit as the move).
+   After M4 the orchestrator re-runs ALL mutation probes against the moved code (consent header,
+   chip bound to option id 2, reset→Idle, Cancelar exactly once, discard without confirm,
+   back-dismiss, móvil marker, AUTO chip, questionnaire page label) and every probe must still be
+   DETECTED before the move is accepted. Android instrumented tests are NOT available on this
+   machine (no emulator): the androidTest twin is not a gate and never counts as proof.
+   - Rows: CH17, CH18, CH19, CH21, CH22, CH24, CH25, CH26, CH31, CH33 (S19 wire), CH48.
+
 5. **M5 — composer delivery/decision chip and AUTO banner move**: final polish per CH20/CH23
    (banner and chip already in M1, close leftovers), plus any mechanical import updates recorded.
 
@@ -56,20 +62,21 @@ specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
 - NOT ports (per ADR no-port zones): haptics (CMP `LocalHapticFeedback`), IME insets
   (`Modifier.imePadding()`/`.navigationBarsPadding()`), clipboard (CMP).
 
-### Golden-unverified rows at Gate C/D (differential golden gate)
+### Golden-unverified rows at Gate C/D (differential golden gate — corrected per orchestrator)
 
-- Affected rows: CH4, CH11, CH32, CH34 (bash-only screenshotChatStreaming), CH38, CH41 (+ the
-  CH39 page-chrome visual, noted in the matrix Notes column).
-- How the differential golden gate will check them (per the orchestrator's protocol, agreed on
-  rev 2): recording happens once per host from `main` BEFORE the migration (baseline PNGs);
-  after each move in T5 the same Roborazzi tests run on the SAME host/qualifier footprint
-  (w411dp-h891dp-xxhdpi × the 4 themes of the suite) and the PNGs are compared pixel-for-pixel
-  against the same-host baseline produced on `main`. Any drift larger than transformation
-  tolerance is a Gate blocker; the golden PNGs are never committed from a non-recording host,
-  and the local run on the actual device/simulator host is O4's T6 deliverables (they are the
-  only machine with a goldens baseline at this time).
-- If any of these six tests drift: the move in flight is reverted (not merged-in-place) and the
-  orchestrator's verdict is appealed with the same evidence; no silent golden updates.
+- NOBODY records Roborazzi goldens in this project: never re-record, never commit a changed PNG
+  under `app/src/test/screenshots` (S15/S20 standing rule).
+- The gate belongs to the orchestrator: host goldens for `main` were recorded once and live in
+  `/tmp/rp-baseline/host-goldens` (138 PNGs, deterministic). After each move in T5, BOTH render
+  on the SAME host with the SAME qualifiers and are compared against those baseline PNGs
+  pixel-for-pixel; drift beyond tolerance reverts the in-flight move.
+- Moves that can change pixels and therefore pull the gate right after themselves:
+  **M1** (shared composer/ChatContent shell → shared-ui) and **M3** (diff/prompt-sheet/pending/
+  new-agent content moves). M2 (voice host consumer) and M4 (ViewModels) are state/logic moves
+  with no pixel surface of their own, but the orchestrator may still gate them at his discretion.
+- Affected golden rows (per the matrix status column): CH4, CH11, CH32, CH34, CH38, CH41, plus the
+  CH39 page-chrome visual mentioned in its Notes. On any drift: revert first, then re-run the
+  orchestrator's verdict with the evidence; no local `recordRoborazzi` ever runs.
 
 ## Log`). Branch `unify/o3-chat`,
 worktree `.worktrees/o3`. Mirror: Engram `odd/unified-kmp-o3/tasks`.
