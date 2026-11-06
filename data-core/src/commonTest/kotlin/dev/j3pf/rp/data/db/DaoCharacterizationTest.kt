@@ -1,38 +1,31 @@
 package dev.j3pf.rp.data.db
 
-import android.content.Context
 import androidx.room.Room
-import androidx.test.core.app.ApplicationProvider
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
+import kotlin.test.AfterTest as After
+import kotlin.test.BeforeTest as Before
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Characterization (T1/Gate A) of the Room DAO contracts on UNCHANGED production code, in-memory
- * Room under Robolectric. Pins DB-04..DB-12 of docs/parity/o1-data.md — behaviors the future
- * Room KMP port (T3, S14/S15) must preserve exactly, including the prompt replay window.
+ * Room with the bundled SQLite driver. Pins DB-04..DB-12 of docs/parity/o1-data.md — behaviors the
+ * future Room KMP port (T3, S14/S15) must preserve exactly, including the prompt replay window.
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class DaoCharacterizationTest {
     private lateinit var db: RpDatabase
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
         db =
             Room
-                .inMemoryDatabaseBuilder(context, RpDatabase::class.java)
-                .allowMainThreadQueries()
+                .inMemoryDatabaseBuilder<RpDatabase>()
+                .setDriver(BundledSQLiteDriver())
                 .build()
     }
 

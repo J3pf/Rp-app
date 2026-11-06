@@ -124,4 +124,30 @@ fun devicePortsAndDedupFakesRecordTheirCalls() = runTest {
     assertTrue(guard.isOpen("p-open"))
     assertFalse(guard.isOpen("p-closed"))
 }
+
+@Test
+fun lifecyclePortsRecordObserversAndFireBothCallbacks() = runTest {
+    val net = RecordingNetworkMonitor()
+    val seen = mutableListOf<Boolean>()
+    net.register { seen += it }
+    assertEquals(0, seen.size)
+    net.goOffline()
+    assertEquals(false, net.isOnline.value)
+    net.goOnline()
+    assertEquals(listOf(false, true), seen)
+    assertEquals(true, net.isOnline.value)
+    assertEquals(1, net.registerCalls.value)
+    net.unregister()
+    assertEquals(1, net.unregisterCalls.value)
+
+    val life = RecordingAppLifecycleMonitor()
+    var fg = 0
+    var bg = 0
+    life.observe(onForeground = { fg += 1 }, onBackground = { bg += 1 })
+    life.fireBackground()
+    life.fireForeground()
+    assertEquals(1, bg)
+    assertEquals(1, fg)
+    assertEquals(true, life.isForeground.value)
+}
 }
