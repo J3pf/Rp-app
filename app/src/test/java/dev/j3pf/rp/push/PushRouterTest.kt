@@ -49,6 +49,11 @@ class PushRouterTest {
     fun setUp() {
         runBlocking {
             ctx = ApplicationProvider.getApplicationContext()
+            // DataStore global: deja un estado limpio para cada test (los tests anteriores
+            // pueden haber dejado silencio/criticalAlways activados).
+            val cleanSettings = SettingsRepository(ctx)
+            cleanSettings.setAgentMuted(agentId, muted = false)
+            cleanSettings.setCriticalAlways(false)
             shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
             nm = ctx.getSystemService(NotificationManager::class.java)
             val server = okhttp3.mockwebserver.MockWebServer().also { it.start() }
@@ -104,6 +109,60 @@ class PushRouterTest {
                 ) != null,
                 "la autorización crítica debe publicarse",
             )
+        }
+    }
+
+    @Test
+    fun `replay tras dejar de silenciar sigue suprimido por la clave de dedupe`() {
+        runBlocking {
+            settings.setAgentMuted(agentId, muted = true)
+            assertTrue(router.handleDirect(PushKind.PROMPT, promptJson(), pushId = null))
+            assertEquals(null, posted(), "silenciado no publica")
+
+            // El usuario deja de silenciar el agente y el relay reenvía el MISMO prompt: sigue
+            // suprimido porque la clave "prompt:<id>" se registró antes del filtro de silencio.
+            settings.setAgentMuted(agentId, muted = false)
+            assertTrue(router.handleDirect(PushKind.PROMPT, promptJson(), pushId = null))
+            assertEquals(null, posted(), "replay del mismo prompt tras desmutear no puede publicar")
+            assertTrue(db.dedup().seenAt(NotificationDeduper.promptKey(promptBody().promptId)) != null, "la fila de dedupe existe")
+
+            // Un prompt NUEVO (otro promptId) del agente ya desmuteado sí se publica.
+            val nuevo = RpJson.encodeToJsonElement(
+                PushPromptBody.serializer(),
+                promptBody().copy(promptId = "01NUEVO"),
+            ) as JsonObject
+            assertTrue(router.handleDirect(PushKind.PROMPT, nuevo, pushId = null))
+            assertTrue(
+                shadowOf(nm).getNotification(
+                    NotificationFactory.PROMPT_TAG,
+                    NotificationFactory.notificationId("01NUEVO"),
+                ) != null,
+                "prompt nuevo del agente desmuteado se publica",
+            )
+            settings.setAgentMuted(agentId, muted = false)
+        }
+    }
+
+    @Test
+    fun `el bypass critico exige danger alto y criticalAlways activo`() {
+        runBlocking {
+            settings.setAgentMuted(agentId, muted = true)
+
+            // danger alto SIN criticalAlways: el silencio manda (el push no publica).
+            settings.setCriticalAlways(false)
+            val alto = RpJson.encodeToJsonElement(PushPromptBody.serializer(), promptBody(Danger.HIGH).copy(promptId = "01ALTO")) as JsonObject
+            assertTrue(router.handleDirect(PushKind.PROMPT, alto, pushId = null), "alto sin criticalAlways se consume en silencio")
+            assertEquals(null, shadowOf(nm).getNotification(NotificationFactory.PROMPT_TAG, NotificationFactory.notificationId("01ALTO")))
+
+            // criticalAlways con danger bajo: también silenciado.
+            settings.setCriticalAlways(true)
+            val bajo = RpJson.encodeToJsonElement(PushPromptBody.serializer(), promptBody(Danger.LOW).copy(promptId = "01BAJO")) as JsonObject
+            assertTrue(router.handleDirect(PushKind.PROMPT, bajo, pushId = null), "bajo con criticalAlways se consume en silencio")
+            assertEquals(null, shadowOf(nm).getNotification(NotificationFactory.PROMPT_TAG, NotificationFactory.notificationId("01BAJO")))
+
+            // Limpia el estado global de DataStore para los tests siguientes.
+            settings.setAgentMuted(agentId, muted = false)
+            settings.setCriticalAlways(false)
         }
     }
 
