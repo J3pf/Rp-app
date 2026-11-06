@@ -2,6 +2,7 @@ package dev.j3pf.rp.data.ports
 
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
+import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.NotifyPrefs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -90,7 +91,11 @@ class PortContractsTest {
         voice.stop()
         assertFalse(voice.listening.value)
 
-        val host = FakeAttachmentsPlatformHost(camera = PreparedLocalFile("f1", "foto.jpg", "image/jpeg", 10))
-        assertEquals(PreparedLocalFile("f1", "foto.jpg", "image/jpeg", 10), host.cameraTarget())
+        val host = FakeAttachmentsPlatformHost(camera = AttachmentRef("blob-1", "foto.jpg", "image/jpeg", 10))
+        assertEquals(AttachmentRef("blob-1", "foto.jpg", "image/jpeg", 10), host.capturePhoto())
+        assertTrue(host.isCameraAvailable)
+        // No-camera environment (e.g. a device class without camera) must report it, not pretend.
+        val headless = FakeAttachmentsPlatformHost(cameraAvailable = false)
+        assertFalse(headless.isCameraAvailable)
     }
 }

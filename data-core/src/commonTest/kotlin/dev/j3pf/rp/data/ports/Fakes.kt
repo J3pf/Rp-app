@@ -150,13 +150,16 @@ class RecordingBackgroundScheduler : BackgroundScheduler {
 class FakeAttachmentsPlatformHost(
     var images: List<AttachmentRef> = emptyList(),
     var documents: List<AttachmentRef> = emptyList(),
-    var camera: PreparedLocalFile? = null,
+    var camera: AttachmentRef? = null,
+    var cameraAvailable: Boolean = true,
 ) : AttachmentsPlatformHost {
     override suspend fun pickImages(maxItems: Int): List<AttachmentRef> = images.take(maxItems)
 
     override suspend fun pickDocuments(mime: List<String>): List<AttachmentRef> = documents
 
-    override suspend fun cameraTarget(): PreparedLocalFile? = camera
+    override suspend fun capturePhoto(): AttachmentRef? = camera
+
+    override val isCameraAvailable: Boolean = cameraAvailable
 }
 
 class FakeBiometricAuthorizer(

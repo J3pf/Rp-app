@@ -20,29 +20,36 @@ interface BackgroundScheduler {
     fun cancelAllWork()
 }
 
-/** A picked attachment already materialized locally (compressed/renamed), ready for upload. */
-data class PreparedLocalFile(
-    val fileRef: String,
-    val name: String,
-    val mime: String,
-    val size: Long,
-)
-
 /**
- * Media/document picker port, negotiated with O3 (chat UI, 2026-11-06) and recorded in ADR S2/S11.
+ * Media/document/camera port, negotiated with O3 (chat UI, 2026-11-06) and platform-neutral by
+ * design review: every phone keeps the camera (S5 — no lost functionality).
  *
- * Android impl: `PickMultipleVisualMedia(10)` images, the all-MIME wildcard documents, camera via
- * `AttachmentsRepository.newCameraTarget()` (FileProvider). iOS impl (fresh, S12):
- * PHPickerViewController / UIDocumentPickerViewController; `cameraTarget()` is Android-only and
- * returns null on iOS (photo-library fallback), never touching file provider machinery.
+ * Android impl: `PickMultipleVisualMedia(10)` images, the all-MIME wildcard documents, camera
+ * intent into an internal FileProvider target (`AttachmentsRepository.newCameraTarget()` stays
+ * internal to the Android impl). iOS impl (fresh, S12): PHPickerViewController /
+ * UIDocumentPickerViewController / UIImagePickerController (or AVFoundation) capture.
+ *
+ * Binding: the Android implementation must own its ActivityResult launchers, so it is created by
+ * a `rememberAttachmentsHost()`-style composable factory in shared-ui (or a composition-root
+ * object holding the launcher state and wrapped behind this interface); O3 never touches the
+ * launcher plumbing. The iOS implementation is constructed by the iOS composition root and
+ * presents controllers through the application window.
  */
 interface AttachmentsPlatformHost {
     suspend fun pickImages(maxItems: Int = 10): List<AttachmentRef>
 
     suspend fun pickDocuments(mime: List<String> = listOf("*/*")): List<AttachmentRef>
 
-    /** Android camera intent target (`Uri` under a FileProvider-capable area); null elsewhere. */
-    suspend fun cameraTarget(): PreparedLocalFile?
+    /**
+     * Platform-native camera capture, returning the already-prepared attachment (compressed /
+     * renamed as the upload base). Only null when the user cancels or camera permission is denied;
+     * implementations without a camera surface must not report having one (the UP-facing question
+     * is answered by `isCameraAvailable`).
+     */
+    suspend fun capturePhoto(): AttachmentRef?
+
+    /** True on Android phones with a camera app; true on iPhones; false where none exists. */
+    val isCameraAvailable: Boolean
 }
 
 /** Result codes for the biometric authorizer, mirroring the current Android `util.AuthResult`. */
