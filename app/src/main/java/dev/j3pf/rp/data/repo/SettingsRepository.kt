@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.protocol.NotifyPrefs
 import dev.j3pf.rp.protocol.RpJson
 import kotlinx.coroutines.flow.Flow
@@ -26,13 +27,13 @@ private val Context.rpDataStore by preferencesDataStore(name = "rp_settings")
 @Singleton
 class SettingsRepository(
     private val store: DataStore<Preferences>,
-) {
+) : SettingsStore {
     @Inject
     constructor(
         @ApplicationContext context: Context,
     ) : this(context.rpDataStore)
 
-    val settings: Flow<AppSettings> =
+    override val settings: Flow<AppSettings> =
         store.data
             .catch { e ->
                 if (e is IOException) emit(emptyPreferences()) else throw e
@@ -60,41 +61,41 @@ class SettingsRepository(
 
     suspend fun current(): AppSettings = settings.first()
 
-    suspend fun setSelectedContext(v: String) = edit { it[SELECTED] = v }
+    override suspend fun setSelectedContext(v: String) = edit { it[SELECTED] = v }
 
-    suspend fun setDirectPush(v: Boolean) = edit { it[DIRECT] = v }
+    override suspend fun setDirectPush(v: Boolean) = edit { it[DIRECT] = v }
 
-    suspend fun setRequireUnlock(v: Boolean) = edit { it[REQUIRE_UNLOCK] = v }
+    override suspend fun setRequireUnlock(v: Boolean) = edit { it[REQUIRE_UNLOCK] = v }
 
-    suspend fun setCriticalAlways(v: Boolean) = edit { it[CRITICAL] = v }
+    override suspend fun setCriticalAlways(v: Boolean) = edit { it[CRITICAL] = v }
 
-    suspend fun setAppLock(v: Boolean) = edit { it[APP_LOCK] = v }
+    override suspend fun setAppLock(v: Boolean) = edit { it[APP_LOCK] = v }
 
-    suspend fun setFlagSecure(v: Boolean) = edit { it[FLAG_SECURE] = v }
+    override suspend fun setFlagSecure(v: Boolean) = edit { it[FLAG_SECURE] = v }
 
-    suspend fun setOnboardingDone(v: Boolean) = edit { it[ONBOARDING] = v }
+    override suspend fun setOnboardingDone(v: Boolean) = edit { it[ONBOARDING] = v }
 
-    suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
+    override suspend fun setBatteryAsked(v: Boolean) = edit { it[BATTERY] = v }
 
-    suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
+    override suspend fun setAppTheme(v: String) = edit { it[APP_THEME] = v }
 
-    suspend fun setChatFontScale(v: Float) = edit { it[CHAT_FONT_SCALE] = v.coerceIn(0.80f, 1.45f) }
+    override suspend fun setChatFontScale(v: Float) = edit { it[CHAT_FONT_SCALE] = v.coerceIn(0.80f, 1.45f) }
 
-    suspend fun setChatMessageSpacing(v: String) = edit { it[CHAT_MESSAGE_SPACING] = v }
+    override suspend fun setChatMessageSpacing(v: String) = edit { it[CHAT_MESSAGE_SPACING] = v }
 
-    suspend fun setMeshSelectedMachine(machineId: String?) =
+    override suspend fun setMeshSelectedMachine(machineId: String?) =
         edit {
             if (machineId == null) it.remove(MESH_SELECTED_MACHINE) else it[MESH_SELECTED_MACHINE] = machineId
         }
 
-    suspend fun setMeshSelectedGroup(groupId: String?) =
+    override suspend fun setMeshSelectedGroup(groupId: String?) =
         edit {
             if (groupId == null) it.remove(MESH_SELECTED_GROUP) else it[MESH_SELECTED_GROUP] = groupId
         }
 
-    suspend fun setNotifyPrefs(v: NotifyPrefs) = edit { it[PREFS] = RpJson.encodeToString(NotifyPrefs.serializer(), v) }
+    override suspend fun setNotifyPrefs(v: NotifyPrefs) = edit { it[PREFS] = RpJson.encodeToString(NotifyPrefs.serializer(), v) }
 
-    suspend fun setAgentMuted(
+    override suspend fun setAgentMuted(
         agentId: String,
         muted: Boolean,
     ) = edit {
@@ -102,7 +103,7 @@ class SettingsRepository(
         it[MUTED_AGENTS] = if (muted) cur + agentId else cur - agentId
     }
 
-    suspend fun wipe() = edit { it.clear() }
+    override suspend fun wipe() = edit { it.clear() }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         store.edit { block(it) }
