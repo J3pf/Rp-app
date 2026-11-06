@@ -25,6 +25,7 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+            implementation("androidx.sqlite:sqlite-bundled:2.6.2")
         }
     }
 }

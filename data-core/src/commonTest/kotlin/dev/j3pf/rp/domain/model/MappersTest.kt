@@ -6,7 +6,7 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.QuotaWindow
 import dev.j3pf.rp.protocol.RpJson
 import kotlinx.serialization.builtins.ListSerializer
-import org.junit.Test
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull

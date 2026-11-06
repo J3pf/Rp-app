@@ -185,3 +185,13 @@ Room 2.8.5 KSP export: `data-core/schemas/dev.j3pf.rp.data.db.RpDatabase/3.json`
 
 Verification: `:data-core:compileKotlinIosArm64` + `:data-core:compileKotlinJvm` passed. Full `:app:testDirectDebugUnitTest` passed: **417 tests, 0 failures, 0 errors, 2 skipped, 76 suites**; `AppModuleDatabaseConfigTest` passed 2/2.
 
+## Move 1 — mapper + characterization-test relocation (slice B")
+
+- Mapper implementation moved to `data-core/src/commonMain/kotlin/dev/j3pf/rp/domain/model/Mappers.kt`; the app path is a relocation comment, not a duplicate implementation. This preserves MP-01..MP-03 behavior.
+- `DaoCharacterizationTest` and `MappersTest` moved to `data-core/src/commonTest`. DB-04..DB-12 characterization assertions and MP-01/MP-02 mapper assertions were not edited. Only test imports/lifecycle and the DAO Room bootstrap changed: Robolectric/ApplicationProvider was replaced by common Room `inMemoryDatabaseBuilder` with `BundledSQLiteDriver`.
+- Fresh totals: before move — app **431 tests / 78 suites / 0 failures / 0 errors / 2 skipped**, data-core **5 / 1 / 0 / 0 / 0**; after move — app **413 / 76 / 0 / 0 / 2**, data-core **23 / 3 / 0 / 0 / 0**. Net: **436 tests before and after**, 0 failures/errors, 2 skipped; 18 tests relocated.
+- Gate results: `:data-core:jvmTest :data-core:compileKotlinIosSimulatorArm64` and `:app:testDirectDebugUnitTest :data-core:jvmTest` both passed with in-process Kotlin and `-Xmx3g`. The full app suite includes `AppModuleDatabaseConfigTest` (2/2 passed).
+- Schema parity rechecked: app and data-core v3 JSON compare equal; both carry identity hash `b4ad483aeb2f27bb4b65b4b725d2cfd7`. The production destructive-fallback implementation was not changed; its existing real-provider test passed. No mutation probe was repeated because `AppModule.kt` is outside slice B".
+
+**Risk: item 6 (characterization net must stay byte-equivalent or it stops being a net).**
+

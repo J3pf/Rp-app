@@ -1,7 +1,7 @@
-# T3b → T3e execution plan (data core migration) — docs-only, BLOCKED until O3/O4 land on feat/unified-kmp
+# T3b → T3e execution plan (data core migration) — Move 1 B" complete; C" pending
 
 Branches: `unify/o1-data` (worktree `.worktrees/o1`), base `feat/unified-kmp` @ c621c38 (ADR 0001 + Gate A parity net merged).
-Premise of every step: the Gate A net (77 parity rows; app suite ≥ 288 green; never re-record goldens) must stay green on `feat/unified-kmp` BEFORE each move, and AFTER each move with only mechanical signature updates listed in the report (S15).
+Premise of every step: preserve the accepted Gate A net (77 parity rows; app suite ≥ 288 green; never re-record goldens) before and after each move, with only mechanical signature updates listed in the report (S15). Those figures are the historical Gate A baseline; the current 84-row parity matrix and fresh Move 1 B" test totals are recorded in `docs/parity/o1-data.md` and below.
 
 ## 0. Room KMP schema/version strategy (S14, fixed rules for T3b)
 
@@ -54,4 +54,17 @@ Deliverables (on `feat/unified-kmp` or the data branch, docs-first):
 
 - `:data-core` KSP room-compiler per target is the main build risk; mitigated by landing the module with schema export FIRST (move 1 slice a) and running the narrowest tasks (`:data-core:compileKotlinJvm :data-core:compileKotlinIosSimulatorArm64 :data-core:jvmTest`).
 - The `MIGRATION_2_3` byte-equality check is a Gate C1 precondition (schema diff script).
-- O3/O4 acceptance gates stay external blockers (orchestrator-controlled).
+- O3/O4 acceptance gates were satisfied before Move 1 execution per orchestrator GO. Recorded evidence includes O4 at `539b295` and accepted Move 4 at `2742b12`; this plan is no longer blocked on O3/O4.
+
+## Move 1 — B" mapper and characterization test move (S14/S15)
+
+`Mappers.kt`, `DaoCharacterizationTest`, and `MappersTest` now live in `:data-core` commonMain/commonTest. The app-side files retain relocation comments only. DAO behavior assertions and mapper assertions are unchanged; the DAO test only changed imports/lifecycle annotations and replaced the Robolectric `ApplicationProvider` builder with `Room.inMemoryDatabaseBuilder<RpDatabase>().setDriver(BundledSQLiteDriver())`. `MappersTest` only changed the test annotation import. No assertion was touched. `sqlite-bundled:2.6.2` is scoped to `commonTest`.
+
+Fresh pre-move results: app 431 tests / 78 suites / 0 failures / 0 errors / 2 skipped; data-core 5 / 1 / 0 / 0 / 0. Fresh post-move results: app 413 / 76 / 0 / 0 / 2; data-core 23 / 3 / 0 / 0 / 0. Combined total stays 436 tests, 0 failures/errors, 2 skipped; 18 tests moved without loss.
+
+Verification passed:
+- `./gradlew :data-core:jvmTest :data-core:compileKotlinIosSimulatorArm64 -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=-Xmx3g` — BUILD SUCCESSFUL.
+- `./gradlew :app:testDirectDebugUnitTest :data-core:jvmTest -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=-Xmx3g` — BUILD SUCCESSFUL.
+- `AppModuleDatabaseConfigTest` ran in the full app suite: 2/2 pass. The schema exports remain canonically equal with identity hash `b4ad483aeb2f27bb4b65b4b725d2cfd7`. The destructive-fallback mutation probe was not repeated in B" because its production source `AppModule.kt` is outside this slice; the existing real-provider regression pin passed unchanged.
+
+Test-first exception: this is a behavior-preserving relocation and common Room bootstrap change, not a behavior change; the moved behavior tests were run green rather than introducing an artificial RED. Risk: item 6 (characterization net must stay byte-equivalent or it stops being a net).
