@@ -98,4 +98,30 @@ class PortContractsTest {
         val headless = FakeAttachmentsPlatformHost(cameraAvailable = false)
         assertFalse(headless.isCameraAvailable)
     }
+
+    @Test
+fun devicePortsAndDedupFakesRecordTheirCalls() = runTest {
+    val health = FakeNotificationHealth(enabled = true)
+    assertTrue(health.isEnabled())
+    assertEquals(NotificationPermissionOutcome.GRANTED, health.request())
+    assertEquals(1, health.requested.value)
+
+    val battery = FakeBatteryExemption(supported = false, ignoring = true)
+    assertFalse(battery.isSupported)
+    assertTrue(battery.isIgnoring())
+
+    val info: PlatformInfo = FakePlatformInfo()
+    assertEquals("0.6.1", info.versionName)
+    assertEquals(999, info.versionCode)
+    assertEquals("direct", info.flavor)
+
+    val dedup = RecordingDedupStore().askFor("k1")
+    assertEquals(true, dedup.firstSeen("k1", now = 1))
+    assertEquals(false, dedup.firstSeen("k2", now = 2))
+    assertEquals(2, dedup.firstSeenCalls.value.size)
+
+    val guard = MapOpenPromptGuard(openIds = setOf("p-open"))
+    assertTrue(guard.isOpen("p-open"))
+    assertFalse(guard.isOpen("p-closed"))
+}
 }

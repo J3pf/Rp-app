@@ -189,3 +189,57 @@ class FakeVoiceInputHost : VoiceInputHost {
         state.value = false
     }
 }
+
+/** Simple mutable fakes for the device ports (orchestrator decision (a)) and O2's dedup chain (e). */
+class FakeNotificationHealth(
+    var enabled: Boolean = true,
+    var outcome: NotificationPermissionOutcome = NotificationPermissionOutcome.GRANTED,
+) : NotificationHealth {
+    val requested = MutableStateFlow(0)
+
+    override fun isEnabled(): Boolean = enabled
+
+    override suspend fun request(): NotificationPermissionOutcome {
+        requested.value += 1
+        return outcome
+    }
+}
+
+class FakeBatteryExemption(
+    var supported: Boolean = true,
+    var ignoring: Boolean = true,
+) : BatteryExemption {
+    override val isSupported: Boolean = supported
+
+    override suspend fun isIgnoring(): Boolean = ignoring
+}
+
+class FakePlatformInfo(
+    override val versionName: String = "0.6.1",
+    override val versionCode: Long = 999,
+    override val flavor: String = "direct",
+) : PlatformInfo
+
+class RecordingDedupStore : DedupStore {
+    val firstSeenCalls = MutableStateFlow<List<Pair<String, Long>>>(emptyList())
+    private val asked = MutableStateFlow<Set<String>>(emptySet())
+
+    fun askFor(vararg keys: String): RecordingDedupStore {
+        asked.value = asked.value + keys
+        return this
+    }
+
+    override suspend fun firstSeen(
+        key: String,
+        now: Long,
+    ): Boolean {
+        firstSeenCalls.value = firstSeenCalls.value + (key to now)
+        return key in asked.value
+    }
+}
+
+class MapOpenPromptGuard(
+    private var openIds: Set<String> = emptySet(),
+) : OpenPromptGuard {
+    override suspend fun isOpen(promptId: String): Boolean = promptId in openIds
+}
