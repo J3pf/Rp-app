@@ -100,19 +100,24 @@ class MeshRepository
 
             connection.state
                 .onEach { state ->
-                    synchronized(subscriptionLock) {
-                        if (state == ConnState.Connected) {
-                            val targetMachineId = activeSubscribers.values.lastOrNull()
-                            if (activeSubscribers.isNotEmpty() &&
-                                (lastSubscribedMachineId != targetMachineId || lastSubscribeEnvelopeId == null)
-                            ) {
-                                sendSubscribe(targetMachineId)
+                    val envelope =
+                        synchronized(subscriptionLock) {
+                            if (state == ConnState.Connected) {
+                                val targetMachineId = activeSubscribers.values.lastOrNull()
+                                if (activeSubscribers.isNotEmpty() &&
+                                    (lastSubscribedMachineId != targetMachineId || lastSubscribeEnvelopeId == null)
+                                ) {
+                                    createSubscribeEnvelope(targetMachineId)
+                                } else {
+                                    null
+                                }
+                            } else {
+                                lastSubscribedMachineId = null
+                                lastSubscribeEnvelopeId = null
+                                null
                             }
-                        } else {
-                            lastSubscribedMachineId = null
-                            lastSubscribeEnvelopeId = null
                         }
-                    }
+                    if (envelope != null) connection.send(envelope)
                 }.launchIn(scope)
         }
 
@@ -124,14 +129,14 @@ class MeshRepository
             owner: Any,
             machineId: String?,
         ) {
-            synchronized(subscriptionLock) {
-                val wasEmpty = activeSubscribers.isEmpty()
-                val previousMachineId = activeSubscribers.values.lastOrNull()
-                activeSubscribers[owner] = machineId
-                if (wasEmpty || previousMachineId != machineId) {
-                    sendSubscribe(machineId)
+            val envelope =
+                synchronized(subscriptionLock) {
+                    val wasEmpty = activeSubscribers.isEmpty()
+                    val previousMachineId = activeSubscribers.values.lastOrNull()
+                    activeSubscribers[owner] = machineId
+                    if (wasEmpty || previousMachineId != machineId) createSubscribeEnvelope(machineId) else null
                 }
-            }
+            if (envelope != null) connection.send(envelope)
         }
 
         fun unsubscribe() {
@@ -139,18 +144,18 @@ class MeshRepository
         }
 
         fun unsubscribe(owner: Any) {
-            synchronized(subscriptionLock) {
-                val previousMachineId = activeSubscribers.values.lastOrNull()
-                activeSubscribers.remove(owner)
-                if (activeSubscribers.isEmpty()) {
-                    connection.send(Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe()))
-                } else {
-                    val remainingMachineId = activeSubscribers.values.lastOrNull()
-                    if (remainingMachineId != previousMachineId) {
-                        sendSubscribe(remainingMachineId)
+            val envelope =
+                synchronized(subscriptionLock) {
+                    val previousMachineId = activeSubscribers.values.lastOrNull()
+                    activeSubscribers.remove(owner)
+                    if (activeSubscribers.isEmpty()) {
+                        Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe())
+                    } else {
+                        val remainingMachineId = activeSubscribers.values.lastOrNull()
+                        if (remainingMachineId != previousMachineId) createSubscribeEnvelope(remainingMachineId) else null
                     }
                 }
-            }
+            if (envelope != null) connection.send(envelope)
         }
 
         fun clear() {
@@ -162,11 +167,11 @@ class MeshRepository
             _snapshot.value = null
         }
 
-        private fun sendSubscribe(machineId: String?) {
+        private fun createSubscribeEnvelope(machineId: String?): Envelope {
             val env = Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId))
             lastSubscribeEnvelopeId = env.id
             lastSubscribedMachineId = machineId
-            connection.send(env)
+            return env
         }
 
         suspend fun getMesh(machineId: String? = null): ApiResult<MeshSnapshot> {
