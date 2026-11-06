@@ -54,4 +54,8 @@ abstract class RpDatabase : RoomDatabase() {
 }
 
 @Suppress("NO_ACTUAL_FOR_EXPECT")
-expect object RpDatabaseConstructor : RoomDatabaseConstructor<RpDatabase>
+expect object RpDatabaseConstructor : RoomDatabaseConstructor<RpDatabase> {
+    // Room KMP 2.8.5 declares `abstract fun initialize(): T`; in Kotlin Multiplatform an
+    // expect object must declare the abstract member so each actual supplies it.
+    override fun initialize(): RpDatabase
+}
