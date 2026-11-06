@@ -243,3 +243,62 @@ class MapOpenPromptGuard(
 ) : OpenPromptGuard {
     override suspend fun isOpen(promptId: String): Boolean = promptId in openIds
 }
+
+class RecordingNetworkMonitor : NetworkMonitor {
+    private val online = MutableStateFlow(true)
+    private val observers = MutableStateFlow<List<NetworkObserver>>(emptyList())
+    val registerCalls = MutableStateFlow(0)
+    val unregisterCalls = MutableStateFlow(0)
+
+    override fun register(observer: NetworkObserver) {
+        observers.value = observers.value + observer
+        registerCalls.value += 1
+    }
+
+    override fun unregister() {
+        unregisterCalls.value += 1
+    }
+
+    override val isOnline: StateFlow<Boolean> = online
+
+    fun goOnline() {
+        online.value = true
+        observers.value.forEach { it.onAvailability(true) }
+    }
+
+    fun goOffline() {
+        online.value = false
+        observers.value.forEach { it.onAvailability(false) }
+    }
+}
+
+class RecordingAppLifecycleMonitor : AppLifecycleMonitor {
+    private val foreground = MutableStateFlow(true)
+    val foregroundCallbacks = MutableStateFlow(0)
+    val backgroundCallbacks = MutableStateFlow(0)
+
+    private var onForeground: (() -> Unit)? = null
+    private var onBackground: (() -> Unit)? = null
+
+    override val isForeground: StateFlow<Boolean> = foreground
+
+    override fun observe(
+        onForeground: () -> Unit,
+        onBackground: () -> Unit,
+    ) {
+        this.onForeground = onForeground
+        this.onBackground = onBackground
+    }
+
+    fun fireForeground() {
+        foreground.value = true
+        onForeground?.invoke()
+        foregroundCallbacks.value += 1
+    }
+
+    fun fireBackground() {
+        foreground.value = false
+        onBackground?.invoke()
+        backgroundCallbacks.value += 1
+    }
+}
