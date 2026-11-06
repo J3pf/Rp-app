@@ -66,7 +66,9 @@ fun ChatTopBar(
     var showQuitDialog by remember { mutableStateOf(false) }
 
     TopAppBar(
-        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+        windowInsets =
+            androidx.compose.foundation.layout
+                .WindowInsets(0, 0, 0, 0),
         title = {
             val rawTitle = agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: sessionName ?: "Agente"
             val folder = agent?.cwd?.let { lastSegment(it) }.orEmpty()
