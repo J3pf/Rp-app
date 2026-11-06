@@ -9,6 +9,7 @@ import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.j3pf.rp.data.ports.SecretStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,13 +21,14 @@ import javax.inject.Singleton
 /**
  * Almacén cifrado respaldado por Android Keystore (Tink AES‑256‑GCM con clave maestra en Keystore).
  * `deviceToken` y `pushKey` sólo existen en disco cifrados y están excluidos de las copias de seguridad.
+ * Move-1 port seam (contract: data-core CredentialsPorts.kt:14-27); the concrete SharedPreferences/Tink implementation stays as-is.
  */
 @Singleton
 open class SecretStore
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
-    ) {
+    ) : SecretStore {
         private val prefs: SharedPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         private val aeadLock = Any()
 
@@ -78,13 +80,13 @@ open class SecretStore
         private val rng = SecureRandom()
 
         private val _session: MutableStateFlow<Session?> = MutableStateFlow(load())
-        val session: StateFlow<Session?> = _session.asStateFlow()
+        override val session: StateFlow<Session?> = _session.asStateFlow()
         protected val sessionState: MutableStateFlow<Session?> get() = _session
 
         /** Lectura síncrona (receivers y servicios). */
-        open fun current(): Session? = _session.value
+        override fun current(): Session? = _session.value
 
-        fun save(session: Session) {
+        override fun save(session: Session) {
             runCatching { writeEncryptedSession(session) }
                 .recoverCatching {
                     synchronized(aeadLock) { resetCorruptedKeyset() }
@@ -104,12 +106,12 @@ open class SecretStore
             }
         }
 
-        fun clear() {
+        override fun clear() {
             prefs.edit { clear() }
             _session.value = null
         }
 
-        fun newRelayId(): String =
+        override fun newRelayId(): String =
             ByteArray(8)
                 .also { rng.nextBytes(it) }
                 .joinToString("") { "%02x".format(it) }

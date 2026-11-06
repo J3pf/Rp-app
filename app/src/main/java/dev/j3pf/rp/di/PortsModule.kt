@@ -43,6 +43,10 @@ abstract class PortsModule {
 
     @Binds
     @Singleton
+    abstract fun bindSecretStore(impl: dev.j3pf.rp.data.secure.SecretStore): dev.j3pf.rp.data.ports.SecretStore
+
+    @Binds
+    @Singleton
     abstract fun bindNotificationHealth(impl: AndroidNotificationHealth): NotificationHealth
 
     @Binds
