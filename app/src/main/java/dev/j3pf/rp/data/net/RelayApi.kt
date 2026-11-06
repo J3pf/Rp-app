@@ -72,7 +72,10 @@ class RelayApi
         suspend fun putPush(
             fcmToken: String?,
             direct: Boolean,
-        ): ApiResult<OkResponse> = shared.putPush(fcmToken, direct)
+            platform: String? = null,
+            apnsToken: String? = null,
+            apnsEnvironment: String? = null,
+        ): ApiResult<OkResponse> = shared.putPush(fcmToken, direct, platform, apnsToken, apnsEnvironment)
 
         suspend fun pushTest(): ApiResult<OkResponse> = shared.pushTest()
 

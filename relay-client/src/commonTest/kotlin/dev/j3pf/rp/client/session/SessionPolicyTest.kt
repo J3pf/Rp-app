@@ -28,6 +28,10 @@ class SessionPolicyTest {
         var cacheRelayId: String? = old.relayId.takeIf { initialSession }
         var direct = true
         var fcm: String? = "fcm"
+        var pushPlatform = SessionPushPlatform.ANDROID
+        var apns: String? = null
+        var apnsEnv: String? = null
+        val pushRequests = mutableListOf<List<String?>>()
         var health: ApiResult<HealthResponse> = ApiResult.Ok(HealthResponse())
         var paired: ApiResult<PairDeviceResponse> = ApiResult.Ok(PairDeviceResponse("device", "token", "key"))
         var push: ApiResult<OkResponse> = ApiResult.Ok(OkResponse())
@@ -51,8 +55,9 @@ class SessionPolicyTest {
                     pairError?.let { throw it }
                     paired
                 },
-                putPush = { token, enabled ->
+                putPush = { token, enabled, platform, apnsToken, apnsEnvironment ->
                     events += "push:${session?.relayId}:$token:$enabled"
+                    pushRequests += listOf(token, enabled.toString(), platform, apnsToken, apnsEnvironment)
                     pushError?.let { throw it }
                     push
                 },
@@ -103,6 +108,12 @@ class SessionPolicyTest {
             events += "direct:$direct"
             return direct
         }
+
+        override fun pushPlatform(): SessionPushPlatform = pushPlatform
+
+        override suspend fun currentApnsToken(): String? = apns
+
+        override fun apnsEnvironment(): String? = apnsEnv
 
         override suspend fun setDirectPush(direct: Boolean) {
             events += "setDirect:$direct"
@@ -218,6 +229,39 @@ class SessionPolicyTest {
             )
             assertEquals(Session("new", "https://new", "new", "device", "token", "key"), f.session)
             println("T3_POLICY initialPair:${f.events};session=${f.session}")
+        }
+
+    @Test
+    fun iosSessionPlatformProvidesApnsRegistrationDuringPair() =
+        runTest {
+            val f =
+                Fixture(initialSession = false).apply {
+                    pushPlatform = SessionPushPlatform.IOS
+                    apns = "apns-token"
+                    apnsEnv = "sandbox"
+                }
+
+            assertEquals(PairResult.Success, f.policy.pair("https://new", "ABCDEF"))
+            assertEquals(listOf("fcm", "true", "ios", "apns-token", "sandbox"), f.pushRequests.single())
+        }
+
+    @Test
+    fun registerApnsTokenSupportsRegistrationKeepAndClearValues() =
+        runTest {
+            val f = Fixture().apply { pushPlatform = SessionPushPlatform.IOS; direct = false }
+
+            assertTrue(f.policy.registerApnsToken("apns-token", "production"))
+            assertTrue(f.policy.registerApnsToken(null, null))
+            assertTrue(f.policy.registerApnsToken("", ""))
+
+            assertEquals(
+                listOf(
+                    listOf("fcm", "false", "ios", "apns-token", "production"),
+                    listOf("fcm", "false", "ios", null, null),
+                    listOf("fcm", "false", "ios", "", ""),
+                ),
+                f.pushRequests,
+            )
         }
 
     @Test

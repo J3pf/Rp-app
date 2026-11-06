@@ -150,6 +150,38 @@ class RelayHttpClientTest {
         }
 
     @Test
+    fun iosPushRegistrationCarriesPlatformTokenAndEnvironment() =
+        runTest {
+            client.putPush(
+                fcmToken = null,
+                direct = true,
+                platform = "ios",
+                apnsToken = "apns-token",
+                apnsEnvironment = "production",
+            )
+
+            assertEquals(
+                """{"direct":true,"platform":"ios","apnsToken":"apns-token","apnsEnvironment":"production"}""",
+                requests.single().body,
+            )
+        }
+
+    @Test
+    fun iosPushRegistrationCanKeepOrClearApnsFields() =
+        runTest {
+            client.putPush(null, true, platform = "ios")
+            assertEquals("""{"direct":true,"platform":"ios"}""", requests.single().body)
+
+            requests.clear()
+            // Relay normalizes the empty-string sentinel to null; omitted fields mean keep.
+            client.putPush(null, true, platform = "ios", apnsToken = "", apnsEnvironment = "")
+            assertEquals(
+                """{"direct":true,"platform":"ios","apnsToken":"","apnsEnvironment":""}""",
+                requests.single().body,
+            )
+        }
+
+    @Test
     fun wrappersFiltersAndMeshQueriesUseProtocolDecoding() =
         runTest {
             reply = RelayHttpResponse(200, """{"devices":[{"deviceId":"live","unknown":1},{"deviceId":"old","revoked":true}]}""")

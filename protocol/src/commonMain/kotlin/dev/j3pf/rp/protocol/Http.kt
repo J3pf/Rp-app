@@ -28,6 +28,11 @@ data class PairCodeResponse(
 data class PushChannelsRequest(
     val fcmToken: String? = null,
     val direct: Boolean,
+    val platform: String? = null,
+    /** Empty string explicitly clears the APNs token; null omits the field to keep its current value. */
+    val apnsToken: String? = null,
+    /** Empty string explicitly clears the APNs environment; null omits the field to keep its current value. */
+    val apnsEnvironment: String? = null,
 )
 
 @Serializable

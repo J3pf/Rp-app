@@ -12,7 +12,7 @@ class SessionPolicy(
     private val normalizeUrl: (String) -> String?,
     private val healthz: suspend (String) -> ApiResult<HealthResponse>,
     private val pairDevice: suspend (String, String, String, String?) -> ApiResult<PairDeviceResponse>,
-    private val putPush: suspend (String?, Boolean) -> ApiResult<OkResponse>,
+    private val putPush: suspend (String?, Boolean, String?, String?, String?) -> ApiResult<OkResponse>,
     private val revokeDevice: suspend (String) -> ApiResult<OkResponse>,
     private val platform: SessionPlatform,
 ) {
@@ -65,7 +65,7 @@ class SessionPolicy(
             ),
         )
         val direct = platform.directPush()
-        putPush(fcm, direct)
+        updatePush(fcm, direct)
         if (direct) platform.startDirectPush()
         platform.startConnection()
         return PairResult.Success
@@ -73,17 +73,53 @@ class SessionPolicy(
 
     suspend fun applyPushChannels(direct: Boolean) {
         platform.setDirectPush(direct)
-        putPush(platform.currentToken(), direct)
+        updatePush(platform.currentToken(), direct)
         if (direct) platform.startDirectPush() else platform.stopDirectPush()
     }
 
     suspend fun registerFcmToken(token: String?): Boolean {
         if (platform.currentSession() == null) return true
-        return when (putPush(token, platform.directPush())) {
+        return when (updatePush(token, platform.directPush())) {
             is ApiResult.Ok -> true
             else -> false
         }
     }
+
+    suspend fun registerApnsToken(
+        token: String?,
+        environment: String?,
+    ): Boolean {
+        if (platform.currentSession() == null) return true
+        if (platform.pushPlatform() != SessionPushPlatform.IOS) return false
+        return when (
+            putPush(
+                platform.currentToken(),
+                platform.directPush(),
+                SessionPushPlatform.IOS.wireValue,
+                token,
+                environment,
+            )
+        ) {
+            is ApiResult.Ok -> true
+            else -> false
+        }
+    }
+
+    private suspend fun updatePush(
+        fcmToken: String?,
+        direct: Boolean,
+    ): ApiResult<OkResponse> =
+        when (platform.pushPlatform()) {
+            SessionPushPlatform.ANDROID -> putPush(fcmToken, direct, null, null, null)
+            SessionPushPlatform.IOS ->
+                putPush(
+                    fcmToken,
+                    direct,
+                    SessionPushPlatform.IOS.wireValue,
+                    platform.currentApnsToken(),
+                    platform.apnsEnvironment(),
+                )
+        }
 
     suspend fun logout() {
         val s = platform.currentSession()

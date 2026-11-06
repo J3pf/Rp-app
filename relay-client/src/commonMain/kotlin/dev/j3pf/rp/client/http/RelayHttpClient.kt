@@ -62,11 +62,17 @@ class RelayHttpClient(
     suspend fun putPush(
         fcmToken: String?,
         direct: Boolean,
+        platform: String? = null,
+        apnsToken: String? = null,
+        apnsEnvironment: String? = null,
     ): ApiResult<OkResponse> =
         authed(
             "PUT",
             "/v1/devices/me/push",
-            encode(PushChannelsRequest.serializer(), PushChannelsRequest(fcmToken, direct)),
+            encode(
+                PushChannelsRequest.serializer(),
+                PushChannelsRequest(fcmToken, direct, platform, apnsToken, apnsEnvironment),
+            ),
             OkResponse.serializer(),
         )
 
