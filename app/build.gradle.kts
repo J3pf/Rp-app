@@ -198,6 +198,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.lifecycle.viewmodel.ktx)
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.turbine)
     testImplementation(libs.okhttp.mockwebserver)
