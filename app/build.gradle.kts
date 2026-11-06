@@ -100,6 +100,15 @@ android {
         unitTests.all {
             it.jvmArgs("-Xmx2g")
             it.timeout.set(Duration.ofMinutes(30))
+            // Test-jvm forwarding for the parity fixture exporters (additive, ODD unified-kmp T3):
+            providers
+                .gradleProperty("parity.dbfixture.out")
+                .orNull
+                ?.let { dbFixtureOut -> it.systemProperty("parity.dbfixture.out", dbFixtureOut) }
+            providers
+                .gradleProperty("parity.dsfixture.out")
+                .orNull
+                ?.let { dsFixtureOut -> it.systemProperty("parity.dsfixture.out", dsFixtureOut) }
         }
     }
 
