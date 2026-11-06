@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.chat
 
+import androidx.test.espresso.Espresso
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -12,7 +13,6 @@ import dev.j3pf.rp.ui.diff.DiffSheet
 import dev.j3pf.rp.ui.theme.RpTheme
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
-import androidx.test.espresso.Espresso
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -114,4 +114,17 @@ class DiffDiscardConfirmationTest {
         rule.onAllNodesWithText(confirmQuestion).assertCountEquals(0)
     }
 
+
+    @Test
+    fun `back dismissal keeps the file intact and closes the dialog`() {
+        val discard = DiscardCapture()
+        renderSheet(discard)
+
+        rule.onNodeWithText("Descartar").performClick()
+        rule.onNodeWithText(confirmQuestion).assertIsDisplayed()
+        Espresso.pressBack()
+
+        rule.onAllNodesWithText(confirmQuestion).assertCountEquals(0)
+        assertFalse("Back dismiss no descarta", discard.discardedPaths.isNotEmpty())
+    }
 }
