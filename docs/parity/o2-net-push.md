@@ -93,12 +93,12 @@ Still-needed ports (requested to O1, cc orchestrator):
 
 | Status | Rows |
 |---|---|
-| proven | 14 |
+| proven | 17 |
 | proof-added | 11 |
-| partial | 9 |
+| partial | 4 |
 | device-only | 3 (PUSH-14 enabled boot start, PUSH-15 battery, PUSH-17 biometric) |
 | gap-with-reason | 2 (NET-13 fallback branch O4-owned, PUSH-19 toggle needs Hilt) |
 
-Total rows: 39. Fully automatic proof rows (proven + proof-added + technical partial): 34/39;
-each `partial` lists exactly which segment remains unpinned and why. Production code unchanged
+Total rows: 37. Automatic proof rows (proven + proof-added + partial): 32/37 (86%); every `partial`
+names the exact segment left unpinned and the harness it needs. Production code unchanged
 throughout T1 (test/doc-only).
