@@ -66,6 +66,15 @@ Line numbers were re-verified against the worktree at commit `8e77b05` (rev 2).
 
 Existing/approved contracts: `RelayTransport` (OkHttpRelayTransport.kt ↔ URLSession), `RelaySocketDriver` (OkHttpSocketDriver.kt ↔ URLSession WebSocketTask), `NetworkMonitor` (ReconnectingSocket adapter ↔ NWPathMonitor, `ReconnectingSocketPolicy` untouched), `RelayUrl` (data-core ports, convertible to okhttp Request & URLSession request), `SecretStore`/`SecureCrypto` (data-core), `BackgroundScheduler` (data-core `enqueueAnswerRetry`/`enqueueOutboxFlush`/`cancelAllWork`), `PromptAnswerDispatcher` (data-core; Android impl = PromptActionHandler, iOS keeps promptId semantics).
 
+Relay APNs support today (read-only survey of ~/Projects/J3pf/Rp-relay @ current main, NOT edited):
+
+- Only FCM exists: `src/push/fcm.ts` (`FcmSender` interface, `createFirebaseSender`, data-only messages `{token, data, android:{priority,ttl,collapseKey}}`); NO APNs sender, no Apple token handling, no `mutable-content`, no Notification-Service-Extension payload design.
+- Device registration: `PUT /v1/devices/me/push` (`PushChannelReq {fcmToken?, direct}` — one generic token column; devices.ts:23). Getting it to `PUT /push` per platform type is a relay-side change.
+- Encryption envelope is platform-neutral: `encryptPush` AES-256-GCM, nonce 12 B, AAD "rp1", body ≤3000 B before base64 (dispatcher.ts:34-46, crypto.ts). The same `(k,n,c)` envelope can ride an APNs payload verbatim; the iOS Notification Service Extension decrypts with the Keychain-access-group pushKey (O1's SecureCrypto + S12 entitlement).
+- Retries: prompt re-push at 5/10 min (PLAN-RELAY.md:146); `messaging/registration-token-not-registered` cleanup maps to Apple's bad-device-token response.
+
+**Needs your decision (cross-repo, user-level)**: supporting APNs end-to-end (device registration per platform, an Apple push sender, `mutable-content`/Notification-Service-Extension payload, token cleanup) touches rp-relay. Per orchestrator instruction this is NOT worked around; flagged for the user's go before T4 implements the iOS push path.
+
 Still-needed ports (requested to O1, cc orchestrator):
 
 | Port | Android impl (file) | iOS approach (written fresh) |
