@@ -88,6 +88,15 @@ USER DECISION (recorded, 2026-11-06): this machine has NO Android emulator/devic
 
 Drive of the two-build harness WITHOUT a relay: the OLD build is a checkout of `main` augmented ONLY with a seed `androidTest` that drives the PRODUCTION APIs — no pairing flow, no live relay: `SecretStore.save(Session(...))` on the device (so the ciphertext and keyset are produced by the real device Keystore), representative agent/theme/TODO/activeTask rows through the production Room DAOs, and representative settings through the production `SettingsRepository` (including theme + onboardingDone). Persist state via `adb shell am instrument`; then binary `adb install -r` of the migrated APK; then the verifying `androidTest` asserts: `SecretStore.current()` returns the identical session, Room rows/TODO/activeTask intact, same settings values read back from the same `rp_settings` file. The full harness (seed androidTest on `main`, upgrade script, verifying androidTest, step-by-step README with exact commands and expected output) is built in T3e and the README states plainly it has NOT been executed.
 
+### 9.1 Gate C1 device-run prerequisites (user executes later; adb only, no emulator)
+
+Machine status recorded by the orchestrator: adb binary ONLY at `/usr/local/share/android-commandlinetools/platform-tools/adb` (`platform-tools` installed); NO Android emulator and NO physical device connected; the user chose to run the real-key in-place upgrade run later on their own device. Prerequisites for that run:
+
+1. A device with v0.6.1 (or the direct-debug build of `main`) paired against a live-enough relay setup — or use the seed androidTest from T3e which needs NO relay (it drives the production `SecretStore`/Room DAOs/`SettingsRepository` directly).
+2. The seed androidTest from `/main`-checkout (T3e) executed via `export PATH=$PATH:/usr/local/share/android-commandlinetools/platform-tools && adb shell am instrument -w dev.j3pf.rp.test/dev.j3pf.rp.UpgradeSeedRunner` — ODD to be spelled out verbatim in `docs/upgrade-harness/README.md` in T3e, exact expected output included.
+3. `adb install -r` of the migrated direct-debug APK (never uninstall — that would clear Keystore-bound master key and DB; `-r` keeps both).
+4. The verifying androidTest listing per-row expected output; the to-report rows `SC-02b`/`SC-03b` `UNPROVEN - needs device` flip to covered ONLY by that run's recorded output, committed under `docs/upgrade-harness/recorded-output/`.
+
 ## 10. Consequences / risks
 
 - Two rows stay `UNPROVEN - needs device` until the user runs the T3e harness: real-Keystore readability (SC-02/SC-03 real-key half) and the true `adb install -r` in-place install. Every report lists them explicitly.
