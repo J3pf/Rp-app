@@ -177,3 +177,11 @@ Verification note: 11 focused tests EXECUTED GREEN (`/gradlew :app:testDirectDeb
 | `BatteryExemption` | `BatteryExemption` → `AndroidBatteryExemption` | `app/src/main/java/dev/j3pf/rp/platform/AndroidBatteryExemption.kt:11`; `app/src/test/java/dev/j3pf/rp/platform/AndroidBatteryExemptionTest.kt:31` | proven |
 | `PlatformInfo` | `PlatformInfo` → `AndroidPlatformInfo` (`BuildConfig` values) | `app/src/main/java/dev/j3pf/rp/platform/AndroidPlatformInfo.kt:9`; `app/src/test/java/dev/j3pf/rp/platform/AndroidPlatformInfoTest.kt:14` | proven |
 
+## Move 1 — Room CORE move (ADR 0003 §1, slice A")
+
+**Risk: S14 stored-data schema.** `Entities.kt` and `Daos.kt` moved to `:data-core` with byte-identical contents; `RpDatabase.kt` moved with only the Room KMP constructor and `SQLiteConnection` migration API adjustments. All five migration SQL statements compare byte-identically to the original app source. The app's three former source files now contain only move comments (no duplicate Room declarations).
+
+Room 2.8.5 KSP export: `data-core/schemas/dev.j3pf.rp.data.db.RpDatabase/3.json`; identity hash `b4ad483aeb2f27bb4b65b4b725d2cfd7`. Canonicalized JSON comparison against the unchanged `app/schemas/.../3.json`: **semantically identical** (tables, columns, indices and SQL); no schema patch was made.
+
+Verification: `:data-core:compileKotlinIosArm64` + `:data-core:compileKotlinJvm` passed. Full `:app:testDirectDebugUnitTest` passed: **417 tests, 0 failures, 0 errors, 2 skipped, 76 suites**; `AppModuleDatabaseConfigTest` passed 2/2.
+
