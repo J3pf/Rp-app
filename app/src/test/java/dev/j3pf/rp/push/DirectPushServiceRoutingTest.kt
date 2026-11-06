@@ -22,6 +22,7 @@ import dev.j3pf.rp.protocol.AgentsUpdate
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.protocol.PromptResolved
 import dev.j3pf.rp.protocol.PushKind
 import dev.j3pf.rp.protocol.PushNotify
 import dev.j3pf.rp.protocol.PushPromptBody
@@ -162,6 +163,26 @@ class DirectPushServiceRoutingTest {
 
         val actual = published.await()
         assertEquals(expected.promptId, actual.body<Prompt>().promptId)
+    }
+
+    @Test
+    fun `malformed push notify body is ignored without posting a notification`() = runBlocking {
+        onText(Envelope.of(MsgType.PUSH_NOTIFY, JsonObject(emptyMap())))
+        shadowOf(Looper.getMainLooper()).idle()
+        delay(50)
+
+        assertTrue(shadowOf(notificationManager).allNotifications.isEmpty())
+    }
+
+    @Test
+    fun `prompt resolved is published to the shared bus`() = runBlocking {
+        val expected = PromptResolved("01RESOLVED", "remote")
+        val published = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(5_000) { bus.messages.first { it.t == MsgType.PROMPT_RESOLVED } }
+        }
+        onText(Envelope.of(MsgType.PROMPT_RESOLVED, expected))
+
+        assertEquals(expected, published.await().body<PromptResolved>())
     }
 
     @Test
