@@ -1,0 +1,147 @@
+# Parity matrix — O1 Data Core (branch `unify/o1-data`, base `main` @ 482cbb9)
+
+Scope: `app/src/main/java/dev/j3pf/rp/{data/db,data/repo,data/secure,domain/model,util,di}` and their tests.
+Behavior oracle: current Android code. Baseline: `:app:testDirectDebugUnitTest` = 32 suites, **243 tests, 0 failures, 0 skipped** (BUILD SUCCESSFUL in 2m16s, worktree @ 6c073ef).
+
+Status legend: `covered` = automated proof exists; `char` = characterization test added on unchanged Android code (T1); `gap` = no automatic proof, reason stated (accepted per S15, port note required).
+
+## 1. Room database (entities, DAOs, migrations) — `data/db/`
+
+| ID | Behavior (incl. edge cases / exact strings) | Android source | Proof test | Status |
+|---|---|---|---|---|
+| DB-01 | Room v3, 6 entities (`machines`, `agents`, `prompts`, `chat_records`, `outbox`, `notification_dedup`), `exportSchema = true` (schemas under `app/schemas`) | `data/db/RpDatabase.kt:8-42` | `db/DatabaseMigrationTest` (helper uses same schema) | covered |
+| DB-02 | `MIGRATION_1_2`: `ALTER TABLE machines ADD COLUMN quotasJson TEXT DEFAULT NULL` | `data/db/RpDatabase.kt:35-37` | `DatabaseMigrationTest#migrationFrom1To2To3EndToEnd` | covered |
+| DB-03 | `MIGRATION_2_3`: adds `theme TEXT DEFAULT NULL`, `todoCompleted INTEGER NOT NULL DEFAULT 0`, `todoTotal INTEGER NOT NULL DEFAULT 0`, `activeTask TEXT DEFAULT NULL` to `agents`; preserves all pre-existing rows/data | `data/db/RpDatabase.kt:40-46` | `DatabaseMigrationTest#migrationFrom2To3PreservesDataAndAddsNewColumnsWithDefaults`, `#migrationFrom1To2To3EndToEnd`; docs/QA.md F5.1 | covered |
+| DB-04 | `AgentDao.observe` returns equipped `AgentWithCounts` (`openPrompts` = count of `prompts` with `state='open'`), ordered `online DESC, lastSeenAt DESC` | `data/db/Daos.kt:50-58` | none (SQL aggregate) | char (DAO-C-04) |
+| DB-05 | `MachineDao.syncWelcome` / `AgentDao.syncWelcome`: transactional `upsert(REPLACE)` + `deleteNotIn` — after an `app.welcome` only the ids the relay keeps remain | `data/db/Daos.kt:25-40`, `data/db/Daos.kt:70-90` | none (liveness snapshot pruning) | char (DAO-C-05) |
+| DB-06 | `PromptDao.upsertOpen` replay window (`PromptState.REPLAY_WINDOW_MS` = `10 * 60_000L`): a re-published `prompt.opened` or stale `app.welcome` cannot revive a prompt resolved within the window; after the window a legitimately reused id shows again | `data/db/Daos.kt:150-174`, `Entities.kt:64-70` | `PromptDao.recentlyResolved` logic untested standalone | char (DAO-C-06a/b) |
+| DB-07 | `PromptDao.resolveMissing`: after `app.welcome`, open prompts not in the relay list are closed with `resolvedBy='cancelled'` | `data/db/Daos.kt:140-147` | indirectly under `PromptDao` flows | char (DAO-C-06b) |
+| DB-08 | `PromptDao.observeOpen` ordering: `dangerRank DESC, openedAt ASC` (high danger first, oldest first within rank) | `data/db/Daos.kt:112-114` | none | char (DAO-C-06a) |
+| DB-09 | `ChatDao.deleteEventsBefore`: removes events with `epoch IS NOT :epoch OR seq < :beforeSeq` (keeps entries; history resync pruning) | `data/db/Daos.kt:207-217` | none | char (DAO-C-07) |
+| DB-10 | `ChatDao.trim`: keeps only the newest `keep` (5000) rows per agent; every persisted event insert + `persistEvent` each 100 events call `ChatRepository` trim | `data/db/Daos.kt:230-242`, `repo/ChatRepository.kt:191-209` | none | char (DAO-C-07) |
+| DB-11 | `OutboxDao`: `put` (REPLACE on `clientMsgId` idempotency key), `get`, `all(relayId)` ordered by `createdAt`, `delete`, `bump` increments `attempts`, `clear` | `data/db/Daos.kt:247-266` | `outbox` is exercised indirectly in ChatRepositoryTest; `bump`/`attempts` untested | char (DAO-C-08) |
+| DB-12 | `DedupDao.firstSeen`: purge older than 24h, then insert; second identical key → `false` (single notification per promptId/pushId); `mark` replaces timestamp; `seenSince(windowMs)` | `data/db/Daos.kt:278-317` | none standalone | char (DAO-C-09) |
+
+## 2. ChatRepository (outbox / retry / persistence) — `data/repo/ChatRepository.kt`
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| CH-01 | `putOutbox` encodes `UserMessage` JSON, retries key = `clientMsgId`; `clearOutbox`/`deleteOutbox` (idempotency) | `repo/ChatRepository.kt:84-104` | `ChatRepositoryTest#\`retry re-sends with identical clientMsgId preserving idempotency\`` (via shared ChatDeliveryPolicy) | covered |
+| CH-02 | `isOutboxPending` / `findOutboxMessage` (malformed JSON → null, no throw) / `allPendingOutbox` (no session-equivalent mismatch tolerated) | `repo/ChatRepository.kt:105-124` | exercised via `ChatRepositoryTest` send/retry paths | covered |
+| CH-03 | `loadInitialState`: replays `Entry` rows via `ChatReducer.applyEntries` then persisted `AgentEvent` rows sorted by `seq`; `null` when no session or no records | `repo/ChatRepository.kt:130-147` | exercised in `ChatRepositoryTest` (resync/history tests read state) | covered |
+| CH-04 | `persistHistory`: on `epochChanged` clears agent; entries re-replace full set (`deleteKind(ENTRY)` + insert, `seq=0`); persisted events filtered to `PERSISTED_EVENTS`, `missing own epoch` inherits `history.epoch`; pruned with `deleteEventsBefore` using `liveFromSeq ^ Long.MAX_VALUE` (null liveFrom → delete all old events) | `repo/ChatRepository.kt:148-189` | `ChatRepositoryTest#\`agent history clears syncing...\``, `\`resync cancels...\`` | covered |
+| CH-05 | `persistEvent`: single event insert, trims every 100th insert | `repo/ChatRepository.kt:191-209` | exercised throughout `ChatRepositoryTest` (state replay depends on persisted events) | covered |
+| CH-05b | event trim ceiling keeps newest 5000 rows (`trim` on every 100th insert) | `repo/ChatRepository.kt:204-206` | `DAO-C-07` characterization test | char |
+| CH-06 | `enqueueBackgroundSend` → WorkManager unique work `send-outbox`, CONNECTED constraint, EXPONENTIAL backoff 15s, expedited fallback (`RUN_AS_NON_EXPEDITED_WORK_REQUEST`) — worker-driven flush; PromptActionHandler reply path keeps failed (401/409) messages in outbox and enqueues retry | `repo/ChatRepository.kt:215-217`, `307-317` | `push/PromptActionHandlerTest#\`responder agente con 401 conserva el mensaje en outbox y encola reintento\`` (:151) | covered |
+| CH-07 | `ChatSessionRegistry` reference counting: `open` creates+starts once, `release` stops when no holders | `repo/ChatRepository.kt:249-256` | `ChatSessionRegistryTest` (:relay-client) + usage in ChatRepositoryTest | covered |
+| CH-08 | `retry(clientMsgId)` re-sends with identical `clientMsgId`; `removeLocal` drops the rejected item; AUTO delivery/method defaults | `repo/ChatRepository.kt:283-297` | `ChatRepositoryTest#\`user message ack updates state to rejected failed and removeLocal cleans it up\``, `\`retry re-sends with identical clientMsgId preserving idempotency\`` | covered |
+| CH-09 | `flushOutbox` returns `true` when nothing pending (Worker contract) | `repo/ChatRepository.kt:300` | no direct unit test of the return flag; send paths covered by `ChatRepositoryTest` (+ outbox retention `push/PromptActionHandlerTest`) | gap — return-flag semantics to pin in T3 when the shared ChatDeliveryPolicy port lands |
+| CH-10 | `clear()` stops registry, clears chat + outbox for current session (logout path) | `repo/ChatRepository.kt:302-305` | `SessionRepositoryLifecycleTest#\`logoutRevokesBestEffortAndClearsOldRelayDataChannelsCredentialsAndSettings\`` | covered |
+
+## 3. PromptsRepository
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| PR-01 | open prompt flow: `prompt.opened` → open (`state='open'`, `dangerRank`, `openedAt` fallback to `now`), `prompt.resolved` → state `'resolved'` + `resolvedBy`/`resolvedAt` | `repo/PromptsRepository.kt:90-124` | `PromptsRepositoryTest#\`prompt abierto llega al bandeja y se cierra con prompt resolved\`` | covered |
+| PR-02 | HTTP fallback when no WS: upload answer over `RelayApi.answer`; HTTP 409 treated as already-answered (no error surfaced); no network → enqueue retry (WorkManager `answer-outbox`) | `repo/PromptsRepository.kt:123-167`, `189-196` | `PromptsRepositoryTest#\`sin websocket responde por HTTP y 409…\``, `\`sin red se encola el reintento\`` | covered |
+| PR-03 | WS preferred when connected: answer via `ws_request` (`answer`) | `repo/PromptsRepository.kt:150-160` | `PromptsRepositoryTest#\`con websocket responde por WS\`` | covered |
+| PR-04 | `observe(promptId)`/`openFor(agentId)` Stream flows ordered per DB-08 | `repo/PromptsRepository.kt:72-81` | same as PR-01/DB-08 | covered |
+| PR-05 | `get(promptId)` returns null w/out active session | `repo/PromptsRepository.kt:84` | covered by PR-01 path | covered |
+
+## 4. AgentsRepository
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| AG-01 | `close outcomes`: `Closed` (relay accepted) / `Archived` (close unsupported → falls back to forget) / `Failed(relayReason)` | `repo/AgentsRepository.kt:113-152` | `AgentsRepositoryCloseTest` (all four outcomes incl. `\`a close error with no relay message keeps the plain text\``) | covered |
+| AG-02 | close error after pane gone = Closed not error; herdr-unavailable → fail without forget | `repo/AgentsRepository.kt:113-152` | `AgentsRepositoryCloseTest` (those 2 tests) | covered |
+| AG-03 | `agents update` relay events remove/purge local rows; `purge` sends exact id; archived list decode + Spanish failure string | `repo/AgentsRepository.kt:156-194` | `AgentsRepositoryCloseTest#\`an agents update remove deletes the local agent\``, `\`purge sends the exact agent id\``, `\`archived relay failure returns an explicit Spanish error\``, `\`archived list decodes rows and pagination cursor\`` | covered |
+
+## 5. SessionRepository (pairing, logout, settings band)
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| SE-01 | `normalizeUrl` rejects user:pass/query/fragment; requires https except http on localhost / 10.0.2.2 / 127.0.0.1; lowercases host; strips trailing `/`; blank forms/null | `repo/SessionRepository.kt:114-132` | `SessionRepositoryTest#\`normaliza la url del relay\`` | covered |
+| SE-02 | `parsePairingUri` only `rp://pair?u=…&c=…` (requires both params); other abilities/null | `repo/SessionRepository.kt:134-140` | `SessionRepositoryTest#\`QR rp pair\`` | covered |
+| SE-03 | health-before-pair: storage only replaced after successful pairing; invalid inputs / health failures / pair failures preserve old storage, WorkManager channels and socket | `repo/SessionRepository.kt:88-92` (`SessionPolicy` shared) | `SessionRepositoryLifecycleTest` (3 tests) | covered |
+| SE-04 | push registration: no token fetch when no session; reports HTTP failure; uses current credentials + `directPush` preference | `repo/SessionRepository.kt:94-99` | `SessionRepositoryLifecycleTest` (`registrationWithoutSession…`, `registrationReportsHttpFailure…`) | covered |
+| SE-05 | `logout`: best-effort revoke, then `connection.stop()`, `WorkManager.cancelAllWork()`, wipe machines/agents/chat/prompts/hosts/mesh/dedup, remove channels, clear credentials+settings | `repo/SessionRepository.kt:100-111` | `SessionRepositoryLifecycleTest#\`logoutRevokes…\``, `logoutWithoutSession…` | covered |
+| SE-06 | `applyPushChannels`: persist preference first, HTTP failure ignored; start/stop `DirectPushService`; `registerFcmToken` → `PUT /v1/devices/me/push` | `repo/SessionRepository.kt:94-99` | `SessionRepositoryLifecycleTest#\`applyPushIgnoresHttpFailureAfterPersistingPreference\`` | covered |
+
+## 6. Machines / Host / Mesh repositories
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| MA-01 | `MachinesRepository.refresh` maps `MachineSummary` (`quotasJson`) to entities and syncs (prune not-in); clear on logout | `repo/MachinesRepository.kt:34-115` | indirectly in lifecycle logout test (clear) ; mapping covered by MP-01 | covered |
+| HO-01 | `HostRepository` wrappers: `listDirs`/`herdrLayout`/`spawn`/`gitDiff`/`gitDiscard`/`resumeAgent` return `HostResult.Ok/Failed` (str errors, no unwrap crash) | `repo/HostRepository.kt:46-110` | no dedicated test (thin passthrough to RelayApi over WS) | gap — passthrough; assert-relevant failures surface via UI screens owned by O4; WireProxy tests cover the relay side |
+| ME-01 | Mesh subscribe envelope `{"machineId":null}` for `Todas las máquinas` (docs/QA F2.1); unsubscribe; snapshot/update replace; live comm events; reconnect restores subscription; ref Count by owner; decode error payload → error state; clear resets | `repo/MeshRepository.kt:119-200` | `MeshRepositoryTest` (9 tests, incl. F2.2 10s? no — timeout fallback is in RelayApiMesh/RelayConnection tests) | covered |
+| ME-02 | Mesh README feature: peer conversation history opens without pre-existing edge and pagination cursor `nextBefore` preserved | `repo/MeshRepository.kt:180-188` | `data/RelayApiMeshTest` (cursor param) + shared-ui tests | covered |
+
+## 7. SecretStore (S18 credentials) — `data/secure/SecretStore.kt`
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| SC-01 | Session model (`relayId/relayUrl/relayName/deviceId/deviceToken/pushKey`) is shared (relay-client commonMain `Session.kt`) — Android SecretStore persists it encrypted with Tink AES256_GCM, keyset in prefs (`rp_keyset`), master key `android-keystore://rp_master_key` | `relay-client/.../secure/Session.kt` + `data/secure/SecretStore.kt:30-47` | (crypto scaffold) `TinkDecryptionTest` (backward-compat decryption proof) | covered (format) |
+| SC-02 | `save` writes all 6 fields encrypted (Base64 NO_WRAP, AD = field key); corruption recovery: on encrypt failure `resetCorruptedKeyset()` (deletes Keystore entry + clears keyset/prefs) and retry once | `data/secure/SecretStore.kt:87-105` | cannot run in unit tests (real Android Keystore required) | gap — S14 in-place-upgrade proof runs on device/emulator at Gate C (orchestrator runs it); Tink format proof covered by TinkDecryptionTest |
+| SC-03 | `load` tolerant: any decrypt failure or missing required key → `session=null`; tolerant `load()` returns null on garbage instead of crashing | `data/secure/SecretStore.kt:117-130` | same constraint | gap (device run at Gate C, S14) |
+| SC-04 | `newRelayId()` = 8 random bytes as 16 lowercase hex chars; two calls differ | `data/secure/SecretStore.kt:112-115` | none | char (SC-C-10) |
+| SC-05 | `current()`/StateFlow scaffold: fresh install → `null`; `clear()` resets StateFlow and prefs field list | `data/secure/SecretStore.kt:63-68` (StateFlow init), `:107-110` | none | char (SC-C-10) |
+| SC-06 | Secret prefs excluded from cloud backup: manifest references `@xml/data_extraction_rules` + `@xml/fullBackupContent` (`AndroidManifest.xml:23-24`) | `data/secure/SecretStore.kt:37`, `app/src/main/AndroidManifest.xml:23-24`, `app/src/main/res/xml/backup_rules.xml` | not unit-testable | gap — static manifest check at Gate C |
+
+## 8. SettingsRepository (settings/theme store) — `data/repo/SettingsRepository.kt`
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| ST-01 | Defaults for fresh install: `selectedContext` `AppSettings.ALL`, `directPush=true`, `requireUnlockToApprove=true`, `criticalAlways=true`, `appLock=false`, `flagSecure=false`, `onboardingDone=false`, `batteryAsked=false`, `notifyPrefs=NotifyPrefs()`, `mutedAgents=∅`, `appTheme="auto"`, `chatFontScale=1.0f`, `chatMessageSpacing="normal"`, mesh selections null | `repo/SettingsRepository.kt:33-59` | none | char (ST-C-01) |
+| ST-02 | `chatFontScale` clamped to `[0.80, 1.45]` on load and on `setChatFontScale` (guard: injected out-of-range value re-coerced at read) | `repo/SettingsRepository.kt:54`, `:81` | none | char (ST-C-02) |
+| ST-03 | `setAgentMuted` adds/removes on the `stringSetPreferencesKey` without touching other settings; `setMeshSelectedMachine/Group(null)` removes the key (shows "Todas") | `repo/SettingsRepository.kt:97-104` | none | char (ST-C-03) |
+| ST-04 | `notifyPrefs` stored as JSON string; malformed JSON in storage → default `NotifyPrefs()` (no crash); `setNotifyPrefs` round-trip | `repo/SettingsRepository.kt:44-46` | none | char (ST-C-04) |
+| ST-05 | `wipe()` clears every key (logout path SE-05) | `repo/SettingsRepository.kt:105` | exercised indirectly in `SessionRepositoryLifecycleTest#logout…` (settings cleared) | covered |
+| ST-06 | DataStore `IOException` during read → emptyPreferences fallback (no crash on corrupt file) | `repo/SettingsRepository.kt:36-39` | hard to inject a corrupted file in unit tests reliably across DataStore; treat as noted behavior | gap — guarded de-facto by DataStore corruption handler upstream; re-verify at Gate C via in-place upgrade run (S14) |
+
+## 9. BiometricGate (`util/BiometricGate.kt`)
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| BI-01 | 5-min freshness window (`VALIDITY_MS = 5*60_000L`): not fresh before any auth, fresh within `VALIDITY` after `recordSuccessForTest`, expired exactly at limit; `invalidate` clears immediately | `util/BiometricGate.kt:20-28`, `companion :105` | `TinkDecryptionTest#\`biometric gate is not fresh until explicit action authentication…\`` | covered |
+| BI-02 | API 29 device-credential fallback (`setDeviceCredentialAllowed`) and API≥30 `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` combinatorics; `authenticate(force=true)` bypasses freshness; cancellation cancels the prompt; error → `AuthResult.FAILED`; unavailable → `AuthResult.UNAVAILABLE` | `util/BiometricGate.kt:30-52`, `:55-103` | requires live BiometricPrompt UI | gap — UI-dependent; covered manually by docs/QA lock flows; port note below (iOS LocalAuthentication) |
+
+## 10. Format / utils (thin delegates to `shared-ui` common utilities) — `util/Format.kt`
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| UT-01 | `lastSegment/relativeTime/humanSize/contextLabel/contextEmoji/agentTitle/parseColor/stableId/truncate` delegate 1:1 to `shared-ui/ui/util` | `util/Format.kt:7-48` | `shared-ui` `AgentCardTest` + `RemotePiAppTest` cover the shared implementations spirit (`hace 5 min`, `hace 2 h`, `Feature X`, titles, etc.) | covered |
+
+## 11. Domain mappers (incl. theme/TODO/activeTask S14 fields) — `domain/model/Mappers.kt`
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| MP-01 | `MachineSummary.toEntity`/`toModel` quotas JSON round-trip; invalid/absent persisted quotas → null (no crash) | `domain/model/Mappers.kt:13-29` | `MappersTest#\`machine summary quotas persist and map back\`` + `\`null or invalid persisted quotas map to null\`` | covered |
+| MP-02 | `AgentSummary.toEntity`/`toModel` full round-trip incl. `theme`, `todoCompleted/todoTotal`, `activeTask` (S14 v3 columns), herdr triple → `HerdrInfo` only when any id present, `model` label empty → null | `domain/model/Mappers.kt:33-107` | `MappersTest#\`agent summary theme and todo fields persist and map back\`` | covered |
+| MP-03 | `Prompt.toEntity` uses `Danger.rank(danger)` and `openedAt ?: now`; `PromptEntity.toModel` decodes JSON | `domain/model/Mappers.kt:110-121` | exercised in PromptsRepositoryTest (opening order test, DB-08 chained) | covered (via PR-01) |
+
+## 12. DI (`di/AppModule.kt`, `di/Qualifiers.kt`)
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| DI-01 | Singletons wired (`AppScope` external test `Scope CoroutineScope`), `Qualifiers`, `Room` singleton with `MIGRATION_1_2/2_3` and no destructive fallback, `DataStore` factory | `di/AppModule.kt`, `di/Qualifiers.kt` | compile-time (Hilt) , enforced at runtime by S20 suite on `testDirectDebugUnitTest` (Hilt injection in Robolectric tests) | covered |
+
+## 13. AttachmentsRepository (Android upload base for chat composer)
+
+| ID | Behavior | Android source | Proof test | Status |
+|---|---|---|---|---|
+| AT-01 | `prepare(uri)`: image compress via `BitmapFactory` (max size, quality), name sanitize (`UNSAFE_FILENAME_REGEX` → `_`, max 120, empty → `"archivo"`), mime from content resolver; `upload` → `RelayApi` blob; `discard` deletes temp file; `cleanup` removes targets older than 24h; `newCameraTarget` FileProvider URI | `repo/AttachmentsRepository.kt:64-220` | Robolectric-capable but heavily Android-gap (Bitmap codec + ContentResolver) | gap — Android-platform surface replaced wholesale by iOS PhotosUIImage/fileImporter + URLSession upload; no behavior parity loss: contract = `(name, mime, size) → AttachmentRef(blobId)` exercisable cross-platform at Gate C |
+
+## Platform ports required (seeds T2 ADR) — O1 own slice
+
+| Port | Signature sketch | Android impl source | iOS approach |
+|---|---|---|---|
+| `SecureStore` | `current(): Session?`, `save(session)`, `clear()`, `session: StateFlow<Session?>`, `current(): secrets-rx session`, `newRelayId(): String` | `data/secure/SecretStore.kt` (Tink+Keystore+EncryptedSharedPreferences-backed prefs) | Keychain (S18) with the S12 entitlement `keychain-access-groups`; keyset stored as Keychain `kSecClassGenericPassword`, AES-GCM via CryptoKit; `newRelayId` via `SecRandomCopyBytes` |
+| `SecretStoreCrypto` (internal seam) | `encrypt(value, key): String`, `decrypt(value, key): String?` | `SecretStore.kt:107-142` internal AD fixup (field key as associated data, Base64 NO_WRAP) | same associated-data discipline; unit-testable seam so S14 upgrade proof can run without device Keystore |
+| `SettingsStore` (DataStore replacement) | `settings: Flow<AppSettings>` + suspend setters as listed in KeysObserver (ST-01 keys exactly); `wipe()` | `repo/SettingsRepository.kt` (androidx.datastore.preferences on Android) | `NSUserDefaults` + `kotlinx-coroutines` StateFlow flow bridge; encode `notifyPrefs` JSON identically (same JSON, same `mutedAgents` set semantics) |
+| `RpDatabase` port | same 6 entities + DAOs; `MIGRATION_2_3` via Room KMP schema | `data/db/*` (Room 2.7, SupportSQLiteDatabase migrations) | Room KMP (BundledSQLiteDriver, `iosArm64`/`iosSimulatorArm64`); migrations via `migrateCallback` path: ship v2 schema + `MIGRATION_2_3` SQL verbatim + S14 upgrade test against v2-produced SQLite bytes |
+| `WorkScheduler` | `enqueueBackgroundSend()` (unique work `send-outbox`), answer retry enqueue (PR-02) | `WorkManager` (app) — `ChatRepository.kt:307-317`, `PromptsRepository.kt:189-196` | BGTaskScheduler (iOS app refresh task + BGProcessingTask); direct-push equivalent gated by S17 free-tier degradation: on iOS background push via APNs replaces long-lived socket wakeups |
+| `PlatformClock/Uuid/Ulid` | `now(): Long`, `newTerminalId()` etc. | `Ulid` already in `:protocol` commonMain; `System.currentTimeMillis` seam in repos (`now = { System… }` lambdas, e.g. `ChatRepository.kt:251`) | keep as Kotlin lambdas (no port needed beyond injection), iOS same logic |
+| `NotificationsRemove` | `removeAll()` on logout | `NotificationChannels` (O2 slice, consumed here SE-05) | iOS: `UNUserNotificationCenter.removeAllDeliveredNotifications()` |
+| App-attachments platform surface | `prepare(uri)`, compress, `newCameraTarget` | `repo/AttachmentsRepository.kt:75-173` | iOS: `PhotosPicker`/`fileImporter` + UIImageJPEGRepresentation-equivalent compression; write fresh code, never extract O2 sources (S4/S12) |
+
+Baseline test counts (recorded for Gate D): `:app:testDirectDebugUnitTest` 243 (worktree is clean — no production code changed for T1). Matrix rows: 52 behavior rows + 8 port rows.
