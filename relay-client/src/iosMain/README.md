@@ -1,0 +1,7 @@
+# iOS relay URLSession adapters
+
+`UrlSessionRelayTransport` uses Foundation `NSURLSession` data tasks for the JSON HTTP port. It preserves the HTTP status/body result shape, maps transport errors to `ApiResult.Network`, applies an 8-second request timeout for `QUICK` and a 60-second request timeout for `DEFAULT`, and cancels the native task when its Kotlin suspension is cancelled. Authorization is attached only to the request; adapters do not log request headers, bodies, URLs, or credentials.
+
+`UrlSessionSocketDriver` uses `NSURLSessionWebSocketTask` and a per-connection `NSURLSession` with the default configuration. Each session owns a delegate and a serial delegate queue, which reports open/close/failure and drives the asynchronous receive loop. `send` checks the atomic open/terminal state and submits an asynchronous URLSession send; it never waits for network work. Close and cancel are forwarded to the native task, and delegate callbacks are guarded against duplicate terminal delivery.
+
+The shared policy API is synchronous for socket send/close while Foundation I/O is asynchronous. The adapter therefore uses a short in-memory state lookup plus atomic state flags; it does not use `runBlocking`, semaphore waits, or synchronous network calls. iOS has no Robolectric-style JVM runtime, so this target is verified by Kotlin/Native simulator compilation; exercise against a live relay remains an integration check for the iOS host.
