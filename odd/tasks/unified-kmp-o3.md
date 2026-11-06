@@ -92,6 +92,8 @@ specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
 - Every READY report must list the subagent task ids used and what each returned.
 - The orchestrator still verifies from the sha and re-runs the mutation probes after M4.
 
+- **L12** (orchestrator seq 62): GO for T5 @ feat/unified-kmp 539b295 (670 tests / 4 nets). Binding order: M1 and M2 first with one READY per move; M3 with independent gentle-ai-verify `Risk: item 2`; M4 copy-first only after M1-M3 accepted, then the nine mutation probes re-run. Common rules: rebase before start and before every READY; orchestrator does all merges; Gate-A tests green at every commit, never weakened; <= ~400-line commits; focused tests while developing, full S20 before READY; ONE Gradle at a time; NEVER `git add -A` (the app test run re-renders tracked PNGs in app/src/test/screenshots: `git checkout -- app/src/test/screenshots` before committing); golden-diff.sh <worktree> must print identical 138 / different 0 after M1 and M3; every READY lists subagent task ids. O4 moves theme/nav/settings/onboarding/agents/Mesh concurrently: stay inside ui/chat, ui/promptsheet, ui/pending, ui/newagent, ui/components, ui/diff and rebase often.
+
 ## Log`). Branch `unify/o3-chat`,
 worktree `.worktrees/o3`. Mirror: Engram `odd/unified-kmp-o3/tasks`.
 
