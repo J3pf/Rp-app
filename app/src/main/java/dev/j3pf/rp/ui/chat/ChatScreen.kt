@@ -128,214 +128,32 @@ fun ChatContent(
     val agent = ui.agent
     val working = ui.sending || agent?.status == "working" || ui.chat.working
     var showInfo by remember { mutableStateOf(false) }
-    var showQuitDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets =
             androidx.compose.foundation.layout
                 .WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
-                windowInsets =
-                    androidx.compose.foundation.layout
-                        .WindowInsets(0, 0, 0, 0),
-                title = {
-                    val rawTitle = agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: ui.chat.sessionName ?: "Agente"
-                    val folder =
-                        agent
-                            ?.cwd
-                            ?.let {
-                                dev.j3pf.rp.util
-                                    .lastSegment(it)
-                            }.orEmpty()
-                    val displayTopic =
-                        if (folder.isNotEmpty() && rawTitle.startsWith("$folder · ")) {
-                            rawTitle.removePrefix("$folder · ").trim()
-                        } else {
-                            rawTitle
-                        }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            displayTopic,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        if (agent != null) {
-                            val effectiveAgent =
-                                if (working && agent.online && agent.status == "idle") {
-                                    agent.copy(status = "working")
-                                } else {
-                                    agent
-                                }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                StatusChip(effectiveAgent)
-                                val hasChanges = ui.diffResult?.files?.isNotEmpty() == true
-                                if (!agent.gitBranch.isNullOrBlank()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color =
-                                            if (hasChanges) {
-                                                MaterialTheme.colorScheme.tertiaryContainer
-                                            } else {
-                                                MaterialTheme.colorScheme.surfaceVariant
-                                            },
-                                        modifier = Modifier.clickable { onOpenDiff() },
-                                    ) {
-                                        Text(
-                                            "⎇ ${agent.gitBranch}${if (hasChanges) " *" else ""}",
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color =
-                                                if (hasChanges) {
-                                                    MaterialTheme.colorScheme.onTertiaryContainer
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                                },
-                                            fontWeight = FontWeight.Medium,
-                                        )
-                                    }
-                                }
-                                val modelText = (ui.chat.model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
-                                val thinkingText = ui.chat.thinkingLevel?.takeIf { it.isNotBlank() }
-                                val subtitle =
-                                    listOfNotNull(
-                                        folder.takeIf { it.isNotBlank() },
-                                        modelText,
-                                        thinkingText,
-                                    ).joinToString(" · ")
-                                if (subtitle.isNotBlank()) {
-                                    Text(
-                                        subtitle,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
-                actions = {
-                    if (working) {
-                        IconButton(onClick = onAbort) { Icon(Icons.Filled.Stop, "Interrumpir", tint = MaterialTheme.colorScheme.error) }
-                    }
-                    if (ui.diffResult?.files?.isNotEmpty() == true) {
-                        AssistChip(
-                            onClick = onOpenDiff,
-                            label = { Text("Diff (${ui.diffResult.files.size})", style = MaterialTheme.typography.labelSmall) },
-                            colors =
-                                AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                ),
-                            border = null,
-                            modifier = Modifier.padding(end = 4.dp),
-                        )
-                    }
-                    var menu by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
-                    DropdownMenu(menu, { menu = false }) {
-                        if (agent != null) {
-                            DropdownMenuItem(
-                                text = { Text("Revisar cambios Git (Diff)") },
-                                onClick = {
-                                    menu = false
-                                    onOpenDiff()
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text("Letra (${(ui.chatFontScale * 100).toInt()}%)")
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        TextButton(
-                                            onClick = { onFontScaleChange((ui.chatFontScale - 0.10f).coerceAtLeast(0.80f)) },
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                        ) {
-                                            Text("A-", fontWeight = FontWeight.Bold)
-                                        }
-                                        if (kotlin.math.abs(ui.chatFontScale - 1.0f) > 0.03f) {
-                                            TextButton(
-                                                onClick = { onFontScaleChange(1.0f) },
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                            ) {
-                                                Text("100%", style = MaterialTheme.typography.labelSmall)
-                                            }
-                                        }
-                                        TextButton(
-                                            onClick = { onFontScaleChange((ui.chatFontScale + 0.10f).coerceAtMost(1.45f)) },
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                        ) {
-                                            Text("A+", fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            },
-                            onClick = {},
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Espaciado de mensajes", style = MaterialTheme.typography.labelMedium)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        listOf(
-                                            "compact" to "Compacto",
-                                            "normal" to "Normal",
-                                            "spacious" to "Amplio",
-                                        ).forEach { (id, label) ->
-                                            val selected = ui.chatMessageSpacing == id
-                                            FilterChip(
-                                                selected = selected,
-                                                onClick = { onMessageSpacingChange(id) },
-                                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                                                shape = RoundedCornerShape(999.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            },
-                            onClick = {},
-                        )
-                        DropdownMenuItem(text = { Text("Información") }, onClick = {
-                            menu = false
-                            showInfo = true
-                        })
-                        DropdownMenuItem(
-                            text = { Text(if (ui.muted) "Activar notificaciones del agente" else "Silenciar notificaciones del agente") },
-                            onClick = {
-                                menu = false
-                                onToggleMute()
-                            },
-                        )
-                        if (!ui.readOnly && agent != null && agent.online) {
-                            DropdownMenuItem(
-                                text = { Text("Cerrar agente (/quit)", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    menu = false
-                                    showQuitDialog = true
-                                },
-                            )
-                        }
-                        if (!ui.readOnly && agent != null && !agent.online) {
-                            DropdownMenuItem(text = { Text("Olvidar agente") }, onClick = {
-                                menu = false
-                                onForget()
-                            })
-                        }
-                    }
-                },
+            ChatTopBar(
+                agent = agent,
+                sessionName = ui.chat.sessionName,
+                model = ui.chat.model,
+                thinkingLevel = ui.chat.thinkingLevel,
+                working = working,
+                diffFileCount = ui.diffResult?.files?.size ?: 0,
+                chatFontScale = ui.chatFontScale,
+                chatMessageSpacing = ui.chatMessageSpacing,
+                muted = ui.muted,
+                readOnly = ui.readOnly,
+                onBack = onBack,
+                onAbort = onAbort,
+                onOpenDiff = onOpenDiff,
+                onFontScaleChange = onFontScaleChange,
+                onMessageSpacingChange = onMessageSpacingChange,
+                onInfo = { showInfo = true },
+                onToggleMute = onToggleMute,
+                onQuit = onQuit,
+                onForget = onForget,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -353,11 +171,7 @@ fun ChatContent(
                 }
             }
             if (ui.isAuto) {
-                Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("AUTO · tus mensajes se envían como tecleados", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
+                AutoDeliveryBanner()
             }
             if (ui.interactiveUnavailable) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
@@ -423,24 +237,6 @@ fun ChatContent(
     }
     if (ui.showForgetConfirmation) {
         AgentCloseConfirmationDialog(onConfirm = onConfirmForget, onDismiss = onCancelForget)
-    }
-    if (showQuitDialog) {
-        AlertDialog(
-            onDismissRequest = { showQuitDialog = false },
-            title = { Text("Cerrar sesión de Pi") },
-            text = { Text("¿Deseas enviar /quit al agente para cerrar su proceso en la terminal de la PC?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showQuitDialog = false
-                    onQuit()
-                }) {
-                    Text("Cerrar agente", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showQuitDialog = false }) { Text("Cancelar") }
-            },
-        )
     }
 }
 
@@ -624,7 +420,6 @@ internal fun MessageList(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun Composer(
     ui: ChatUiState,
@@ -639,8 +434,6 @@ internal fun Composer(
     newCameraTarget: () -> Uri,
     onSend: () -> Unit,
 ) {
-    var attachMenu by remember { mutableStateOf(false) }
-    var choiceMenu by remember { mutableStateOf(false) }
     var cameraTarget by remember { mutableStateOf<Uri?>(null) }
 
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { onPicked(it) }
@@ -678,296 +471,53 @@ internal fun Composer(
             }
         }
 
-    val canSendNow = ui.canSend && (text.isNotBlank() || ui.attachments.isNotEmpty())
-
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-        tonalElevation = 4.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (ui.attachments.isNotEmpty()) {
-                val attachmentsScroll = rememberScrollState()
-                Row(
-                    Modifier
-                        .horizontalEdgeFade(attachmentsScroll, edgeColor = MaterialTheme.colorScheme.surface)
-                        .horizontalScroll(attachmentsScroll),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    ui.attachments.forEach { a ->
-                        AttachmentChip(a, onRemove = { onRemoveAttachment(a.id) }, onRetry = { onRetryAttachment(a.id) })
-                    }
-                }
-            }
-            val isSlashText = text.trimStart().startsWith("/")
-            val catalog =
-                remember(ui.agent?.launcher, ui.agent?.model?.id, ui.agent?.model?.provider) {
-                    SlashCommandCatalogs.resolve(ui.agent)
-                }
-            val suggestions: List<Pair<String, String>> =
-                remember(text, catalog) {
-                    val trimmed = text.trimStart()
-                    val lowerTrimmed = trimmed.lowercase()
-                    if (!lowerTrimmed.startsWith("/")) {
-                        emptyList()
-                    } else {
-                        val subEntry =
-                            catalog.subSuggestions.entries.firstOrNull { (cmd, _) ->
-                                lowerTrimmed == cmd || lowerTrimmed.startsWith("$cmd ")
-                            }
-                        if (subEntry != null) {
-                            val (cmd, levels) = subEntry
-                            val arg = trimmed.substring(cmd.length).trimStart()
-                            val matchingLevels =
-                                if (arg.isEmpty()) {
-                                    levels
-                                } else {
-                                    levels.filter { it.startsWith(arg.lowercase()) && it != arg.lowercase() }
-                                }
-                            matchingLevels.map { level -> level to "$cmd $level" }
-                        } else if (!lowerTrimmed.contains(" ")) {
-                            catalog.commands
-                                .filter { it.startsWith(lowerTrimmed) && it != lowerTrimmed }
-                                .map { cmd -> cmd to "$cmd " }
-                        } else {
-                            emptyList()
-                        }
-                    }
-                }
-
-            if (suggestions.isNotEmpty()) {
-                val suggestionsScroll = rememberScrollState()
-                Row(
-                    Modifier
-                        .horizontalEdgeFade(suggestionsScroll, edgeColor = MaterialTheme.colorScheme.surface)
-                        .horizontalScroll(suggestionsScroll),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    suggestions.forEach { (label, replacement) ->
-                        SuggestionChip(
-                            onClick = { onText(replacement) },
-                            label = { Text(label) },
-                            shape = RoundedCornerShape(999.dp),
-                        )
-                    }
-                }
-            }
-            val composerScrollState = rememberScrollState()
-            Row(
-                Modifier
-                    .horizontalEdgeFade(composerScrollState, edgeColor = MaterialTheme.colorScheme.surface)
-                    .horizontalScroll(composerScrollState),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val isHerdrAgent = ui.agent?.herdr != null || (ui.agent != null && ui.agent.launcher != "pi")
-                if (!isHerdrAgent) {
-                    Column {
-                        AssistChip(
-                            onClick = { choiceMenu = true },
-                            shape = RoundedCornerShape(999.dp),
-                            colors =
-                                if (isSlashText) {
-                                    AssistChipDefaults.assistChipColors(
-                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                } else {
-                                    AssistChipDefaults.assistChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                    )
-                                },
-                            label = {
-                                Text(
-                                    text = if (isSlashText) "⚡ Comando ${catalog.launcherLabel} (/)" else "Entrega: ${ui.choice.label}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            },
-                        )
-                        DropdownMenu(choiceMenu, { choiceMenu = false }) {
-                            DeliveryChoice.entries.forEach { c ->
-                                val enabled = c != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
-                                DropdownMenuItem(
-                                    text = { Text(c.label) },
-                                    enabled = enabled,
-                                    onClick = {
-                                        choiceMenu = false
-                                        onChoice(c)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    if (working) {
-                        FilterChip(
-                            selected = ui.workingDelivery == Delivery.FOLLOW_UP,
-                            onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
-                            shape = RoundedCornerShape(999.dp),
-                            label = { Text("Encolar (follow‑up)", style = MaterialTheme.typography.labelSmall) },
-                        )
-                        FilterChip(
-                            selected = ui.workingDelivery == Delivery.STEER,
-                            onClick = { onWorkingDelivery(Delivery.STEER) },
-                            shape = RoundedCornerShape(999.dp),
-                            label = { Text("Interrumpir y dirigir (steer)", style = MaterialTheme.typography.labelSmall) },
-                        )
-                    }
-                } else if (isSlashText) {
-                    AssistChip(
-                        onClick = {},
-                        shape = RoundedCornerShape(999.dp),
-                        colors =
-                            AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            ),
-                        label = {
-                            Text(
-                                text = "⚡ Comando ${catalog.launcherLabel} (/)",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
+    ChatComposer(
+        agent = ui.agent,
+        working = working,
+        text = text,
+        onTextChange = onText,
+        attachments =
+            ui.attachments.map { attachment ->
+                ComposerAttachment(
+                    id = attachment.id,
+                    name = attachment.name,
+                    size = attachment.size,
+                    state =
+                        when (attachment.state) {
+                            UploadState.PREPARING -> AttachmentUploadState.PREPARING
+                            UploadState.READY -> AttachmentUploadState.READY
+                            UploadState.UPLOADING -> AttachmentUploadState.UPLOADING
+                            UploadState.DONE -> AttachmentUploadState.DONE
+                            UploadState.ERROR -> AttachmentUploadState.ERROR
                         },
-                    )
-                }
-                if (text.isEmpty() && ui.attachments.isEmpty()) {
-                    catalog.quickShortcuts.forEach { cmd ->
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                            modifier =
-                                Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .clickable { onText("$cmd ") },
-                        ) {
-                            Text(
-                                text = cmd,
-                                style =
-                                    MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp,
-                                    ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                            )
-                        }
-                    }
-                }
-            }
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Column {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                    ) {
-                        IconButton(onClick = { attachMenu = true }, modifier = Modifier.size(42.dp)) {
-                            Icon(Icons.Filled.AttachFile, "Adjuntar", modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    DropdownMenu(attachMenu, { attachMenu = false }) {
-                        DropdownMenuItem(text = { Text("Archivo") }, onClick = {
-                            attachMenu = false
-                            files.launch(arrayOf("*/*"))
-                        })
-                        DropdownMenuItem(text = { Text("Foto de la galería") }, onClick = {
-                            attachMenu = false
-                            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        })
-                        DropdownMenuItem(text = { Text("Cámara") }, onClick = {
-                            attachMenu = false
-                            cameraPermission.launch(Manifest.permission.CAMERA)
-                        })
-                    }
-                }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = onText,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(22.dp),
-                    placeholder = {
-                        Text(
-                            if (voiceInput.isListening) {
-                                stringResource(R.string.voice_listening)
-                            } else {
-                                "Escribe a tu agente…"
-                            },
-                        )
-                    },
-                    maxLines = 6,
+                    progress = attachment.progress,
+                    error = attachment.error,
                 )
-                val isVoiceMode = !canSendNow && !ui.sending && voiceInput.isAvailable
-                Surface(
-                    shape = CircleShape,
-                    color =
-                        when {
-                            voiceInput.isListening -> MaterialTheme.colorScheme.errorContainer
-                            canSendNow -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-                        },
-                    contentColor =
-                        when {
-                            voiceInput.isListening -> MaterialTheme.colorScheme.onErrorContainer
-                            canSendNow -> MaterialTheme.colorScheme.onPrimary
-                            else -> MaterialTheme.colorScheme.outline
-                        },
-                    border =
-                        if (!canSendNow && !voiceInput.isListening) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                        } else {
-                            null
-                        },
-                ) {
-                    val haptic = LocalHapticFeedback.current
-                    if (isVoiceMode || voiceInput.isListening) {
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (voiceInput.isListening) {
-                                    voiceInput.stopListening()
-                                } else {
-                                    baseVoiceText = text
-                                    recordAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            Icon(
-                                if (voiceInput.isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
-                                contentDescription = stringResource(R.string.action_voice_input),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    } else {
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSend()
-                            },
-                            enabled = canSendNow && !ui.sending,
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            if (ui.sending) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            } else {
-                                Icon(Icons.AutoMirrored.Filled.Send, "Enviar", modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+            },
+        canSend = ui.canSend,
+        sending = ui.sending,
+        choice = ui.choice,
+        onChoice = onChoice,
+        workingDelivery = ui.workingDelivery,
+        onWorkingDelivery = onWorkingDelivery,
+        onPickDocuments = { files.launch(arrayOf("*/*")) },
+        onPickImages = {
+            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onCameraCapture = { cameraPermission.launch(Manifest.permission.CAMERA) },
+        onRemoveAttachment = onRemoveAttachment,
+        onRetryAttachment = onRetryAttachment,
+        onSend = onSend,
+        isVoiceAvailable = voiceInput.isAvailable,
+        isListening = voiceInput.isListening,
+        onVoiceToggle = {
+            baseVoiceText = text
+            recordAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+        },
+        onVoiceStop = voiceInput::stopListening,
+        voiceListeningText = stringResource(R.string.voice_listening),
+        voiceInputDescription = stringResource(R.string.action_voice_input),
+    )
 }
 
 @Composable
