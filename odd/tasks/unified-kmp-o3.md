@@ -1,7 +1,77 @@
 # unified-kmp-o3 — chat slice (Obrero 3)
 
 Feature doc of worker O3 (session subagent-chat-01a1af49-2949-74e2) inside the migration
-specified in `odd/tasks/unified-kmp.md` (read by O3 down to `## Log`). Branch `unify/o3-chat`,
+specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
+## T5 migration plan (docs-only, waiting for GO; contracts per docs/adr/0001 §2/§4/§5)
+
+### Order of moves (each gated on its CH rows; shared files additive-only)
+
+1. **M1 — shared stateless UI (chat)**: move the remaining app-owned stateless composables that
+   are required for parity on iOS: `Composer` (with `AttachmentChipRow`, delivery/working-delivery
+   chips, slash suggestions read-only logic — ChatScreen.kt:629-936 minus ActivityResult launchers)
+   and `ChatContent` shell minus `rememberActivityResult` call sites. Both become shared-ui
+   `ui/chat/` composables taking the negotiated ports as parameters (constructor/time-based idiom: plain
+   params + CompositionLocals). The Android launchers (photo/file/camera/perms) stay as `:app`
+   adapter composables injected as `suspend picker(...)`-style callbacks into the shared composer.
+   - Rows to keep green after M1: CH14, CH15, CH16, CH23, CH27, CH28 (branch chip), CH43; tests
+     move to the shared-ui commonTest source set unchanged (mechanical import change only).
+2. **M2 — VoiceInputState → shared port consumer**: replace the direct `SpeechRecognizer` call
+   with `VoiceInputHost` injection (`start/stop/listening/onPartial/onFinal/onError` codes 1-6).
+   The :app Android actual keeps VoiceInputState.kt semantics; iOS actual (SFSpeechRecognizer +
+   AVAudioSession record permission) is O4-hosted. Rows: CH37 partial (mic rows device-only), CH37 overall header.
+3. **M3 — diff/prompt-sheet/pending/new-agent content moves UK to shared**: `DiffSheet.kt` app
+   wrapper becomes a thin alias for the shared sheet with `SettingsStore.strings`; the review-consent
+   body (PromptContent.kt:402-457) moves to its own shared composable with `BiometricAuthorizer`
+   parameter; PendingContent/NewAgentContent already shared — only their :app VMs relocate per ADR §4
+   (lifecycle-viewmodel multiplatform).
+   - Rows: CH31, CH32, CH33 (+ S19 wire chain), CH38, CH41, CH43; GamePad ChatViewModel tests stay on :app
+     until M4.
+4. **M4 — ChatViewModel + PromptSheetViewModel migrate to :shared-ui as KMP ViewModels** (ADR §4)
+   with constructor injection of `ChatRepository`, `SettingsStore`, `AttachmentsRepository`,
+   `HostRepository`, `BiometricAuthorizer`, `AttachmentsPlatformHost`, `VoiceInputHost`; the :app
+   Hilt module binds the same implementations; the Android `SavedStateHandle.toRoute<ChatRoute>()`
+   seam is replaced by a plain `agentId` in a shared VM factory parameter (orchestrator decides the
+   exact navigation seam with O4). The characterization harness (ChatViewModelCharacterizationTest)
+   gets an androidTest twin for :app wiring; the core tests move to :shared-ui jvmTest against the
+   same :data-core fakes.
+   - Rows: CH17, CH18, CH19, CH21, CH22, CH24, CH25, CH26, CH31, CH33(S19 wire), CH48.
+5. **M5 — composer delivery/decision chip and AUTO banner move**: final polish per CH20/CH23
+   (banner and chip already in M1, close leftovers), plus any mechanical import updates recorded.
+
+### Ports consumed (exact contracts per ADR 0001 §2, cc O1 when a deviation is needed)
+
+- `AttachmentsPlatformHost`: `attach.pickImages(maxItems: Int = 10): List<AttachmentRef>`,
+  `pickDocuments(mime: List<String> = listOf("*/*")): List<AttachmentRef>`,
+  `cameraTarget(): PreparedLocalFile?` (Android composer keeps the TakePicture/FileProvider path
+  via the exact current code; iOS PhotosPicker/UIDocumentPicker; camera fallback = photo library).
+- `BiometricAuthorizer`: `suspend fun authenticate(reason: String): AuthResult` with
+  `sealed interface AuthResult { OK; FAILED; UNAVAILABLE }` and the 5-minute freshness INSIDE the
+  impl (Android = wrapper over util/BiometricGate.kt unchanged; iOS = LAContext.evaluatePolicy
+  chained with a 5-min in-memory freshness engine; the session-wide K-chain persists via the
+  shared keychain access group only if O1 extends the contract — not requested here).
+- `VoiceInputHost`: `start(listener: VoiceListener)`, `stop()`, `listening: StateFlow<Boolean>`,
+  `VoiceListener { onPartial(text); onFinal(text); onError(code) }` with codes 1-6 per ADR 0001 §2.
+  iOS actual: SFSpeechRecognizer with `AVAudioSession.record` authorization check first
+  (`no-permissions` code 6), recognizer-unavailable → code 3, network-related failures → code 2.
+- NOT ports (per ADR no-port zones): haptics (CMP `LocalHapticFeedback`), IME insets
+  (`Modifier.imePadding()`/`.navigationBarsPadding()`), clipboard (CMP).
+
+### Golden-unverified rows at Gate C/D (differential golden gate)
+
+- Affected rows: CH4, CH11, CH32, CH34 (bash-only screenshotChatStreaming), CH38, CH41 (+ the
+  CH39 page-chrome visual, noted in the matrix Notes column).
+- How the differential golden gate will check them (per the orchestrator's protocol, agreed on
+  rev 2): recording happens once per host from `main` BEFORE the migration (baseline PNGs);
+  after each move in T5 the same Roborazzi tests run on the SAME host/qualifier footprint
+  (w411dp-h891dp-xxhdpi × the 4 themes of the suite) and the PNGs are compared pixel-for-pixel
+  against the same-host baseline produced on `main`. Any drift larger than transformation
+  tolerance is a Gate blocker; the golden PNGs are never committed from a non-recording host,
+  and the local run on the actual device/simulator host is O4's T6 deliverables (they are the
+  only machine with a goldens baseline at this time).
+- If any of these six tests drift: the move in flight is reverted (not merged-in-place) and the
+  orchestrator's verdict is appealed with the same evidence; no silent golden updates.
+
+## Log`). Branch `unify/o3-chat`,
 worktree `.worktrees/o3`. Mirror: Engram `odd/unified-kmp-o3/tasks`.
 
 ## Specs
@@ -38,6 +108,76 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
 |---|---|---|---|
 | O3-T1 | S5 S11 S15 | Parity matrix `docs/parity/o3-chat.md` + characterization tests on unchanged Android code + platform-ports section | |
 | O3-T5 | S15 S19 | Migrate chat slice through shared code (waits for orchestrator go) | |
+
+
+## T5 migration plan (docs-only, waiting for GO; contracts per docs/adr/0001 §2/§4/§5)
+
+### Order of moves (each gated on its CH rows; shared files additive-only)
+
+1. **M1 — shared stateless UI (chat)**: move the remaining app-owned stateless composables that
+   are required for parity on iOS: `Composer` (with `AttachmentChipRow`, delivery/working-delivery
+   chips, slash suggestions read-only logic — ChatScreen.kt:629-936 minus ActivityResult launchers)
+   and `ChatContent` shell minus `rememberActivityResult` call sites. Both become shared-ui
+   `ui/chat/` composables taking the negotiated ports as parameters (constructor/time-based idiom: plain
+   params + CompositionLocals). The Android launchers (photo/file/camera/perms) stay as `:app`
+   adapter composables injected as `suspend picker(...)`-style callbacks into the shared composer.
+   - Rows to keep green after M1: CH14, CH15, CH16, CH23, CH27, CH28 (branch chip), CH43; tests
+     move to the shared-ui commonTest source set unchanged (mechanical import change only).
+2. **M2 — VoiceInputState → shared port consumer**: replace the direct `SpeechRecognizer` call
+   with `VoiceInputHost` injection (`start/stop/listening/onPartial/onFinal/onError` codes 1-6).
+   The :app Android actual keeps VoiceInputState.kt semantics; iOS actual (SFSpeechRecognizer +
+   AVAudioSession record permission) is O4-hosted. Rows: CH37 partial (mic rows device-only), CH37 overall header.
+3. **M3 — diff/prompt-sheet/pending/new-agent content moves UK to shared**: `DiffSheet.kt` app
+   wrapper becomes a thin alias for the shared sheet with `SettingsStore.strings`; the review-consent
+   body (PromptContent.kt:402-457) moves to its own shared composable with `BiometricAuthorizer`
+   parameter; PendingContent/NewAgentContent already shared — only their :app VMs relocate per ADR §4
+   (lifecycle-viewmodel multiplatform).
+   - Rows: CH31, CH32, CH33 (+ S19 wire chain), CH38, CH41, CH43; GamePad ChatViewModel tests stay on :app
+     until M4.
+4. **M4 — ChatViewModel + PromptSheetViewModel migrate to :shared-ui as KMP ViewModels** (ADR §4)
+   with constructor injection of `ChatRepository`, `SettingsStore`, `AttachmentsRepository`,
+   `HostRepository`, `BiometricAuthorizer`, `AttachmentsPlatformHost`, `VoiceInputHost`; the :app
+   Hilt module binds the same implementations; the Android `SavedStateHandle.toRoute<ChatRoute>()`
+   seam is replaced by a plain `agentId` in a shared VM factory parameter (orchestrator decides the
+   exact navigation seam with O4). The characterization harness (ChatViewModelCharacterizationTest)
+   gets an androidTest twin for :app wiring; the core tests move to :shared-ui jvmTest against the
+   same :data-core fakes.
+   - Rows: CH17, CH18, CH19, CH21, CH22, CH24, CH25, CH26, CH31, CH33(S19 wire), CH48.
+5. **M5 — composer delivery/decision chip and AUTO banner move**: final polish per CH20/CH23
+   (banner and chip already in M1, close leftovers), plus any mechanical import updates recorded.
+
+### Ports consumed (exact contracts per ADR 0001 §2, cc O1 when a deviation is needed)
+
+- `AttachmentsPlatformHost`: `attach.pickImages(maxItems: Int = 10): List<AttachmentRef>`,
+  `pickDocuments(mime: List<String> = listOf("*/*")): List<AttachmentRef>`,
+  `cameraTarget(): PreparedLocalFile?` (Android composer keeps the TakePicture/FileProvider path
+  via the exact current code; iOS PhotosPicker/UIDocumentPicker; camera fallback = photo library).
+- `BiometricAuthorizer`: `suspend fun authenticate(reason: String): AuthResult` with
+  `sealed interface AuthResult { OK; FAILED; UNAVAILABLE }` and the 5-minute freshness INSIDE the
+  impl (Android = wrapper over util/BiometricGate.kt unchanged; iOS = LAContext.evaluatePolicy
+  chained with a 5-min in-memory freshness engine; the session-wide K-chain persists via the
+  shared keychain access group only if O1 extends the contract — not requested here).
+- `VoiceInputHost`: `start(listener: VoiceListener)`, `stop()`, `listening: StateFlow<Boolean>`,
+  `VoiceListener { onPartial(text); onFinal(text); onError(code) }` with codes 1-6 per ADR 0001 §2.
+  iOS actual: SFSpeechRecognizer with `AVAudioSession.record` authorization check first
+  (`no-permissions` code 6), recognizer-unavailable → code 3, network-related failures → code 2.
+- NOT ports (per ADR no-port zones): haptics (CMP `LocalHapticFeedback`), IME insets
+  (`Modifier.imePadding()`/`.navigationBarsPadding()`), clipboard (CMP).
+
+### Golden-unverified rows at Gate C/D (differential golden gate)
+
+- Affected rows: CH4, CH11, CH32, CH34 (bash-only screenshotChatStreaming), CH38, CH41 (+ the
+  CH39 page-chrome visual, noted in the matrix Notes column).
+- How the differential golden gate will check them (per the orchestrator's protocol, agreed on
+  rev 2): recording happens once per host from `main` BEFORE the migration (baseline PNGs);
+  after each move in T5 the same Roborazzi tests run on the SAME host/qualifier footprint
+  (w411dp-h891dp-xxhdpi × the 4 themes of the suite) and the PNGs are compared pixel-for-pixel
+  against the same-host baseline produced on `main`. Any drift larger than transformation
+  tolerance is a Gate blocker; the golden PNGs are never committed from a non-recording host,
+  and the local run on the actual device/simulator host is O4's T6 deliverables (they are the
+  only machine with a goldens baseline at this time).
+- If any of these six tests drift: the move in flight is reverted (not merged-in-place) and the
+  orchestrator's verdict is appealed with the same evidence; no silent golden updates.
 
 ## Log
 
