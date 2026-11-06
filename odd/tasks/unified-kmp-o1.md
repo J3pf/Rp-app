@@ -25,7 +25,7 @@ Slice: `app/.../{data/db, data/repo, data/secure, domain, util, di}` + tests; sh
 | ID | Specs | Route | Commit |
 |---|---|---|---|
 | T1 | S5 S11 S15 | Characterization tests on unchanged Android code + parity matrix `docs/parity/o1-data.md` (Gate A) | ec8917c `test(parity): characterize O1 data-core behaviors unchanged, add parity matrix` |
-| T2 | S7 S10 S16 | Target architecture ADR `docs/adr/0001-kmp-target-architecture.md` + shared ports contract (Gate B) | pending |
+| T2 | S7 S10 S16 | Target architecture ADR `docs/adr/0001-kmp-target-architecture.md` + shared ports contract (Gate B) | 9e7cb3b `docs(adr): decide target KMP architecture and S14 upgrade-proof harness` |
 | T3 | S14 S15 S18 S20 | Data core migration to common code (Room KMP, repos, secure/settings store, iOS Keychain actual) + in-place upgrade proof (Gate C1) | pending |
 
 ## Log
@@ -45,3 +45,4 @@ Slice: `app/.../{data/db, data/repo, data/secure, domain, util, di}` + tests; sh
 - **L6**: O3 accepted the five contract decisions (AttachmentsPlatformHost, BiometricAuthorizer, VoiceInputHost; haptics/IME on CMP built-ins). Contracts to be published in docs/adr/0001 at T2. Awaiting full app suite result.
 - **L7**: T1 committed on unify/o1-data as ec8917c (single work-unit slice: parity matrix + 3 characterization test classes, 746 insertions, ~842 authored lines total with the ODD doc). Full 4-module S20 verification launched as post-commit confirmation.
 - **L8**: ADR 0001 written (11 sections): module graph (:data-core new KMP module), interface-over-expect/actual policy, ViewModel KMP via lifecycle 2.11 multiplatform, Hilt only as Android composition root + hand-written iOS graph, Room KMP 2.8.5 with BundledSQLiteDriver flip gated at C1, datastore-preferences-core settings, org.jetbrains.androidx.navigation, and the S14 upgrade-proof fixture plan (Robolectric crypto-seam fallback; Gate C1 NEEDS one Android emulator session for the connected two-build upgrade test — flagged for orchestrator). S20 suite post-commit: protocol 73 / relay-client 75 / shared-ui 108 / app 268 = 524 tests, 0 failures.
+- **L9**: O1 port-request answer to O3 re-delivered with final contract shapes (AttachmentsPlatformHost / BiometricAuthorizer / VoiceInputHost as interfaces; haptics/IME on CMP built-ins) — already sent at 05:53Z, confirmed again per orchestrator request; ADR §11 records it.
