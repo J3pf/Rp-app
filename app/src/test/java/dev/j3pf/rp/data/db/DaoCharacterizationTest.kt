@@ -319,6 +319,29 @@ class DaoCharacterizationTest {
         assertTrue(dao.seenSince("prompt-1", windowMs = 100_000L, now = now))
     }
 
+    // ---- PromptDao.recentlyResolved (pre-move characterization: the production default-clock
+    // semantic is about to become an ALWAYS-EXPLICIT caller argument for KMP compilability) ----
+
+    @Test
+    fun recentlyResolvedIsTrueOnlyInsideTheReplayWindowForResolvedRows() = runTest {
+        val dao = db.prompts()
+        val now = 9_000_000L
+        // Resolution inside the window -> replay suppressed.
+        db.prompts().upsert(listOf(prompt("p-in-window", state = PromptState.RESOLVED, resolvedAt = now - 100)))
+        assertTrue(dao.recentlyResolved("r1", "p-in-window", now = now))
+        // Resolution OLDer than the replay window -> NOT suppressed.
+        db.prompts().upsert(listOf(prompt("p-out-of-window", state = PromptState.RESOLVED, resolvedAt = now - PromptState.REPLAY_WINDOW_MS - 1)))
+        assertFalse(dao.recentlyResolved("r1", "p-out-of-window", now = now))
+        // Boundary is INCLUSIVE on resolvedAt >= now - window.
+        db.prompts().upsert(listOf(prompt("p-edge", state = PromptState.RESOLVED, resolvedAt = now - PromptState.REPLAY_WINDOW_MS)))
+        assertTrue(dao.recentlyResolved("r1", "p-edge", now = now))
+        // An OPEN prompt is never "recently resolved" regardless of data.
+        db.prompts().upsert(listOf(prompt("p-open", state = PromptState.OPEN, resolvedAt = now)))
+        assertFalse(dao.recentlyResolved("r1", "p-open", now = now))
+        // Unknown prompt id -> false, no crash.
+        assertFalse(dao.recentlyResolved("r1", "p-missing", now = now))
+    }
+
     @Test
     fun dedupSeenSinceExpiresExactlyAtWindowEdge() = runTest {
         val dao = db.dedup()

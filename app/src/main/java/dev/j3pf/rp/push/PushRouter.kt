@@ -57,7 +57,7 @@ class PushRouter
                     // este dispositivo (marca del deduper) ni si el relay lo cerró (fila resuelta).
                     if (deduper.answeredRecently(p.promptId)) return true
                     val relayId = secrets.current()?.relayId
-                    if (relayId != null && promptDao.recentlyResolved(relayId, p.promptId)) return true
+                    if (relayId != null && promptDao.recentlyResolved(relayId, p.promptId, System.currentTimeMillis())) return true
                     if (!deduper.firstSeen(NotificationDeduper.promptKey(p.promptId))) return true
                     // Silencio por agente (local); las autorizaciones críticas pueden saltárselo si el ajuste está activo.
                     val s = settings.current()

@@ -166,7 +166,7 @@ interface PromptDao {
     suspend fun recentlyResolved(
         relayId: String,
         promptId: String,
-        now: Long = System.currentTimeMillis(),
+        now: Long,
     ): Boolean {
         val row = get(relayId, promptId) ?: return false
         return row.state == PromptState.RESOLVED && (row.resolvedAt ?: 0L) >= now - PromptState.REPLAY_WINDOW_MS
@@ -287,7 +287,7 @@ abstract class DedupDao {
     open suspend fun seenSince(
         key: String,
         windowMs: Long,
-        now: Long = System.currentTimeMillis(),
+        now: Long,
     ): Boolean {
         val at = seenAt(key) ?: return false
         return at >= now - windowMs
