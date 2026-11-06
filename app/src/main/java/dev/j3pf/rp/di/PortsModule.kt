@@ -1,0 +1,53 @@
+package dev.j3pf.rp.di
+
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dev.j3pf.rp.data.ports.BackgroundScheduler
+import dev.j3pf.rp.data.ports.BatteryExemption
+import dev.j3pf.rp.data.ports.DedupStore
+import dev.j3pf.rp.data.ports.NotificationHealth
+import dev.j3pf.rp.data.ports.OpenPromptGuard
+import dev.j3pf.rp.data.ports.PlatformInfo
+import dev.j3pf.rp.data.ports.SettingsStore
+import dev.j3pf.rp.data.repo.SettingsRepository
+import dev.j3pf.rp.platform.AndroidBatteryExemption
+import dev.j3pf.rp.platform.AndroidNotificationHealth
+import dev.j3pf.rp.platform.AndroidPlatformInfo
+import dev.j3pf.rp.platform.DaoDedupStore
+import dev.j3pf.rp.platform.DaoOpenPromptGuard
+import dev.j3pf.rp.platform.WorkManagerBackgroundScheduler
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class PortsModule {
+    @Binds
+    @Singleton
+    abstract fun bindBackgroundScheduler(impl: WorkManagerBackgroundScheduler): BackgroundScheduler
+
+    @Binds
+    @Singleton
+    abstract fun bindDedupStore(impl: DaoDedupStore): DedupStore
+
+    @Binds
+    @Singleton
+    abstract fun bindOpenPromptGuard(impl: DaoOpenPromptGuard): OpenPromptGuard
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsStore(impl: SettingsRepository): SettingsStore
+
+    @Binds
+    @Singleton
+    abstract fun bindNotificationHealth(impl: AndroidNotificationHealth): NotificationHealth
+
+    @Binds
+    @Singleton
+    abstract fun bindBatteryExemption(impl: AndroidBatteryExemption): BatteryExemption
+
+    @Binds
+    @Singleton
+    abstract fun bindPlatformInfo(impl: AndroidPlatformInfo): PlatformInfo
+}
