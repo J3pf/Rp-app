@@ -47,6 +47,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -59,6 +60,7 @@ class PromptsRepositoryTest {
     private lateinit var bus: MessageBus
     private lateinit var conn: RelayConnection
     private lateinit var repo: PromptsRepository
+    private lateinit var db: dev.j3pf.rp.data.db.RpDatabase
     private val prompt =
         Prompt(
             promptId = "01PROMPT",
@@ -79,7 +81,7 @@ class PromptsRepositoryTest {
         val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
         val api = RelayApi(testClient(), secrets)
         conn = RelayConnection(ctx, secrets, bus, testClient(), scope)
-        val db = inMemoryDb(ctx)
+        db = inMemoryDb(ctx)
         val factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
         repo = PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, factory, scope)
         repo.start()
@@ -184,6 +186,61 @@ class PromptsRepositoryTest {
             )
             assertEquals(1, server.requestCount) // sólo el upgrade, ninguna petición HTTP
             assertNotNull(repo.get("01PROMPT"))
+        }
+    }
+
+
+    /** Verdict rev-3 fix (2), PR-06: APP_WELCOME purges resolved prompts older than 24 h at the
+     *  REPOSITORY level (the trigger lives in PromptsRepository.start(), PromptsRepository.kt:118). */
+    @Test
+    fun `app welcome purges resolved prompts older than 24h and keeps fresh ones`() {
+        runTest(testScheduler) {
+            // Seeds are RELATIVE to the real clock the repository uses for its 24h purge cutoff.
+            val now = System.currentTimeMillis()
+            fun promptEntity(id: String, state: String, resolvedAt: Long?) =
+                dev.j3pf.rp.data.db.PromptEntity(
+                    relayId = "r1",
+                    promptId = id,
+                    agentId = "m:s",
+                    json = "{\"id\":\"$id\"}",
+                    state = state,
+                    dangerRank = 1,
+                    openedAt = now - 3_600_000L,
+                    resolvedBy = if (state == "resolved") "user" else null,
+                    resolvedAt = resolvedAt,
+                )
+            db.prompts().upsert(
+                listOf(
+                    promptEntity("p-open", "open", null),
+                    promptEntity("p-fresh-resolved", "resolved", now - 2 * 3_600_000L),
+                    promptEntity("p-stale-resolved", "resolved", now - 25 * 3_600_000L),
+                ),
+            )
+
+            // APP_WELCOME realises the purge trigger (repo listens on the bus): only p-open is open.
+            bus.publish(
+                Envelope.of(
+                    MsgType.APP_WELCOME,
+                    dev.j3pf.rp.protocol.AppWelcome(openPrompts = listOf(prompt.copy(promptId = "p-open"))),
+                ),
+            )
+
+            // The bus re-dispatches asynchronously; poll until the purge effect lands.
+            withContext(Dispatchers.IO) {
+                val deadline = System.nanoTime() + 10_000_000_000L
+                while (System.nanoTime() < deadline) {
+                    if (db.prompts().get("r1", "p-stale-resolved") == null) return@withContext
+                    runCatching { repo.open.first() } // yields the repo's coroutine
+                }
+            }
+
+            // A stayed open (in welcome); B kept it resolved timestamps, but after the
+            // of the purge trigger exactly the >24h resolved row is GONE:
+            assertNull(db.prompts().get("r1", "p-stale-resolved"))
+            assertEquals("open", db.prompts().get("r1", "p-open")?.state)
+            val fresh = db.prompts().get("r1", "p-fresh-resolved")!!
+            assertEquals("resolved", fresh.state)
+            assertEquals(now - 2 * 3_600_000L, fresh.resolvedAt)
         }
     }
 }
