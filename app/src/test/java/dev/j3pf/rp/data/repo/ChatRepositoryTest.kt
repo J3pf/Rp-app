@@ -55,6 +55,7 @@ class ChatRepositoryTest {
     private lateinit var connection: RelayConnection
     private lateinit var bus: MessageBus
     private lateinit var repository: ChatRepository
+    private lateinit var db: dev.j3pf.rp.data.db.RpDatabase
 
     private val sockets = LinkedBlockingQueue<WebSocket>()
     private val outgoing = LinkedBlockingQueue<String>()
@@ -71,7 +72,7 @@ class ChatRepositoryTest {
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         bus = MessageBus()
         connection = RelayConnection(context, secrets, bus, testClient(), repoScope)
-        val db = inMemoryDb(context)
+        db = inMemoryDb(context)
         val settingsRepo = SettingsRepository(context)
         val factory =
             dev.j3pf.rp.push
@@ -298,5 +299,45 @@ class ChatRepositoryTest {
             session.retry(originalId)
             assertEquals(2, receivedClientMsgIds.size)
             assertEquals(originalId, receivedClientMsgIds[1], "Retry MUST send the exact same clientMsgId")
+        }
+
+
+    /** Verdict rev-3 fix (2), CH-09: the Worker contract `flushOutbox(): true when nothing pending`. */
+    @Test
+    fun `flushOutbox returns true when the outbox is empty`() =
+        runBlocking {
+            assertTrue(repository.flushOutbox())
+        }
+
+    /** CH-09b: a transient failure (HTTP 5xx) keeps the retry key pending -> flushOutbox false. */
+    @Test
+    fun `flushOutbox returns false when the delivery fails`() =
+        runBlocking {
+            // flushOutbox uses the HTTP path (ChatDeliveryPolicy.flushOutbox, ChatDeliveryPolicy.kt:221-253);
+            // a 5xx keeps the item and reports pending work. No websocket is needed.
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(500))
+
+            val message =
+                dev.j3pf.rp.protocol.UserMessage(
+                    agentId = "test-agent",
+                    clientMsgId = "01FLUSHFAIL",
+                    text = "se cae",
+                )
+            db.outbox().put(
+                dev.j3pf.rp.data.db.OutboxEntity(
+                    clientMsgId = message.clientMsgId,
+                    relayId = "r1",
+                    agentId = message.agentId,
+                    json = dev.j3pf.rp.protocol.RpJson
+                        .encodeToString(dev.j3pf.rp.protocol.UserMessage.serializer(), message),
+                    attempts = 0,
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+
+            assertFalse(repository.flushOutbox())
+            assertEquals(1, server.requestCount)
+            // The retry key stays available (outbox item not silently dropped):
+            assertTrue(db.outbox().all("r1").any { it.clientMsgId == "01FLUSHFAIL" })
         }
 }
