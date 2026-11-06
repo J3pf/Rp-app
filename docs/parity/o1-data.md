@@ -114,6 +114,8 @@ Status legend: `covered` = automated proof exists; `char` = characterization tes
 
 | ID | Behavior | Android source | Proof test | Status |
 |---|---|---|---|---|
+| ST-07 | On-disk settings file: `rp_settings.preferences_pb` (DataStore Preferences format, key set per ST-01) — part of the S14 upgrade surface (in-place install reads the SAME file) | `data/repo/SettingsRepository.kt:24` (delegate `preferencesDataStore(name = "rp_settings")`) | fixture `app/src/test/resources/rp_settings.preferences_pb` (exported by PRODUCTION setters through `DataStoreFixtureExporterTest#productionSettersPersistFixtureValuesAndOptionallyExportBytes`); read-back `DataStoreFixtureTest#onDiskFileFixtureReadsBackExactValues` | covered (fixture) |
+| ST-08 | ST-06 fallback pinned with REAL corruption: garbage bytes in the preferences file produce `AppSettings()` defaults without crashing (DataStore corruption surfaces as an `IOException` subtype, so the production `catch { if (e is IOException) emit(emptyPreferences()) }` path is what fires) | `data/repo/SettingsRepository.kt:36-39` | `DataStoreFixtureTest#corruptPreferencesFileFallsBackToEmptyPreferences` | covered |
 | UT-01 | `lastSegment/relativeTime/humanSize/contextLabel/contextEmoji/agentTitle/parseColor/stableId/truncate` delegate 1:1 to `shared-ui/ui/util` | `util/Format.kt:7-48` | `shared-ui` `AgentCardTest` + `RemotePiAppTest` cover the shared implementations spirit (`hace 5 min`, `hace 2 h`, `Feature X`, titles, etc.) | covered |
 
 ## 11. Domain mappers (incl. theme/TODO/activeTask S14 fields) — `domain/model/Mappers.kt`
