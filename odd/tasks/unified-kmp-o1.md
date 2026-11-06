@@ -24,7 +24,7 @@ Slice: `app/.../{data/db, data/repo, data/secure, domain, util, di}` + tests; sh
 
 | ID | Specs | Route | Commit |
 |---|---|---|---|
-| T1 | S5 S11 S15 | Characterization tests on unchanged Android code + parity matrix `docs/parity/o1-data.md` (Gate A) | pending |
+| T1 | S5 S11 S15 | Characterization tests on unchanged Android code + parity matrix `docs/parity/o1-data.md` (Gate A) | ec8917c `test(parity): characterize O1 data-core behaviors unchanged, add parity matrix` |
 | T2 | S7 S10 S16 | Target architecture ADR `docs/adr/0001-kmp-target-architecture.md` + shared ports contract (Gate B) | pending |
 | T3 | S14 S15 S18 S20 | Data core migration to common code (Room KMP, repos, secure/settings store, iOS Keychain actual) + in-place upgrade proof (Gate C1) | pending |
 
@@ -43,3 +43,4 @@ Slice: `app/.../{data/db, data/repo, data/secure, domain, util, di}` + tests; sh
 - **L4**: Parity matrix docs/parity/o1-data.md written (11+21+34 rows + 8 platform ports); added characterization tests on unchanged code: SettingsRepositoryTest (ST-01..06), DaoCharacterizationTest (DB-04..12), SecretStoreScaffoldTest (SC-04/05). Strict no-production-change for Gate A. Baseline recorded: 243 app tests green.
 - **L5**: Port contract decisions: P-BIO/P-PICK approved as interfaces (no expect-class); P-HAPTICS/P-IME rejected as ports (CMP built-ins already cover them), P-VOICE approved with documented error codes. Sent to O3, cc orchestrator. Rationale recorded for T2 ADR.
 - **L6**: O3 accepted the five contract decisions (AttachmentsPlatformHost, BiometricAuthorizer, VoiceInputHost; haptics/IME on CMP built-ins). Contracts to be published in docs/adr/0001 at T2. Awaiting full app suite result.
+- **L7**: T1 committed on unify/o1-data as ec8917c (single work-unit slice: parity matrix + 3 characterization test classes, 746 insertions, ~842 authored lines total with the ODD doc). Full 4-module S20 verification launched as post-commit confirmation.
