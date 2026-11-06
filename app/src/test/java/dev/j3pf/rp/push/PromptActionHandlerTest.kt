@@ -131,6 +131,23 @@ class PromptActionHandlerTest {
     }
 
     @Test
+    fun `429 muestra reintento y encola WorkManager`() {
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":"too_many_attempts"}"""))
+            handler.handle(ctx, intent(PromptActionReceiver.ANSWER_CONFIRM_YES))
+            val n = current()
+            assertNotNull(n) // 429 → Queued: la notificación pasa a "Sin conexión · se reintentará"
+            assertEquals(ctx.getString(dev.j3pf.rp.R.string.notif_retrying), n.extras.getString(android.app.Notification.EXTRA_TEXT))
+            val infos =
+                androidx.work.WorkManager
+                    .getInstance(ctx)
+                    .getWorkInfosForUniqueWork("answer-01PROMPT")
+                    .get()
+            assertEquals(1, infos.size, "429 encola el reintento por WorkManager")
+        }
+    }
+
+    @Test
     fun `sin red muestra reintento y encola WorkManager`() {
         runBlocking {
             server.shutdown()
