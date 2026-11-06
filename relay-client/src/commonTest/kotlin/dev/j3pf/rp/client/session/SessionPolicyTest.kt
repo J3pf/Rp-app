@@ -252,13 +252,29 @@ class SessionPolicyTest {
 
             assertTrue(f.policy.registerApnsToken("apns-token", "production"))
             assertTrue(f.policy.registerApnsToken(null, null))
-            assertTrue(f.policy.registerApnsToken("", ""))
+            // Clearing sends the "" token sentinel with a null environment ("" would 400 on the relay).
+            assertTrue(f.policy.registerApnsToken("", null))
+
+            // Android platform: no registration call at all.
+            val androidFixture = Fixture().apply { pushPlatform = SessionPushPlatform.ANDROID; direct = false }
+            assertFalse(androidFixture.policy.registerApnsToken("token", "sandbox"))
+            assertTrue(androidFixture.pushRequests.isEmpty())
+
+            // No session: no-op success.
+            val bare = Fixture(initialSession = false)
+            assertTrue(bare.policy.registerApnsToken("token", "sandbox"))
+            assertTrue(bare.pushRequests.isEmpty())
+
+            // Null token (keep) with an explicit environment updates only the environment column.
+            val keepDevice = Fixture().apply { pushPlatform = SessionPushPlatform.IOS; direct = false }
+            assertTrue(keepDevice.policy.registerApnsToken(null, "sandbox"))
+            assertEquals(listOf(listOf("fcm", "false", "ios", null, "sandbox")), keepDevice.pushRequests)
 
             assertEquals(
                 listOf(
                     listOf("fcm", "false", "ios", "apns-token", "production"),
                     listOf("fcm", "false", "ios", null, null),
-                    listOf("fcm", "false", "ios", "", ""),
+                    listOf("fcm", "false", "ios", "", null),
                 ),
                 f.pushRequests,
             )

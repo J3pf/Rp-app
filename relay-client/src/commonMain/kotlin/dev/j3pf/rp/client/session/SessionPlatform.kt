@@ -26,10 +26,10 @@ interface SessionPlatform {
 
     suspend fun currentToken(): String?
 
-    /** Null keeps the relay's APNs token; an empty string explicitly clears it. */
+    /** Null keeps the relay's APNs token; an empty string explicitly clears token and environment (Apple tokens are per-environment). */
     suspend fun currentApnsToken(): String? = null
 
-    /** Null keeps the relay's APNs environment; an empty string explicitly clears it. */
+    /** Valid only with a non-null, non-empty token; "sandbox"|"production". Null keeps the stored environment. */
     fun apnsEnvironment(): String? = null
 
     /** Existing platforms default to Android to preserve their current registration behavior. */
