@@ -230,3 +230,8 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
   `:app:testDirectDebugUnitTest --tests chat.* --tests promptsheet.*` → 22 tests, 0 failures.
   No test weakening, no Roborazzi touches, no production change; remaining rows need O1's fake
   repos (T5) or device/manual E2E (QA cases).
+- **L13** (O3, M1): added commonMain `ChatComposer` and `ChatTopBar`, plus moved the AUTO banner;
+  :app retains `ChatContent`, the exact `Composer` signature, ActivityResult/permission wiring, and
+  `VoiceInputState`. Updated parity source citations for CH14/15/16/23/27/31/43; no Gate-A test
+  files changed. The final focused Gradle invocation with in-process Kotlin execution was
+  `BUILD SUCCESSFUL` (test task UP-TO-DATE); its XML reports record 58 tests, 0 failures, 0 skipped.
