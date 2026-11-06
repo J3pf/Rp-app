@@ -150,6 +150,47 @@ class RelayHttpClientTest {
         }
 
     @Test
+    fun iosPushRegistrationCarriesPlatformTokenAndEnvironment() =
+        runTest {
+            client.putPush(
+                fcmToken = null,
+                direct = true,
+                platform = "ios",
+                apnsToken = "apns-token",
+                apnsEnvironment = "production",
+            )
+
+            assertEquals(
+                """{"direct":true,"platform":"ios","apnsToken":"apns-token","apnsEnvironment":"production"}""",
+                requests.single().body,
+            )
+        }
+
+    @Test
+    fun iosPushRegistrationCanKeepOrClearApnsFields() =
+        runTest {
+            client.putPush(null, true, platform = "ios")
+            assertEquals("""{"direct":true,"platform":"ios"}""", requests.single().body)
+
+            requests.clear()
+            // Empty apnsToken is the clear sentinel (the relay maps "" to null and drops both APNs fields);
+            // apnsEnvironment:"" would be rejected (schema only allows sandbox|production), so it is never sent.
+            client.putPush(null, true, platform = "ios", apnsToken = "")
+            assertEquals(
+                """{"direct":true,"platform":"ios","apnsToken":""}""",
+                requests.single().body,
+            )
+
+            // Token without environment: the relay keeps/propagates the per-device env column on its own.
+            requests.clear()
+            client.putPush(null, true, platform = "ios", apnsToken = "t2")
+            assertEquals(
+                """{"direct":true,"platform":"ios","apnsToken":"t2"}""",
+                requests.single().body,
+            )
+        }
+
+    @Test
     fun wrappersFiltersAndMeshQueriesUseProtocolDecoding() =
         runTest {
             reply = RelayHttpResponse(200, """{"devices":[{"deviceId":"live","unknown":1},{"deviceId":"old","revoked":true}]}""")
