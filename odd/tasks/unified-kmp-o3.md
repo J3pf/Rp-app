@@ -246,3 +246,11 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
   (pending parent acceptance) binds `AndroidVoiceInputHost`, routes the shared composer through the
   frozen `VoiceInputHost` contract, and preserves permission/base-text behavior; see CH54 and the
   new host/consumer tests for current proof.
+- **L14** (O3, M3-A): moved only the stateless `ModalBottomSheet` frame into commonMain
+  `PromptSheetChrome`; the :app wrapper retains Hilt/lifecycle collection, status timing/reset and
+  dismissal, biometric authentication/mapping, and `PromptContent` answer handling. Added direct
+  Robolectric characterization for the resolved/missing/queued strings and error/auth-message
+  passthrough; updated CH35–CH37 citations. No Gate-A tests or screenshot goldens changed.
+  `:app:testDirectDebugUnitTest --tests 'dev.j3pf.rp.ui.promptsheet.*'`, `:shared-ui:jvmTest`,
+  `:shared-ui:compileKotlinIosSimulatorArm64`, and `:shared-ui:ktlintCheck` all passed (final run).
+  Biometric gate remains platform-side; risk item 2 is not resolved by this chrome extraction.
