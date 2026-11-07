@@ -89,15 +89,17 @@ class SessionPolicy(
         token: String?,
         environment: String?,
     ): Boolean {
+        val validEnvironment = validApnsEnvironment(environment)
         if (platform.currentSession() == null) return true
         if (platform.pushPlatform() != SessionPushPlatform.IOS) return false
+        if (environment != null && validEnvironment == null) return false
         return when (
             putPush(
                 platform.currentToken(),
                 platform.directPush(),
                 SessionPushPlatform.IOS.wireValue,
                 token,
-                environment,
+                validEnvironment,
             )
         ) {
             is ApiResult.Ok -> true
@@ -111,14 +113,21 @@ class SessionPolicy(
     ): ApiResult<OkResponse> =
         when (platform.pushPlatform()) {
             SessionPushPlatform.ANDROID -> putPush(fcmToken, direct, null, null, null)
-            SessionPushPlatform.IOS ->
-                putPush(
-                    fcmToken,
-                    direct,
-                    SessionPushPlatform.IOS.wireValue,
-                    platform.currentApnsToken(),
-                    platform.apnsEnvironment(),
-                )
+            SessionPushPlatform.IOS -> {
+                val environment = platform.apnsEnvironment()
+                val validEnvironment = validApnsEnvironment(environment)
+                if (environment != null && validEnvironment == null) {
+                    ApiResult.Http(400, "Invalid APNs environment")
+                } else {
+                    putPush(
+                        fcmToken,
+                        direct,
+                        SessionPushPlatform.IOS.wireValue,
+                        platform.currentApnsToken(),
+                        validEnvironment,
+                    )
+                }
+            }
         }
 
     suspend fun logout() {
@@ -129,3 +138,9 @@ class SessionPolicy(
         platform.clearCredentialsAndSettings()
     }
 }
+
+internal fun validApnsEnvironment(environment: String?): String? =
+    when (environment) {
+        null, "sandbox", "production" -> environment
+        else -> null
+    }

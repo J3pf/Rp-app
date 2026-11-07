@@ -455,6 +455,43 @@ class SessionPolicyTest {
         }
 
     @Test
+    fun registerApnsTokenRejectsUnknownEnvironmentWithoutSending() =
+        runTest {
+            val f = Fixture().apply { pushPlatform = SessionPushPlatform.IOS }
+
+            assertFalse(f.policy.registerApnsToken("token", "testing"))
+            assertTrue(f.pushRequests.isEmpty())
+        }
+
+    @Test
+    fun registerApnsTokenRejectsEmptyEnvironmentWithoutSending() =
+        runTest {
+            val f = Fixture().apply { pushPlatform = SessionPushPlatform.IOS }
+
+            assertFalse(f.policy.registerApnsToken("token", ""))
+            assertTrue(f.pushRequests.isEmpty())
+        }
+
+    @Test
+    fun registerApnsTokenKeepsTokenClearTokenRequestOrder() =
+        runTest {
+            val f = Fixture().apply { pushPlatform = SessionPushPlatform.IOS; direct = false }
+
+            assertTrue(f.policy.registerApnsToken("t1", "sandbox"))
+            assertTrue(f.policy.registerApnsToken("", null))
+            assertTrue(f.policy.registerApnsToken("t2", "production"))
+
+            assertEquals(
+                listOf(
+                    listOf("fcm", "false", "ios", "t1", "sandbox"),
+                    listOf("fcm", "false", "ios", "", null),
+                    listOf("fcm", "false", "ios", "t2", "production"),
+                ),
+                f.pushRequests,
+            )
+        }
+
+    @Test
     fun sessionWsBaseRetainsExistingConversionBehavior() {
         val s = Fixture().old
         assertEquals("wss://relay/path", s.copy(relayUrl = "https://relay/path///").wsBase)
