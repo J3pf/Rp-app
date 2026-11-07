@@ -5,6 +5,7 @@ import dev.j3pf.rp.client.session.ApplePushRegistration
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readBytes
 import platform.Foundation.NSData
+import kotlin.concurrent.Volatile
 
 /**
  * iOS APNs registration bridge. Keep the environment aligned with the app's APNs entitlement: if
@@ -19,6 +20,20 @@ import platform.Foundation.NSData
  */
 object IosPushRegistrationBridge {
     const val DEFAULT_APNS_ENVIRONMENT = "sandbox"
+
+    /**
+     * Composition-root anchor for iOS APNs registration. Set once by the iOS composition root,
+     * before first use; until then registration stays INERT BY DESIGN: [register] returns false
+     * and sends nothing (no throw, no crash, no token logged).
+     */
+    @Volatile
+    var registration: ApplePushRegistration? = null
+
+    /** Inert until [registration] is set by the iOS composition root. Never logs the token. */
+    suspend fun register(apnsToken: NSData?): Boolean {
+        val registration = registration ?: return false
+        return register(registration, apnsToken)
+    }
 
     @OptIn(ExperimentalForeignApi::class)
     fun apnsTokenHex(data: NSData): String {
