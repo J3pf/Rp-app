@@ -66,11 +66,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.serialization.Serializable
 import javax.inject.Inject
-
-@Serializable
-private data object ArchivedAgentsRoute
 
 private const val ARCHIVED_READ_ONLY_AGENT = "archived_read_only_agent"
 
