@@ -17,14 +17,11 @@ import dev.j3pf.rp.protocol.HostSpawn
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -42,28 +39,28 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
- * WIRE-LEVEL contract proof for UNIT P3 (verifier follow-up on the fake-only common test,
- * Risk: item 2): the assertions below run through a `HostGateway` REFERENCE (never the
- * concrete type), backed by the REAL `HostRepository` over a real socket, pinning exactly
- * the four mutations the verifier marked as MISSED:
- *   (a) the timeout literal "Tiempo de espera agotado" reaching Failed.message AT WIRE LEVEL
- *       (mutating the literal in HostRepository turns this RED);
- *   (b) NotConnected -> "Sin conexión con el relay" with `requests.isEmpty()` (NO frame
- *       leaves the device), and exactly ONE frame per call on the connected-erroring path;
- *   (c) ORDER with no dispatcher hops: two sequential gateway calls from one coroutine are
- *       received by the wire in the exact send order;
- *   (d) EXACT payload shapes the :app consumers build today for listDirs/herdrLayout/gitDiff
- *       (null and non-null path)/gitDiscard/spawn.
- * The pre-existing gitDiscard error-string assertion in HostRepositoryErrorsTest stays
- * untouched (S15). Timeouts use the REAL 12 s path of `ask()` — the 12 s duration is the
- * wire guarantee being proven, not slack.
+ * WIRE-LEVEL contract proof for UNIT P3 (rev2.1 corrections applied per the verifier's
+ * ruling): the contract holds a `HostGateway` REFERENCE (never the concrete class) whose
+ * backing implementation is the REAL `HostRepository` over a real socket. Proven here:
+ *   (a) the timeout literal "Tiempo de espera agotado" AND its REAL 12 s duration
+ *       (System.nanoTime window; mutating 12_000 -> 1_000 must fail the floor);
+ *   (b) NotConnected AFTER a real socket existed: "Sin conexión con el relay" with
+ *       ZERO host frames on the wire;
+ *   (c) send ORDER of two SEQUENTIAL gateway calls in ONE coroutine on
+ *       Dispatchers.Default, plus the hop probe (thread identity after each call);
+ *   (d) EXACT payloads for listDirs/herdrLayout/spawn/gitDiff(null and non-null
+ *       path)/gitDiscard, all three fields of gitDiff's non-null case asserted.
+ * Connection-level frames (app.hello from RelayConnection.kt onSocketOpen) are FILTERED so
+ * the contract counts only host frames (the same discipline HostRepositoryErrorsTest uses).
+ * rev2.1 wording discipline: "zero frames" only where a socket exists; no "erroring path"
+ * claim; the hop statement is limited to the resume-thread identity, not a general claim.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class HostGatewayWireContractTest {
     private lateinit var context: android.app.Application
     private lateinit var server: MockWebServer
-    private lateinit var scope: CoroutineScope
+    private lateinit var scope: kotlinx.coroutines.CoroutineScope
     private lateinit var bus: MessageBus
     private lateinit var connection: RelayConnection
     private lateinit var repository: HostRepository
@@ -71,13 +68,11 @@ class HostGatewayWireContractTest {
     private lateinit var gateway: HostGateway
     private val requests = LinkedBlockingQueue<Envelope>()
 
-    @Volatile private var responder: ((Envelope) -> Envelope?)? = null
-
     @Before
     fun setUp() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
         server = MockWebServer().also { it.start() }
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         bus = MessageBus()
         connection = RelayConnection(secrets, bus, dev.j3pf.rp.testClient(), scope)
@@ -102,79 +97,86 @@ class HostGatewayWireContractTest {
                         text: String,
                     ) {
                         val env = Envelope.parse(text)
-                        // Filter CONNECTION-LEVEL frames (app.hello keepalive from
-                        // RelayConnection.kt:87) — the same discipline
-                        // HostRepositoryErrorsTest uses; the contract is about host frames.
-                        if (env.t in HostGatewayWireContractTest.HOST_FRAMES) requests.put(env)
-                        // No response ever: leaves the gateway to its provider-timeout path.
+                        if (env.t in HOST_FRAMES) {
+                            requests.put(env)
+                            // No response ever: leaves the gateway to its provider timeout path.
+                        }
                     }
                 },
             ),
         )
     }
 
-    private fun connect() {
+    private suspend fun connect() {
         socketAcceptingOnlyFrames()
         connection.start()
-        runBlocking { withTimeout(5_000) { connection.state.first { it == ConnState.Connected } } }
+        withTimeout(5_000) { connection.state.first { it == ConnState.Connected } }
     }
 
     @Test
-    fun timeoutLiteralIsPinnedAtWireLevelThroughThePort() = runBlocking {
+    fun timeoutLiteralAndIts12sDurationArePinnedAtWireLevelThroughThePort() = runBlocking {
         connect()
-        // assert THROUGH the port: `gateway` is a HostGateway reference.
+        val startedAt = System.nanoTime()
         val result = gateway.listDirs("m1", "/") as Failed
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         assertEquals("Tiempo de espera agotado", result.message)
+        assertTrue(
+            "listDirs timeout must run the REAL 12 s path (mutating 12_000->1_000 fails this floor; got ${elapsedMs} ms)",
+            elapsedMs >= 10_500,
+        )
+        assertTrue(
+            "listDirs timeout must not drift past ~15 s (got ${elapsedMs} ms)",
+            elapsedMs <= 15_000,
+        )
     }
 
     @Test
-    fun notConnectedSendsZeroFramesAndPinsTheDisconnectionLiteral() = runBlocking {
-        // connection.start() was never called: the gateway must fail FAST with the exact
-        // literal and WITHOUT sending any frame (NotConnected branch, HostRepository.kt:124).
-        val before = requests.size
+    fun notConnectedAfterARealSocketExistedSendsZeroFramesAndPinsTheDisconnectionLiteral() = runBlocking {
+        // A real socket WAS opened first (green light for the zero-frames claim to be
+        // meaningful): connect -> stop, then the NotConnected path bets zero host frames.
+        connect()
+        connection.stop()
+
         val failed = gateway.gitDiscard("m1", "/repo", "f.txt") as Failed
         assertEquals("Sin conexión con el relay", failed.message)
-        assertEquals("no frame may leave the device when the socket is not connected", before, requests.size)
-        assertTrue(requests.isEmpty())
+        assertTrue(
+            "ZERO host frames may leave the device on the NotConnected path",
+            requests.isEmpty(),
+        )
     }
 
     @Test
-    fun connectedErroringPathSendsExactlyOneFramePerCall() = runBlocking {
+    fun connectedPathSendsExactlyOneHostFramePerCall() = runBlocking {
         connect()
-        responder = { req ->
-            FrameLog.payload(req)
-            null // gateway goes to the timeout path after one frame; order+count is what we pin
-        }
         val before = requests.size
         gateway.listDirs("m1", "/")
         assertEquals(1, requests.size - before)
     }
 
     @Test
-    fun gatewayPreservesSendOrderWithoutDispatcherHops() = runBlocking {
-        connect()
-        responder = { req ->
-            FrameLog.payload(req)
-            null
+    fun sequentialGatewayCallsInOneDefaultCoroutinePreserveSendOrder() = runBlocking {
+        withContext(Dispatchers.Default) {
+            connect()
+            val callerThread = Thread.currentThread().name
+            gateway.gitDiff("m1", "/repo", null)
+            gateway.gitDiff("m1", "/repo", "lib/x")
+            // HOP PROBE (what IS provable): after each call the coroutine RESUMES on this
+            // coroutine's own dispatcher (Dispatchers.Default); a hop that left the
+            // coroutine on a DIFFERENT thread is observable here.
+            assertEquals(callerThread, Thread.currentThread().name)
+            val first = requests.poll(15, TimeUnit.SECONDS)!!
+            val second = requests.poll(15, TimeUnit.SECONDS)!!
+            assertEquals(MsgType.HOST_GIT_DIFF, first.t)
+            assertEquals(MsgType.HOST_GIT_DIFF, second.t)
+            // ALL THREE fields of the non-null case, plus the null-path shape:
+            assertEquals(HostGitDiff("m1", "/repo", path = "lib/x"), second.body<HostGitDiff>())
+            assertEquals(HostGitDiff("m1", "/repo", path = null), first.body<HostGitDiff>())
         }
-        // Two sequential calls launched from ONE coroutine: the wire receives them in the
-        // exact send order. No queue, no dispatcher hop between them (port adds nothing).
-        val j1 = launch(Dispatchers.Unconfined) { gateway.gitDiff("m1", "/repo", null) }
-        val j2 = launch(Dispatchers.Unconfined) { gateway.gitDiff("m1", "/repo", "lib/x") }
-        joinAll(j1, j2)
-        val first = requests.poll(15, TimeUnit.SECONDS)!!
-        val second = requests.poll(15, TimeUnit.SECONDS)!!
-        assertEquals(MsgType.HOST_GIT_DIFF, first.t)
-        assertEquals(null, first.body<HostGitDiff>()!!.path)
-        assertEquals("lib/x", second.body<HostGitDiff>()!!.path)
     }
 
     @Test
     fun everyRpcCarriesExactlyThePayloadConsumersBuildToday() = runBlocking {
         connect()
-        responder = {
-            null // consume frames only; payloads are asserted from the requests queue
-        }
         gateway.listDirs("m1", "/x")
         gateway.herdrLayout("m2")
         gateway.spawn(HostSpawn(machineId = "m3", cwd = "/y", name = "n", backend = "claude"))
@@ -182,13 +184,13 @@ class HostGatewayWireContractTest {
         gateway.gitDiscard("m5", "/repo/y", "f.txt")
 
         withTimeout(10_000) {
-            val listOfDirs = requests.take()
-            assertEquals(MsgType.HOST_LIST_DIRS, listOfDirs.t)
-            assertEquals(HostListDirs("m1", "/x"), listOfDirs.body<HostListDirs>())
+            val listDirsFrame = requests.take()
+            assertEquals(MsgType.HOST_LIST_DIRS, listDirsFrame.t)
+            assertEquals(HostListDirs("m1", "/x"), listDirsFrame.body<HostListDirs>())
 
-            val herdr = requests.take()
-            assertEquals(MsgType.HOST_HERDR_LAYOUT, herdr.t)
-            assertEquals(HostMachineRef("m2"), herdr.body<HostMachineRef>())
+            val herdrFrame = requests.take()
+            assertEquals(MsgType.HOST_HERDR_LAYOUT, herdrFrame.t)
+            assertEquals(HostMachineRef("m2"), herdrFrame.body<HostMachineRef>())
 
             val spawnFrame = requests.take()
             assertEquals(MsgType.HOST_SPAWN, spawnFrame.t)
@@ -197,30 +199,25 @@ class HostGatewayWireContractTest {
                 spawnFrame.body<HostSpawn>(),
             )
 
-            val gitNull = requests.take()
-            assertEquals(MsgType.HOST_GIT_DIFF, gitNull.t)
-            assertEquals(HostGitDiff("m4", "/repo/x", path = null), gitNull.body<HostGitDiff>())
+            val gitNullFrame = requests.take()
+            assertEquals(MsgType.HOST_GIT_DIFF, gitNullFrame.t)
+            assertEquals(HostGitDiff("m4", "/repo/x", path = null), gitNullFrame.body<HostGitDiff>())
 
-            val discard = requests.take()
-            assertEquals(MsgType.HOST_GIT_DISCARD, discard.t)
-            assertEquals(HostGitDiscard("m5", "/repo/y", "f.txt"), discard.body<HostGitDiscard>())
+            val discardFrame = requests.take()
+            assertEquals(MsgType.HOST_GIT_DISCARD, discardFrame.t)
+            assertEquals(HostGitDiscard("m5", "/repo/y", "f.txt"), discardFrame.body<HostGitDiscard>())
         }
     }
 
-    /** One shared object: the connection-level fame filter alias with the other tests. */
-    private object FrameLog {
-        fun payload(request: Envelope) { /* no-op; queue owned by the test fixture */ }
-    }
-
     private companion object {
-        /** Host-frame kinds this contract's queue accepts (connection frames excluded). */
+        /** Host frames this contract counts (connection-level frames filtered). */
         val HOST_FRAMES =
-            listOf(
+            setOf(
                 MsgType.HOST_LIST_DIRS,
                 MsgType.HOST_HERDR_LAYOUT,
                 MsgType.HOST_SPAWN,
                 MsgType.HOST_GIT_DIFF,
                 MsgType.HOST_GIT_DISCARD,
-            ).toSet()
+            )
     }
 }
