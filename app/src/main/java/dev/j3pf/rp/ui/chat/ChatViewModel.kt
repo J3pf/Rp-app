@@ -27,7 +27,7 @@ import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HostGitDiffResult
 import dev.j3pf.rp.ui.nav.ChatRoute
-import dev.j3pf.rp.util.BiometricGate
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -78,7 +78,7 @@ class ChatViewModel
         private val attachmentsRepo: AttachmentsRepository,
         private val hostRepo: HostRepository,
         connection: RelayConnection,
-        val gate: BiometricGate,
+        val gate: BiometricAuthorizer,
     ) : ViewModel() {
         val agentId: String = savedStateHandle.toRoute<ChatRoute>().agentId
         private val session = chats.open(agentId)

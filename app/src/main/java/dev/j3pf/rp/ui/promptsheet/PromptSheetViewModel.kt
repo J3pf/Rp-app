@@ -11,7 +11,7 @@ import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
-import dev.j3pf.rp.util.BiometricGate
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,7 +47,7 @@ class PromptSheetViewModel
     constructor(
         private val prompts: PromptsRepository,
         settings: SettingsRepository,
-        val gate: BiometricGate,
+        val gate: BiometricAuthorizer,
     ) : ViewModel() {
         val settings: StateFlow<AppSettings> = settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 

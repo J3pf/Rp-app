@@ -95,7 +95,7 @@ import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.components.rememberActivity
 import dev.j3pf.rp.ui.promptsheet.AnswerUi
 import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
-import dev.j3pf.rp.util.AuthResult
+import dev.j3pf.rp.data.ports.BiometricAuthResult as AuthResult
 import dev.j3pf.rp.util.agentTitle
 import kotlinx.coroutines.launch
 
@@ -315,7 +315,7 @@ fun ChatScreen(
             scope.launch {
                 if (vm.needsAuth()) {
                     if (activity == null) return@launch
-                    when (vm.gate.authenticate(activity, "Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
+                    when (vm.gate.authenticate("Enviar como tecleado", "Este mensaje autoriza acciones en modo Auto")) {
                         AuthResult.OK -> {}
 
                         AuthResult.UNAVAILABLE -> {
@@ -347,7 +347,7 @@ fun ChatScreen(
                         snackbar.showSnackbar("No se pudo verificar tu identidad")
                         return@launch
                     }
-                    val r = promptVm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))
+                    val r = promptVm.gate.authenticate("Confirma tu identidad", p.title.take(80))
                     if (r != AuthResult.OK) {
                         snackbar.showSnackbar(
                             if (r ==
