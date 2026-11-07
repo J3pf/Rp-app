@@ -160,5 +160,24 @@ fun lifecyclePortsRecordObserversAndFireBothCallbacks() = runTest {
     net.register(counting)
     net.fireNetworkIdentityChange()
     assertEquals(2, counting.identityChangeCalls.value)
+
+    // Risk: item 2 pin (verifier advisory 1): the two-arg overload's DEFAULT body must
+    // (i) propagate the single-arg member's result UNCHANGED — including UNAVAILABLE/FAILED,
+    // not just OK — and (ii) pass the `reason` through to the single-arg member verbatim.
+    val coal = FakeBiometricAuthorizer(result = BiometricAuthResult.OK)
+    assertEquals(BiometricAuthResult.OK, coal.authenticate("t1", "r1"))
+    // Verbatim and EXACTLY ONCE: the single-arg member saw exactly one call and its argument
+    // was the reason exactly as passed (the title "t1" alone never satisfies this — the
+    // assertion pins the full value, not a substring).
+    assertEquals(1, coal.reasons.value.size)
+    assertEquals("r1", coal.reasons.value.single())
+    val curtain = FakeBiometricAuthorizer(result = BiometricAuthResult.UNAVAILABLE)
+    assertEquals(BiometricAuthResult.UNAVAILABLE, curtain.authenticate("t-unavail", "r-unavail"))
+    assertEquals(1, curtain.reasons.value.size)
+    assertEquals("r-unavail", curtain.reasons.value.single())
+    val fail = FakeBiometricAuthorizer(result = BiometricAuthResult.FAILED)
+    assertEquals(BiometricAuthResult.FAILED, fail.authenticate("t-fail", "r-fail"))
+    assertEquals(1, fail.reasons.value.size)
+    assertEquals("r-fail", fail.reasons.value.single())
 }
 }
