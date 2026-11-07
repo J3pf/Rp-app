@@ -129,7 +129,8 @@ class MeshRepositoryWireOrderTest {
         val connection = RelayConnection(secrets, bus, testClient(), scope)
         val deliveryEntered = CountDownLatch(1)
         val releaseDelivery = CountDownLatch(1)
-        private val pauseNextDelivery = AtomicBoolean(false)
+        /** Armed by armPause() and stays armed until releaseDelivery fires on EVERY matching delivery. */
+        private val pauseArmed = AtomicBoolean(false)
         val accepted = CopyOnWriteArrayList<SentEnvelope>()
         val sockets = LinkedBlockingQueue<WebSocket>()
         private val incoming = LinkedBlockingQueue<Envelope>()
@@ -142,7 +143,7 @@ class MeshRepositoryWireOrderTest {
                     val isTarget =
                         env.t == pausedType &&
                             (pausedMachineId == null || env.body<MeshSubscribe>().machineId == pausedMachineId)
-                    val paused = isTarget && pauseNextDelivery.compareAndSet(true, false)
+                    val paused = isTarget && pauseArmed.get()
                     if (paused) {
                         deliveryEntered.countDown()
                         check(releaseDelivery.await(WAIT_SECONDS, TimeUnit.SECONDS)) { "timed out at the wire-order send seam" }
@@ -183,7 +184,7 @@ class MeshRepositoryWireOrderTest {
         }
 
         fun armPause() {
-            check(pauseNextDelivery.compareAndSet(false, true)) { "wire-order pause was already armed" }
+            check(pauseArmed.compareAndSet(false, true)) { "wire-order pause was already armed" }
         }
 
         fun dispatchConnectedObserver() = scope.launch { repository.handleConnectionState(ConnState.Connected) }
@@ -199,6 +200,7 @@ class MeshRepositoryWireOrderTest {
 
         override fun close() {
             releaseDelivery.countDown()
+            pauseArmed.set(false)
             connection.stop()
             sockets.forEach { runCatching { it.close(1000, "test complete") } }
             scope.cancel()
