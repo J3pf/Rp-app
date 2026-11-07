@@ -166,11 +166,18 @@ fun lifecyclePortsRecordObserversAndFireBothCallbacks() = runTest {
     // not just OK — and (ii) pass the `reason` through to the single-arg member verbatim.
     val coal = FakeBiometricAuthorizer(result = BiometricAuthResult.OK)
     assertEquals(BiometricAuthResult.OK, coal.authenticate("t1", "r1"))
-    assertTrue(coal.reasons.value.contains("r1"))
-    assertEquals(1, coal.reasons.value.size) // no extra calls, title alone must not reach it
+    // Verbatim and EXACTLY ONCE: the single-arg member saw exactly one call and its argument
+    // was the reason exactly as passed (the title "t1" alone never satisfies this — the
+    // assertion pins the full value, not a substring).
+    assertEquals(1, coal.reasons.value.size)
+    assertEquals("r1", coal.reasons.value.single())
     val curtain = FakeBiometricAuthorizer(result = BiometricAuthResult.UNAVAILABLE)
-    assertEquals(BiometricAuthResult.UNAVAILABLE, curtain.authenticate("t", "r"))
+    assertEquals(BiometricAuthResult.UNAVAILABLE, curtain.authenticate("t-unavail", "r-unavail"))
+    assertEquals(1, curtain.reasons.value.size)
+    assertEquals("r-unavail", curtain.reasons.value.single())
     val fail = FakeBiometricAuthorizer(result = BiometricAuthResult.FAILED)
-    assertEquals(BiometricAuthResult.FAILED, fail.authenticate("t", "r"))
+    assertEquals(BiometricAuthResult.FAILED, fail.authenticate("t-fail", "r-fail"))
+    assertEquals(1, fail.reasons.value.size)
+    assertEquals("r-fail", fail.reasons.value.single())
 }
 }
