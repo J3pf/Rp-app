@@ -73,18 +73,21 @@ interface BiometricAuthorizer {
     suspend fun authenticate(reason: String): BiometricAuthResult
 
     /**
-     * ADDITIVE overload (O3 M4 request 2026-11-07): preserves the byte-locked Spanish screen
-     * literals — title AND subtitle both render in the platform BiometricPrompt today
-     * (ChatScreen.kt:318/:350, PromptSheet.kt:95). The single-arg member keeps EXACTLY today's
-     * freshness semantics; the overload adds NO bypass, records the auth timestamp with the
-     * today-default (always true at all three call sites, per O3's sweep), and surfaces NO
-     * android types (the Android adapter resolves the foreground FragmentActivity via the
-     * :app lifecycle seam). iOS impl contract: title = fallback heading, reason = body.
+     * ADDITIVE overload (O3 M4 request 2026-11-07; orchestrator ruling 2026-11-07): the DEFAULT
+     * body delegates to the single-arg member so every EXISTING implementation, fake and
+     * iosMain actual keeps compiling and behaving exactly as today; implementations that CAN
+     * render both strings (Android adapter via the :app lifecycle seam, iOS actual) OVERRIDE
+     * it and render `title` + `reason` while keeping the same freshness/timestamp semantics —
+     * it preserves the byte-locked Spanish screen literals rendered in the platform
+     * BiometricPrompt today (ChatScreen.kt:318/:350, PromptSheet.kt:95). Adds NO bypass; the
+     * timestamp is recorded with the today-default (always true at all three call sites, per
+     * O3's sweep). No android types in the port. iOS override contract: title = fallback
+     * heading, reason = body.
      */
     suspend fun authenticate(
         title: String,
         reason: String,
-    ): BiometricAuthResult
+    ): BiometricAuthResult = authenticate(reason)
 
     companion object {
         /** Freshness window of the current Android gate; implementations must honor it. */
