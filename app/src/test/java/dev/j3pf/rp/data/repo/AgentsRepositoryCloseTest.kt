@@ -70,7 +70,7 @@ class AgentsRepositoryCloseTest {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
             bus = MessageBus()
-            connection = RelayConnection(context, secrets, bus, testClient(), scope)
+            connection = RelayConnection(secrets, bus, testClient(), scope)
             db = inMemoryDb(context)
             settingsFile = File.createTempFile("agents-close-test", ".preferences_pb")
             val settings =

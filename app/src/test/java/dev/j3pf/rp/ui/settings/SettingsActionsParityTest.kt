@@ -370,7 +370,7 @@ class SettingsActionsParityTest {
         val bus = MessageBus()
         val client = testClient()
         val api = RelayApi(client, secrets)
-        connection = RelayConnection(context, secrets, bus, client, scope!!)
+        connection = RelayConnection(secrets, bus, client, scope!!)
         db = inMemoryDb(context)
         settingsFile = File.createTempFile("settings-actions-parity", ".preferences_pb")
         val settings =

@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.ReconnectingSocket
+import dev.j3pf.rp.platform.AndroidNetworkMonitor
 import dev.j3pf.rp.testClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,6 +41,7 @@ import kotlin.test.assertTrue
 class ReconnectingSocketTest {
     private val context = ApplicationProvider.getApplicationContext<Application>()
     private val cm = context.getSystemService(ConnectivityManager::class.java)
+    private val networkMonitor = AndroidNetworkMonitor(context)
     private val scheduler = TestCoroutineScheduler()
     private val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(scheduler))
     private val server = MockWebServer().also { it.start() }
@@ -48,7 +50,7 @@ class ReconnectingSocketTest {
     private var requests = 0
     private val socket =
         ReconnectingSocket(
-            context,
+            networkMonitor,
             testClient(),
             scope,
             requestProvider = {

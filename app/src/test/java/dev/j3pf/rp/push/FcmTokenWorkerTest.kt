@@ -78,7 +78,7 @@ class FcmTokenWorkerTest {
         val bus = MessageBus()
         val client = testClient()
         val api = RelayApi(client, secrets)
-        connection = RelayConnection(context, secrets, bus, client, scope)
+        connection = RelayConnection(secrets, bus, client, scope)
         settingsFile = File.createTempFile("fcm-token-worker", ".preferences_pb").also { it.delete() }
         val settings = SettingsRepository(PreferenceDataStoreFactory.create(scope = scope, produceFile = { settingsFile }))
         settings.setDirectPush(false)

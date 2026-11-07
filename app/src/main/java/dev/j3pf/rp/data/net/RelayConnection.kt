@@ -1,12 +1,10 @@
 package dev.j3pf.rp.data.net
 
-import android.content.Context
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.BuildConfig
 import dev.j3pf.rp.client.ws.RelayWsClient
+import dev.j3pf.rp.data.ports.AppLifecycleMonitor
+import dev.j3pf.rp.data.ports.NetworkMonitor
+import dev.j3pf.rp.data.ports.NetworkObserver
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.protocol.AppHello
@@ -15,6 +13,7 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Ulid
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -25,8 +24,25 @@ import okhttp3.Request
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private object UnmonitoredNetworkMonitor : NetworkMonitor {
+    override val isOnline: StateFlow<Boolean> = MutableStateFlow(false)
+
+    override fun register(observer: NetworkObserver) = Unit
+
+    override fun unregister() = Unit
+}
+
+private object UnobservedAppLifecycleMonitor : AppLifecycleMonitor {
+    override val isForeground: StateFlow<Boolean> = MutableStateFlow(false)
+
+    override fun observe(
+        onForeground: () -> Unit,
+        onBackground: () -> Unit,
+    ) = Unit
+}
+
 /**
- * WebSocket completo `/ws/app?mode=foreground` mientras la app está en primer plano (`ProcessLifecycleOwner`).
+ * WebSocket completo `/ws/app?mode=foreground` mientras la app está en primer plano.
  * Expone [messages] (bus compartido) y [state]; las peticiones con `id` se resuelven con un
  * `CompletableDeferred` por id y timeout de 10 s.
  */
@@ -34,15 +50,23 @@ import javax.inject.Singleton
 class RelayConnection
     @Inject
     constructor(
-        @ApplicationContext private val context: Context,
         private val secrets: SecretStore,
         private val bus: MessageBus,
         client: OkHttpClient,
         @AppScope private val scope: CoroutineScope,
+        private val networkMonitor: NetworkMonitor,
+        private val lifecycleMonitor: AppLifecycleMonitor,
     ) {
+        internal constructor(
+            secrets: SecretStore,
+            bus: MessageBus,
+            client: OkHttpClient,
+            scope: CoroutineScope,
+        ) : this(secrets, bus, client, scope, UnmonitoredNetworkMonitor, UnobservedAppLifecycleMonitor)
+
         private val socket: ReconnectingSocket =
             ReconnectingSocket(
-                context = context,
+                networkMonitor = networkMonitor,
                 client = client,
                 scope = scope,
                 requestProvider = {
@@ -83,23 +107,15 @@ class RelayConnection
 
         /** Engancha el ciclo de vida del proceso y reinicia al cambiar la sesión. Llamar una vez desde `RpApp`. */
         fun attach() {
-            ProcessLifecycleOwner.get().lifecycle.addObserver(
-                object : DefaultLifecycleObserver {
-                    override fun onStart(owner: LifecycleOwner) = start()
-
-                    override fun onStop(owner: LifecycleOwner) = stop()
-                },
+            lifecycleMonitor.observe(
+                onForeground = ::start,
+                onBackground = ::stop,
             )
             secrets.session
                 .distinctUntilChanged { a, b -> a?.deviceToken == b?.deviceToken && a?.relayUrl == b?.relayUrl }
                 .onEach {
                     socket.stop()
-                    if (it != null &&
-                        ProcessLifecycleOwner
-                            .get()
-                            .lifecycle.currentState
-                            .isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
-                    ) {
+                    if (it != null && lifecycleMonitor.isForeground.value) {
                         socket.start()
                     }
                 }.launchIn(scope)

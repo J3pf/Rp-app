@@ -78,7 +78,7 @@ class SendMessageWorkerTest {
         val bus = MessageBus()
         val client = testClient()
         val api = RelayApi(client, secrets)
-        val connection = RelayConnection(context, secrets, bus, client, scope)
+        val connection = RelayConnection(secrets, bus, client, scope)
         val settings = SettingsRepository(context)
         val notificationFactory = NotificationFactory(context, channels, settings, NotificationDeduper(db.dedup()))
         val prompts = PromptsRepository(context, db.prompts(), secrets, bus, connection, api, notificationFactory, scope)

@@ -71,7 +71,7 @@ class ChatRepositoryTest {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         bus = MessageBus()
-        connection = RelayConnection(context, secrets, bus, testClient(), repoScope)
+        connection = RelayConnection(secrets, bus, testClient(), repoScope)
         db = inMemoryDb(context)
         val settingsRepo = SettingsRepository(context)
         val factory =
