@@ -72,6 +72,20 @@ enum class BiometricAuthResult {
 interface BiometricAuthorizer {
     suspend fun authenticate(reason: String): BiometricAuthResult
 
+    /**
+     * ADDITIVE overload (O3 M4 request 2026-11-07): preserves the byte-locked Spanish screen
+     * literals — title AND subtitle both render in the platform BiometricPrompt today
+     * (ChatScreen.kt:318/:350, PromptSheet.kt:95). The single-arg member keeps EXACTLY today's
+     * freshness semantics; the overload adds NO bypass, records the auth timestamp with the
+     * today-default (always true at all three call sites, per O3's sweep), and surfaces NO
+     * android types (the Android adapter resolves the foreground FragmentActivity via the
+     * :app lifecycle seam). iOS impl contract: title = fallback heading, reason = body.
+     */
+    suspend fun authenticate(
+        title: String,
+        reason: String,
+    ): BiometricAuthResult
+
     companion object {
         /** Freshness window of the current Android gate; implementations must honor it. */
         const val VALIDITY_MS = 5 * 60_000L
