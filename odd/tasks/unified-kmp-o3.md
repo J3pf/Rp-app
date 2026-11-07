@@ -98,7 +98,25 @@ specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
 
 - **L12** (orchestrator seq 62): GO for T5 @ feat/unified-kmp 539b295 (670 tests / 4 nets). Binding order: M1 and M2 first with one READY per move; M3 with independent gentle-ai-verify `Risk: item 2`; M4 copy-first only after M1-M3 accepted, then the nine mutation probes re-run. Common rules: rebase before start and before every READY; orchestrator does all merges; Gate-A tests green at every commit, never weakened; <= ~400-line commits; focused tests while developing, full S20 before READY; ONE Gradle at a time; NEVER `git add -A` (the app test run re-renders tracked PNGs in app/src/test/screenshots: `git checkout -- app/src/test/screenshots` before committing); golden-diff.sh <worktree> must print identical 138 / different 0 after M1 and M3; every READY lists subagent task ids. O4 moves theme/nav/settings/onboarding/agents/Mesh concurrently: stay inside ui/chat, ui/promptsheet, ui/pending, ui/newagent, ui/components, ui/diff and rebase often.
 
-## Log`). Branch `unify/o3-chat`,
+- **L16** (O3, M4 C1/C2): RED observed BEFORE the fix — PromptSheetAuthGateTest compiled with
+  `Argument type mismatch: FakeGate vs BiometricGate` (pre-seam) at :185/:193, i.e. the RED evidence
+  was captured with the test authored as the sentinel. C1+the shared harness retarget landed at
+  f61c8cc (Risk: item 2 seam: BiometricAuthorizerAndroid adapter wrapping the UNCHANGED
+  util/BiometricGate — no timed rapid api/direct calls; freshness and recordAuthTimestamp owned by
+  the gate; two-arg port member preserves bytes-identical literals at ChatScreen.kt:318/:350 and
+  PromptSheet.kt:95; PortsModule 12th additive @Binds (O1 cc'd, AndroidPortBindingsTest floor
+  says 11+) and C2 GREEN: PromptSheetAuthGateTest 3/3 focused (port-typed VM wires ONE envelope for
+  a direct answer WITHOUT touching the gate; chrome pins 'Confirma tu identidad', 'Configura un
+  bloqueo de pantalla para aprobar', 'No se pudo verificar tu identidad', 'Desbloqueo cancelado'
+  verbatim as chrome params).
+  **DOCUMENTED HOLE**: the :app scope.launch MAPPING (gate result→literal + activity-null guard)
+  cannot be drive-assisted on this host: 4 probes dispatched the merged Button OnClick AND its
+  action directly inside the ModalBottomSheet and the launch never executed (metric evidence:
+  mergedClick=true, gateCalls=0, wire=0). The three literal-mapping cases are therefore covered at
+  the chrome-parameter surface only (verbatim strings pinned) — the review/mutation probes and the
+  orchestrator's independent verify must re-check the mapped path on a host that can drive a
+  ModalBottomSheet; no bypass or freshness shortcut is claimed by the adapter.
+`). Branch `unify/o3-chat`,
 worktree `.worktrees/o3`. Mirror: Engram `odd/unified-kmp-o3/tasks`.
 
 ## Specs
