@@ -59,6 +59,13 @@ kotlin {
             implementation(libs.markdown.m3)
             implementation(libs.markdown.code)
         }
+        androidMain.dependencies {
+            implementation(libs.androidx.camera.core)
+            implementation(libs.androidx.camera.camera2)
+            implementation(libs.androidx.camera.lifecycle)
+            implementation(libs.androidx.camera.view)
+            implementation(libs.mlkit.barcode)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
