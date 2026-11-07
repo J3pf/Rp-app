@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.j3pf.rp.FakeSecretStore
+import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.data.db.RpDatabase
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
@@ -115,7 +116,7 @@ class NotificationZombieTest {
             deduper = NotificationDeduper(db.dedup())
             factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
             handler = PromptActionHandler(RelayApi(testClient(), secrets), factory, db.prompts(), db.outbox(), secrets)
-            router = PushRouter(factory, deduper, secrets, SettingsRepository(ctx), db.prompts())
+            router = PushRouter(factory, deduper, AndroidPushEnvelopeCrypto(), secrets, SettingsRepository(ctx), db.prompts())
             repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
             // El push real entra por el router (deduplica); sembrar aquí es lo que hace que el
             // deduper tenga la clave tomada, como en producción.

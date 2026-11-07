@@ -5,6 +5,7 @@ import android.app.Application
 import android.app.NotificationManager
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
+import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.data.db.RpDatabase
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.inMemoryDb
@@ -62,7 +63,7 @@ class PushRouterTest {
             settings = SettingsRepository(ctx)
             factory =
                 NotificationFactory(ctx, NotificationChannels(ctx), settings, NotificationDeduper(db.dedup()))
-            router = PushRouter(factory, NotificationDeduper(db.dedup()), secrets, settings, db.prompts())
+            router = PushRouter(factory, NotificationDeduper(db.dedup()), AndroidPushEnvelopeCrypto(), secrets, settings, db.prompts())
         }
     }
 

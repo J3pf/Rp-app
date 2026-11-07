@@ -6,6 +6,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
+import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.data.db.RpDatabase
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.inMemoryDb
@@ -61,7 +62,7 @@ class PushRouterFcmFunnelTest {
         val settings = SettingsRepository(context)
         val channels = NotificationChannels(context)
         val factory = NotificationFactory(context, channels, settings, deduper)
-        router = PushRouter(factory, deduper, secrets, settings, db.prompts())
+        router = PushRouter(factory, deduper, AndroidPushEnvelopeCrypto(), secrets, settings, db.prompts())
     }
 
     @After
