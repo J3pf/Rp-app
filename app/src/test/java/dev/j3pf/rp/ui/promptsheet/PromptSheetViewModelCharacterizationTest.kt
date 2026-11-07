@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.promptsheet
 
 import android.app.Application
+import dev.j3pf.rp.platform.BiometricAuthorizerAndroid
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.ConnState
@@ -164,7 +165,7 @@ class PromptSheetViewModelCharacterizationTest {
 
         connection.start()
         withTimeout(15_000) { connection.state.first { it == ConnState.Connected } }
-        return PromptSheetViewModel(prompts, settingsRepo, BiometricGate())
+        return PromptSheetViewModel(prompts, settingsRepo, BiometricAuthorizerAndroid(BiometricGate(), ApplicationProvider.getApplicationContext()))
     }
 
     // ──────────────────────── requiresAuth matrix ────────────────────────

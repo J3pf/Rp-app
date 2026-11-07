@@ -11,7 +11,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.ui.components.rememberActivity
-import dev.j3pf.rp.util.AuthResult
+import dev.j3pf.rp.data.ports.BiometricAuthResult as AuthResult
 import kotlinx.coroutines.launch
 
 /**
@@ -92,7 +92,7 @@ fun PromptSheet(
                                 authMessage = "No se pudo verificar tu identidad"
                                 return@launch
                             }
-                            when (vm.gate.authenticate(activity, "Confirma tu identidad", p.title.take(80))) {
+                            when (vm.gate.authenticate("Confirma tu identidad", p.title.take(80))) {
                                 AuthResult.OK -> vm.answer(p.promptId, answer)
                                 AuthResult.FAILED -> authMessage = "Desbloqueo cancelado"
                                 AuthResult.UNAVAILABLE -> authMessage = "Configura un bloqueo de pantalla para aprobar"

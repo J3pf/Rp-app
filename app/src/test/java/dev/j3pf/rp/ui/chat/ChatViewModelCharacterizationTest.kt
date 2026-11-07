@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.chat
 
 import android.app.Application
+import dev.j3pf.rp.platform.BiometricAuthorizerAndroid
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
@@ -203,7 +204,7 @@ class ChatViewModelCharacterizationTest {
                 attachmentsRepo = attachments,
                 hostRepo = host,
                 connection = connection,
-                gate = BiometricGate(),
+                gate = BiometricAuthorizerAndroid(BiometricGate(),ApplicationProvider.getApplicationContext<Application>()),
             )
         withTimeout(15_000) { vm.state.first { it.agent?.cwd == cwd } }
         return vm
