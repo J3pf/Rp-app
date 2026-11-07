@@ -228,7 +228,8 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
 - If any of these six tests drift: the move in flight is reverted (not merged-in-place) and the
   orchestrator's verdict is appealed with the same evidence; no silent golden updates.
 
-## Log
+- **L17** (O3, M4-C3/C4 explorer mw6n97j1-h-wi8l): ONLY `gate: BiometricAuthorizer` is a common port today. ChatViewModel's remaining 7 constructor entries are :app concretes (ChatRepository, AgentsRepository, SettingsRepository, AttachmentsRepository, HostRepository, RelayConnection + the AndroidX SavedStateHandle); PromptSheetViewModel is 2 :app concretes + the port. Test-harness seams are Android-bound too (FakeSecretStore/testSession/testClient/inMemoryDb in app/src/test/TestSupport.kt; MockWebServer+OkHttp+Robolectric). CONSEQUENCE: the C4 move to :shared-ui (Hilt-free plain constructors) and the C3 identical-assertion shared copies BOTH require port-ified repositories (Chat/Prompts/Agents/Host/Attachments) which belong to O1's Move-2 wave (O1 owns ports; no new parallel contracts per the standing rule). M4-C3/C4 stay blocked pending that wave; agentId factory + factory-seam coordination with O4 remains valid; no C3/C4 test was authored until the wave lands (per the no-invent-workaround ruling).
+
 
 - **L1** (orchestrator, verbatim brief): "YOUR SLICE (T1 now, then T5): Android packages
   dev.j3pf.rp.ui.{chat, promptsheet, pending, newagent, components} and shared-ui
