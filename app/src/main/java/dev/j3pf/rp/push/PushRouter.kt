@@ -1,11 +1,11 @@
 package dev.j3pf.rp.push
 
 import dev.j3pf.rp.data.db.PromptDao
+import dev.j3pf.rp.data.ports.PushEnvelopeCrypto
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.PushCancelBody
-import dev.j3pf.rp.protocol.PushCrypto
 import dev.j3pf.rp.protocol.PushKind
 import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.PushSettledBody
@@ -25,6 +25,7 @@ class PushRouter
     constructor(
         private val factory: NotificationFactory,
         private val deduper: NotificationDeduper,
+        private val pushEnvelopeCrypto: PushEnvelopeCrypto,
         private val secrets: SecretStore,
         private val settings: SettingsRepository,
         private val promptDao: PromptDao,
@@ -33,7 +34,7 @@ class PushRouter
         suspend fun handleFcm(data: Map<String, String>): Boolean {
             val k = data["k"] ?: return false
             val key = secrets.current()?.pushKey ?: return false
-            val plain = PushCrypto.decrypt(key, data["n"] ?: return false, data["c"] ?: return false) ?: return false
+            val plain = pushEnvelopeCrypto.decrypt(key, data["n"] ?: return false, data["c"] ?: return false) ?: return false
             val body = runCatching { RpJson.parseToJsonElement(plain) as JsonObject }.getOrNull() ?: return false
             return handle(k, body, pushId = null)
         }

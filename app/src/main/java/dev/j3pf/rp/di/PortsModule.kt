@@ -12,12 +12,14 @@ import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.ports.NotificationHealth
 import dev.j3pf.rp.data.ports.OpenPromptGuard
 import dev.j3pf.rp.data.ports.PlatformInfo
+import dev.j3pf.rp.data.ports.PushEnvelopeCrypto
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.platform.AndroidAppLifecycleMonitor
 import dev.j3pf.rp.platform.AndroidBatteryExemption
 import dev.j3pf.rp.platform.AndroidNetworkMonitor
+import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.platform.AndroidNotificationHealth
 import dev.j3pf.rp.platform.AndroidPlatformInfo
 import dev.j3pf.rp.platform.AndroidVoiceInputHost
@@ -48,6 +50,10 @@ abstract class PortsModule {
     @Binds
     @Singleton
     abstract fun bindSecretStore(impl: dev.j3pf.rp.data.secure.SecretStore): dev.j3pf.rp.data.ports.SecretStore
+
+    @Binds
+    @Singleton
+    abstract fun bindPushEnvelopeCrypto(impl: AndroidPushEnvelopeCrypto): PushEnvelopeCrypto
 
     @Binds
     @Singleton

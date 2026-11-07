@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
+import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.data.db.RpDatabase
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
@@ -87,7 +88,7 @@ class DirectPushServiceRoutingTest {
         val deduper = NotificationDeduper(db.dedup())
         factory = NotificationFactory(context, channels, settings, deduper)
         val client = testClient()
-        val router = PushRouter(factory, deduper, secrets, settings, db.prompts())
+        val router = PushRouter(factory, deduper, AndroidPushEnvelopeCrypto(), secrets, settings, db.prompts())
         val connection = RelayConnection(secrets, bus, client, repositoryScope)
         val machines = MachinesRepository(db.machines(), secrets, bus, RelayApi(client, secrets), channels, repositoryScope)
         val agents = AgentsRepository(db.agents(), secrets, bus, connection, settings, repositoryScope)
