@@ -133,7 +133,7 @@ fun devicePortsAndDedupFakesRecordTheirCalls() = runTest {
 }
 
 @Test
-fun hostGatewayRecordsOneCallPerRpcAndPropagatesFailuresUnchanged() = runTest {
+fun hostGatewayFakeShapeContractRecordsCallsAndCannedFailures() = runTest {
     val gateway = FakeHostGateway()
     val dirs = HostDirs(path = "/home/user", dirs = listOf("src"))
     val layout = HerdrLayout()

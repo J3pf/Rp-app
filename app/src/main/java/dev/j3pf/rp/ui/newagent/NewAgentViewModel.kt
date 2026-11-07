@@ -3,10 +3,8 @@ package dev.j3pf.rp.ui.newagent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.ports.HostResult
-import dev.j3pf.rp.data.ports.HostResult.Ok
-import dev.j3pf.rp.data.ports.HostResult.Failed
+import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.protocol.HerdrTarget
 import dev.j3pf.rp.protocol.HostSpawn

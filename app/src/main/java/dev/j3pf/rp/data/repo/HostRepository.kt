@@ -1,12 +1,10 @@
 package dev.j3pf.rp.data.repo
 
 import dev.j3pf.rp.data.net.MessageBus
-import dev.j3pf.rp.data.ports.HostGateway
-import dev.j3pf.rp.data.ports.HostResult
-import dev.j3pf.rp.data.ports.HostResult.Ok
-import dev.j3pf.rp.data.ports.HostResult.Failed
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
+import dev.j3pf.rp.data.ports.HostGateway
+import dev.j3pf.rp.data.ports.HostResult
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Envelope
@@ -34,7 +32,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
-
 
 /** Cliente de `rp-host` (PROTOCOLO §9) a través del relay: listar carpetas, layout de herdr y crear agentes. */
 @Singleton
