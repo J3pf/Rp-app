@@ -147,7 +147,7 @@ class UpgradeSeedTest {
             // Settings through the REAL DataStore-backed repository.
             val settings = dev.j3pf.rp.data.repo.SettingsRepository(context)
             settings.setAppTheme("sexy")
-            settings.setDirectPush(true)
+            settings.setDirectPush(false)  // seeded FALSE so the verify assert is falsifiable (default is true)
             settings.setBatteryAsked(true)
             settings.setOnboardingDone(true)
 

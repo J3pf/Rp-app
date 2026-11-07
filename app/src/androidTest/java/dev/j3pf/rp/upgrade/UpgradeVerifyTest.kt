@@ -6,6 +6,7 @@ import dev.j3pf.rp.data.db.PromptState
 import dev.j3pf.rp.di.AppModule
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,7 +81,10 @@ class UpgradeVerifyTest {
         val settings = dev.j3pf.rp.data.repo.SettingsRepository(context)
         val snap = settings.current()
         assertEquals("sexy", snap.appTheme)
-        assertTrue(snap.directPush)
+        // Falsifiable artifacts: directPush default is TRUE (SettingsRepository.kt), so the
+        // seed planted FALSE — a lost settings file would flip this back to true/defaults.
+        assertFalse(snap.directPush)
         assertTrue(snap.batteryAsked)
+        assertTrue(snap.onboardingDone) // seed set true; default false (falsifiable)
     }
 }
