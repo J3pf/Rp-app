@@ -106,7 +106,7 @@ Status vocabulary: {proven, proof-added, partial, golden-unverified-on-this-host
 | CH51 | QA U7 reduced-motion static equivalents | LocalReducedMotion (ChatMessages.kt:176; ChatComponents.kt:443/481) | ChatUiCharacterizationTest.kt `reduced motion still renders...` | proof-added |  |
 | CH52 | QA U8 48dp touch targets + TalkBack Spanish contentDescriptions | M3 minimumInteractiveComponentSize + composer IconButtons | — | device-only | QA U8 step: TalkBack sweep on device |
 | CH53 | `Supera 25 MB` on oversized uploads | ChatViewModel.kt:258‑266 | ChatViewModelCharacterizationTest.kt (413 test) | proof-added |  |
-| CH54 | Voice input: mic → partial/final text into the composer | app VoiceInputState.kt; ChatScreen.kt:884+ | — | device-only | QA step: tap mic, speak; the composer shows the partial text (iOS port P-VOICE) |
+| CH54 | Voice input: mic → partial/final text into the composer, preserving the existing `baseVoiceText` prefix; unavailable host is a no-op and errors silently reset listening | shared-ui .../chat/VoiceInputHostState.kt:13‑101; app .../platform/AndroidVoiceInputHost.kt:23‑122; ChatScreen.kt:478‑535 | shared-ui VoiceInputHostStateTest.kt (4 tests); app AndroidVoiceInputHostTest.kt (6 tests) | partial | Port/consumer behavior is covered; real microphone capture remains device-only (QA step: tap mic, speak, and verify partial text; iOS port P-VOICE is O4-owned) |
 | CH55 | Camera capture attachment (TakePicture + FileProvider target) | app Composer launchers (ChatScreen.kt:648‑659) + AttachmentsRepository.newCameraTarget | — | device-only | QA A1 camera step (iOS maps to the photo library via P-PICK) |
 
 ## Platform ports required (final contracts merged from O1 — :data-core in 25ab449)
@@ -115,7 +115,7 @@ Status vocabulary: {proven, proof-added, partial, golden-unverified-on-this-host
 |---|---|---|---|---|
 | P-PICK | `AttachmentsPlatformHost`: pickImages(maxItems), pickDocuments(mime), cameraTarget(): PreparedLocalFile? | app ChatScreen.kt:645‑647, 891‑905 | PhotosPicker / UIDocumentPickerViewController | PORT (contract) |
 | P-BIO | `BiometricAuthorizer.authenticate(reason): AuthResult` (OK/FAILED/UNAVAILABLE), 5-min validity | BiometricGate.kt:104 | LAContext.evaluatePolicy + Keychain (keychain-access-groups) | PORT (contract) |
-| P-VOICE | `VoiceInputHost` + VoiceListener codes 1–6 | app VoiceInputState.kt | SFSpeechRecognizer + AVAudioSession.record | PORT (contract) |
+| P-VOICE | `VoiceInputHost` + VoiceListener codes 1–6 | app .../platform/AndroidVoiceInputHost.kt | SFSpeechRecognizer + AVAudioSession.record | PORT (contract) |
 | P-HAPTICS | no port: CMP LocalHapticFeedback in commonMain | ChatScreen.kt:66 | CMP equivalent | PORT (contract) |
 | P-IME | no port: standard CMP imePadding/navigationBarsPadding | ChatScreen.kt:44‑45, 87‑90 | CMP insets; device insets bugs belong to O4's iOS host | PORT (contract) |
 | P-DIR | not needed (relay-mediated herdr/folder lists) | NewAgentViewModel | — | PORT (contract) |
@@ -125,7 +125,7 @@ Status vocabulary: {proven, proof-added, partial, golden-unverified-on-this-host
 
 ```
 $ python3 counts-by-script.py >> paste-of-output
-rows=55 — device-only 5, golden-unverified-on-this-host 4, out-of-slice 3, proof-added 32, proven 11
+rows=55 — device-only 4, golden-unverified-on-this-host 4, out-of-slice 3, partial 1, proof-added 32, proven 11
 ```
 
 Test-class census (same script inputs):

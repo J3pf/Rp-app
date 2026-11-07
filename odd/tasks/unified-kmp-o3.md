@@ -15,10 +15,14 @@ specified in `odd/tasks/unified-kmp.md` (read by O3 down to `
    adapter composables injected as `suspend picker(...)`-style callbacks into the shared composer.
    - Rows to keep green after M1: CH14, CH15, CH16, CH23, CH27, CH28 (branch chip), CH43; tests
      move to the shared-ui commonTest source set unchanged (mechanical import change only).
-2. **M2 — VoiceInputState → shared port consumer**: replace the direct `SpeechRecognizer` call
-   with `VoiceInputHost` injection (`start/stop/listening/onPartial/onFinal/onError` codes 1-6).
-   The :app Android actual keeps VoiceInputState.kt semantics; iOS actual (SFSpeechRecognizer +
-   AVAudioSession record permission) is O4-hosted. Rows: CH37 partial (mic rows device-only), CH37 overall header.
+2. **M2 — Android VoiceInputHost + shared port consumer**: bind `AndroidVoiceInputHost` to
+   `VoiceInputHost`; move composer consumer state to shared-ui behind `start`/`stop` lambdas and a
+   `StateFlow<Boolean>` (the frozen contract remains unchanged). The app adapts `VoiceListener`
+   callbacks and retains `RECORD_AUDIO` permission plus `baseVoiceText` prefix behavior. Android
+   maps recognizer errors to codes 1–6 and reports unavailable recognition as `NO_RECOGNIZER` (3);
+   the shared consumer forwards partial/final text, stops on disposal, silently resets on errors, and
+   does nothing when unavailable. The iOS actual is O4-owned. Row: CH54 (port/consumer proof added;
+   real microphone capture remains a device check).
 3. **M3 — diff/prompt-sheet/pending/new-agent content moves UK to shared**: `DiffSheet.kt` app
    wrapper becomes a thin alias for the shared sheet with `SettingsStore.strings`; the review-consent
    body (PromptContent.kt:402-457) moves to its own shared composable with `BiometricAuthorizer`
@@ -146,10 +150,14 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
    adapter composables injected as `suspend picker(...)`-style callbacks into the shared composer.
    - Rows to keep green after M1: CH14, CH15, CH16, CH23, CH27, CH28 (branch chip), CH43; tests
      move to the shared-ui commonTest source set unchanged (mechanical import change only).
-2. **M2 — VoiceInputState → shared port consumer**: replace the direct `SpeechRecognizer` call
-   with `VoiceInputHost` injection (`start/stop/listening/onPartial/onFinal/onError` codes 1-6).
-   The :app Android actual keeps VoiceInputState.kt semantics; iOS actual (SFSpeechRecognizer +
-   AVAudioSession record permission) is O4-hosted. Rows: CH37 partial (mic rows device-only), CH37 overall header.
+2. **M2 — Android VoiceInputHost + shared port consumer**: bind `AndroidVoiceInputHost` to
+   `VoiceInputHost`; move composer consumer state to shared-ui behind `start`/`stop` lambdas and a
+   `StateFlow<Boolean>` (the frozen contract remains unchanged). The app adapts `VoiceListener`
+   callbacks and retains `RECORD_AUDIO` permission plus `baseVoiceText` prefix behavior. Android
+   maps recognizer errors to codes 1–6 and reports unavailable recognition as `NO_RECOGNIZER` (3);
+   the shared consumer forwards partial/final text, stops on disposal, silently resets on errors, and
+   does nothing when unavailable. The iOS actual is O4-owned. Row: CH54 (port/consumer proof added;
+   real microphone capture remains a device check).
 3. **M3 — diff/prompt-sheet/pending/new-agent content moves UK to shared**: `DiffSheet.kt` app
    wrapper becomes a thin alias for the shared sheet with `SettingsStore.strings`; the review-consent
    body (PromptContent.kt:402-457) moves to its own shared composable with `BiometricAuthorizer`
@@ -231,7 +239,10 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
   No test weakening, no Roborazzi touches, no production change; remaining rows need O1's fake
   repos (T5) or device/manual E2E (QA cases).
 - **L13** (O3, M1): added commonMain `ChatComposer` and `ChatTopBar`, plus moved the AUTO banner;
-  :app retains `ChatContent`, the exact `Composer` signature, ActivityResult/permission wiring, and
-  `VoiceInputState`. Updated parity source citations for CH14/15/16/23/27/31/43; no Gate-A test
-  files changed. The final focused Gradle invocation with in-process Kotlin execution was
-  `BUILD SUCCESSFUL` (test task UP-TO-DATE); its XML reports record 58 tests, 0 failures, 0 skipped.
+  :app retains `ChatContent`, the exact `Composer` signature, and ActivityResult/permission wiring.
+  Updated parity source citations for CH14/15/16/23/27/31/43; no Gate-A test files changed. The final
+  focused Gradle invocation with in-process Kotlin execution was `BUILD SUCCESSFUL` (test task
+  UP-TO-DATE); its XML reports record 58 tests, 0 failures, 0 skipped. Follow-on M2 implementation
+  (pending parent acceptance) binds `AndroidVoiceInputHost`, routes the shared composer through the
+  frozen `VoiceInputHost` contract, and preserves permission/base-text behavior; see CH54 and the
+  new host/consumer tests for current proof.
