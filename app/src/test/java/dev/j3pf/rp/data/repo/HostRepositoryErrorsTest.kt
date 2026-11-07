@@ -60,7 +60,7 @@ class HostRepositoryErrorsTest {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
             bus = MessageBus()
-            connection = RelayConnection(context, secrets, bus, dev.j3pf.rp.testClient(), scope)
+            connection = RelayConnection(secrets, bus, dev.j3pf.rp.testClient(), scope)
             repository = HostRepository(connection, bus, scope)
             repository.start()
         }

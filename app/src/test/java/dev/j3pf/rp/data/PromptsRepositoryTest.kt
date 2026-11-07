@@ -80,7 +80,7 @@ class PromptsRepositoryTest {
         bus = MessageBus()
         val secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
         val api = RelayApi(testClient(), secrets)
-        conn = RelayConnection(ctx, secrets, bus, testClient(), scope)
+        conn = RelayConnection(secrets, bus, testClient(), scope)
         db = inMemoryDb(ctx)
         val factory = NotificationFactory(ctx, NotificationChannels(ctx), SettingsRepository(ctx), NotificationDeduper(db.dedup()))
         repo = PromptsRepository(ctx, db.prompts(), secrets, bus, conn, api, factory, scope)

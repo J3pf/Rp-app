@@ -126,7 +126,7 @@ class MeshRepositoryWireOrderTest {
         private val bus = MessageBus()
         private val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         private val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
-        val connection = RelayConnection(context, secrets, bus, testClient(), scope)
+        val connection = RelayConnection(secrets, bus, testClient(), scope)
         val deliveryEntered = CountDownLatch(1)
         val releaseDelivery = CountDownLatch(1)
         private val pauseNextDelivery = AtomicBoolean(false)

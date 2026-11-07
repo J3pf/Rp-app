@@ -231,7 +231,7 @@ class AgentsLifecycleTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val secrets = FakeSecretStore(context, testSession(server!!.url("/").toString()))
         val bus = MessageBus()
-        connection = RelayConnection(context, secrets, bus, testClient(), scope!!)
+        connection = RelayConnection(secrets, bus, testClient(), scope!!)
         db = inMemoryDb(context)
         settingsFile = File.createTempFile("agents-lifecycle-test", ".preferences_pb")
         val settings = SettingsRepository(PreferenceDataStoreFactory.create(scope = scope!!, produceFile = { settingsFile!! }))

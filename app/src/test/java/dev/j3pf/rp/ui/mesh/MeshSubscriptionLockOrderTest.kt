@@ -255,7 +255,7 @@ class MeshLockOrderForkProbe {
             val context = ApplicationProvider.getApplicationContext<android.app.Application>()
             val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
             val bus = MessageBus()
-            val relayConnection = RelayConnection(context, secrets, bus, testClient(), scope)
+            val relayConnection = RelayConnection(secrets, bus, testClient(), scope)
             connection = relayConnection
             val repository = MeshRepository(relayConnection, bus, RelayApi(testClient(), secrets), scope)
             runProbeRound(repository, relayConnection)

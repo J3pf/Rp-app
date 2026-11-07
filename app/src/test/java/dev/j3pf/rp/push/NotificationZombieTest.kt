@@ -135,7 +135,7 @@ class NotificationZombieTest {
             db.prompts(),
             secrets,
             bus,
-            RelayConnection(ctx, secrets, bus, testClient(), repoScope),
+            RelayConnection(secrets, bus, testClient(), repoScope),
             RelayApi(testClient(), secrets),
             factory,
             repoScope,

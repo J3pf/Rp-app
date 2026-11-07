@@ -62,7 +62,7 @@ class MeshRepositoryTest {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         bus = MessageBus()
-        connection = RelayConnection(context, secrets, bus, testClient(), scope)
+        connection = RelayConnection(secrets, bus, testClient(), scope)
         repository = MeshRepository(connection, bus, RelayApi(testClient(), secrets), scope)
     }
 

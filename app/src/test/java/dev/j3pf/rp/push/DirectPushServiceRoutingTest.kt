@@ -29,6 +29,7 @@ import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
+import dev.j3pf.rp.platform.AndroidNetworkMonitor
 import dev.j3pf.rp.util.stableId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,7 +88,7 @@ class DirectPushServiceRoutingTest {
         factory = NotificationFactory(context, channels, settings, deduper)
         val client = testClient()
         val router = PushRouter(factory, deduper, secrets, settings, db.prompts())
-        val connection = RelayConnection(context, secrets, bus, client, repositoryScope)
+        val connection = RelayConnection(secrets, bus, client, repositoryScope)
         val machines = MachinesRepository(db.machines(), secrets, bus, RelayApi(client, secrets), channels, repositoryScope)
         val agents = AgentsRepository(db.agents(), secrets, bus, connection, settings, repositoryScope)
 
@@ -101,6 +102,7 @@ class DirectPushServiceRoutingTest {
         inject("agents", agents)
         inject("factory", factory)
         inject("baseClient", client)
+        inject("networkMonitor", AndroidNetworkMonitor(context))
     }
 
     @After

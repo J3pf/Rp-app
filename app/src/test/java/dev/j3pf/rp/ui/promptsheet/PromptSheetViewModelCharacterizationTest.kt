@@ -106,7 +106,7 @@ class PromptSheetViewModelCharacterizationTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         val bus = MessageBus()
-        connection = RelayConnection(context, secrets, bus, testClient(), scope)
+        connection = RelayConnection(secrets, bus, testClient(), scope)
         db = inMemoryDb(context)
         settingsRepo = SettingsRepository(context)
         val api = RelayApi(testClient(), secrets)

@@ -17,6 +17,7 @@ import dev.j3pf.rp.R
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.ReconnectingSocket
+import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.secure.SecretStore
@@ -63,6 +64,8 @@ class DirectPushService : LifecycleService() {
 
     @Inject lateinit var baseClient: OkHttpClient
 
+    @Inject lateinit var networkMonitor: NetworkMonitor
+
     private lateinit var socket: ReconnectingSocket
 
     override fun onCreate() {
@@ -73,7 +76,7 @@ class DirectPushService : LifecycleService() {
         val client = baseClient.newBuilder().pingInterval(270, TimeUnit.SECONDS).build()
         socket =
             ReconnectingSocket(
-                context = this,
+                networkMonitor = networkMonitor,
                 client = client,
                 scope = lifecycleScope,
                 requestProvider = {

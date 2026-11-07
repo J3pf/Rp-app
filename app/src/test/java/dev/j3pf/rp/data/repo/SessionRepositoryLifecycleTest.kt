@@ -84,7 +84,7 @@ class SessionRepositoryLifecycleTest {
             secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
             val bus = MessageBus()
             val api = RelayApi(testClient(), secrets)
-            connection = RelayConnection(context, secrets, bus, testClient(), scope)
+            connection = RelayConnection(secrets, bus, testClient(), scope)
             settingsFile = File.createTempFile("session-policy", ".preferences_pb").also { it.delete() }
             settings = SettingsRepository(PreferenceDataStoreFactory.create(scope = scope, produceFile = { settingsFile }))
             settings.setDirectPush(false)

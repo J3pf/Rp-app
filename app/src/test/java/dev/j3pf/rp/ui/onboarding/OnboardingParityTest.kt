@@ -161,7 +161,7 @@ class OnboardingParityTest {
         val bus = MessageBus()
         val client = testClient()
         val api = RelayApi(client, secrets)
-        connection = RelayConnection(context, secrets, bus, client, scope!!)
+        connection = RelayConnection(secrets, bus, client, scope!!)
         db = inMemoryDb(context)
         settingsFile = File.createTempFile("onboarding-parity", ".preferences_pb")
         settings = SettingsRepository(PreferenceDataStoreFactory.create(scope = scope!!, produceFile = { settingsFile!! }))

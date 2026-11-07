@@ -61,7 +61,7 @@ class RelayConnectionTest {
         scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         bus = MessageBus()
         val ctx = ApplicationProvider.getApplicationContext<android.app.Application>()
-        conn = RelayConnection(ctx, FakeSecretStore(ctx, testSession(server.url("/").toString())), bus, testClient(), scope)
+        conn = RelayConnection(FakeSecretStore(ctx, testSession(server.url("/").toString())), bus, testClient(), scope)
     }
 
     @After
