@@ -19,6 +19,7 @@ kotlin {
             api(project(":protocol"))
             api(project(":relay-client"))
             api(libs.androidx.room.runtime)
+            api(libs.androidx.datastore.preferences)
             implementation("androidx.room:room-common:${libs.versions.room.get()}")
             implementation(libs.kotlinx.coroutines.core)
         }
