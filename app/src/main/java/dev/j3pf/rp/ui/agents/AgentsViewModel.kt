@@ -9,7 +9,9 @@ import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.repo.ArchivedAgentsResult
 import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.HostRepository
-import dev.j3pf.rp.data.repo.HostResult
+import dev.j3pf.rp.data.ports.HostResult
+import dev.j3pf.rp.data.ports.HostResult.Ok
+import dev.j3pf.rp.data.ports.HostResult.Failed
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.protocol.AgentSummary

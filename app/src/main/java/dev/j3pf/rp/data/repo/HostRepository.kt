@@ -1,6 +1,10 @@
 package dev.j3pf.rp.data.repo
 
 import dev.j3pf.rp.data.net.MessageBus
+import dev.j3pf.rp.data.ports.HostGateway
+import dev.j3pf.rp.data.ports.HostResult
+import dev.j3pf.rp.data.ports.HostResult.Ok
+import dev.j3pf.rp.data.ports.HostResult.Failed
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.di.AppScope
@@ -31,15 +35,6 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
 
-sealed interface HostResult<out T> {
-    data class Ok<T>(
-        val value: T,
-    ) : HostResult<T>
-
-    data class Failed(
-        val message: String,
-    ) : HostResult<Nothing>
-}
 
 /** Cliente de `rp-host` (PROTOCOLO §9) a través del relay: listar carpetas, layout de herdr y crear agentes. */
 @Singleton
@@ -49,11 +44,11 @@ class HostRepository
         private val connection: RelayConnection,
         private val bus: MessageBus,
         @AppScope private val scope: CoroutineScope,
-    ) {
+    ) : HostGateway {
         private val _hosts = MutableStateFlow<Map<String, HostInfo>>(emptyMap())
-        val hosts: StateFlow<Map<String, HostInfo>> = _hosts.asStateFlow()
+        override val hosts: StateFlow<Map<String, HostInfo>> = _hosts.asStateFlow()
 
-        fun start() {
+        override fun start() {
             bus.messages
                 .onEach { env ->
                     if (env.t == MsgType.HOSTS_UPDATE) {
@@ -63,35 +58,35 @@ class HostRepository
                 }.launchIn(scope)
         }
 
-        fun clear() {
+        override fun clear() {
             _hosts.value = emptyMap()
         }
 
-        suspend fun listDirs(
+        override suspend fun listDirs(
             machineId: String,
             path: String,
         ): HostResult<HostDirs> = ask(MsgType.HOST_LIST_DIRS, HostListDirs(machineId, path)) { it.body<HostDirs>() }
 
-        suspend fun herdrLayout(machineId: String): HostResult<HerdrLayout> =
+        override suspend fun herdrLayout(machineId: String): HostResult<HerdrLayout> =
             ask(MsgType.HOST_HERDR_LAYOUT, HostMachineRef(machineId)) { it.body<HerdrLayout>() }
 
-        suspend fun spawn(req: HostSpawn): HostResult<HostSpawned> =
+        override suspend fun spawn(req: HostSpawn): HostResult<HostSpawned> =
             ask(MsgType.HOST_SPAWN, req, timeoutMs = 30_000) { it.body<HostSpawned>() }
 
-        suspend fun gitDiff(
+        override suspend fun gitDiff(
             machineId: String,
             cwd: String,
-            path: String? = null,
+            path: String?,
         ): HostResult<HostGitDiffResult> = ask(MsgType.HOST_GIT_DIFF, HostGitDiff(machineId, cwd, path)) { it.body<HostGitDiffResult>() }
 
-        suspend fun gitDiscard(
+        override suspend fun gitDiscard(
             machineId: String,
             cwd: String,
             path: String,
         ): HostResult<HostGitDiscardResult> =
             ask(MsgType.HOST_GIT_DISCARD, HostGitDiscard(machineId, cwd, path)) { it.body<HostGitDiscardResult>() }
 
-        suspend fun resumeAgent(agent: AgentSummary): HostResult<HostSpawned> {
+        override suspend fun resumeAgent(agent: AgentSummary): HostResult<HostSpawned> {
             val sessionId = agent.agentId.substringAfter(':')
             val host = _hosts.value[agent.machineId]
             val effectiveBackend = host?.defaultBackend ?: if (host?.backends?.herdr != null) "herdr" else null

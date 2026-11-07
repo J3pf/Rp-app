@@ -17,7 +17,9 @@ import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.ChatRepository
 import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.HostRepository
-import dev.j3pf.rp.data.repo.HostResult
+import dev.j3pf.rp.data.ports.HostResult
+import dev.j3pf.rp.data.ports.HostResult.Ok
+import dev.j3pf.rp.data.ports.HostResult.Failed
 import dev.j3pf.rp.data.repo.LocalAttachment
 import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.repo.SettingsRepository

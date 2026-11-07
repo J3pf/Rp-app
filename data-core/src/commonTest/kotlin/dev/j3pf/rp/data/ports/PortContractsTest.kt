@@ -2,7 +2,14 @@ package dev.j3pf.rp.data.ports
 
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.HerdrLayout
+import dev.j3pf.rp.protocol.HostDirs
+import dev.j3pf.rp.protocol.HostGitDiffResult
+import dev.j3pf.rp.protocol.HostGitDiscardResult
+import dev.j3pf.rp.protocol.HostSpawn
+import dev.j3pf.rp.protocol.HostSpawned
 import dev.j3pf.rp.protocol.NotifyPrefs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -123,6 +130,52 @@ fun devicePortsAndDedupFakesRecordTheirCalls() = runTest {
     val guard = MapOpenPromptGuard(openIds = setOf("p-open"))
     assertTrue(guard.isOpen("p-open"))
     assertFalse(guard.isOpen("p-closed"))
+}
+
+@Test
+fun hostGatewayRecordsOneCallPerRpcAndPropagatesFailuresUnchanged() = runTest {
+    val gateway = FakeHostGateway()
+    val dirs = HostDirs(path = "/home/user", dirs = listOf("src"))
+    val layout = HerdrLayout()
+    val spawnRequest = HostSpawn(machineId = "m-spawn", cwd = "/workspace")
+    val spawned = HostSpawned(spawnId = "spawn-1")
+    val diffFailure = HostResult.Failed("herdr no responde")
+    val discardFailure = HostResult.Failed("git_locked")
+
+    gateway.listDirsResult = HostResult.Ok(dirs)
+    gateway.herdrLayoutResult = HostResult.Ok(layout)
+    gateway.spawnResult = HostResult.Ok(spawned)
+    gateway.gitDiffResult = diffFailure
+    gateway.gitDiscardResult = discardFailure
+
+    val dirsResult = gateway.listDirs("m-dirs", "/home/user")
+    val layoutResult = gateway.herdrLayout("m-layout")
+    val spawnResult = gateway.spawn(spawnRequest)
+    val diffResult = gateway.gitDiff("m-diff", "/repo", "src/Main.kt")
+    val discardResult = gateway.gitDiscard("m-discard", "/repo", "src/Main.kt")
+
+    assertEquals(1, gateway.listDirsCalls.size)
+    assertEquals("m-dirs" to "/home/user", gateway.listDirsCalls.single())
+    assertEquals(HostResult.Ok(dirs), dirsResult)
+    assertEquals(1, gateway.herdrLayoutCalls.size)
+    assertEquals("m-layout", gateway.herdrLayoutCalls.single())
+    assertEquals(HostResult.Ok(layout), layoutResult)
+    assertEquals(1, gateway.spawnCalls.size)
+    assertEquals(spawnRequest, gateway.spawnCalls.single())
+    assertEquals(HostResult.Ok(spawned), spawnResult)
+    assertEquals(1, gateway.gitDiffCalls.size)
+    assertEquals(Triple("m-diff", "/repo", "src/Main.kt"), gateway.gitDiffCalls.single())
+    assertEquals(diffFailure, diffResult)
+    assertEquals(1, gateway.gitDiscardCalls.size)
+    assertEquals(Triple("m-discard", "/repo", "src/Main.kt"), gateway.gitDiscardCalls.single())
+    assertEquals(discardFailure, discardResult)
+
+    // resumeAgent remains a pass-through here; Android's derivation is proved in its existing suite.
+    val emptyAgent = AgentSummary(agentId = "", machineId = "m-empty")
+    gateway.resumeAgent(emptyAgent)
+    assertEquals(1, gateway.resumeAgentCalls.size)
+    assertEquals(emptyAgent, gateway.resumeAgentCalls.single())
+    assertEquals("", gateway.resumeAgentCalls.single().agentId)
 }
 
 @Test
