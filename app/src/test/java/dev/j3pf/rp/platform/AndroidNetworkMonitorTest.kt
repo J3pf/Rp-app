@@ -38,7 +38,7 @@ class AndroidNetworkMonitorTest {
         callbackSource.capabilitiesChanged(first, validated = false)
         callbackSource.capabilitiesChanged(first, validated = true)
         callbackSource.capabilitiesChanged(first, validated = true)
-        assertEquals(listOf(true), availability)
+        assertEquals(listOf(true, true, true), availability)
         assertEquals(0, identityChanges)
 
         callbackSource.available(second)
@@ -46,17 +46,17 @@ class AndroidNetworkMonitorTest {
         callbackSource.capabilitiesChanged(second, validated = true)
         callbackSource.capabilitiesChanged(second, validated = true)
         assertTrue(monitor.isOnline.value)
-        assertEquals(listOf(true, true), availability)
+        assertEquals(listOf(true, true, true, true, true), availability)
         assertEquals(1, identityChanges)
 
         callbackSource.lost(first, activeNetwork = second)
         assertTrue(monitor.isOnline.value)
-        assertEquals(listOf(true, true), availability)
+        assertEquals(listOf(true, true, true, true, true), availability)
         assertEquals(1, identityChanges)
 
         callbackSource.lost(second, activeNetwork = null)
         assertFalse(monitor.isOnline.value)
-        assertEquals(listOf(true, true, false), availability)
+        assertEquals(listOf(true, true, true, true, true, false), availability)
         assertEquals(1, identityChanges)
 
         monitor.unregister()

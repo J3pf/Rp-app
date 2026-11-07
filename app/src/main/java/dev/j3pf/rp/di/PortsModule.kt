@@ -66,7 +66,6 @@ abstract class PortsModule {
     abstract fun bindVoiceInputHost(impl: AndroidVoiceInputHost): VoiceInputHost
 
     @Binds
-    @Singleton
     abstract fun bindNetworkMonitor(impl: AndroidNetworkMonitor): NetworkMonitor
 
     @Binds

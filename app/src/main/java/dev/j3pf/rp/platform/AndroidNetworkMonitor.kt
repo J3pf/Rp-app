@@ -60,6 +60,10 @@ class AndroidNetworkMonitor private constructor(
     private val events =
         object : NetworkCallbackSource.Events {
             override fun onAvailable(network: Any) {
+                synchronized(lock) {
+                    if (!registered && !registering) return
+                    if (lastValidatedNetwork == null) lastValidatedNetwork = network
+                }
                 notifyAvailability(true)
             }
 
@@ -68,15 +72,23 @@ class AndroidNetworkMonitor private constructor(
                 validated: Boolean,
             ) {
                 if (!validated) return
-                val (currentObserver, identityChanged) =
+                val (currentObserver, identityChanged, identityUnchanged) =
                     synchronized(lock) {
                         if (!registered && !registering) return
                         val previousNetwork = lastValidatedNetwork
                         lastValidatedNetwork = network
                         online.value = true
-                        observer to (previousNetwork != null && previousNetwork != network)
+                        Triple(
+                            observer,
+                            previousNetwork != null && previousNetwork != network,
+                            previousNetwork == network,
+                        )
                     }
-                if (identityChanged) currentObserver?.onNetworkIdentityChange()
+                if (identityChanged) {
+                    currentObserver?.onNetworkIdentityChange()
+                } else if (identityUnchanged) {
+                    currentObserver?.onAvailability(true)
+                }
             }
 
             override fun onLost(
