@@ -68,3 +68,10 @@ Verification passed:
 - `AppModuleDatabaseConfigTest` ran in the full app suite: 2/2 pass. The schema exports remain canonically equal with identity hash `b4ad483aeb2f27bb4b65b4b725d2cfd7`. The destructive-fallback mutation probe was not repeated in B" because its production source `AppModule.kt` is outside this slice; the existing real-provider regression pin passed unchanged.
 
 Test-first exception: this is a behavior-preserving relocation and common Room bootstrap change, not a behavior change; the moved behavior tests were run green rather than introducing an artificial RED. Risk: item 6 (characterization net must stay byte-equivalent or it stops being a net).
+
+## C" addendum — harness built, compile-verified only
+
+- `app/src/androidTest/java/dev/j3pf/rp/upgrade/UpgradeSeedTest.kt` seeds REAL production rows through `AppModule.database(ctx)` + `SecretStore.save` + real Settings setters (read-back before return).
+- `UpgradeVerifyTest.kt` is READ-ONLY post-`adb install -r` proof: session decrypt round-trip, DB row/value equality incl. theme/todo/activeTask, `PRAGMA user_version == 3` via `openHelper.readableDatabase`, settings snapshot equality. NO writes, NO relay, NEVER an uninstall.
+- User-run procedure with the UNPROVEN banner: docs/upgrade-harness/README.md. SC-02b/SC-03b stay device-only until `docs/upgrade-harness/recorded-output/<date>.md` exists.
+- Gates run by the parent: `:app:assembleDirectDebugAndroidTest` (BUILD SUCCESSFUL, compile-only) + FULL `:app:testDirectDebugUnitTest` 418/0/2 + golden-gate 138/0 PASS.

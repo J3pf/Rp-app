@@ -5,6 +5,15 @@ import kotlinx.coroutines.flow.StateFlow
 /** Push/foreground coordination contract negotiated with O2 (T4b Move 1, 2026-11-06). */
 fun interface NetworkObserver {
     fun onAvailability(available: Boolean)
+
+    /**
+     * VALIDATED network identity change (handover): Android semantics move verbatim from
+     * ReconnectingSocket.kt:75-107 — this maps to `retryNow(force = true)`; a plain boolean
+     * `onAvailability(true)` cannot express forced-reconnect-on-handover (contract pinned by
+     * `ReconnectingSocketTest.availableLostAndValidatedHandoverKeepNativeOwnership`). Default
+     * body keeps every existing observer/fake source-compatible.
+     */
+    fun onNetworkIdentityChange() {}
 }
 
 /**
