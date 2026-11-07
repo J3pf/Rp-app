@@ -8,13 +8,6 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.OptIn
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,18 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.repo.PairResult
 import dev.j3pf.rp.data.repo.SessionRepository
@@ -58,7 +45,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -128,15 +114,13 @@ fun PairScreen(
     )
 }
 
-/** Escáner QR con CameraX + ML Kit (modelo empaquetado, sin Play Services de descarga). */
-@OptIn(ExperimentalGetImage::class)
+/** QR camera preview; pairing URI parsing and onboarding actions remain in the Android host. */
 @Composable
 fun ScanScreen(
     onResult: (url: String, code: String) -> Unit,
     onManual: () -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED,
@@ -160,55 +144,17 @@ fun ScanScreen(
     }
 
     val handled = remember { AtomicBoolean(false) }
-    val executor = remember { Executors.newSingleThreadExecutor() }
-    val scanner =
-        remember {
-            BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
-        }
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        onDispose {
-            scanner.close()
-            executor.shutdown()
-        }
-    }
-
     Box(Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { ctx ->
-                val view = PreviewView(ctx)
-                val providerFuture = ProcessCameraProvider.getInstance(ctx)
-                providerFuture.addListener({
-                    val provider = providerFuture.get()
-                    val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-                    val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
-                    analysis.setAnalyzer(executor) { proxy ->
-                        val media = proxy.image
-                        if (media == null || handled.get()) {
-                            proxy.close()
-                            return@setAnalyzer
-                        }
-                        scanner
-                            .process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                            .addOnSuccessListener { codes ->
-                                val raw = codes.firstNotNullOfOrNull { it.rawValue }
-                                if (raw != null) {
-                                    val parsed = SessionRepository.parsePairingUri(raw)
-                                    if (parsed != null && handled.compareAndSet(false, true)) {
-                                        view.post { onResult(parsed.first, parsed.second) }
-                                    } else if (parsed == null) {
-                                        invalid = true
-                                    }
-                                }
-                            }.addOnCompleteListener { proxy.close() }
-                    }
-                    runCatching {
-                        provider.unbindAll()
-                        provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                    }
-                }, ContextCompat.getMainExecutor(ctx))
-                view
+        QrScannerView(
+            onResult = { raw ->
+                val parsed = SessionRepository.parsePairingUri(raw)
+                if (parsed == null) {
+                    invalid = true
+                } else if (handled.compareAndSet(false, true)) {
+                    onResult(parsed.first, parsed.second)
+                }
             },
-            modifier = Modifier.fillMaxSize(),
+            onCancel = onManual,
         )
         Column(Modifier.align(Alignment.BottomCenter).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (invalid) Text("Ese QR no es de RP (rp://pair…)", color = MaterialTheme.colorScheme.error)
