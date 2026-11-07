@@ -45,46 +45,65 @@ class UpgradeVerifyTest {
         )
 
     @Test
-    fun verifiesInPlaceUpgradeSurvivalReadOnly() = runBlocking {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
+    fun verifiesInPlaceUpgradeSurvivalReadOnly() =
+        runBlocking {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-        // 1) Secrets survived the package-identity-preserving upgrade.
-        val secrets = dev.j3pf.rp.data.secure.SecretStore(context)
-        assertEquals(seedSession, secrets.current())
+            // 1) Secrets survived the package-identity-preserving upgrade.
+            val secrets =
+                dev.j3pf.rp.data.secure
+                    .SecretStore(context)
+            assertEquals(seedSession, secrets.current())
 
-        // 2) Database through the SAME real provider/name; Room opens the persisted file and
-        //    keeps it at schema version 3 with the unchanged identity hash.
-        val db = AppModule.database(context)
-        try {
-            val agent = db.agents().get(seedRelayId, seedAgentId)!!
-            assertEquals("sexy", agent.theme)
-            assertEquals(3, agent.todoCompleted)
-            assertEquals(7, agent.todoTotal)
-            assertEquals("seed-active-task", agent.activeTask)
-            val prompt = db.prompts().get(seedRelayId, seedPromptId)!!
-            assertEquals(PromptState.OPEN, prompt.state)
-            assertEquals(2, prompt.dangerRank)
-            assertEquals(1, db.chat().records(seedRelayId, seedAgentId).size)
-            assertEquals(seedMsgId, db.outbox().all(seedRelayId).single().clientMsgId)
-            assertEquals(seedMachineId, db.machines().all(seedRelayId).single().machineId)
-            assertEquals(1_000_003L, db.dedup().seenAt(seedDedupKey))
-            // Schema version of the persisted file must still be 3 (S14 upgrade contract).
-            db.openHelper.readableDatabase.query("PRAGMA user_version").use { c ->
-                c.moveToFirst()
-                assertEquals(3L, c.getLong(0))
+            // 2) Database through the SAME real provider/name; Room opens the persisted file and
+            //    keeps it at schema version 3 with the unchanged identity hash.
+            val db = AppModule.database(context)
+            try {
+                val agent = db.agents().get(seedRelayId, seedAgentId)!!
+                assertEquals("sexy", agent.theme)
+                assertEquals(3, agent.todoCompleted)
+                assertEquals(7, agent.todoTotal)
+                assertEquals("seed-active-task", agent.activeTask)
+                val prompt = db.prompts().get(seedRelayId, seedPromptId)!!
+                assertEquals(PromptState.OPEN, prompt.state)
+                assertEquals(2, prompt.dangerRank)
+                assertEquals(1, db.chat().records(seedRelayId, seedAgentId).size)
+                assertEquals(
+                    seedMsgId,
+                    db
+                        .outbox()
+                        .all(seedRelayId)
+                        .single()
+                        .clientMsgId,
+                )
+                assertEquals(
+                    seedMachineId,
+                    db
+                        .machines()
+                        .all(seedRelayId)
+                        .single()
+                        .machineId,
+                )
+                assertEquals(1_000_003L, db.dedup().seenAt(seedDedupKey))
+                // Schema version of the persisted file must still be 3 (S14 upgrade contract).
+                db.openHelper.readableDatabase.query("PRAGMA user_version").use { c ->
+                    c.moveToFirst()
+                    assertEquals(3L, c.getLong(0))
+                }
+            } finally {
+                db.close()
             }
-        } finally {
-            db.close()
-        }
 
-        // 3) Settings survived (same file name; the DataStore-side is re-read, no writes).
-        val settings = dev.j3pf.rp.data.repo.SettingsRepository(context)
-        val snap = settings.current()
-        assertEquals("sexy", snap.appTheme)
-        // Falsifiable artifacts: directPush default is TRUE (SettingsRepository.kt), so the
-        // seed planted FALSE — a lost settings file would flip this back to true/defaults.
-        assertFalse(snap.directPush)
-        assertTrue(snap.batteryAsked)
-        assertTrue(snap.onboardingDone) // seed set true; default false (falsifiable)
-    }
+            // 3) Settings survived (same file name; the DataStore-side is re-read, no writes).
+            val settings =
+                dev.j3pf.rp.data.repo
+                    .SettingsRepository(context)
+            val snap = settings.current()
+            assertEquals("sexy", snap.appTheme)
+            // Falsifiable artifacts: directPush default is TRUE (SettingsRepository.kt), so the
+            // seed planted FALSE — a lost settings file would flip this back to true/defaults.
+            assertFalse(snap.directPush)
+            assertTrue(snap.batteryAsked)
+            assertTrue(snap.onboardingDone) // seed set true; default false (falsifiable)
+        }
 }
