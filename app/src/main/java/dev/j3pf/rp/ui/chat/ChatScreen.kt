@@ -63,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -71,15 +72,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.R
 import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.UploadState
+import dev.j3pf.rp.data.ports.VoiceInputHost
+import dev.j3pf.rp.data.ports.VoiceListener
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.platform.AndroidVoiceInputHost
 import dev.j3pf.rp.ui.agents.AgentCloseConfirmationDialog
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.StatusChip
@@ -124,6 +132,8 @@ fun ChatContent(
         androidx.compose.foundation.lazy
             .rememberLazyListState(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    voiceInputHost: VoiceInputHost? = null,
+    isVoiceInputAvailable: Boolean = false,
 ) {
     val agent = ui.agent
     val working = ui.sending || agent?.status == "working" || ui.chat.working
@@ -222,6 +232,8 @@ fun ChatContent(
                     onRetryAttachment = onRetryAttachment,
                     newCameraTarget = newCameraTarget,
                     onSend = onSend,
+                    voiceInputHost = voiceInputHost,
+                    isVoiceInputAvailable = isVoiceInputAvailable,
                 )
             }
         }
@@ -254,6 +266,14 @@ fun ChatScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val activity = rememberActivity()
+    val applicationContext = LocalContext.current.applicationContext
+    val voiceInputHost =
+        remember(applicationContext) {
+            EntryPointAccessors.fromApplication(
+                applicationContext,
+                ChatVoiceInputEntryPoint::class.java,
+            ).voiceInputHost()
+        }
     var text by rememberSaveable { mutableStateOf("") }
     var busyPrompt by remember { mutableStateOf<String?>(null) }
 
@@ -364,6 +384,8 @@ fun ChatScreen(
         onOpenDiff = vm::openDiffSheet,
         busyPromptId = busyPrompt,
         snackbarHostState = snackbar,
+        voiceInputHost = voiceInputHost,
+        isVoiceInputAvailable = voiceInputHost.isAvailable,
     )
 
     if (ui.showDiffSheet) {
@@ -433,6 +455,8 @@ internal fun Composer(
     onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri,
     onSend: () -> Unit,
+    voiceInputHost: VoiceInputHost? = null,
+    isVoiceInputAvailable: Boolean = false,
 ) {
     var cameraTarget by remember { mutableStateOf<Uri?>(null) }
 
@@ -453,7 +477,22 @@ internal fun Composer(
 
     var baseVoiceText by remember { mutableStateOf("") }
     val voiceInput =
-        rememberVoiceInputState(
+        rememberVoiceInputHostState(
+            hostKey = voiceInputHost,
+            isAvailable = isVoiceInputAvailable,
+            listeningFlow = voiceInputHost?.listening,
+            start = { onPartial, onFinal, onError ->
+                voiceInputHost?.start(
+                    object : VoiceListener {
+                        override fun onPartial(text: String) = onPartial(text)
+
+                        override fun onFinal(text: String) = onFinal(text)
+
+                        override fun onError(code: Int) = onError()
+                    },
+                )
+            },
+            stop = { voiceInputHost?.stop() },
             onPartialResult = { partial ->
                 val prefix = if (baseVoiceText.isNotEmpty() && !baseVoiceText.endsWith(" ")) "$baseVoiceText " else baseVoiceText
                 onText(prefix + partial)
@@ -508,7 +547,7 @@ internal fun Composer(
         onRemoveAttachment = onRemoveAttachment,
         onRetryAttachment = onRetryAttachment,
         onSend = onSend,
-        isVoiceAvailable = voiceInput.isAvailable,
+        isVoiceAvailable = isVoiceInputAvailable,
         isListening = voiceInput.isListening,
         onVoiceToggle = {
             baseVoiceText = text
@@ -518,6 +557,12 @@ internal fun Composer(
         voiceListeningText = stringResource(R.string.voice_listening),
         voiceInputDescription = stringResource(R.string.action_voice_input),
     )
+}
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface ChatVoiceInputEntryPoint {
+    fun voiceInputHost(): AndroidVoiceInputHost
 }
 
 @Composable

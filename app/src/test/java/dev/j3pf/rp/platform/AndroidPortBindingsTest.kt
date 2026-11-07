@@ -8,6 +8,7 @@ import dev.j3pf.rp.data.ports.NotificationHealth
 import dev.j3pf.rp.data.ports.OpenPromptGuard
 import dev.j3pf.rp.data.ports.PlatformInfo
 import dev.j3pf.rp.data.ports.SettingsStore
+import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.di.PortsModule
 import org.junit.Test
@@ -21,7 +22,7 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 class AndroidPortBindingsTest {
     @Test
-    fun eachPortImplementationMatchesItsBindingAndModuleHasSevenBinds() {
+    fun eachPortImplementationMatchesItsBindingAndModuleHasEightBinds() {
         assertImplements(WorkManagerBackgroundScheduler::class.java, BackgroundScheduler::class.java)
         assertImplements(DaoDedupStore::class.java, DedupStore::class.java)
         assertImplements(DaoOpenPromptGuard::class.java, OpenPromptGuard::class.java)
@@ -29,11 +30,12 @@ class AndroidPortBindingsTest {
         assertImplements(AndroidNotificationHealth::class.java, NotificationHealth::class.java)
         assertImplements(AndroidBatteryExemption::class.java, BatteryExemption::class.java)
         assertImplements(AndroidPlatformInfo::class.java, PlatformInfo::class.java)
+        assertImplements(AndroidVoiceInputHost::class.java, VoiceInputHost::class.java)
 
         val bindings = PortsModule::class.java.declaredMethods.count { method ->
             method.isAnnotationPresent(Binds::class.java)
         }
-        assertEquals(7, bindings)
+        assertEquals(8, bindings)
     }
 
     private fun assertImplements(implementation: Class<*>, port: Class<*>) {

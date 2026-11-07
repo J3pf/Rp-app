@@ -11,10 +11,12 @@ import dev.j3pf.rp.data.ports.NotificationHealth
 import dev.j3pf.rp.data.ports.OpenPromptGuard
 import dev.j3pf.rp.data.ports.PlatformInfo
 import dev.j3pf.rp.data.ports.SettingsStore
+import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.platform.AndroidBatteryExemption
 import dev.j3pf.rp.platform.AndroidNotificationHealth
 import dev.j3pf.rp.platform.AndroidPlatformInfo
+import dev.j3pf.rp.platform.AndroidVoiceInputHost
 import dev.j3pf.rp.platform.DaoDedupStore
 import dev.j3pf.rp.platform.DaoOpenPromptGuard
 import dev.j3pf.rp.platform.WorkManagerBackgroundScheduler
@@ -50,4 +52,8 @@ abstract class PortsModule {
     @Binds
     @Singleton
     abstract fun bindPlatformInfo(impl: AndroidPlatformInfo): PlatformInfo
+
+    @Binds
+    @Singleton
+    abstract fun bindVoiceInputHost(impl: AndroidVoiceInputHost): VoiceInputHost
 }
