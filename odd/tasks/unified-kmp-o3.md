@@ -292,4 +292,6 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
   remaining files are Android resource/Hilt/lifecycle composition seams, not portable UI.
   Updated the Android-source column adapter notes for CH31–CH33, CH38, and CH41. Documentation-only;
   no behavior, statuses, or the script-computed `rows=55` summary changed. No Gradle run: this task
-  changed only documentation and explicitly prohibited Gradle.
+  changed only documentation and explicitly prohibited Gradle.- **L18** (O3 orchestration-addendum, seq 70): my FUTURE iOS composition root gains a one-time `IosPushRegistrationBridge` anchor-set responsibility: the root init binds O4's bridge (`register(apnsToken:)` overload returning false while unset) so iOS push registration activates only when the root lands; until then the gap is named inert-by-design with MY unit as the trigger (O4 never invents a parallel Session/SessionPolicy type). Effects: C4 composition-root design docs will show the anchor set in the root lifecycle sequence; C5 never touches the Android `SessionPolicy` construction in `SessionRepository.kt:43` (single producer of `ApplePushRegistration` deps until the iOS root lands).
+
+
