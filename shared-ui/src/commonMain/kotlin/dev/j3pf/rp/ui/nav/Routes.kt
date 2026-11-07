@@ -21,6 +21,9 @@ data object PermissionsRoute
 data object AgentsRoute
 
 @Serializable
+data object ArchivedAgentsRoute
+
+@Serializable
 data object MeshRoute
 
 @Serializable

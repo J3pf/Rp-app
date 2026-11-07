@@ -1,5 +1,8 @@
 package dev.j3pf.rp.ui.nav
 
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -24,6 +27,7 @@ class NavModelsTest {
         assertNotNull(ScanRoute)
         assertNotNull(PermissionsRoute)
         assertNotNull(AgentsRoute)
+        assertNotNull(ArchivedAgentsRoute)
         assertNotNull(MeshRoute)
         assertNotNull(PendingRoute)
         assertNotNull(SettingsRoute)
@@ -42,5 +46,31 @@ class NavModelsTest {
 
         val chat = ChatRoute(agentId = "agent-42")
         assertEquals("agent-42", chat.agentId)
+    }
+
+    @Test
+    fun `every route serializes and deserializes`() {
+        assertRouteRoundTrip(OnboardingRoute)
+        assertRouteRoundTrip(PairRoute(url = "https://example.com", code = "123456"))
+        assertRouteRoundTrip(ScanRoute)
+        assertRouteRoundTrip(PermissionsRoute)
+        assertRouteRoundTrip(AgentsRoute)
+        assertRouteRoundTrip(ArchivedAgentsRoute)
+        assertRouteRoundTrip(MeshRoute)
+        assertRouteRoundTrip(PendingRoute)
+        assertRouteRoundTrip(SettingsRoute)
+        assertRouteRoundTrip(ChatRoute(agentId = "agent-42"))
+        assertRouteRoundTrip(NewAgentRoute)
+        assertRouteRoundTrip(DevicesRoute)
+        assertRouteRoundTrip(MachinesRoute)
+        assertRouteRoundTrip(AddMachineRoute)
+        assertRouteRoundTrip(NotificationSettingsRoute)
+        assertRouteRoundTrip(SecuritySettingsRoute)
+        assertRouteRoundTrip(BatteryRoute)
+        assertRouteRoundTrip(AboutRoute)
+    }
+
+    private inline fun <reified T> assertRouteRoundTrip(route: T) {
+        assertEquals(route, Json.decodeFromString<T>(Json.encodeToString(route)))
     }
 }

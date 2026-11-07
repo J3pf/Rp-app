@@ -53,6 +53,9 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.materialIconsExtended)
+            // Adopted after the S13 compile spike (spike/adaptive @ d7c546d): resolves for
+            // iosSimulatorArm64, no forced Compose stack changes (see docs/parity G-6, ODD L17).
+            implementation(libs.compose.material3.adaptive)
             implementation(libs.markdown.m3)
             implementation(libs.markdown.code)
         }
