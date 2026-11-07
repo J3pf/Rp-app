@@ -195,3 +195,6 @@ Verification: `:data-core:compileKotlinIosArm64` + `:data-core:compileKotlinJvm`
 
 **Risk: item 6 (characterization net must stay byte-equivalent or it stops being a net).**
 
+## Move 2 — settings now common (a7a1098/516ac0a)
+
+- `DataStoreSettingsStore` (dev.j3pf.rp.data.settings) is the new writer; `SettingsRepository` delegates. The ST-* evidence column now cites the common store; ST-08 corrupt fallback and C1/C2 pins live in SettingsContractIdentityTest and DataStoreBidirectionalCompatibilityTest; 5 mutation probes DETECTED (default-body pin / C1 rename / C2 key / ST-08 catch / SE-05 wipe).
