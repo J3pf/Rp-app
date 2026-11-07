@@ -59,6 +59,26 @@ class AndroidNetworkMonitorProbeTest {
         assertEquals(listOf(Unit), observer.identityChanges)
     }
 
+    @Test
+    fun validatedAfterLostOfSeededNetwork_pre_move_retried() = runTest {
+        val source = RecordingNetworkCallbackSource()
+        val monitor = AndroidNetworkMonitor.withCallbackSource(source)
+        val observer = Obs()
+        monitor.register(observer)
+
+        source.available(NetworkIdentity("A"))
+        source.available(NetworkIdentity("B"))
+        source.lost(NetworkIdentity("A"), activeNetwork = NetworkIdentity("B"))
+        source.capabilitiesChanged(NetworkIdentity("B"), validated = true)
+
+        // Pre-move mapping (c4fa975): losing the last validated network drove
+        // policy.networkLost() (persistent, keeps the retry machinery armed) and nulls
+        // the seed; a later validated callback for the other network had prev == null
+        // so changed == false -> retryNow(force = false) -> onAvailability(true).
+        assertEquals(listOf(true, true, false, true), observer.availability)
+        assertEquals(emptyList(), observer.identityChanges)
+    }
+
     // DI-level singletonFreeBind is checked by reading PortsModule.kt: bindNetworkMonitor must
     // have no @Singleton scope, while bindAppLifecycleMonitor keeps @Singleton. The injected
     // AndroidNetworkMonitor constructor is also unscoped; reflection/this unit test cannot verify

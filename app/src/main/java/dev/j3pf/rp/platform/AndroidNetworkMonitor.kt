@@ -84,9 +84,13 @@ class AndroidNetworkMonitor private constructor(
                             previousNetwork == network,
                         )
                     }
+                // Pre-move semantics (ReconnectingSocket.kt @ c4fa975): every validated
+                // capability change ended in retryNow(force = changed). A null previous
+                // network (seeded lost, other active) is not an identity change, so it
+                // still signals ordinary availability and the socket retries non-forced.
                 if (identityChanged) {
                     currentObserver?.onNetworkIdentityChange()
-                } else if (identityUnchanged) {
+                } else {
                     currentObserver?.onAvailability(true)
                 }
             }
