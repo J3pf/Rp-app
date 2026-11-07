@@ -171,6 +171,10 @@ class FakeBiometricAuthorizer(
         reasons.value = reasons.value + reason
         return result
     }
+
+    // INTENTIONALLY does NOT override the two-arg overload: the default body must delegate to
+    // the single-arg member (that delegation is the Risk: item 2 contract pinned by
+    // PortContractsTest biometricOverloadDefaultsDelegateAndReachesSingleArg).
 }
 
 class FakeVoiceInputHost : VoiceInputHost {

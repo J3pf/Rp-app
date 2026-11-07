@@ -160,5 +160,17 @@ fun lifecyclePortsRecordObserversAndFireBothCallbacks() = runTest {
     net.register(counting)
     net.fireNetworkIdentityChange()
     assertEquals(2, counting.identityChangeCalls.value)
+
+    // Risk: item 2 pin (verifier advisory 1): the two-arg overload's DEFAULT body must
+    // (i) propagate the single-arg member's result UNCHANGED — including UNAVAILABLE/FAILED,
+    // not just OK — and (ii) pass the `reason` through to the single-arg member verbatim.
+    val coal = FakeBiometricAuthorizer(result = BiometricAuthResult.OK)
+    assertEquals(BiometricAuthResult.OK, coal.authenticate("t1", "r1"))
+    assertTrue(coal.reasons.value.contains("r1"))
+    assertEquals(1, coal.reasons.value.size) // no extra calls, title alone must not reach it
+    val curtain = FakeBiometricAuthorizer(result = BiometricAuthResult.UNAVAILABLE)
+    assertEquals(BiometricAuthResult.UNAVAILABLE, curtain.authenticate("t", "r"))
+    val fail = FakeBiometricAuthorizer(result = BiometricAuthResult.FAILED)
+    assertEquals(BiometricAuthResult.FAILED, fail.authenticate("t", "r"))
 }
 }
