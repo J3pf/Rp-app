@@ -149,5 +149,16 @@ fun lifecyclePortsRecordObserversAndFireBothCallbacks() = runTest {
     assertEquals(1, bg)
     assertEquals(1, fg)
     assertEquals(true, life.isForeground.value)
+
+    // Handover contract: the default member is a no-op for source compatibility, and the
+    // monitor fires onNetworkIdentityChange() on VALIDATED identity changes.
+    val counting = CountingNetworkObserver()
+    counting.onNetworkIdentityChange()
+    assertEquals(1, counting.identityChangeCalls.value)
+    counting.onAvailability(true)
+    assertEquals(1, counting.availabilityCalls.value)
+    net.register(counting)
+    net.fireNetworkIdentityChange()
+    assertEquals(2, counting.identityChangeCalls.value)
 }
 }

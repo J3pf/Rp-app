@@ -270,6 +270,23 @@ class RecordingNetworkMonitor : NetworkMonitor {
         online.value = false
         observers.value.forEach { it.onAvailability(false) }
     }
+
+    fun fireNetworkIdentityChange() {
+        observers.value.forEach { it.onNetworkIdentityChange() }
+    }
+}
+
+class CountingNetworkObserver : NetworkObserver {
+    val availabilityCalls = MutableStateFlow(0)
+    val identityChangeCalls = MutableStateFlow(0)
+
+    override fun onAvailability(available: Boolean) {
+        availabilityCalls.value += 1
+    }
+
+    override fun onNetworkIdentityChange() {
+        identityChangeCalls.value += 1
+    }
 }
 
 class RecordingAppLifecycleMonitor : AppLifecycleMonitor {
