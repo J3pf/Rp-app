@@ -246,3 +246,31 @@ pending questions/authorizations screen, new-agent flow, 48dp touch targets and 
   (pending parent acceptance) binds `AndroidVoiceInputHost`, routes the shared composer through the
   frozen `VoiceInputHost` contract, and preserves permission/base-text behavior; see CH54 and the
   new host/consumer tests for current proof.
+- **L14** (O3, M3-A): moved only the stateless `ModalBottomSheet` frame into commonMain
+  `PromptSheetChrome`; the :app wrapper retains Hilt/lifecycle collection, status timing/reset and
+  dismissal, biometric authentication/mapping, and `PromptContent` answer handling. Added direct
+  Robolectric characterization for the resolved/missing/queued strings and error/auth-message
+  passthrough; updated CH35–CH37 citations. No Gate-A tests or screenshot goldens changed.
+  `:app:testDirectDebugUnitTest --tests 'dev.j3pf.rp.ui.promptsheet.*'`, `:shared-ui:jvmTest`,
+  `:shared-ui:compileKotlinIosSimulatorArm64`, and `:shared-ui:ktlintCheck` all passed (final run).
+  Biometric gate remains platform-side; risk item 2 is not resolved by this chrome extraction.
+- **L15** (O3, M3 remaining-surface audit): read all three remaining app files; none contains a
+  genuinely stateless, unshared UI piece that contradicts the planned split.
+  `app/src/main/java/dev/j3pf/rp/ui/chat/DiffSheet.kt:10‑31` delegates to shared `DiffSheet` and only
+  forwards callbacks plus Android resource/literal labels (`R.string.diff_title`,
+  `R.string.diff_discard`, `Pedir ajuste`); **KEEP in :app** as a resource adapter. The shared sheet
+  retains the S19 confirmation behavior
+  (`shared-ui/src/commonMain/kotlin/dev/j3pf/rp/ui/diff/DiffSheet.kt:71,289‑307`).
+  `app/src/main/java/dev/j3pf/rp/ui/pending/PendingScreen.kt:26‑55,58‑68` is a Hilt
+  `PendingViewModel` and lifecycle state/delegation seam over already-shared `PendingContent`
+  (`shared-ui/src/commonMain/kotlin/dev/j3pf/rp/ui/pending/PendingContent.kt:43+`); **NO-MOVE**
+  from M3, with VM migration belonging to M4/composition-root work.
+  `app/src/main/java/dev/j3pf/rp/ui/newagent/NewAgentScreen.kt:12‑46` wires the Hilt/lifecycle
+  `NewAgentViewModel` (`app/src/main/java/dev/j3pf/rp/ui/newagent/NewAgentViewModel.kt:22‑31`)
+  into shared `NewAgentContent` and `HerdrPlacementSection`
+  (`shared-ui/src/commonMain/kotlin/dev/j3pf/rp/ui/newagent/NewAgentContent.kt:55+,276+`);
+  **NO-MOVE** from M3, with its VM seam likewise belonging to M4/composition-root work. These
+  remaining files are Android resource/Hilt/lifecycle composition seams, not portable UI.
+  Updated the Android-source column adapter notes for CH31–CH33, CH38, and CH41. Documentation-only;
+  no behavior, statuses, or the script-computed `rows=55` summary changed. No Gradle run: this task
+  changed only documentation and explicitly prohibited Gradle.
