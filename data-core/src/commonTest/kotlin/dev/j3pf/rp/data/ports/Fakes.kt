@@ -2,7 +2,15 @@ package dev.j3pf.rp.data.ports
 
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.HerdrLayout
+import dev.j3pf.rp.protocol.HostDirs
+import dev.j3pf.rp.protocol.HostGitDiffResult
+import dev.j3pf.rp.protocol.HostGitDiscardResult
+import dev.j3pf.rp.protocol.HostInfo
+import dev.j3pf.rp.protocol.HostSpawn
+import dev.j3pf.rp.protocol.HostSpawned
 import dev.j3pf.rp.protocol.NotifyPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -191,6 +199,76 @@ class FakeVoiceInputHost : VoiceInputHost {
     override fun stop() {
         listener = null
         state.value = false
+    }
+}
+
+/** Recording fake for the HostGateway contract; it never transforms arguments or results. */
+class FakeHostGateway(
+    initialHosts: Map<String, HostInfo> = emptyMap(),
+) : HostGateway {
+    private val hostState = MutableStateFlow(initialHosts)
+    override val hosts: StateFlow<Map<String, HostInfo>> = hostState
+    var startCalls = 0
+        private set
+
+    val listDirsCalls = mutableListOf<Pair<String, String>>()
+    val herdrLayoutCalls = mutableListOf<String>()
+    val spawnCalls = mutableListOf<HostSpawn>()
+    val gitDiffCalls = mutableListOf<Triple<String, String, String?>>()
+    val gitDiscardCalls = mutableListOf<Triple<String, String, String>>()
+    val resumeAgentCalls = mutableListOf<AgentSummary>()
+
+    var listDirsResult: HostResult<HostDirs> = HostResult.Failed("not configured")
+    var herdrLayoutResult: HostResult<HerdrLayout> = HostResult.Failed("not configured")
+    var spawnResult: HostResult<HostSpawned> = HostResult.Failed("not configured")
+    var gitDiffResult: HostResult<HostGitDiffResult> = HostResult.Failed("not configured")
+    var gitDiscardResult: HostResult<HostGitDiscardResult> = HostResult.Failed("not configured")
+    var resumeAgentResult: HostResult<HostSpawned> = HostResult.Failed("not configured")
+
+    override fun start() {
+        startCalls += 1
+    }
+
+    override fun clear() {
+        hostState.value = emptyMap()
+    }
+
+    override suspend fun listDirs(machineId: String, path: String): HostResult<HostDirs> {
+        listDirsCalls += machineId to path
+        return listDirsResult
+    }
+
+    override suspend fun herdrLayout(machineId: String): HostResult<HerdrLayout> {
+        herdrLayoutCalls += machineId
+        return herdrLayoutResult
+    }
+
+    override suspend fun spawn(req: HostSpawn): HostResult<HostSpawned> {
+        spawnCalls += req
+        return spawnResult
+    }
+
+    override suspend fun gitDiff(
+        machineId: String,
+        cwd: String,
+        path: String?,
+    ): HostResult<HostGitDiffResult> {
+        gitDiffCalls += Triple(machineId, cwd, path)
+        return gitDiffResult
+    }
+
+    override suspend fun gitDiscard(
+        machineId: String,
+        cwd: String,
+        path: String,
+    ): HostResult<HostGitDiscardResult> {
+        gitDiscardCalls += Triple(machineId, cwd, path)
+        return gitDiscardResult
+    }
+
+    override suspend fun resumeAgent(agent: AgentSummary): HostResult<HostSpawned> {
+        resumeAgentCalls += agent
+        return resumeAgentResult
     }
 }
 

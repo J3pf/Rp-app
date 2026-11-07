@@ -8,6 +8,7 @@ import dev.j3pf.rp.data.ports.AppLifecycleMonitor
 import dev.j3pf.rp.data.ports.BackgroundScheduler
 import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.ports.BatteryExemption
+import dev.j3pf.rp.data.ports.HostGateway
 import dev.j3pf.rp.data.ports.DedupStore
 import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.ports.NotificationHealth
@@ -16,6 +17,7 @@ import dev.j3pf.rp.data.ports.PlatformInfo
 import dev.j3pf.rp.data.ports.PushEnvelopeCrypto
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.ports.VoiceInputHost
+import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.platform.AndroidAppLifecycleMonitor
 import dev.j3pf.rp.platform.AndroidBatteryExemption
@@ -44,6 +46,10 @@ abstract class PortsModule {
     @Binds
     @Singleton
     abstract fun bindOpenPromptGuard(impl: DaoOpenPromptGuard): OpenPromptGuard
+
+    @Binds
+    @Singleton
+    abstract fun bindHostGateway(impl: HostRepository): HostGateway
 
     @Binds
     @Singleton

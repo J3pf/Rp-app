@@ -1,5 +1,9 @@
 package dev.j3pf.rp.data.repo
 
+import dev.j3pf.rp.data.ports.HostResult
+import dev.j3pf.rp.data.ports.HostResult.Ok
+import dev.j3pf.rp.data.ports.HostResult.Failed
+
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
