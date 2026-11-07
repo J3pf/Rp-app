@@ -10,11 +10,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.data.ports.VoiceErrorCode
 import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.ports.VoiceListener
-import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
+import javax.inject.Singleton
 
 @Singleton
 class AndroidVoiceInputHost internal constructor(
@@ -164,7 +164,9 @@ internal interface SpeechRecognitionEvents {
     fun onListeningChanged(listening: Boolean) {}
 }
 
-private class AndroidSpeechRecognizerEngine(context: Context) : SpeechRecognizerEngine {
+private class AndroidSpeechRecognizerEngine(
+    context: Context,
+) : SpeechRecognizerEngine {
     private val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
 
     override fun start(events: SpeechRecognitionEvents) {

@@ -17,7 +17,9 @@ class AndroidNetworkMonitor private constructor(
     private val callbackSource: NetworkCallbackSource,
 ) : NetworkMonitor {
     @Inject
-    constructor(@ApplicationContext context: Context) : this(AndroidConnectivityCallbackSource(context))
+    constructor(
+        @ApplicationContext context: Context,
+    ) : this(AndroidConnectivityCallbackSource(context))
 
     private val lock = Any()
     private val online = MutableStateFlow(false)
