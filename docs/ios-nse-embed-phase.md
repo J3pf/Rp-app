@@ -41,3 +41,21 @@ app target must (1) depend on the NSE target and (2) copy the .appex into `PlugI
   protected); unit gets its own commit (rollback = single revert) and `Risk: item 5`.
 - Does NOT unlock device runs: S12 still owns signing/entitlements/provisioning (TEAM_ID
   19410625785 parked for T6.5, provisioning path user-parked).
+
+## TestFlight dependency of the embed
+
+The embed is ALSO gated on CI: `.github/workflows/testflight.yml` archives with
+`CODE_SIGN_STYLE=Manual`, `CODE_SIGN_IDENTITY="Apple Distribution"` and a single
+`PROVISIONING_PROFILE_SPECIFIER` from `PROVISIONING_PROFILE_BASE64`; once the appex is embedded,
+export signs BOTH bundles, and the app's existing profile does NOT cover
+`dev.j3pf.rp.iosApp.NotificationService`. So before the embed unit ships:
+
+- the user's parked provisioning deliverable must include a SECOND App ID + profile for the
+  extension (`$(BUNDLE_ID).NotificationService`), OR one shared wildcard profile that covers both;
+- the workflow gains the wiring: either a second secret (`PROVISIONING_PROFILE_BASE64_NSE` +
+  `PROVISIONING_PROFILE_SPECIFIER_NSE` passed to exportOptions for the extension bundle) or an
+  updated exportOptions where one profile covers app + extension.
+
+Without that wiring the next `archive` fails at export (missing profile for the extension).
+Execution of the embed unit stays HELD until the user delivers both pieces (Ruling 2026-11-07:
+accepted plan-of-record, `Risk: item 5` confirmed, no new work until the human input lands).
