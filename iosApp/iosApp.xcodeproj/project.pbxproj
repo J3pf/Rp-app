@@ -11,6 +11,7 @@
 		D30000010000000000000016 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000010000000000000015 /* ContentView.swift */; };
 		D30000010000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D30000010000000000000017 /* Assets.xcassets */; };
 		D3000001000000000000001C /* SharedUi.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3000001000000000000001B /* SharedUi.framework */; };
+		D30000010000000000N00N1 /* ServiceExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000010000000000N00N3 /* ServiceExtension.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,6 +22,9 @@
 		D30000010000000000000019 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		D3000001000000000000001A /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		D3000001000000000000001B /* SharedUi.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SharedUi.framework; path = "../shared-ui/build/bin/iosSimulatorArm64/debugFramework/SharedUi.framework"; sourceTree = SOURCE_ROOT; };
+		D30000010000000000N00N2 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D30000010000000000N00N3 /* ServiceExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceExtension.swift; sourceTree = "<group>"; };
+		D30000010000000000N00N4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +43,7 @@
 			isa = PBXGroup;
 			children = (
 				D3000001000000000000000F /* Configuration */,
+				D30000010000000000N00N5 /* NotificationService */,
 				D3000001000000000000000E /* iosApp */,
 				D3000001000000000000001B /* SharedUi.framework */,
 				D30000010000000000000011 /* Products */,
@@ -54,6 +59,15 @@
 				D30000010000000000000010 /* Preview Content */,
 			);
 			path = iosApp;
+			sourceTree = "<group>";
+		};
+		D30000010000000000N00N5 /* NotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				D30000010000000000N00N3 /* ServiceExtension.swift */,
+				D30000010000000000N00N4 /* Info.plist */,
+			);
+			path = NotificationService;
 			sourceTree = "<group>";
 		};
 		D3000001000000000000000F /* Configuration */ = {
@@ -76,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				D30000010000000000000012 /* iosApp.app */,
+				D30000010000000000N00N2 /* NotificationService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -101,6 +116,23 @@
 			productReference = D30000010000000000000012 /* iosApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D30000010000000000N00N6 /* NotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D30000010000000000N00N7 /* Build configuration list for PBXNativeTarget "NotificationService" */;
+			buildPhases = (
+				D30000010000000000N00N8 /* Sources */,
+				D30000010000000000N00N9 /* Frameworks */,
+				D30000010000000000N00NA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NotificationService;
+			productName = NotificationService;
+			productReference = D30000010000000000N00N2 /* NotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -112,6 +144,9 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					D30000010000000000000006 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				D30000010000000000N00N6 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -130,16 +165,31 @@
 			projectRoot = "";
 			targets = (
 				D30000010000000000000006 /* iosApp */,
+				D30000010000000000N00N6 /* NotificationService */,
 			);
 		};
 /* End PBXProject section */
 
+		D30000010000000000N00N9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* Begin PBXResourcesBuildPhase section */
 		D3000001000000000000000D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				D30000010000000000000018 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000010000000000N00NA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -173,6 +223,14 @@
 		};
 /* End PBXShellScriptBuildPhase section */
 
+		D30000010000000000N00N8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D30000010000000000N00N1 /* ServiceExtension.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* Begin PBXSourcesBuildPhase section */
 		D3000001000000000000000B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -185,6 +243,69 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+		D30000010000000000N00N7 /* Build configuration list for PBXNativeTarget "NotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D30000010000000000N00N11 /* Debug */,
+				D30000010000000000N00N12 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D30000010000000000N00N11 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D3000001000000000000001A /* Config.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).NotificationService";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = NotificationService;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D30000010000000000N00N12 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D3000001000000000000001A /* Config.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).NotificationService";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = NotificationService;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* Begin XCBuildConfiguration section */
 		D30000010000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
