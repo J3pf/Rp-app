@@ -23,6 +23,10 @@ class KeyValueSettingsStore(
     val state: StateFlow<AppSettings> = _state.asStateFlow()
     override val settings: StateFlow<AppSettings> = state
 
+    init {
+        onMutedAgentsChanged(_state.value.mutedAgents)
+    }
+
     override suspend fun setSelectedContext(v: String) {
         update(SettingsKeys.K_SELECTED_CONTEXT, v) { copy(selectedContext = v) }
     }

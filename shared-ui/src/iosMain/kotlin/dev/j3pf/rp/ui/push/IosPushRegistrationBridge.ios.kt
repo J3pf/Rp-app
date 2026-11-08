@@ -29,10 +29,17 @@ object IosPushRegistrationBridge {
     @Volatile
     var registration: ApplePushRegistration? = null
 
-    /** Inert until [registration] is set by the iOS composition root. Never logs the token. */
+    /** Cached lowercase hex APNs token when delivered before [registration] is attached or before pairing. */
+    @Volatile
+    var lastApnsTokenHex: String? = null
+        internal set
+
+    /** Inert until [registration] is set by the iOS composition root, but caches [lastApnsTokenHex]. Never logs the token. */
     suspend fun register(apnsToken: NSData?): Boolean {
+        val hex = apnsToken?.let { apnsTokenHex(it) }
+        lastApnsTokenHex = hex
         val registration = registration ?: return false
-        return register(registration, apnsToken)
+        return registration.register(hex, DEFAULT_APNS_ENVIRONMENT)
     }
 
     @OptIn(ExperimentalForeignApi::class)
@@ -49,9 +56,9 @@ object IosPushRegistrationBridge {
     suspend fun register(
         registration: ApplePushRegistration,
         apnsToken: NSData?,
-    ): Boolean =
-        registration.register(
-            apnsToken?.let { apnsTokenHex(it) },
-            DEFAULT_APNS_ENVIRONMENT,
-        )
+    ): Boolean {
+        val hex = apnsToken?.let { apnsTokenHex(it) }
+        lastApnsTokenHex = hex
+        return registration.register(hex, DEFAULT_APNS_ENVIRONMENT)
+    }
 }

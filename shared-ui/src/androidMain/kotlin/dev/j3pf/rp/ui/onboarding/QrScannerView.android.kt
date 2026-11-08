@@ -26,7 +26,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalGetImage::class)
 @Composable
 actual fun QrScannerView(
@@ -36,6 +35,7 @@ actual fun QrScannerView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnResult by rememberUpdatedState(onResult)
+    val currentOnCancel by rememberUpdatedState(onCancel)
     val executor = remember { Executors.newSingleThreadExecutor() }
     val scanner =
         remember {
@@ -49,8 +49,8 @@ actual fun QrScannerView(
         onDispose {
             disposed.set(true)
             cameraProvider.value?.unbindAll()
-            scanner.close()
             executor.shutdown()
+            scanner.close()
         }
     }
 
@@ -61,33 +61,36 @@ actual fun QrScannerView(
             providerFuture.addListener({
                 if (disposed.get()) return@addListener
 
-                val provider = providerFuture.get()
-                val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-                val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
-                analysis.setAnalyzer(executor) { proxy ->
-                    val media = proxy.image
-                    if (media == null || disposed.get()) {
-                        proxy.close()
-                        return@setAnalyzer
-                    }
-                    scanner
-                        .process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                        .addOnSuccessListener { codes ->
-                            val raw = codes.firstNotNullOfOrNull { it.rawValue }
-                            if (raw == null) {
-                                lastRawValue.set(null)
-                            } else if (lastRawValue.getAndSet(raw) != raw) {
-                                view.post {
-                                    if (!disposed.get()) currentOnResult(raw)
-                                }
-                            }
-                        }.addOnCompleteListener { proxy.close() }
-                }
                 runCatching {
+                    val provider = providerFuture.get()
+                    val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
+                    val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                    analysis.setAnalyzer(executor) { proxy ->
+                        val media = proxy.image
+                        if (media == null || disposed.get()) {
+                            proxy.close()
+                            return@setAnalyzer
+                        }
+                        scanner
+                            .process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
+                            .addOnSuccessListener { codes ->
+                                val raw = codes.firstNotNullOfOrNull { it.rawValue }
+                                if (raw == null) {
+                                    lastRawValue.set(null)
+                                } else if (lastRawValue.getAndSet(raw) != raw) {
+                                    view.post {
+                                        if (!disposed.get()) currentOnResult(raw)
+                                    }
+                                }
+                            }.addOnCompleteListener { proxy.close() }
+                    }
                     provider.unbindAll()
                     provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                }.onSuccess {
+                    provider
+                }.onSuccess { provider ->
                     cameraProvider.value = provider
+                }.onFailure {
+                    if (!disposed.get()) currentOnCancel()
                 }
             }, ContextCompat.getMainExecutor(viewContext))
             view

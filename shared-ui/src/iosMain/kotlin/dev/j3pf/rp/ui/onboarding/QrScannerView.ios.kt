@@ -22,7 +22,10 @@ import platform.AVFoundation.AVMediaTypeVideo
 import platform.AVFoundation.AVMetadataMachineReadableCodeObject
 import platform.AVFoundation.AVMetadataObjectTypeQRCode
 import platform.UIKit.UIView
+import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
 import platform.darwin.dispatch_get_main_queue
 
 @OptIn(ExperimentalForeignApi::class)
@@ -57,7 +60,11 @@ private class IosQrScanner(
 ) {
     private val session = AVCaptureSession()
     private val output = AVCaptureMetadataOutput()
-    private val delegate = QrMetadataDelegate(onResult)
+    private val delegate =
+        QrMetadataDelegate { raw ->
+            stopSessionAsync()
+            onResult(raw)
+        }
     private var previewLayer: AVCaptureVideoPreviewLayer? = null
     private var configured = false
 
@@ -76,7 +83,7 @@ private class IosQrScanner(
         view.layer.addSublayer(layer)
         previewLayer = layer
         layer.frame = view.bounds
-        session.startRunning()
+        startSessionAsync()
         return view
     }
 
@@ -86,9 +93,27 @@ private class IosQrScanner(
 
     fun dispose() {
         output.setMetadataObjectsDelegate(null, null)
-        session.stopRunning()
+        stopSessionAsync()
         previewLayer?.removeFromSuperlayer()
         previewLayer = null
+    }
+
+    private fun startSessionAsync() {
+        val queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)
+        dispatch_async(queue) {
+            if (!session.isRunning()) {
+                session.startRunning()
+            }
+        }
+    }
+
+    private fun stopSessionAsync() {
+        val queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)
+        dispatch_async(queue) {
+            if (session.isRunning()) {
+                session.stopRunning()
+            }
+        }
     }
 
     private fun configureSession(): Boolean {

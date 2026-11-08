@@ -13,6 +13,7 @@ import dev.j3pf.rp.data.secure.SecretStoreIos
 import dev.j3pf.rp.data.settings.SettingsKeys
 import dev.j3pf.rp.ui.push.IosPushRegistrationBridge
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
@@ -168,14 +169,23 @@ object IosAppScope {
                     name.ifBlank { "iPhone" }
                 },
                 apnsEnvironmentProvider = { IosPushRegistrationBridge.DEFAULT_APNS_ENVIRONMENT },
+                currentApnsTokenProvider = { IosPushRegistrationBridge.lastApnsTokenHex },
                 startSocketConnection = { socketPolicy.start() },
                 stopSocketConnection = { socketPolicy.stop() },
+                retrySocketConnection = { socketPolicy.retryNow() },
                 isSocketConnected = { socketPolicy.isConnected },
                 sendSocketText = { socketPolicy.send(it) },
                 connState = socketPolicy.state,
             )
         controllerRef = controller
-        IosPushRegistrationBridge.registration = ApplePushRegistration { controller.sessionPolicy }
+        val applePushRegistration = ApplePushRegistration { controller.sessionPolicy }
+        IosPushRegistrationBridge.registration = applePushRegistration
+        val cachedToken = IosPushRegistrationBridge.lastApnsTokenHex
+        if (cachedToken != null && secrets.current() != null) {
+            scope.launch {
+                applePushRegistration.register(cachedToken, IosPushRegistrationBridge.DEFAULT_APNS_ENVIRONMENT)
+            }
+        }
         return controller
     }
 

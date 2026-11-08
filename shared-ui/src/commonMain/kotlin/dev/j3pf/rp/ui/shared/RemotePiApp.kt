@@ -6,11 +6,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.ui.agents.AgentsContent
 import dev.j3pf.rp.ui.agents.AgentsUiState
@@ -51,6 +58,7 @@ import dev.j3pf.rp.ui.nav.PendingRoute
 import dev.j3pf.rp.ui.nav.ScanRoute
 import dev.j3pf.rp.ui.nav.SecuritySettingsRoute
 import dev.j3pf.rp.ui.nav.SettingsRoute
+import dev.j3pf.rp.ui.newagent.HerdrPlacementSection
 import dev.j3pf.rp.ui.newagent.NewAgentContent
 import dev.j3pf.rp.ui.newagent.NewAgentUi
 import dev.j3pf.rp.ui.onboarding.OnboardingContent
@@ -60,7 +68,6 @@ import dev.j3pf.rp.ui.pending.PendingContent
 import dev.j3pf.rp.ui.pending.PendingUiState
 import dev.j3pf.rp.ui.promptsheet.PromptContent
 import dev.j3pf.rp.ui.promptsheet.PromptSheetChrome
-import dev.j3pf.rp.ui.promptsheet.PromptSheetChromeState
 import dev.j3pf.rp.ui.settings.AboutContent
 import dev.j3pf.rp.ui.settings.AddMachineContent
 import dev.j3pf.rp.ui.settings.BatteryContent
@@ -98,6 +105,16 @@ fun RemotePiApp(controller: SharedAppController? = null) {
     val busyPromptId by appController.busyPromptId.collectAsState()
     val promptSheetState by appController.promptSheetState.collectAsState()
     val promptSheetError by appController.promptSheetError.collectAsState()
+    val promptSheetAuthMessage by appController.promptSheetAuthMessage.collectAsState()
+    val pendingForgetAgentId by appController.pendingForgetAgentId.collectAsState()
+    val actionMessage by appController.actionMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(actionMessage) {
+        val msg = actionMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        appController.consumeActionMessage()
+    }
 
     val themeChoice =
         remember(settings.appTheme, machines, agents) {
@@ -138,15 +155,18 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                     SharedChatScreen(
                         agentId = current.agentId,
                         appController = appController,
+                        snackbarHostState = snackbarHostState,
                     )
                 }
 
                 is NewAgentRoute -> {
                     val canGoUp =
                         remember(newAgentUi.form.path, newAgentUi.host) {
-                            val p = newAgentUi.form.path.trimEnd('/')
+                            val p = newAgentUi.form.path.trimEnd('/', '\\')
                             val roots = newAgentUi.host?.roots.orEmpty()
-                            p.isNotBlank() && roots.none { it.trimEnd('/') == p } && p.contains('/')
+                            p.isNotBlank() &&
+                                roots.none { it.trimEnd('/', '\\') == p } &&
+                                (p.contains('/') || p.contains('\\'))
                         }
                     NewAgentContent(
                         ui = newAgentUi,
@@ -161,6 +181,17 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                         onSetName = { n -> appController.updateNewAgentForm { it.copy(name = n) } },
                         onSetPrompt = { p -> appController.updateNewAgentForm { it.copy(initialPrompt = p) } },
                         onCreate = appController::createNewAgent,
+                        herdrSection = {
+                            HerdrPlacementSection(
+                                ui = newAgentUi,
+                                onSetPlacement = appController::setNewAgentPlacement,
+                                onSetWorkspace = { id -> appController.updateNewAgentForm { it.copy(workspaceId = id) } },
+                                onSetPane = { id -> appController.updateNewAgentForm { it.copy(paneId = id) } },
+                                onSetDirection = { d -> appController.updateNewAgentForm { it.copy(direction = d) } },
+                                onRefreshLayout = appController::loadNewAgentHerdrLayout,
+                            )
+                        },
+                        snackbarHostState = snackbarHostState,
                     )
                 }
 
@@ -232,7 +263,7 @@ fun RemotePiApp(controller: SharedAppController? = null) {
 
                 is AboutRoute -> {
                     AboutContent(
-                        versionName = "0.5.0",
+                        versionName = appController.appVersion,
                         versionCode = "1",
                         flavor = "APNs",
                         onBack = { appController.navigateBack() },
@@ -249,6 +280,7 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                         }
                     Scaffold(
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
                         bottomBar = {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 if (selectedTab == AppTab.AGENTS) {
@@ -277,27 +309,31 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                                     AgentsContent(
                                         state = agentsState,
                                         conn = conn,
+                                        snackbarHostState = snackbarHostState,
                                         bottomBar = {},
                                         onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
                                         onNewAgent = { appController.navigateTo(NewAgentRoute) },
                                         onSelect = appController::selectContext,
                                         onRefresh = appController::refreshAll,
                                         onResume = { agent, _ -> appController.resumeAgent(agent) },
-                                        onForget = appController::forgetAgent,
+                                        onForget = appController::requestForgetAgent,
                                     )
                                 }
 
                                 AppTab.MESH -> {
                                     MeshScreenContent(
-                                        uiState = meshState.copy(isConnected = conn == dev.j3pf.rp.data.net.ConnState.Connected),
+                                        uiState = meshState.copy(isConnected = conn == ConnState.Connected),
                                         onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
                                         onToggleListView = appController::toggleMeshListView,
                                         onSelectMachine = appController::selectMeshMachine,
                                         onSelectGroup = appController::selectMeshGroup,
                                         onNodeClick = appController::selectMeshNode,
+                                        onEdgeClick = appController::onMeshEdgeClick,
+                                        onViewportSizeChanged = appController::onMeshViewportSizeChanged,
                                         onDismissNodeDetail = appController::dismissMeshNodeDetail,
                                         onViewConversation = appController::openMeshConversation,
                                         onDismissConversation = appController::dismissMeshConversation,
+                                        onLoadMoreConversation = appController::loadMoreMeshConversation,
                                         onRetry = { appController.refreshMesh() },
                                     )
                                 }
@@ -318,7 +354,7 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                                         onLogout = appController::logout,
                                         onSelectFontScale = appController::setChatFontScale,
                                         onSelectMessageSpacing = appController::setChatMessageSpacing,
-                                        versionName = "0.5.0",
+                                        versionName = appController.appVersion,
                                     )
                                 }
                             }
@@ -327,13 +363,28 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                 }
             }
 
+            if (pendingForgetAgentId != null) {
+                SharedAgentCloseConfirmationDialog(
+                    onConfirm = {
+                        val closingChatAgent = (route as? ChatRoute)?.agentId == pendingForgetAgentId
+                        appController.confirmForgetAgent {
+                            if (closingChatAgent) {
+                                appController.navigateBack()
+                            }
+                        }
+                    },
+                    onDismiss = appController::cancelForgetAgent,
+                )
+            }
+
             val promptId = activePromptId
             if (promptId != null) {
                 val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
                 PromptSheetChrome(
-                    state = if (activePrompt != null) promptSheetState else PromptSheetChromeState.AlreadyResolved,
+                    state = promptSheetState,
                     onDismissRequest = appController::dismissPromptSheet,
                     errorMessage = promptSheetError,
+                    authMessage = promptSheetAuthMessage,
                 ) {
                     if (activePrompt != null) {
                         PromptContent(
@@ -349,9 +400,32 @@ fun RemotePiApp(controller: SharedAppController? = null) {
 }
 
 @Composable
+private fun SharedAgentCloseConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cerrar agente") },
+        text = { Text("¿Quieres cerrar este agente o archivar su historial si ya no tiene una ventana activa?") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Cerrar", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        },
+    )
+}
+
+@Composable
 private fun SharedChatScreen(
     agentId: String,
     appController: SharedAppController,
+    snackbarHostState: SnackbarHostState,
 ) {
     val chatSession = remember(agentId) { appController.chatSessions.open(agentId) }
     DisposableEffect(agentId) {
@@ -374,7 +448,7 @@ private fun SharedChatScreen(
     val agent = agents.firstOrNull { it.agentId == agentId }
     var text by rememberSaveable(agentId) { mutableStateOf("") }
     var choice by rememberSaveable(agentId) { mutableStateOf(DeliveryChoice.AUTO) }
-    var workingDelivery by rememberSaveable(agentId) { mutableStateOf(Delivery.STEER) }
+    var workingDelivery by rememberSaveable(agentId) { mutableStateOf(Delivery.FOLLOW_UP) }
     var showInfo by remember { mutableStateOf(false) }
 
     val working = chatState.working || agent?.status == "working"
@@ -382,6 +456,7 @@ private fun SharedChatScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 ChatTopBar(
@@ -402,11 +477,8 @@ private fun SharedChatScreen(
                     onMessageSpacingChange = appController::setChatMessageSpacing,
                     onInfo = { showInfo = true },
                     onToggleMute = { appController.setAgentMuted(agentId, !muted) },
-                    onQuit = { appController.closeOrQuitAgent(agentId) },
-                    onForget = {
-                        appController.forgetAgent(agentId)
-                        appController.navigateBack()
-                    },
+                    onQuit = { appController.quitAgent(chatSession) },
+                    onForget = { appController.requestForgetAgent(agentId) },
                 )
                 if (agent?.gentleMode == "auto") {
                     AutoDeliveryBanner()
@@ -436,13 +508,14 @@ private fun SharedChatScreen(
                 onRetryAttachment = {},
                 onSend = {
                     val msg = text
-                    text = ""
                     appController.sendChatMessage(
                         session = chatSession,
                         text = msg,
                         choice = choice,
                         workingDelivery = workingDelivery,
                         working = working,
+                        agent = agent,
+                        onSent = { text = "" },
                     )
                 },
                 isVoiceAvailable = false,
@@ -467,9 +540,8 @@ private fun SharedChatScreen(
             busyPromptId = busyPromptId,
             onAnswerPrompt = { prompt, answer -> appController.answerPrompt(prompt.promptId, answer) },
             onRetryUserMessage = { userMsg ->
-                userMsg.clientMsgId?.let { cId ->
-                    appController.scope.launch { chatSession.retry(cId) }
-                }
+                val cId = userMsg.clientMsgId ?: userMsg.key.removePrefix("local:")
+                appController.scope.launch { chatSession.retry(cId) }
             },
             modifier =
                 Modifier
@@ -494,9 +566,10 @@ private fun SharedChatScreen(
             isLoading = diffLoading,
             onSelectFile = appController::selectDiffFile,
             onDiscardFile = { path -> appController.discardDiffFile(agent, path) },
-            onRequestAdjustment = { adjustment ->
+            onRequestAdjustment = { filePath ->
+                val prefix = if (text.isBlank()) "Ajusta en $filePath: " else "$text\nAjusta en $filePath: "
+                text = prefix
                 appController.dismissDiffSheet()
-                text = adjustment
             },
             onDismiss = appController::dismissDiffSheet,
         )
