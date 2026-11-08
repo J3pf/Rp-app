@@ -15,11 +15,13 @@ import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.ports.NotificationHealth
 import dev.j3pf.rp.data.ports.OpenPromptGuard
 import dev.j3pf.rp.data.ports.PlatformInfo
+import dev.j3pf.rp.data.ports.PromptSheetGate
 import dev.j3pf.rp.data.ports.PushEnvelopeCrypto
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.HostRepository
+import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.platform.AndroidAppLifecycleMonitor
 import dev.j3pf.rp.platform.AndroidBatteryExemption
@@ -95,4 +97,8 @@ abstract class PortsModule {
     @Binds
     @Singleton
     abstract fun bindAgentsGate(impl: AgentsRepository): AgentsGate
+
+    @Binds
+    @Singleton
+    abstract fun bindPromptSheetGate(impl: PromptsRepository): PromptSheetGate
 }

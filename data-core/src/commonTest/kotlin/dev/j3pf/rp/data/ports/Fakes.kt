@@ -1,8 +1,10 @@
 package dev.j3pf.rp.data.ports
 
+import dev.j3pf.rp.data.net.AnswerOutcome
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HostDirs
@@ -12,6 +14,7 @@ import dev.j3pf.rp.protocol.HostInfo
 import dev.j3pf.rp.protocol.HostSpawn
 import dev.j3pf.rp.protocol.HostSpawned
 import dev.j3pf.rp.protocol.NotifyPrefs
+import dev.j3pf.rp.protocol.Prompt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -446,5 +449,43 @@ class FakeAgentsGate(
     override suspend fun purge(agentId: String): Boolean {
         purgeCalls += agentId
         return purgeResult
+    }
+}
+
+class FakePromptSheetGate(
+    initialOpen: List<Prompt> = emptyList(),
+) : PromptSheetGate {
+    val openFlow = MutableStateFlow(initialOpen)
+    override val open: StateFlow<List<Prompt>> = openFlow
+
+    var startCalls = 0
+        private set
+    var clearCalls = 0
+        private set
+    var refreshCalls = 0
+        private set
+
+    val answerCalls = mutableListOf<Pair<String, Answer>>()
+    var answerResult: AnswerOutcome = AnswerOutcome.Sent
+
+    override fun start() {
+        startCalls += 1
+    }
+
+    override suspend fun clear() {
+        clearCalls += 1
+        openFlow.value = emptyList()
+    }
+
+    override suspend fun refresh() {
+        refreshCalls += 1
+    }
+
+    override suspend fun answer(
+        promptId: String,
+        answer: Answer,
+    ): AnswerOutcome {
+        answerCalls += promptId to answer
+        return answerResult
     }
 }

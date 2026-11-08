@@ -17,6 +17,7 @@ import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
+import dev.j3pf.rp.data.ports.PromptSheetGate
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.domain.model.toEntity
@@ -61,21 +62,21 @@ class PromptsRepository
         private val api: RelayApi,
         private val notifications: NotificationFactory,
         @AppScope private val scope: CoroutineScope,
-    ) {
+    ) : PromptSheetGate {
         /** Todos los prompts abiertos, ordenados por peligro y antigüedad. */
-        val open: Flow<List<Prompt>> =
+        override val open: Flow<List<Prompt>> =
             secrets.session
                 .flatMapLatest { s ->
                     if (s == null) emptyFlow() else dao.observeOpen(s.relayId).map { l -> l.map { it.toModel() } }
                 }.distinctUntilChanged()
 
-        fun openFor(agentId: String): Flow<List<Prompt>> =
+        override fun openFor(agentId: String): Flow<List<Prompt>> =
             secrets.session
                 .flatMapLatest { s ->
                     if (s == null) emptyFlow() else dao.observeOpenFor(s.relayId, agentId).map { l -> l.map { it.toModel() } }
                 }.distinctUntilChanged()
 
-        fun observe(promptId: String): Flow<Prompt?> =
+        override fun observe(promptId: String): Flow<Prompt?> =
             secrets.session
                 .flatMapLatest { s ->
                     if (s == null) emptyFlow() else dao.observeOne(s.relayId, promptId).map { it?.toModel() }
@@ -83,11 +84,11 @@ class PromptsRepository
 
         suspend fun get(promptId: String): Prompt? = secrets.current()?.let { dao.get(it.relayId, promptId)?.toModel() }
 
-        suspend fun clear() {
+        override suspend fun clear() {
             secrets.current()?.let { dao.clear(it.relayId) }
         }
 
-        fun start() {
+        override fun start() {
             bus.messages
                 .onEach { env ->
                     val relayId = secrets.current()?.relayId ?: return@onEach
@@ -120,7 +121,7 @@ class PromptsRepository
         }
 
         /** Sincroniza la bandeja por HTTP (fallback sin WS). */
-        suspend fun refresh() {
+        override suspend fun refresh() {
             val relayId = secrets.current()?.relayId ?: return
             val res = api.openPrompts()
             if (res is ApiResult.Ok) {
@@ -138,7 +139,7 @@ class PromptsRepository
          * Responde por WS si está conectado; si no (o falla) por HTTP; sin red → WorkManager expedited.
          * "La primera respuesta gana": 409 = [AnswerOutcome.AlreadyResolved].
          */
-        suspend fun answer(
+        override suspend fun answer(
             promptId: String,
             answer: Answer,
         ): AnswerOutcome {

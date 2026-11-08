@@ -1,8 +1,10 @@
 package dev.j3pf.rp.data.ports
 
+import dev.j3pf.rp.data.net.AnswerOutcome
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HostDirs
@@ -11,6 +13,8 @@ import dev.j3pf.rp.protocol.HostGitDiscardResult
 import dev.j3pf.rp.protocol.HostSpawn
 import dev.j3pf.rp.protocol.HostSpawned
 import dev.j3pf.rp.protocol.NotifyPrefs
+import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.protocol.PromptKind
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -267,5 +271,29 @@ fun agentsGateFakeShapeContractRecordsCallsAndDerivedObserve() = runTest {
     gate.clear()
     assertEquals(1, gate.clearCalls)
     assertTrue(gate.agents.first().isEmpty())
+}
+
+@Test
+fun promptSheetGateFakeShapeContractRecordsAnswersAndOpenFlow() = runTest {
+    val p1 = Prompt(promptId = "p-1", agentId = "m1:a1", kind = PromptKind.CONFIRM)
+    val p2 = Prompt(promptId = "p-2", agentId = "m1:a2", kind = PromptKind.CONFIRM)
+    val gate = FakePromptSheetGate(listOf(p1, p2))
+
+    assertEquals(p1, gate.observe("p-1").first())
+    assertEquals(listOf(p2), gate.openFor("m1:a2").first())
+
+    gate.start()
+    gate.refresh()
+    assertEquals(1, gate.startCalls)
+    assertEquals(1, gate.refreshCalls)
+
+    val alreadyResolved: AnswerOutcome = AnswerOutcome.AlreadyResolved
+    gate.answerResult = alreadyResolved
+    assertEquals(alreadyResolved, gate.answer("p-1", Answer.Cancelled))
+    assertEquals<List<Pair<String, Answer>>>(listOf("p-1" to Answer.Cancelled), gate.answerCalls)
+
+    gate.clear()
+    assertEquals(1, gate.clearCalls)
+    assertTrue(gate.open.first().isEmpty())
 }
 }
