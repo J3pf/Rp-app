@@ -15,6 +15,8 @@ import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.RelayApi
+import dev.j3pf.rp.data.ports.AttachmentsGate
+import dev.j3pf.rp.data.ports.StagedAttachment
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.BlobInfo
 import dev.j3pf.rp.protocol.Ulid
@@ -39,7 +41,17 @@ data class LocalAttachment(
     val size: Long,
     val file: File,
     val sourceUri: Uri,
-)
+) {
+    fun toStaged(): StagedAttachment =
+        StagedAttachment(
+            id = id,
+            name = name,
+            mime = mime,
+            size = size,
+            stagingPath = file.absolutePath,
+            sourceUri = sourceUri.toString(),
+        )
+}
 
 enum class UploadState { PREPARING, READY, UPLOADING, DONE, ERROR }
 
@@ -66,7 +78,7 @@ class AttachmentsRepository
     constructor(
         @ApplicationContext private val context: Context,
         private val api: RelayApi,
-    ) {
+    ) : AttachmentsGate {
         private val dir get() = File(context.cacheDir, "attachments").apply { mkdirs() }
         private val cameraDir get() = File(context.cacheDir, "camera").apply { mkdirs() }
         private val compressSemaphore = Semaphore(2)
@@ -137,11 +149,33 @@ class AttachmentsRepository
             }
         }
 
+        override suspend fun prepare(
+            uriString: String,
+            compressImages: Boolean,
+        ): Result<StagedAttachment> = prepare(Uri.parse(uriString), compressImages).map { it.toStaged() }
+
+        override suspend fun upload(
+            staged: StagedAttachment,
+            onProgress: (Float) -> Unit,
+        ): ApiResult<BlobInfo> {
+            val file = File(staged.stagingPath)
+            val body = file.asRequestBody(staged.mime.toMediaTypeOrNull())
+            return api.uploadBlob(staged.name, staged.mime, body) { sent, total ->
+                if (total > 0) onProgress((sent.toFloat() / total).coerceIn(0f, 1f))
+            }
+        }
+
         fun discard(local: LocalAttachment) {
             runCatching { local.file.delete() }
         }
 
-        fun cleanup(olderThanMs: Long = 24 * 3600_000L) {
+        override fun discard(staged: StagedAttachment) {
+            if (staged.stagingPath.isNotEmpty()) {
+                runCatching { File(staged.stagingPath).delete() }
+            }
+        }
+
+        override fun cleanup(olderThanMs: Long) {
             val limit = System.currentTimeMillis() - olderThanMs
             listOf(dir, cameraDir).forEach { d -> d.listFiles()?.filter { it.lastModified() < limit }?.forEach { it.delete() } }
         }

@@ -1,11 +1,13 @@
 package dev.j3pf.rp.data.ports
 
 import dev.j3pf.rp.data.net.AnswerOutcome
+import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.BlobInfo
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HostDirs
 import dev.j3pf.rp.protocol.HostGitDiffResult
@@ -487,5 +489,42 @@ class FakePromptSheetGate(
     ): AnswerOutcome {
         answerCalls += promptId to answer
         return answerResult
+    }
+}
+
+class FakeAttachmentsGate : AttachmentsGate {
+    val prepareCalls = mutableListOf<Pair<String, Boolean>>()
+    val uploadCalls = mutableListOf<StagedAttachment>()
+    val discardCalls = mutableListOf<StagedAttachment>()
+    val cleanupCalls = mutableListOf<Long>()
+
+    var prepareResult: Result<StagedAttachment> =
+        Result.success(StagedAttachment("att-1", "foto.jpg", "image/jpeg", 64L, "/tmp/att-1", "content://test/1"))
+    var uploadProgressSteps: List<Float> = listOf(0.5f, 1.0f)
+    var uploadResult: ApiResult<BlobInfo> = ApiResult.Ok(BlobInfo(blobId = "b1", size = 64L))
+
+    override suspend fun prepare(
+        uriString: String,
+        compressImages: Boolean,
+    ): Result<StagedAttachment> {
+        prepareCalls += uriString to compressImages
+        return prepareResult
+    }
+
+    override suspend fun upload(
+        staged: StagedAttachment,
+        onProgress: (Float) -> Unit,
+    ): ApiResult<BlobInfo> {
+        uploadCalls += staged
+        uploadProgressSteps.forEach(onProgress)
+        return uploadResult
+    }
+
+    override fun discard(staged: StagedAttachment) {
+        discardCalls += staged
+    }
+
+    override fun cleanup(olderThanMs: Long) {
+        cleanupCalls += olderThanMs
     }
 }

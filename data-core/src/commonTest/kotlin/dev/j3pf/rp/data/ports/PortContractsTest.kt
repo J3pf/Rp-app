@@ -1,11 +1,13 @@
 package dev.j3pf.rp.data.ports
 
 import dev.j3pf.rp.data.net.AnswerOutcome
+import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AttachmentRef
+import dev.j3pf.rp.protocol.BlobInfo
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HostDirs
 import dev.j3pf.rp.protocol.HostGitDiffResult
@@ -295,5 +297,29 @@ fun promptSheetGateFakeShapeContractRecordsAnswersAndOpenFlow() = runTest {
     gate.clear()
     assertEquals(1, gate.clearCalls)
     assertTrue(gate.open.first().isEmpty())
+}
+
+@Test
+fun attachmentsGateFakeShapeContractRecordsPrepareUploadDiscardAndCleanup() = runTest {
+    val gate = FakeAttachmentsGate()
+    val staged = gate.prepare("content://test/1", compressImages = false).getOrThrow()
+    assertEquals<List<Pair<String, Boolean>>>(listOf("content://test/1" to false), gate.prepareCalls)
+
+    val progress = mutableListOf<Float>()
+    val res = gate.upload(staged) { progress += it }
+    assertEquals<ApiResult<BlobInfo>>(ApiResult.Ok(BlobInfo(blobId = "b1", size = 64L)), res)
+    assertEquals(listOf(0.5f, 1.0f), progress)
+    assertEquals(listOf(staged), gate.uploadCalls)
+
+    gate.discard(staged)
+    assertEquals(listOf(staged), gate.discardCalls)
+
+    gate.cleanup(3600_000L)
+    assertEquals(listOf(3600_000L), gate.cleanupCalls)
+
+    val host = FakeAttachmentsPlatformHost()
+    assertTrue(host.readAttachment("content://test/1").isFailure)
+    host.deleteStaging("/tmp/att-1")
+    host.cleanStaleStaging()
 }
 }

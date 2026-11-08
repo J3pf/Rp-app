@@ -50,6 +50,16 @@ interface AttachmentsPlatformHost {
 
     /** True on Android phones with a camera app; true on iPhones; false where none exists. */
     val isCameraAvailable: Boolean
+
+    /** Additive staging read for platform-selected URIs (Unit P6). */
+    suspend fun readAttachment(uri: String): Result<StagedAttachment> =
+        Result.failure(UnsupportedOperationException("readAttachment not supported by this host"))
+
+    /** Additive staging deletion for a staged attachment path (Unit P6). */
+    fun deleteStaging(stagingPath: String) {}
+
+    /** Additive stale-staging cleanup older than [olderThanMs] (Unit P6). */
+    fun cleanStaleStaging(olderThanMs: Long = 24 * 3600_000L) {}
 }
 
 /** Result codes for the biometric authorizer, mirroring the current Android `util.AuthResult`. */
