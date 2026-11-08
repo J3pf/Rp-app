@@ -42,13 +42,19 @@ object CommonPushEnvelopeCrypto : PushEnvelopeCrypto {
 }
 
 /**
+ * Returns a cryptographically secure random number generator (`SecureRandom` on JVM/Android,
+ * `SecRandomCopyBytes` / `arc4random_buf` on iOS).
+ */
+expect fun platformSecureRandom(): Random
+
+/**
  * Multiplatform [SecureCrypto] implementation backed by [Aes256Gcm] using field-scoped associated
  * data (`field.encodeToByteArray()`) and a 12-byte random nonce prefixed to the ciphertext.
  */
 @OptIn(ExperimentalEncodingApi::class)
 class AesGcmSecureCrypto(
     private val masterKey: ByteArray,
-    private val random: Random = Random.Default,
+    private val random: Random = platformSecureRandom(),
 ) : SecureCrypto {
     init {
         require(masterKey.size == Aes256Gcm.KEY_BYTES) { "Master key must be 32 bytes" }

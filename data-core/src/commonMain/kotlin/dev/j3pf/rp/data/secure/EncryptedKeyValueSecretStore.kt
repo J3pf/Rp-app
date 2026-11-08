@@ -2,6 +2,7 @@ package dev.j3pf.rp.data.secure
 
 import dev.j3pf.rp.data.crypto.Aes256Gcm
 import dev.j3pf.rp.data.crypto.AesGcmSecureCrypto
+import dev.j3pf.rp.data.crypto.platformSecureRandom
 import dev.j3pf.rp.data.ports.SecretStore
 import dev.j3pf.rp.data.ports.SecureCrypto
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +69,7 @@ class InMemorySecretKeyValueBacking : SecretKeyValueBacking {
 class EncryptedKeyValueSecretStore(
     private val backing: SecretKeyValueBacking,
     private val accessGroup: String? = null,
-    private val random: Random = Random.Default,
+    private val random: Random = platformSecureRandom(),
     private val onPushKeyChanged: (pushKey: String?, accessGroup: String?) -> Unit = { _, _ -> },
 ) : SecretStore {
     @Volatile
@@ -91,6 +92,10 @@ class EncryptedKeyValueSecretStore(
         backing.clear()
     }
 
+    private fun clearEncryptedSessionEntries() {
+        SESSION_KEYS.forEach { backing.remove(it) }
+    }
+
     private val _session: MutableStateFlow<Session?> = MutableStateFlow(load())
     override val session: StateFlow<Session?> = _session.asStateFlow()
 
@@ -101,8 +106,7 @@ class EncryptedKeyValueSecretStore(
             .recoverCatching {
                 resetCorruptedMasterKey()
                 writeEncryptedSession(session)
-            }
-        backing.putString(K_NSE_PUSH_KEY, session.pushKey)
+            }.getOrThrow()
         onPushKeyChanged(session.pushKey, accessGroup)
         _session.value = session
     }
@@ -140,15 +144,29 @@ class EncryptedKeyValueSecretStore(
 
     private fun load(): Session? =
         runCatching {
+            val hasStoredEntries = SESSION_KEYS.any { backing.getString(it) != null }
+            if (!hasStoredEntries) return null
             val crypto = getOrCreateCrypto()
+            val relayId = getDecrypted(crypto, K_RELAY_ID)
+            val relayUrl = getDecrypted(crypto, K_URL)
+            val relayName = getDecrypted(crypto, K_NAME) ?: ""
+            val deviceId = getDecrypted(crypto, K_DEVICE_ID)
+            val deviceToken = getDecrypted(crypto, K_TOKEN)
+            val pushKey = getDecrypted(crypto, K_PUSH_KEY)
+            if (relayId == null || relayUrl == null || deviceId == null || deviceToken == null || pushKey == null) {
+                clearEncryptedSessionEntries()
+                return null
+            }
             Session(
-                relayId = getDecrypted(crypto, K_RELAY_ID) ?: return null,
-                relayUrl = getDecrypted(crypto, K_URL) ?: return null,
-                relayName = getDecrypted(crypto, K_NAME) ?: "",
-                deviceId = getDecrypted(crypto, K_DEVICE_ID) ?: return null,
-                deviceToken = getDecrypted(crypto, K_TOKEN) ?: return null,
-                pushKey = getDecrypted(crypto, K_PUSH_KEY) ?: return null,
+                relayId = relayId,
+                relayUrl = relayUrl,
+                relayName = relayName,
+                deviceId = deviceId,
+                deviceToken = deviceToken,
+                pushKey = pushKey,
             )
+        }.onFailure {
+            runCatching { clearEncryptedSessionEntries() }
         }.getOrNull()
 
     private fun getDecrypted(
@@ -168,6 +186,15 @@ class EncryptedKeyValueSecretStore(
         const val K_TOKEN = "deviceToken"
         const val K_PUSH_KEY = "pushKey"
         const val K_NSE_PUSH_KEY = "rp_nse_push_key"
+        private val SESSION_KEYS =
+            listOf(
+                K_RELAY_ID,
+                K_URL,
+                K_NAME,
+                K_DEVICE_ID,
+                K_TOKEN,
+                K_PUSH_KEY,
+            )
         private const val HEX_DIGITS = "0123456789abcdef"
     }
 }

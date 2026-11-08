@@ -1,7 +1,5 @@
 package dev.j3pf.rp.data.ports
 
-import kotlinx.coroutines.flow.StateFlow
-
 /**
  * Notification allowlist port (orchestrator decision 2026-11-06, (a)).
  *

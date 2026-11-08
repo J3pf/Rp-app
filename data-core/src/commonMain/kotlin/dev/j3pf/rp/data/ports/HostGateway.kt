@@ -24,7 +24,10 @@ interface HostGateway {
 
     fun clear()
 
-    suspend fun listDirs(machineId: String, path: String): HostResult<HostDirs>
+    suspend fun listDirs(
+        machineId: String,
+        path: String,
+    ): HostResult<HostDirs>
 
     suspend fun herdrLayout(machineId: String): HostResult<HerdrLayout>
 
@@ -36,7 +39,11 @@ interface HostGateway {
         path: String? = null,
     ): HostResult<HostGitDiffResult>
 
-    suspend fun gitDiscard(machineId: String, cwd: String, path: String): HostResult<HostGitDiscardResult>
+    suspend fun gitDiscard(
+        machineId: String,
+        cwd: String,
+        path: String,
+    ): HostResult<HostGitDiscardResult>
 
     /** Android keeps today's resume-argument derivation; common callers pass the agent unchanged. */
     suspend fun resumeAgent(agent: AgentSummary): HostResult<HostSpawned>

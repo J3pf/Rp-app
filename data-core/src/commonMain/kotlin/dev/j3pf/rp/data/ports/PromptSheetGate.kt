@@ -17,11 +17,9 @@ import kotlinx.coroutines.flow.map
 interface PromptSheetGate {
     val open: Flow<List<Prompt>>
 
-    fun openFor(agentId: String): Flow<List<Prompt>> =
-        open.map { list -> list.filter { it.agentId == agentId } }.distinctUntilChanged()
+    fun openFor(agentId: String): Flow<List<Prompt>> = open.map { list -> list.filter { it.agentId == agentId } }.distinctUntilChanged()
 
-    fun observe(promptId: String): Flow<Prompt?> =
-        open.map { list -> list.firstOrNull { it.promptId == promptId } }.distinctUntilChanged()
+    fun observe(promptId: String): Flow<Prompt?> = open.map { list -> list.firstOrNull { it.promptId == promptId } }.distinctUntilChanged()
 
     fun start()
 

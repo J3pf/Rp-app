@@ -51,9 +51,11 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
         code: Int,
         reason: String,
     ) {
-        val state = stateFor(socket) ?: return
+        val state = removeState(socket) ?: return
         state.open.store(CLOSED)
+        state.terminal.store(TERMINAL)
         socket.cancelWithCloseCode(code.toLong(), reason.toNSData())
+        state.session?.finishTasksAndInvalidate()
     }
 
     override fun cancel(socket: NSURLSessionWebSocketTask) {
@@ -102,9 +104,14 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
             task: NSURLSessionTask,
             didCompleteWithError: NSError?,
         ) {
-            val error = didCompleteWithError ?: return
             val webSocketTask = task as? NSURLSessionWebSocketTask ?: return
-            state.fail(webSocketTask, error, this@UrlSessionSocketDriver::removeState)
+            if (didCompleteWithError != null) {
+                state.fail(webSocketTask, didCompleteWithError, this@UrlSessionSocketDriver::removeState)
+            } else if (state.terminal.compareAndSet(ACTIVE, TERMINAL)) {
+                state.open.store(CLOSED)
+                removeState(webSocketTask)
+                state.session?.finishTasksAndInvalidate()
+            }
         }
 
         private fun receiveNext(socket: NSURLSessionWebSocketTask) {

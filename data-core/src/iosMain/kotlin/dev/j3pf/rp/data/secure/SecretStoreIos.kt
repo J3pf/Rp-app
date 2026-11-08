@@ -2,7 +2,6 @@ package dev.j3pf.rp.data.secure
 
 import dev.j3pf.rp.data.ports.SecretStore
 import kotlinx.coroutines.flow.StateFlow
-import platform.Foundation.NSUserDefaults
 import kotlin.concurrent.Volatile
 
 /**
@@ -10,10 +9,9 @@ import kotlin.concurrent.Volatile
  * (`kSecClassGenericPassword`) Keychain backing and shared-access-group `pushKey` mirror
  * (O1 Move 3, S12/S18).
  *
- * When running in an unsigned iOS Simulator build (`CODE_SIGNING_ALLOWED=NO` in `.github/workflows/ios.yml`),
- * or before the Swift host registers its Keychain hook, [SecretStoreIos] falls back seamlessly to
- * an app-scoped backing while keeping every [Session] field AES-256-GCM encrypted under a
- * randomly generated 32-byte master key with field-scoped associated data.
+ * When running in headless unit tests before the Swift host registers its Keychain hook,
+ * [SecretStoreIos] falls back to an volatile in-memory [InMemorySecretKeyValueBacking] so key
+ * material and credentials are never written to unencrypted `NSUserDefaults` on disk (S18).
  */
 object IosKeychainBridge {
     @Volatile
@@ -23,48 +21,16 @@ object IosKeychainBridge {
     var onPushKeyChanged: ((pushKey: String?, accessGroup: String?) -> Unit)? = null
 }
 
-private class NsUserDefaultsSecretBacking : SecretKeyValueBacking {
-    private val defaults: NSUserDefaults = NSUserDefaults.standardUserDefaults
-    private val knownKeys =
-        listOf(
-            EncryptedKeyValueSecretStore.K_MASTER_KEY,
-            EncryptedKeyValueSecretStore.K_RELAY_ID,
-            EncryptedKeyValueSecretStore.K_URL,
-            EncryptedKeyValueSecretStore.K_NAME,
-            EncryptedKeyValueSecretStore.K_DEVICE_ID,
-            EncryptedKeyValueSecretStore.K_TOKEN,
-            EncryptedKeyValueSecretStore.K_PUSH_KEY,
-            EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY,
-        )
-
-    override fun getString(key: String): String? = defaults.stringForKey(key)
-
-    override fun putString(
-        key: String,
-        value: String,
-    ) {
-        defaults.setObject(value, forKey = key)
-    }
-
-    override fun remove(key: String) {
-        defaults.removeObjectForKey(key)
-    }
-
-    override fun clear() {
-        knownKeys.forEach { defaults.removeObjectForKey(it) }
-    }
-}
-
 /**
  * iOS implementation of [SecretStore] (O1 Move 3, ADR 0003 §3).
  *
- * Receives [accessGroup] as a constructor parameter (e.g. `"$(AppIdentifierPrefix)dev.j3pf.rp.iosApp"`)
+ * Receives [accessGroup] as a constructor parameter (e.g. `"19410625785.dev.j3pf.rp.iosApp"`)
  * and delegates field-scoped AES-256-GCM encryption to [EncryptedKeyValueSecretStore].
  */
 class SecretStoreIos(
     val accessGroup: String? = null,
     backing: SecretKeyValueBacking =
-        IosKeychainBridge.backingFactory?.invoke(accessGroup) ?: NsUserDefaultsSecretBacking(),
+        IosKeychainBridge.backingFactory?.invoke(accessGroup) ?: InMemorySecretKeyValueBacking(),
 ) : SecretStore {
     private val delegate =
         EncryptedKeyValueSecretStore(

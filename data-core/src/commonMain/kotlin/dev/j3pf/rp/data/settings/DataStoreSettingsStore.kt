@@ -1,6 +1,7 @@
 package dev.j3pf.rp.data.settings
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.IOException
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -8,14 +9,13 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.ports.SettingsStore
+import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.protocol.NotifyPrefs
 import dev.j3pf.rp.protocol.RpJson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
-import androidx.datastore.core.IOException
 
 /**
  * MOVE 2 (ADR 0003 §2, orchestrator conditions C1-C3): the settings writer is now COMMON.
@@ -50,9 +50,20 @@ object SettingsKeys {
 
     val ALL_NAMES =
         listOf(
-            K_SELECTED_CONTEXT, K_DIRECT_PUSH, K_REQUIRE_UNLOCK, K_CRITICAL_ALWAYS, K_APP_LOCK,
-            K_FLAG_SECURE, K_ONBOARDING_DONE, K_BATTERY_ASKED, K_NOTIFY_PREFS, K_MUTED_AGENTS,
-            K_APP_THEME, K_CHAT_FONT_SCALE, K_CHAT_MESSAGE_SPACING, K_MESH_SELECTED_MACHINE,
+            K_SELECTED_CONTEXT,
+            K_DIRECT_PUSH,
+            K_REQUIRE_UNLOCK,
+            K_CRITICAL_ALWAYS,
+            K_APP_LOCK,
+            K_FLAG_SECURE,
+            K_ONBOARDING_DONE,
+            K_BATTERY_ASKED,
+            K_NOTIFY_PREFS,
+            K_MUTED_AGENTS,
+            K_APP_THEME,
+            K_CHAT_FONT_SCALE,
+            K_CHAT_MESSAGE_SPACING,
+            K_MESH_SELECTED_MACHINE,
             K_MESH_SELECTED_GROUP,
         )
 

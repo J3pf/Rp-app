@@ -2,6 +2,7 @@ package dev.j3pf.rp.data.secure
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -44,19 +45,21 @@ class EncryptedKeyValueSecretStoreTest {
         assertEquals(sampleSession.pushKey, mirroredPushKey)
         assertEquals("19410625785.dev.j3pf.rp.iosApp", mirroredGroup)
 
-        // Stored values in backing are ciphertext, never plaintext
+        // Stored values in backing are ciphertext, never plaintext, and K_NSE_PUSH_KEY is never written to backing
         val rawToken = backing.getString(EncryptedKeyValueSecretStore.K_TOKEN)!!
         assertNotEquals(sampleSession.deviceToken, rawToken)
+        assertNull(backing.getString(EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY))
 
         // Re-opening a new store instance over the same backing decrypts the exact session
         val reopened = EncryptedKeyValueSecretStore(backing = backing)
         assertEquals(sampleSession, reopened.current())
 
-        // Swapping two fields' ciphertexts fails AEAD field-associated-data check and returns null
+        // Swapping two fields' ciphertexts fails AEAD field-associated-data check, returns null, and purges corrupted entries
         val rawUrl = backing.getString(EncryptedKeyValueSecretStore.K_URL)!!
         backing.putString(EncryptedKeyValueSecretStore.K_TOKEN, rawUrl)
         val tampered = EncryptedKeyValueSecretStore(backing = backing)
         assertNull(tampered.current())
+        assertNull(backing.getString(EncryptedKeyValueSecretStore.K_TOKEN))
 
         // Saving again recovers cleanly
         tampered.save(sampleSession)
@@ -66,6 +69,28 @@ class EncryptedKeyValueSecretStoreTest {
         tampered.clear()
         assertNull(tampered.current())
         assertNull(tampered.session.value)
+    }
+
+    @Test
+    fun savePropagatesExceptionWhenBackingFailsOnBothInitialAndRetryWrites() {
+        val failingBacking =
+            object : SecretKeyValueBacking {
+                override fun getString(key: String): String? = null
+
+                override fun putString(
+                    key: String,
+                    value: String,
+                ): Nothing = throw IllegalStateException("Keychain write failed")
+
+                override fun remove(key: String) = Unit
+
+                override fun clear() = Unit
+            }
+        val store = EncryptedKeyValueSecretStore(backing = failingBacking)
+        assertFailsWith<IllegalStateException> {
+            store.save(sampleSession)
+        }
+        assertNull(store.current())
     }
 
     @Test
