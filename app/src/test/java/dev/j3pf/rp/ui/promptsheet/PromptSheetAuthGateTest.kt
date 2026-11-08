@@ -3,6 +3,7 @@ package dev.j3pf.rp.ui.promptsheet
 import android.app.Application
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.ConnState
@@ -30,11 +31,13 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import okhttp3.WebSocket
@@ -98,6 +101,8 @@ class PromptSheetAuthGateTest {
     private lateinit var server: MockWebServer
     private lateinit var connection: RelayConnection
     private lateinit var scope: CoroutineScope
+    private var db: dev.j3pf.rp.data.db.RpDatabase? = null
+    private var activeVm: PromptSheetViewModel? = null
     private val requests = LinkedBlockingQueue<Envelope>()
 
     private fun prompt() =
@@ -112,9 +117,20 @@ class PromptSheetAuthGateTest {
 
     @After
     fun tearDown() {
+        activeVm?.let { vm ->
+            vm.viewModelScope.cancel()
+            runBlocking { withTimeout(10_000) { vm.viewModelScope.coroutineContext[Job]?.join() } }
+        }
+        activeVm = null
         runCatching { connection.stop() }
-        runCatching { scope.cancel() }
+        if (::scope.isInitialized) {
+            scope.cancel()
+            runBlocking { withTimeout(10_000) { scope.coroutineContext[Job]?.join() } }
+        }
+        runCatching { db?.close() }
+        db = null
         runCatching { server.shutdown() }
+        Dispatchers.resetMain()
     }
 
     private fun buildVm(gate: FakeGate): PromptSheetViewModel {
@@ -125,7 +141,7 @@ class PromptSheetAuthGateTest {
         val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         val bus = MessageBus()
         connection = RelayConnection(secrets, bus, testClient(), scope)
-        val db = inMemoryDb(context)
+        val localDb = inMemoryDb(context).also { db = it }
         val settingsRepo = SettingsRepository(context)
         val api = RelayApi(testClient(), secrets)
         val factory =
@@ -133,12 +149,12 @@ class PromptSheetAuthGateTest {
                 context,
                 dev.j3pf.rp.push.NotificationChannels(context),
                 settingsRepo,
-                dev.j3pf.rp.push.NotificationDeduper(db.dedup()),
+                dev.j3pf.rp.push.NotificationDeduper(localDb.dedup()),
             )
         val prompts =
             dev.j3pf.rp.data.repo.PromptsRepository(
                 context,
-                db.prompts(),
+                localDb.prompts(),
                 secrets,
                 bus,
                 connection,
@@ -185,7 +201,7 @@ class PromptSheetAuthGateTest {
         )
         connection.start()
         runBlocking { withTimeout(15_000) { connection.state.first { it == ConnState.Connected } } }
-        return PromptSheetViewModel(prompts, settingsRepo, gate)
+        return PromptSheetViewModel(prompts, settingsRepo, gate).also { activeVm = it }
     }
 
     private fun wireAnswerCount(): Int = requests.count { it.t == MsgType.PROMPT_ANSWER }

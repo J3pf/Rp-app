@@ -26,6 +26,7 @@ import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -139,6 +140,7 @@ class SessionRepositoryLifecycleTest {
         connection.stop()
         socket?.close(1000, "test complete")
         scope.cancel()
+        runBlocking { withTimeout(10_000) { scope.coroutineContext[Job]?.join() } }
         db.close()
         server.shutdown()
         settingsFile.delete()

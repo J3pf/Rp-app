@@ -34,6 +34,7 @@ import dev.j3pf.rp.platform.AndroidNetworkMonitor
 import dev.j3pf.rp.util.stableId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -108,7 +109,10 @@ class DirectPushServiceRoutingTest {
 
     @After
     fun tearDown() {
-        if (::repositoryScope.isInitialized) repositoryScope.cancel()
+        if (::repositoryScope.isInitialized) {
+            repositoryScope.cancel()
+            runBlocking { withTimeout(10_000) { repositoryScope.coroutineContext[Job]?.join() } }
+        }
         if (::db.isInitialized) db.close()
     }
 

@@ -32,9 +32,11 @@ import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -123,6 +125,7 @@ class FcmTokenWorkerTest {
         if (!::context.isInitialized) return
         connection.stop()
         scope.cancel()
+        runBlocking { withTimeout(10_000) { scope.coroutineContext[Job]?.join() } }
         db.close()
         server.shutdown()
         settingsFile.delete()

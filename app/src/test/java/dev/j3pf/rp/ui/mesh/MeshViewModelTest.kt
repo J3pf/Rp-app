@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.mesh
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.ConnState
@@ -25,6 +26,7 @@ import dev.j3pf.rp.testSession
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -96,9 +98,16 @@ class MeshViewModelTest {
 
     @After
     fun tearDown() {
+        if (::viewModel.isInitialized) {
+            viewModel.viewModelScope.cancel()
+            runBlocking { withTimeout(10_000) { viewModel.viewModelScope.coroutineContext[Job]?.join() } }
+        }
         if (::connection.isInitialized) connection.stop()
         sockets.forEach { runCatching { it.close(1000, "test complete") } }
-        if (::scope.isInitialized) scope.cancel()
+        if (::scope.isInitialized) {
+            scope.cancel()
+            runBlocking { withTimeout(10_000) { scope.coroutineContext[Job]?.join() } }
+        }
         if (::db.isInitialized) db.close()
         if (::server.isInitialized) server.shutdown()
         testDispatcher.cancel()

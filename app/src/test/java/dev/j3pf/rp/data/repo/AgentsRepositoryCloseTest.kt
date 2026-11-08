@@ -22,6 +22,7 @@ import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -88,7 +89,10 @@ class AgentsRepositoryCloseTest {
     @After
     fun tearDown() {
         if (::connection.isInitialized) connection.stop()
-        if (::scope.isInitialized) scope.cancel()
+        if (::scope.isInitialized) {
+            scope.cancel()
+            runBlocking { withTimeout(10_000) { scope.coroutineContext[Job]?.join() } }
+        }
         if (::db.isInitialized) db.close()
         // MockWebServer asserts if the socket is still half-open; el resto de la suite ya envuelve
         // shutdown() en runCatching por lo mismo.

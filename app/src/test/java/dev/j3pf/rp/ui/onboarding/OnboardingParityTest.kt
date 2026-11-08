@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.MessageBus
@@ -86,6 +87,10 @@ class OnboardingParityTest {
 
     @After
     fun tearDown() {
+        if (::pairViewModel.isInitialized) {
+            pairViewModel.viewModelScope.cancel()
+            runBlocking { withTimeout(10_000) { pairViewModel.viewModelScope.coroutineContext[Job]?.join() } }
+        }
         connection?.stop()
         scope?.cancel()
         if (scope != null) drainScope()

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.ConnState
@@ -34,6 +35,7 @@ import dev.j3pf.rp.testSession
 import dev.j3pf.rp.ui.theme.RpTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -73,8 +75,15 @@ class AgentsLifecycleTest {
 
     @After
     fun tearDown() {
+        if (::lifecycleViewModel.isInitialized) {
+            lifecycleViewModel.viewModelScope.cancel()
+            runBlocking { withTimeout(10_000) { lifecycleViewModel.viewModelScope.coroutineContext[Job]?.join() } }
+        }
         connection?.stop()
         scope?.cancel()
+        if (scope != null) {
+            runBlocking { withTimeout(10_000) { scope?.coroutineContext?.get(Job)?.join() } }
+        }
         db?.close()
         // MockWebServer asserts si el socket queda medio abierto al cerrar; la suite ya envuelve shutdown().
         runCatching { server?.shutdown() }

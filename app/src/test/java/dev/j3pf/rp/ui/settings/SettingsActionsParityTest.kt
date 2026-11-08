@@ -100,7 +100,12 @@ class SettingsActionsParityTest {
         // Cancel the ViewModel's combine scope BEFORE closing Room, then drain the test scope so
         // no dao coroutine is mid-flight when the database closes (this was the "connection
         // closed" / "database is not open" flake root when run under concurrent load).
-        viewModel?.viewModelScope?.cancel()
+        viewModel?.let { vm ->
+            vm.viewModelScope.cancel()
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeout(10_000) { vm.viewModelScope.coroutineContext[Job]?.join() }
+            }
+        }
         connection?.stop()
         scope?.cancel()
         if (scope != null) drainScope()

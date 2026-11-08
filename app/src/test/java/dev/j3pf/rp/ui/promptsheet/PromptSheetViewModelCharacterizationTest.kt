@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.promptsheet
 
 import android.app.Application
+import androidx.lifecycle.viewModelScope
 import dev.j3pf.rp.platform.BiometricAuthorizerAndroid
 import androidx.test.core.app.ApplicationProvider
 import dev.j3pf.rp.FakeSecretStore
@@ -29,11 +30,13 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import okhttp3.WebSocket
@@ -95,9 +98,18 @@ class PromptSheetViewModelCharacterizationTest {
 
     @After
     fun tearDown() {
+        if (::vm.isInitialized) {
+            vm.viewModelScope.cancel()
+            runBlocking { withTimeout(10_000) { vm.viewModelScope.coroutineContext[Job]?.join() } }
+        }
         runCatching { connection.stop() }
-        runCatching { scope.cancel() }
+        if (::scope.isInitialized) {
+            scope.cancel()
+            runBlocking { withTimeout(10_000) { scope.coroutineContext[Job]?.join() } }
+        }
+        if (::db.isInitialized) runCatching { db.close() }
         runCatching { server.shutdown() }
+        Dispatchers.resetMain()
     }
 
     private suspend fun connectHarness(): PromptSheetViewModel {
