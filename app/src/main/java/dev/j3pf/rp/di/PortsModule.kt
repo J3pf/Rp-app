@@ -6,10 +6,10 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.j3pf.rp.data.ports.AppLifecycleMonitor
 import dev.j3pf.rp.data.ports.BackgroundScheduler
-import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.ports.BatteryExemption
-import dev.j3pf.rp.data.ports.HostGateway
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.ports.DedupStore
+import dev.j3pf.rp.data.ports.HostGateway
 import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.ports.NotificationHealth
 import dev.j3pf.rp.data.ports.OpenPromptGuard
@@ -21,12 +21,12 @@ import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.platform.AndroidAppLifecycleMonitor
 import dev.j3pf.rp.platform.AndroidBatteryExemption
-import dev.j3pf.rp.platform.BiometricAuthorizerAndroid
 import dev.j3pf.rp.platform.AndroidNetworkMonitor
-import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.platform.AndroidNotificationHealth
 import dev.j3pf.rp.platform.AndroidPlatformInfo
+import dev.j3pf.rp.platform.AndroidPushEnvelopeCrypto
 import dev.j3pf.rp.platform.AndroidVoiceInputHost
+import dev.j3pf.rp.platform.BiometricAuthorizerAndroid
 import dev.j3pf.rp.platform.DaoDedupStore
 import dev.j3pf.rp.platform.DaoOpenPromptGuard
 import dev.j3pf.rp.platform.WorkManagerBackgroundScheduler
@@ -85,6 +85,7 @@ abstract class PortsModule {
     @Binds
     @Singleton
     abstract fun bindAppLifecycleMonitor(impl: AndroidAppLifecycleMonitor): AppLifecycleMonitor
+
     @Binds
     @Singleton
     abstract fun bindBiometricAuthorizer(impl: BiometricAuthorizerAndroid): BiometricAuthorizer

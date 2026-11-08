@@ -11,6 +11,7 @@ import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.ports.HostResult
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AttachmentUi
@@ -27,7 +28,6 @@ import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HostGitDiffResult
 import dev.j3pf.rp.ui.nav.ChatRoute
-import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

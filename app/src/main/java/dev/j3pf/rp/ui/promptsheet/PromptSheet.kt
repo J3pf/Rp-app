@@ -11,8 +11,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.ui.components.rememberActivity
-import dev.j3pf.rp.data.ports.BiometricAuthResult as AuthResult
 import kotlinx.coroutines.launch
+import dev.j3pf.rp.data.ports.BiometricAuthResult as AuthResult
 
 /**
  * Hoja de respuesta global (BottomSheet). Se cierra sola si el prompt se resuelve en otro sitio; si al responder
@@ -64,12 +64,13 @@ fun PromptSheet(
     }
 
     val currentStatus = status
-    val chromeState = when {
-        currentStatus == AnswerUi.AlreadyResolved -> PromptSheetChromeState.AlreadyResolved
-        currentStatus is AnswerUi.Queued -> PromptSheetChromeState.Queued(currentStatus.message)
-        prompt == null -> PromptSheetChromeState.PromptMissing
-        else -> PromptSheetChromeState.Content
-    }
+    val chromeState =
+        when {
+            currentStatus == AnswerUi.AlreadyResolved -> PromptSheetChromeState.AlreadyResolved
+            currentStatus is AnswerUi.Queued -> PromptSheetChromeState.Queued(currentStatus.message)
+            prompt == null -> PromptSheetChromeState.PromptMissing
+            else -> PromptSheetChromeState.Content
+        }
 
     PromptSheetChrome(
         state = chromeState,

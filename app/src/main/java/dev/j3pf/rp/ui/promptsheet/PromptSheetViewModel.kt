@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.j3pf.rp.data.net.AnswerOutcome
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
@@ -11,7 +12,6 @@ import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
-import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

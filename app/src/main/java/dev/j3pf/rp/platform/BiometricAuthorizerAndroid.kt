@@ -40,8 +40,7 @@ class BiometricAuthorizerAndroid
         }
 
         /** Single-arg port member: title falls back to the shared security-screen default. */
-        override suspend fun authenticate(reason: String): BiometricAuthResult =
-            authenticate("Confirma tu identidad", reason)
+        override suspend fun authenticate(reason: String): BiometricAuthResult = authenticate("Confirma tu identidad", reason)
 
         /** Two-string member of the port (title + reason) — the exact literals path. */
         override suspend fun authenticate(
