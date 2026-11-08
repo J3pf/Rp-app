@@ -3,6 +3,33 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-08
+
+### Added
+- **Unified KMP/CMP Architecture (`:data-core` & 17 Shared Ports)**:
+  - Extracted `:data-core` multiplatform module with Room KMP (`RpDatabase`, `MIGRATION_2_3`), `SettingsStore` (`DataStoreSettingsStore` / `KeyValueSettingsStore`), `SecretStore` (`EncryptedKeyValueSecretStore` + `SecretStoreIos`), `PushEnvelopeCrypto` (`CommonPushEnvelopeCrypto` + pure-Kotlin `Aes256Gcm`), `HostGateway`, `AgentsGate`, `PromptSheetGate`, `AttachmentsGate`, `ChatSessionGate`, and `BiometricAuthorizer`.
+  - Preserved in-place Android upgrade compatibility from v0.6.1 (Room v2→v3, Tink Keystore encrypted session credentials, and DataStore settings).
+- **Full 5-Screen iOS & Multiplatform Application Shell (`RemotePiApp`)**:
+  - Wired `IosAppScope` and `SharedAppController` in `:shared-ui` to drive Onboarding/Pairing, QR Scanner (`QrScannerView` via AVFoundation on iOS and CameraX/MLKit on Android), Agents, Agent Mesh, Pending Prompts, Settings (Machines, Devices, Notifications, Security, About), Live Chat (`ChatSession` + `ChatSessionRegistry`), New Agent creation, Prompt Bottom Sheet, and Git Diff Sheet.
+  - Added `IosKeychainStoreBridge` and Swift `Security.framework` backing in `iOSApp.swift` with shared Keychain access group (`$(AppIdentifierPrefix)$(CFBundleIdentifier)`) and automatic fallback on unsigned simulator runs (`errSecMissingEntitlement`).
+- **iOS Native Networking & Encrypted APNs Push Extension**:
+  - Added `UrlSessionRelayTransport` and `UrlSessionSocketDriver` in `:relay-client/iosMain`.
+  - Added `IosPushRegistrationBridge` with lowercase hex APNs device token formatting and `DEFAULT_APNS_ENVIRONMENT` validation.
+  - Added `NotificationService` app extension (`ServiceExtension.swift`) decrypting `{k,n,c}` push payloads using `CryptoKit.AES.GCM` (AAD `rp1`), reading `pushKey` and `mutedAgents` from the shared Keychain access group, and deduplicating by `promptId`.
+- **Adaptive Window-Size Layouts**:
+  - Added `org.jetbrains.compose.material3.adaptive:adaptive:1.3.0` to `:shared-ui` for phone, tablet, foldable, and iPad layouts.
+
+### Fixed
+- **Mesh Subscription Deadlock & Wire-Order Inversion (`D-2`)**:
+  - Decoupled `MeshRepository.subscriptionLock` from `RelayConnection.send` and added a monotonic `decisionSeq` + `sendLock` gate so reconnect observer resubscribes never deadlock or overtake newer subscribe/unsubscribe decisions.
+- **Archived Agents Route Accessibility (`D-1`)**:
+  - Promoted `ArchivedAgentsRoute` to public `@Serializable` in shared `Routes.kt` and verified round-trip serialization across all 18 route types.
+- **Robolectric Cross-Test `SQLiteConnectionPool` Teardown Leak (`L36`)**:
+  - Cancelled and joined `viewModelScope` and repository/harness `CoroutineScope` jobs before closing in-memory Room instances in unit tests.
+
+### Requires
+- **Rp-relay >= 0.7.0** (for iOS APNs push support; **>= 0.6.1** for Android) and **Rp-plugin >= 0.3.0**.
+
 ## [0.6.1] - 2026-10-29
 
 ### Fixed

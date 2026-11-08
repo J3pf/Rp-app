@@ -1,12 +1,12 @@
 # rp-app
 
-An Android app (Kotlin + Jetpack Compose) for viewing and controlling your [Pi](https://github.com/earendil-works/pi) agents through the **RP** relay: live chat, attachments, **question and authorization notifications with direct replies**, and **Agent Mesh** (animated topology and real-time communication flows).
+A Kotlin Multiplatform + Compose Multiplatform (KMP/CMP) mobile app for **Android and iOS** (phones, tablets, foldables, and iPads) for viewing and controlling your [Pi](https://github.com/earendil-works/pi) agents through the **RP** relay: live chat, attachments, **question and authorization notifications with direct replies**, and **Agent Mesh** (animated topology and real-time communication flows).
 
 > Status: **implemented** (see [Build from source](#build-from-source)). Design documentation is in `docs/`.
 
 | Document | Contents |
 |---|---|
-| [docs/INSTALACION.md](docs/INSTALACION.md) | APK installation, relay pairing, and troubleshooting |
+| [docs/INSTALACION.md](docs/INSTALACION.md) | Android & iOS installation, relay pairing, and troubleshooting |
 | [docs/PLAN-APP.md](docs/PLAN-APP.md) | Detailed app plan |
 | [docs/QA.md](docs/QA.md) | Manual E2E tests for notifications, offline mode, Agent Mesh, and more |
 | [docs/RESILIENCIA.md](docs/RESILIENCIA.md) | Scalability, resilience, and independence (Google-free push, interactive delivery without `herdr`, Linux/Windows) |
@@ -15,6 +15,13 @@ An Android app (Kotlin + Jetpack Compose) for viewing and controlling your [Pi](
 | [`rp-relay/docs/PROTOCOLO.md`](https://github.com/j3pf/rp-relay/blob/main/docs/PROTOCOLO.md) | Network protocol contract |
 
 ## Main features
+
+- **Unified KMP/CMP Architecture & Full iOS App (v0.7.0)**:
+  - **Shared `:data-core` Module & 17 Domain Ports**: Room KMP database (`MIGRATION_2_3`), `SettingsStore` (`DataStoreSettingsStore` / `KeyValueSettingsStore`), `SecretStore` (`EncryptedKeyValueSecretStore` with pure-Kotlin AES-256-GCM and `SecretStoreIos`), `PushEnvelopeCrypto` (`CommonPushEnvelopeCrypto`), `HostGateway`, `AgentsGate`, `PromptSheetGate`, `AttachmentsGate`, `ChatSessionGate`, and `BiometricAuthorizer`.
+  - **Full 5-Screen iOS & Multiplatform Shell**: `RemotePiApp()`, `SharedAppController`, and `IosAppScope` drive Onboarding/Pairing, QR Scanner (`QrScannerView` via AVFoundation on iOS and CameraX/MLKit on Android), Agents, Agent Mesh, Pending Prompts, Settings (Machines, Devices, Notifications, Security, About), Live Chat, New Agent creation, Prompt Bottom Sheet, and Git Diff Sheet from a single shared UI codebase.
+  - **iOS Native Transport, Keychain & Encrypted APNs Push**: `UrlSessionRelayTransport` (HTTP), `UrlSessionSocketDriver` (WebSocket), `IosKeychainStoreBridge` (`Security.framework` with shared Keychain access group fallback for unsigned simulator runs), `IosPushRegistrationBridge` (lowercase hex APNs token registration), and `NotificationService` (`ServiceExtension.swift`) decrypting `{k,n,c}` payloads with `CryptoKit.AES.GCM` (AAD `rp1`) and `promptId` deduplication.
+  - **Adaptive Layouts & Mesh Concurrency Hardening**: Window-size-class adaptive layouts (`org.jetbrains.compose.material3.adaptive:adaptive:1.3.0`) across phone, tablet, foldable, and iPad viewports; deterministic `MeshRepository` lock-order and wire-order sequencing (`decisionSeq` + `sendLock`).
+  - Requires **Rp-relay >= 0.7.0** (for APNs push) or **>= 0.6.1** (Android) and **Rp-plugin >= 0.3.0**.
 
 - **Diagnosable Close Failures (v0.6.1)**:
   - A failed agent close now reports the relay's reason instead of a mute "No se pudo cerrar el agente", so the failure is diagnosable from the phone.
@@ -120,8 +127,9 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 ./gradlew :protocol:compileCommonMainKotlinMetadata # shared Kotlin metadata (Linux-compatible)
 ./gradlew :protocol:test                       # shared + JVM protocol, chat, and crypto tests
 ./gradlew :protocol:jvmTest                     # KMP JVM test entry point
-./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP/WS/session policy
-./gradlew :shared-ui:compileCommonMainKotlinMetadata :shared-ui:jvmTest       # shared Compose Multiplatform UI
+./gradlew :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest # shared HTTP/WS/session/chat policy
+./gradlew :data-core:compileIosMainKotlinMetadata :data-core:jvmTest          # shared Room KMP, ports, AES-GCM crypto, and stores
+./gradlew :shared-ui:compileCommonMainKotlinMetadata :shared-ui:compileIosMainKotlinMetadata :shared-ui:jvmTest # shared CMP UI & iOS scope
 ./gradlew :app:testDirectDebugUnitTest         # Robolectric, MockWebServer, and Compose tests
 ./gradlew :app:assembleDirectDebug             # APK without Google services (direct channel)
 ./gradlew :app:assembleFcmDebug                # APK with optional FCM (requires app/google-services.json)
@@ -136,107 +144,22 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 
 ```
 protocol/     Kotlin Multiplatform: shared protocol v1 models and ChatReducer; JVM crypto/ULID adapters
-relay-client/ Kotlin Multiplatform: shared HTTP, pairing/session, WS correlation/bus, and reconnect policy
-shared-ui/    Compose Multiplatform: shared theme, design tokens, custom canvas, screens, routes, and iOS MainViewController
-app/          Compose + Hilt + Room: data/{net,db,repo,secure}, push/, Android host shell & services
-iosApp/       Xcode iOS host application wrapper embedding SharedUi.framework (MainViewController)
+relay-client/ Kotlin Multiplatform: shared HTTP, pairing/session, chat session/sync/delivery, WS correlation/bus, and URLSession iOS drivers
+data-core/    Kotlin Multiplatform: Room KMP database, 17 domain ports, pure-Kotlin AES-256-GCM push crypto, and SecretStore/SettingsStore
+shared-ui/    Compose Multiplatform: shared theme, design tokens, MeshCanvas, all 5 screens, SharedAppController, IosAppScope, and MainViewController
+app/          Android host shell (Compose + Hilt + Room adapters, CameraX/MLKit QR actual, WorkManager, DirectPushService, FCM)
+iosApp/       Xcode iOS host application + NotificationService extension embedding SharedUi.framework
 ```
 
 ### Kotlin Multiplatform foundation
 
-`protocol` targets JVM (consumed by the existing Android app), `iosArm64`, and
-`iosSimulatorArm64`. Its source sets are:
+`protocol`, `relay-client`, `data-core`, and `shared-ui` target JVM/Android, `iosArm64`, and `iosSimulatorArm64`:
 
-- `commonMain`: wire models, JSON serializers, chat state/reducer, and formatting.
-- `commonTest`: portable serialization and protocol compatibility tests.
-- `jvmMain`: unchanged AES-GCM `PushCrypto` and secure `Ulid`, plus JVM logging.
-- `jvmTest`: resource-based fixture/chat tests and JVM crypto tests. Fixtures remain
-  in `src/test/resources` so `scripts/sync-fixtures.sh` keeps its existing behavior.
-- `iosMain`: the native logging adapter; it still needs compilation on macOS.
+- `protocol`: wire models, JSON serializers, `ChatReducer`, and JVM/iOS platform logging and ULID/crypto helpers.
+- `relay-client`: `RelayHttpClient`, `RelayWsClient`, `ReconnectingSocketPolicy`, `SessionPolicy`, `ChatSession`, `ChatSyncPolicy`, `ChatDeliveryPolicy`, `PromptAnswerPolicy`, and native iOS `UrlSessionRelayTransport` / `UrlSessionSocketDriver`.
+- `data-core`: Room KMP database (`RpDatabase`, `MIGRATION_2_3`), shared ports (`HostGateway`, `AgentsGate`, `PromptSheetGate`, `AttachmentsGate`, `ChatSessionGate`, `SettingsStore`, `SecretStore`, `PushEnvelopeCrypto`, `BiometricAuthorizer`), pure-Kotlin `Aes256Gcm` + `CommonPushEnvelopeCrypto`, `EncryptedKeyValueSecretStore`, and `SecretStoreIos`.
+- `shared-ui`: all screens, adaptive scaffolds, `MeshCanvas`, `QrScannerView` (`expect`/`actual` for Android CameraX+MLKit and iOS AVFoundation), `SharedAppController`, `IosAppScope`, `IosKeychainStoreBridge`, `IosPushRegistrationBridge`, and `RemotePiApp()`.
+- `iosApp`: SwiftUI entry point (`iOSApp.swift`) installing the Keychain bridge and forwarding APNs tokens, plus the `NotificationService` extension (`ServiceExtension.swift`) decrypting `{k,n,c}` push envelopes with `CryptoKit.AES.GCM` (AAD `rp1`).
 
-The legacy `:protocol:test` task remains a JVM test task, including support for
-`--tests`. KMP JVM reports are under `protocol/build/reports/tests/jvmTest`;
-legacy reports remain under `protocol/build/reports/tests/test`.
-
-All shared UI screens, routes, theme tokens, and the `MeshCanvas` topology view live in
-`:shared-ui`, and `iosApp/` provides the Xcode application target that embeds
-`SharedUi.framework` via `MainViewController`. Native iOS adapters (URLSession HTTP/WebSocket
-drivers, Keychain storage, and APNs push) and full Xcode/Simulator compilation require macOS
-with Xcode installed (`./gradlew :shared-ui:embedAndSignAppleFrameworkForXcode`). On Linux,
-`:protocol:compileIosMainKotlinMetadata`, `:relay-client:compileIosMainKotlinMetadata`, and
-`:shared-ui:compileIosMainKotlinMetadata` verify the multiplatform Kotlin sources alongside
-the JVM and Android test suites.
-
-### Shared HTTP relay client
-
-`relay-client` targets JVM 17 (used by Android), `iosArm64`, and `iosSimulatorArm64`.
-Its `commonMain` owns the existing health/pairing HTTP calls, device/push preferences,
-machines, mesh queries, prompt answers, message requests, and reply/error decoding.
-`ApiResult` and `AnswerOutcome` retain their existing `dev.j3pf.rp.data.net` package.
-
-`RelayHttpClient` takes an injected `RelayHttpTransport`, a request-local
-`RelayCredentials` provider, a query encoder, and an invalid-response exception
-factory. Android's `RelayApi` delegates to it, reading `SecretStore.current()` per
-request and supplying the existing UTF-8 `URLEncoder` and `IOException` behavior.
-`OkHttpRelayTransport` retains cancellable OkHttp calls and the 8-second quick-action
-timeout. Multipart `uploadBlob(RequestBody, onProgress)` stays native and streaming,
-without a global upload call timeout; only its response decoding is shared.
-
-Common tests run through `:relay-client:jvmTest`; reports are in
-`relay-client/build/reports/tests/jvmTest`. Linux common metadata/JVM/Android checks
-are not iOS certification: there is no iOS HTTP transport yet. macOS compilation
-(`:relay-client:compileKotlinIosArm64`) and simulator/iPhone transport tests remain
-unverified. Chat synchronization policy remains native.
-
-### Shared pairing/session policy
-
-`SessionPolicy` owns code normalization, health-before-pair sequencing, existing
-Spanish failure messages, successful session replacement, push registration, and
-best-effort logout revocation. `Session` and `PairResult` keep their existing
-packages and fields; `Session.wsBase` retains its existing conversion behavior.
-
-Android's `SessionRepository` delegates through `SessionPlatform`: URL validation
-and QR parsing, `Build.MODEL`, FCM token acquisition, encrypted `SecretStore`,
-settings, WorkManager, Room/cache cleanup, notification channels, direct push,
-and connection start/stop remain native. Rejected pairing leaves the old session
-and its work/channels/socket untouched. On success, old-relay cleanup precedes
-new relay ID generation and credential save, then push registration and connection
-startup; push HTTP/network failures remain ignored. Common callback event traces
-cover initial/replacement ordering and logout; native regression probes cover
-old-session preservation and the storage/lifecycle adapter.
-
-There is no iOS session adapter or encrypted storage implementation. Linux common
-metadata/JVM/Android checks do not compile iOS or verify macOS/iPhone behavior.
-Chat subscription/synchronization and retry/delivery extraction remains T4 scope.
-
-### Shared WebSocket policy
-
-`RelayWsClient` owns envelope/version filtering, request correlation/timeouts, and
-pending failure; `RelayMessageBus` preserves the shared foreground/direct-push
-512-message DROP_OLDEST bus. `WsReply` and `ConnState` keep their existing packages.
-`ReconnectingSocketPolicy` owns generation fencing, fatal closes, immediate restart,
-and 1–30-second exponential backoff with ±20% jitter. Its generic
-`RelaySocketDriver<Request, Socket>` keeps native requests opaque (no credential DTO
-or request logging); coroutine scope and jitter are injectable for deterministic tests.
-
-Android's unchanged `RelayConnection`/`ReconnectingSocket` APIs delegate to those
-policies. OkHttp transport/timeouts, secure `Ulid.new()`, device/version hello data,
-session/process lifecycle, and connectivity callback ownership stay native. A shared
-reentrant `RelayLock` serializes concurrent JVM socket/connectivity callbacks and
-protects pending requests; iOS uses `NSRecursiveLock` but is not compiled or tested
-on Linux. No iOS socket driver is supplied. Duplicate explicit request IDs and
-cancelled-request pending cleanup retain their existing hazards; they are not fixed
-by this extraction. T4 can consume the shared `request`, `send`, `messages`, and
-connection state contracts without taking over native lifecycle or persistence.
-
-### Compose Multiplatform shared UI
-
-`shared-ui` targets Android (via AGP 9 `com.android.kotlin.multiplatform.library`), JVM 17, `iosArm64`, and `iosSimulatorArm64`. It contains the complete mobile presentation layer:
-
-- **Theme & Design Tokens**: `RpSpacing`, `RpShapes`, `RpGlows`, `RpGradients`, `RpMotion`, and the 4 visual themes (`gentleCute`, `gentleSexy`, `omarchy`, `system`).
-- **Shared Components**: `RpMarkdown`, `StatusChip`, `SurfaceCard`, `QuotaDynamicIsland`, and `EdgeFade`.
-- **Presentation Screens**: Pure Compose Multiplatform implementations of `AgentsContent`, `ChatComponents`, `ChatMessages`, `DiffSheet`, `NewAgentContent`, `OnboardingContent`, `PendingContent`, `PromptContent`, and `SettingsContent`.
-- **Mesh Topology Canvas**: Replaced Android native `android.graphics.Canvas`/`Paint` with pure CMP `DrawScope` canvas (`MeshCanvas.kt`) supporting pan, pinch-zoom, orthogonal connector buses with animated packet pulses, and auto-fit calibration.
-- **Navigation & Shell**: Type-safe `@Serializable` navigation destinations (`Routes.kt`), `AppTab`, `AppBottomBar`, and `LockScreen`.
-- **iOS Entry Point**: Exports `MainViewController` via `ComposeUIViewController { RemotePiApp() }` for consuming in iOS application wrappers.
+On Linux, `:protocol:compileIosMainKotlinMetadata`, `:relay-client:compileIosMainKotlinMetadata`, `:data-core:compileIosMainKotlinMetadata`, and `:shared-ui:compileIosMainKotlinMetadata` compile the `iosMain` source sets against the Apple native distribution metadata alongside all JVM and Android unit tests. Full Xcode framework linking and Simulator verification run on macOS via `.github/workflows/ios.yml` and `.github/workflows/testflight.yml`.
 

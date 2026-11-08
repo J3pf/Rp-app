@@ -1,45 +1,36 @@
-# Installation, Pairing, and Troubleshooting Guide — RP App (Android)
+# Installation, Pairing, and Troubleshooting Guide — RP App (Android & iOS)
 
-This guide explains how to install the **RP** Android app, pair it with your **RP Relay** server, and troubleshoot common network, permission, and notification issues.
+This guide explains how to install the **RP** mobile app on **Android** and **iOS**, pair it with your **RP Relay** server, and troubleshoot common network, permission, and notification issues.
 
 ---
 
 ## 1. System Requirements
 
 - **Mobile device:**
-  - Android 8.0 (API 26) or later.
-  - Android 12+ (API 31+) recommended for biometric authentication on notification actions.
-- **Connectivity:** Network access to the **RP Relay** server (same local network, VPN/Tailscale, or a public HTTPS domain). Requires **Rp-relay >= 0.5.5** and **Rp-plugin >= 0.2.8**.
+  - **Android:** Android 8.0 (API 26) or later; Android 12+ (API 31+) recommended for biometric authentication on notification actions.
+  - **iOS / iPadOS:** iOS 16.0 or later (iPhone and iPad).
+- **Connectivity:** Network access to the **RP Relay** server (same local network, VPN/Tailscale, or a public HTTPS domain). Requires **Rp-relay >= 0.7.0** (for iOS APNs push; **>= 0.6.1** for Android) and **Rp-plugin >= 0.3.0**.
 - **Optional build environment:**
-  - JDK 17 or later (`openjdk-17-jdk` / `openjdk-21-jdk`).
-  - Android SDK platform 36 and `build-tools 36.0.0` (managed automatically by `scripts/build-apk.sh`).
+  - JDK 17 or 21 (`openjdk-17-jdk` / `openjdk-21-jdk`).
+  - **Android:** Android SDK platform 36 and `build-tools 36.0.0` (managed automatically by `scripts/build-apk.sh`).
+  - **iOS (macOS only):** Xcode 26.0+ with iOS SDK and Apple Silicon (`arm64`) simulator or physical iPhone/iPad.
 
 ---
 
-## 2. Downloading and Installing the APK
+## 2. Installing the App
 
-### Option A: Direct download from the official release (recommended)
+### 2.1 Android: Direct APK Download or Local Build
+
+#### Option A: Direct download from the official release (recommended)
 
 1. Open the official GitHub release on your phone or computer:
-   👉 **[RP App v0.5.0 — Download APK](https://github.com/J3pf/Rp-app/releases/tag/v0.5.0)**
-2. Download the official installer:
-   - **[rp-v0.5.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.5.0/rp-v0.5.0-direct.apk)**: the official release without Google services, using the `remoteMessaging` WebSocket push channel.
+   👉 **[RP App Releases — GitHub](https://github.com/J3pf/Rp-app/releases)**
+2. Download the `direct` APK (Google-free WebSocket push channel) and install it on your phone or via ADB:
+   ```bash
+   adb install -r rp-v0.6.1-direct.apk
+   ```
 
-#### Install on your phone
-- **From the phone browser:**
-  1. Download the APK.
-  2. If prompted, allow your browser or file manager to **Install unknown apps** from this source.
-  3. Tap **Install**.
-- **From a computer using ADB (USB cable or Wi-Fi):**
-  1. Enable **Developer options** and **USB debugging** on the phone.
-  2. Run:
-     ```bash
-     adb install -r rp-v0.5.0-direct.apk
-     ```
-
-### Option B: Build locally from source
-
-If you prefer to build the APK yourself:
+#### Option B: Build Android APK locally from source
 
 ```bash
 # Build the direct debug flavor
@@ -53,6 +44,24 @@ scripts/build-apk.sh --test
 ```
 
 The generated APK is placed at `dist/rp-direct-debug.apk`.
+
+### 2.2 iOS: Xcode Simulator, Physical Device, or TestFlight
+
+1. On a Mac with Xcode and JDK 21 installed, open `iosApp/iosApp.xcodeproj` in Xcode, or build for the simulator from the terminal:
+   ```bash
+   ./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64
+   xcodebuild \
+     -project iosApp/iosApp.xcodeproj \
+     -scheme iosApp \
+     -sdk iphonesimulator \
+     -configuration Debug \
+     -destination 'generic/platform=iOS Simulator' \
+     CODE_SIGNING_ALLOWED=NO \
+     build
+   ```
+2. For physical iPhone/iPad installation or TestFlight distribution:
+   - `iosApp/Configuration/Config.xcconfig` configures `TEAM_ID`, `BUNDLE_ID`, and `CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements`.
+   - Use `.github/workflows/testflight.yml` (manual `workflow_dispatch`) with the 8 documented Apple Developer / App Store Connect secrets to archive and upload to TestFlight.
 
 ---
 
@@ -81,7 +90,7 @@ The command prints:
    - **Scan QR code:** Tap the button, grant camera permission, and point the camera at the server terminal. The app detects the URL and code automatically.
    - **Enter manually:** If you are on another network or do not have a camera, tap `Ingresar manualmente` and enter the relay URL and 8-character code.
 3. Tap `Vincular`.
-4. The app calls `POST /v1/pair/device`, stores the encrypted device token in **Android Keystore** (Tink AES-256-GCM), and opens a secure WebSocket channel.
+4. The app calls `POST /v1/pair/device`, stores the encrypted device token and push key in **Android Keystore** (Tink AES-256-GCM) or **iOS Keychain** (`kSecClassGenericPassword` + AES-256-GCM), and opens a secure WebSocket channel.
 5. Your PCs and active agents appear in the app.
 
 ---
