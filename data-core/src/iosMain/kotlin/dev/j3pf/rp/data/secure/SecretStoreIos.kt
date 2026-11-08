@@ -23,10 +23,8 @@ object IosKeychainBridge {
     var onPushKeyChanged: ((pushKey: String?, accessGroup: String?) -> Unit)? = null
 }
 
-private class NsUserDefaultsSecretBacking(
-    suiteName: String = "dev.j3pf.rp.secrets",
-) : SecretKeyValueBacking {
-    private val defaults: NSUserDefaults = NSUserDefaults(suiteName = suiteName)
+private class NsUserDefaultsSecretBacking : SecretKeyValueBacking {
+    private val defaults: NSUserDefaults = NSUserDefaults.standardUserDefaults
     private val knownKeys =
         listOf(
             EncryptedKeyValueSecretStore.K_MASTER_KEY,

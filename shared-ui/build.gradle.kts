@@ -48,6 +48,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":protocol"))
             api(project(":relay-client"))
+            api(project(":data-core"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

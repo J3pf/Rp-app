@@ -1,3 +1,4 @@
+import Security
 import SharedUi
 import SwiftUI
 import UIKit
@@ -5,6 +6,10 @@ import UIKit
 @main
 struct iOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    init() {
+        KeychainStoreHelper.installBridge()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -16,15 +21,12 @@ struct iOSApp: App {
 /// Remote-notification token hand-off. The ONLY push wiring this app side owns: relay the device
 /// token to the Kotlin bridge verbatim as NSData. Token conversion, environment and relay PUT live
 /// in `SharedUi.IosPushRegistrationBridge` (O2's registered boundary). Never log the token.
-///
-/// TODO(push): registration stays INERT until O3's iOS composition root sets
-/// `IosPushRegistrationBridge.registration` (named gap in docs; no requestAuthorization here — the
-/// UX prompt decision is deliberately NOT made at launch).
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil,
     ) -> Bool {
+        KeychainStoreHelper.installBridge()
         // Token never arrives until iOS is asked to register; do NOT request notification
         // authorization here (product/UX decision pending).
         UIApplication.shared.registerForRemoteNotifications()
@@ -35,8 +37,79 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data,
     ) {
-        // Inert until the iOS composition root sets SharedUi bridge's registration anchor
-        // (named gap); never logs the token or any failure detail.
         SharedUi.IosPushRegistrationBridge.shared.register(apnsToken: deviceToken) { _, _ in }
+    }
+}
+
+private enum KeychainStoreHelper {
+    private static let service = "dev.j3pf.rp.secrets"
+    private static let missingEntitlementStatus: OSStatus = -34018
+
+    static func installBridge() {
+        SharedUi.IosKeychainStoreBridge.shared.configure(
+            onGet: { key, accessGroup in
+                readString(account: key, accessGroup: accessGroup)
+            },
+            onPut: { key, value, accessGroup in
+                writeString(account: key, value: value, accessGroup: accessGroup)
+            },
+            onRemove: { key, accessGroup in
+                deleteItem(account: key, accessGroup: accessGroup)
+            },
+        )
+    }
+
+    private static func baseQuery(account: String, accessGroup: String?) -> [String: Any] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        if let accessGroup, !accessGroup.isEmpty {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        return query
+    }
+
+    private static func readString(account: String, accessGroup: String?) -> String? {
+        var query = baseQuery(account: account, accessGroup: accessGroup)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        var status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == missingEntitlementStatus, accessGroup != nil {
+            return readString(account: account, accessGroup: nil)
+        }
+        guard status == errSecSuccess, let data = item as? Data else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func writeString(account: String, value: String, accessGroup: String?) {
+        let data = Data(value.utf8)
+        let query = baseQuery(account: account, accessGroup: accessGroup)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            status = SecItemAdd(addQuery as CFDictionary, nil)
+        }
+        if status == missingEntitlementStatus, accessGroup != nil {
+            writeString(account: account, value: value, accessGroup: nil)
+        }
+    }
+
+    private static func deleteItem(account: String, accessGroup: String?) {
+        let query = baseQuery(account: account, accessGroup: accessGroup)
+        let status = SecItemDelete(query as CFDictionary)
+        if status == missingEntitlementStatus, accessGroup != nil {
+            deleteItem(account: account, accessGroup: nil)
+        }
     }
 }
