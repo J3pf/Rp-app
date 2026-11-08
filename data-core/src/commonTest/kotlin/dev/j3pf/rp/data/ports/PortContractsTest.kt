@@ -3,11 +3,14 @@ package dev.j3pf.rp.data.ports
 import dev.j3pf.rp.data.net.AnswerOutcome
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.BlobInfo
+import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HostDirs
 import dev.j3pf.rp.protocol.HostGitDiffResult
@@ -321,5 +324,48 @@ fun attachmentsGateFakeShapeContractRecordsPrepareUploadDiscardAndCleanup() = ru
     assertTrue(host.readAttachment("content://test/1").isFailure)
     host.deleteStaging("/tmp/att-1")
     host.cleanStaleStaging()
+}
+
+@Test
+fun chatSessionGateFakeShapeContractRecordsLifecycleAndDeliveryCalls() = runTest {
+    val gate = FakeChatSessionGate()
+    val s = gate.open("m1:a1")
+    assertEquals("m1:a1", s.agentId)
+    assertEquals(1, s.startCalls)
+
+    s.subscribe()
+    assertEquals(1, s.subscribeCalls)
+
+    s.sendResult = SendResult.Queued
+    val sendRes = s.send("hola", emptyList(), Delivery.STEER, DeliveryMethod.INTERACTIVE, asCommand = true, clientMsgId = "c-1")
+    assertEquals<SendResult>(SendResult.Queued, sendRes)
+    assertEquals(1, s.sendCalls.size)
+    assertEquals("hola", s.sendCalls.single().text)
+    assertEquals(Delivery.STEER, s.sendCalls.single().delivery)
+    assertEquals(DeliveryMethod.INTERACTIVE, s.sendCalls.single().method)
+    assertTrue(s.sendCalls.single().asCommand)
+    assertEquals("c-1", s.sendCalls.single().clientMsgId)
+
+    s.abort()
+    assertEquals(1, s.abortCalls)
+
+    s.removeLocal("c-1")
+    assertEquals(listOf("c-1"), s.removeLocalCalls)
+
+    s.retryResult = SendResult.Delivered(null)
+    assertEquals<SendResult>(SendResult.Delivered(null), s.retry("c-1"))
+    assertEquals(listOf("c-1"), s.retryCalls)
+
+    gate.release("m1:a1")
+    assertEquals(listOf("m1:a1"), gate.releaseCalls)
+    assertEquals(1, s.stopCalls)
+
+    gate.flushOutboxResult = false
+    assertFalse(gate.flushOutbox())
+    assertEquals(1, gate.flushOutboxCalls)
+
+    gate.clear()
+    assertEquals(1, gate.clearCalls)
+    assertTrue(gate.sessions.isEmpty())
 }
 }

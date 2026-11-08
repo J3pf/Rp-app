@@ -1,13 +1,17 @@
 package dev.j3pf.rp.data.ports
 
+import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.data.net.AnswerOutcome
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.BlobInfo
+import dev.j3pf.rp.protocol.Delivery
+import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HerdrLayout
 import dev.j3pf.rp.protocol.HostDirs
 import dev.j3pf.rp.protocol.HostGitDiffResult
@@ -526,5 +530,106 @@ class FakeAttachmentsGate : AttachmentsGate {
 
     override fun cleanup(olderThanMs: Long) {
         cleanupCalls += olderThanMs
+    }
+}
+
+data class RecordedSend(
+    val text: String,
+    val attachments: List<AttachmentRef>,
+    val delivery: String,
+    val method: String,
+    val asCommand: Boolean,
+    val clientMsgId: String?,
+)
+
+class FakeChatSession(
+    override val agentId: String,
+    initialState: ChatState = ChatState(),
+    initialSyncing: Boolean = false,
+) : ChatSession {
+    val stateFlow = MutableStateFlow(initialState)
+    val syncingFlow = MutableStateFlow(initialSyncing)
+    override val state: StateFlow<ChatState> = stateFlow
+    override val syncing: StateFlow<Boolean> = syncingFlow
+
+    var startCalls = 0
+        private set
+    var stopCalls = 0
+        private set
+    var subscribeCalls = 0
+        private set
+    var abortCalls = 0
+        private set
+
+    val sendCalls = mutableListOf<RecordedSend>()
+    val removeLocalCalls = mutableListOf<String>()
+    val retryCalls = mutableListOf<String>()
+
+    var sendResult: SendResult = SendResult.Delivered(null)
+    var retryResult: SendResult = SendResult.Delivered(null)
+
+    override fun start() {
+        startCalls += 1
+    }
+
+    override fun stop() {
+        stopCalls += 1
+    }
+
+    override suspend fun subscribe() {
+        subscribeCalls += 1
+    }
+
+    override suspend fun send(
+        text: String,
+        attachments: List<AttachmentRef>,
+        delivery: String,
+        method: String,
+        asCommand: Boolean,
+        clientMsgId: String?,
+    ): SendResult {
+        sendCalls += RecordedSend(text, attachments, delivery, method, asCommand, clientMsgId)
+        return sendResult
+    }
+
+    override fun abort() {
+        abortCalls += 1
+    }
+
+    override fun removeLocal(clientMsgId: String) {
+        removeLocalCalls += clientMsgId
+    }
+
+    override suspend fun retry(clientMsgId: String): SendResult {
+        retryCalls += clientMsgId
+        return retryResult
+    }
+}
+
+class FakeChatSessionGate : ChatSessionGate {
+    val sessions = mutableMapOf<String, FakeChatSession>()
+    val releaseCalls = mutableListOf<String>()
+    var flushOutboxCalls = 0
+        private set
+    var clearCalls = 0
+        private set
+    var flushOutboxResult: Boolean = true
+
+    override fun open(agentId: String): FakeChatSession =
+        sessions.getOrPut(agentId) { FakeChatSession(agentId) }.also { it.start() }
+
+    override fun release(agentId: String) {
+        releaseCalls += agentId
+        sessions[agentId]?.stop()
+    }
+
+    override suspend fun flushOutbox(): Boolean {
+        flushOutboxCalls += 1
+        return flushOutboxResult
+    }
+
+    override suspend fun clear() {
+        clearCalls += 1
+        sessions.clear()
     }
 }

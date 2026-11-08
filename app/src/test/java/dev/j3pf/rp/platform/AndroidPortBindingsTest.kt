@@ -5,6 +5,7 @@ import dev.j3pf.rp.data.ports.AgentsGate
 import dev.j3pf.rp.data.ports.AttachmentsGate
 import dev.j3pf.rp.data.ports.BackgroundScheduler
 import dev.j3pf.rp.data.ports.BatteryExemption
+import dev.j3pf.rp.data.ports.ChatSessionGate
 import dev.j3pf.rp.data.ports.DedupStore
 import dev.j3pf.rp.data.ports.HostGateway
 import dev.j3pf.rp.data.ports.NotificationHealth
@@ -15,6 +16,7 @@ import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AttachmentsRepository
+import dev.j3pf.rp.data.repo.ChatRepository
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
@@ -50,6 +52,7 @@ class AndroidPortBindingsTest {
         assertImplements(AgentsRepository::class.java, AgentsGate::class.java)
         assertImplements(PromptsRepository::class.java, PromptSheetGate::class.java)
         assertImplements(AttachmentsRepository::class.java, AttachmentsGate::class.java)
+        assertImplements(ChatRepository::class.java, ChatSessionGate::class.java)
 
         val bindingPorts = PortsModule::class.java.declaredMethods
             .filter { method -> method.isAnnotationPresent(Binds::class.java) }
@@ -58,18 +61,19 @@ class AndroidPortBindingsTest {
         // Original Move-4 seven + O3 M2's VoiceInputHost; O2's T4b Move 1 adds
         // bindSecretStore + bindNetworkMonitor + bindAppLifecycleMonitor, and O2's T4b
         // Move 2 adds bindPushEnvelopeCrypto, P3 adds bindHostGateway, P2 adds bindAgentsGate,
-        // P5 adds bindPromptSheetGate, and P6 adds bindAttachmentsGate.
+        // P5 adds bindPromptSheetGate, P6 adds bindAttachmentsGate, and P1 adds bindChatSessionGate.
         val requiredPorts = setOf(
             "BackgroundScheduler", "DedupStore", "OpenPromptGuard", "SettingsStore",
             "NotificationHealth", "BatteryExemption", "PlatformInfo", "VoiceInputHost",
             "SecretStore", "NetworkMonitor", "AppLifecycleMonitor",
             "PushEnvelopeCrypto", "HostGateway", "AgentsGate", "PromptSheetGate", "AttachmentsGate",
+            "ChatSessionGate",
         )
         assertTrue(
             bindingPorts.containsAll(requiredPorts),
             "missing binds: ${requiredPorts - bindingPorts} (bound: $bindingPorts)",
         )
-        assertTrue(bindingPorts.size >= 16, "bind count dropped below the 16 required ports: $bindingPorts")
+        assertTrue(bindingPorts.size >= 17, "bind count dropped below the 17 required ports: $bindingPorts")
     }
 
     private fun assertImplements(implementation: Class<*>, port: Class<*>) {

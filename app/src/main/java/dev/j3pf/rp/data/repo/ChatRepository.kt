@@ -28,14 +28,13 @@ import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
+import dev.j3pf.rp.data.ports.ChatSessionGate
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.protocol.AgentEvent
 import dev.j3pf.rp.protocol.AgentHistory
 import dev.j3pf.rp.protocol.AttachmentRef
-import dev.j3pf.rp.protocol.Delivery
-import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.Entry
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.RpJson
@@ -51,6 +50,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import dev.j3pf.rp.client.chat.ChatSession as SharedChatSession
+import dev.j3pf.rp.data.ports.ChatSession as ChatSessionPort
 
 @Singleton
 class ChatRepository
@@ -66,7 +66,7 @@ class ChatRepository
         private val api: RelayApi,
         @AppScope private val scope: CoroutineScope,
         private val agentDao: AgentDao,
-    ) {
+    ) : ChatSessionGate {
         private val persisted = AtomicInteger(0)
 
         private val chatPlatform =
@@ -250,15 +250,15 @@ class ChatRepository
             )
 
         /** Sesión de chat de un agente; la primera llamada la crea y la arranca. */
-        fun open(agentId: String): ChatSession = registry.open(agentId)
+        override fun open(agentId: String): ChatSession = registry.open(agentId)
 
-        fun release(agentId: String) {
+        override fun release(agentId: String) {
             registry.release(agentId)
         }
 
         inner class ChatSession(
-            val agentId: String,
-        ) {
+            override val agentId: String,
+        ) : ChatSessionPort {
             private val core =
                 SharedChatSession(
                     agentId = agentId,
@@ -271,35 +271,35 @@ class ChatRepository
                     now = { System.currentTimeMillis() },
                 )
 
-            val state: StateFlow<ChatState> get() = core.state
-            val syncing: StateFlow<Boolean> get() = core.syncing
+            override val state: StateFlow<ChatState> get() = core.state
+            override val syncing: StateFlow<Boolean> get() = core.syncing
 
-            fun start() = core.start()
+            override fun start() = core.start()
 
-            fun stop() = core.stop()
+            override fun stop() = core.stop()
 
-            suspend fun subscribe() = core.subscribe()
+            override suspend fun subscribe() = core.subscribe()
 
-            suspend fun send(
+            override suspend fun send(
                 text: String,
-                attachments: List<AttachmentRef> = emptyList(),
-                delivery: String = Delivery.AUTO,
-                method: String = DeliveryMethod.AUTO,
-                asCommand: Boolean = false,
-                clientMsgId: String? = null,
+                attachments: List<AttachmentRef>,
+                delivery: String,
+                method: String,
+                asCommand: Boolean,
+                clientMsgId: String?,
             ): SendResult = core.send(text, attachments, delivery, method, asCommand, clientMsgId)
 
-            fun abort() = core.abort()
+            override fun abort() = core.abort()
 
-            fun removeLocal(clientMsgId: String) = core.removeLocal(clientMsgId)
+            override fun removeLocal(clientMsgId: String) = core.removeLocal(clientMsgId)
 
-            suspend fun retry(clientMsgId: String): SendResult = core.retry(clientMsgId)
+            override suspend fun retry(clientMsgId: String): SendResult = core.retry(clientMsgId)
         }
 
         /** Vuelca la bandeja de salida (lo llama el Worker). Devuelve `true` si no queda nada pendiente. */
-        suspend fun flushOutbox(): Boolean = deliveryPolicy.flushOutbox()
+        override suspend fun flushOutbox(): Boolean = deliveryPolicy.flushOutbox()
 
-        suspend fun clear() {
+        override suspend fun clear() {
             registry.clear()
             secrets.current()?.relayId?.let { chatPlatform.clearChat(it) }
             chatPlatform.clearOutbox()
