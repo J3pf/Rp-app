@@ -1,6 +1,7 @@
 package dev.j3pf.rp.platform
 
 import dagger.Binds
+import dev.j3pf.rp.data.ports.AgentsGate
 import dev.j3pf.rp.data.ports.BackgroundScheduler
 import dev.j3pf.rp.data.ports.BatteryExemption
 import dev.j3pf.rp.data.ports.DedupStore
@@ -10,6 +11,7 @@ import dev.j3pf.rp.data.ports.OpenPromptGuard
 import dev.j3pf.rp.data.ports.PlatformInfo
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.ports.VoiceInputHost
+import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.di.PortsModule
@@ -41,6 +43,7 @@ class AndroidPortBindingsTest {
         assertImplements(AndroidPlatformInfo::class.java, PlatformInfo::class.java)
         assertImplements(AndroidVoiceInputHost::class.java, VoiceInputHost::class.java)
         assertImplements(HostRepository::class.java, HostGateway::class.java)
+        assertImplements(AgentsRepository::class.java, AgentsGate::class.java)
 
         val bindingPorts = PortsModule::class.java.declaredMethods
             .filter { method -> method.isAnnotationPresent(Binds::class.java) }
@@ -48,19 +51,18 @@ class AndroidPortBindingsTest {
             .toSet()
         // Original Move-4 seven + O3 M2's VoiceInputHost; O2's T4b Move 1 adds
         // bindSecretStore + bindNetworkMonitor + bindAppLifecycleMonitor, and O2's T4b
-        // Move 2 adds bindPushEnvelopeCrypto, and P3 adds bindHostGateway. The invariant pinned here is per-port
-        // presence (nothing ever removed) with a floor matching the list.
+        // Move 2 adds bindPushEnvelopeCrypto, P3 adds bindHostGateway, and P2 adds bindAgentsGate.
         val requiredPorts = setOf(
             "BackgroundScheduler", "DedupStore", "OpenPromptGuard", "SettingsStore",
             "NotificationHealth", "BatteryExemption", "PlatformInfo", "VoiceInputHost",
             "SecretStore", "NetworkMonitor", "AppLifecycleMonitor",
-            "PushEnvelopeCrypto", "HostGateway",
+            "PushEnvelopeCrypto", "HostGateway", "AgentsGate",
         )
         assertTrue(
             bindingPorts.containsAll(requiredPorts),
             "missing binds: ${requiredPorts - bindingPorts} (bound: $bindingPorts)",
         )
-        assertTrue(bindingPorts.size >= 13, "bind count dropped below the 13 required ports: $bindingPorts")
+        assertTrue(bindingPorts.size >= 14, "bind count dropped below the 14 required ports: $bindingPorts")
     }
 
     private fun assertImplements(implementation: Class<*>, port: Class<*>) {

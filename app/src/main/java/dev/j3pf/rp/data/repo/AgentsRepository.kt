@@ -4,6 +4,9 @@ import dev.j3pf.rp.data.db.AgentDao
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
+import dev.j3pf.rp.data.ports.AgentsGate
+import dev.j3pf.rp.data.ports.ArchivedAgentsResult
+import dev.j3pf.rp.data.ports.CloseOutcome
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.domain.model.toEntity
@@ -14,7 +17,6 @@ import dev.j3pf.rp.protocol.AgentRef
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.AgentsUpdate
 import dev.j3pf.rp.protocol.AppWelcome
-import dev.j3pf.rp.protocol.ArchivedAgentSummary
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.MsgType
@@ -32,27 +34,6 @@ import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
 
-sealed interface CloseOutcome {
-    data object Closed : CloseOutcome
-
-    data object Archived : CloseOutcome
-
-    data class Failed(
-        val message: String,
-    ) : CloseOutcome
-}
-
-sealed interface ArchivedAgentsResult {
-    data class Ok(
-        val agents: List<ArchivedAgentSummary>,
-        val nextBefore: Long?,
-    ) : ArchivedAgentsResult
-
-    data class Failed(
-        val message: String,
-    ) : ArchivedAgentsResult
-}
-
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class AgentsRepository
@@ -64,9 +45,9 @@ class AgentsRepository
         private val connection: RelayConnection,
         private val settings: SettingsRepository,
         @AppScope private val scope: CoroutineScope,
-    ) {
+    ) : AgentsGate {
         /** Todos los agentes con su contador de prompts abiertos. */
-        val agents: Flow<List<AgentSummary>> =
+        override val agents: Flow<List<AgentSummary>> =
             secrets.session
                 .flatMapLatest { s ->
                     if (s == null) emptyFlow() else dao.observe(s.relayId).map { list -> list.map { it.agent.toModel(it.openPrompts) } }
@@ -78,13 +59,13 @@ class AgentsRepository
                 if (ctx == AppSettings.ALL) list else list.filter { it.machineContext == ctx }
             }.distinctUntilChanged()
 
-        fun observe(agentId: String): Flow<AgentSummary?> =
+        override fun observe(agentId: String): Flow<AgentSummary?> =
             secrets.session
                 .flatMapLatest { s ->
                     if (s == null) emptyFlow() else dao.observeOne(s.relayId, agentId).map { it?.agent?.toModel(it.openPrompts) }
                 }.distinctUntilChanged()
 
-        fun start() {
+        override fun start() {
             bus.messages
                 .onEach { env ->
                     val relayId = secrets.current()?.relayId ?: return@onEach
@@ -110,7 +91,7 @@ class AgentsRepository
         }
 
         /** Cierra el pane de Herdr; cuando no hay pane vinculado, archiva el historial con `agent.forget`. */
-        suspend fun close(agentId: String): CloseOutcome {
+        override suspend fun close(agentId: String): CloseOutcome {
             val relayId = secrets.current()?.relayId ?: return CloseOutcome.Failed("Sin sesión con el relay")
             val ref = AgentRef(agentId)
             return when (val reply = connection.request(Envelope.of(MsgType.AGENT_CLOSE, ref, id = Ulid.new()))) {
@@ -153,9 +134,9 @@ class AgentsRepository
             if (relayMessage.isBlank()) "No se pudo cerrar el agente" else "No se pudo cerrar el agente: $relayMessage"
 
         /** Lista archivados desde el relay; el cursor pertenece al estado de pantalla, no a Room. */
-        suspend fun archived(
-            machineId: String? = null,
-            before: Long? = null,
+        override suspend fun archived(
+            machineId: String?,
+            before: Long?,
         ): ArchivedAgentsResult =
             when (
                 val reply =
@@ -175,7 +156,7 @@ class AgentsRepository
             }
 
         /** Elimina irreversiblemente el historial archivado en el relay. */
-        suspend fun purge(agentId: String): Boolean {
+        override suspend fun purge(agentId: String): Boolean {
             val reply = connection.request(Envelope.of(MsgType.AGENT_PURGE, AgentRef(agentId), id = Ulid.new()))
             return reply is WsReply.Ok
         }
@@ -191,7 +172,7 @@ class AgentsRepository
             return false
         }
 
-        suspend fun clear() {
+        override suspend fun clear() {
             secrets.current()?.relayId?.let { dao.clear(it) }
         }
     }

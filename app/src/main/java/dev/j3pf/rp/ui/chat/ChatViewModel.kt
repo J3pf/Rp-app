@@ -12,12 +12,12 @@ import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.ports.BiometricAuthorizer
+import dev.j3pf.rp.data.ports.CloseOutcome
 import dev.j3pf.rp.data.ports.HostResult
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.ChatRepository
-import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.LocalAttachment
 import dev.j3pf.rp.data.repo.SendResult

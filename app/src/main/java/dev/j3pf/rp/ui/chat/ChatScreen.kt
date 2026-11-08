@@ -43,10 +43,10 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import dev.j3pf.rp.R
 import dev.j3pf.rp.chat.UserMsg
+import dev.j3pf.rp.data.ports.CloseOutcome
 import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.ports.VoiceListener
 import dev.j3pf.rp.data.repo.AttachmentUi
-import dev.j3pf.rp.data.repo.CloseOutcome
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.platform.AndroidVoiceInputHost
 import dev.j3pf.rp.protocol.Answer

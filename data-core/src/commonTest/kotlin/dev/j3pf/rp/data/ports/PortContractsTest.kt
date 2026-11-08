@@ -11,6 +11,7 @@ import dev.j3pf.rp.protocol.HostGitDiscardResult
 import dev.j3pf.rp.protocol.HostSpawn
 import dev.j3pf.rp.protocol.HostSpawned
 import dev.j3pf.rp.protocol.NotifyPrefs
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -232,5 +233,39 @@ fun lifecyclePortsRecordObserversAndFireBothCallbacks() = runTest {
     assertEquals(BiometricAuthResult.FAILED, fail.authenticate("t-fail", "r-fail"))
     assertEquals(1, fail.reasons.value.size)
     assertEquals("r-fail", fail.reasons.value.single())
+}
+
+@Test
+fun agentsGateFakeShapeContractRecordsCallsAndDerivedObserve() = runTest {
+    val a1 = AgentSummary(agentId = "m1:a1", machineId = "m1", sessionName = "One")
+    val a2 = AgentSummary(agentId = "m1:a2", machineId = "m1", sessionName = "Two")
+    val gate = FakeAgentsGate(listOf(a1, a2))
+
+    assertEquals(a1, gate.observe("m1:a1").first())
+    assertNull(gate.observe("m1:missing").first())
+
+    gate.start()
+    assertEquals(1, gate.startCalls)
+
+    val closeFailure: CloseOutcome = CloseOutcome.Failed("No se pudo cerrar el agente")
+    gate.closeResult = closeFailure
+    assertEquals(closeFailure, gate.close("m1:a1"))
+    assertEquals(listOf("m1:a1"), gate.closeCalls)
+
+    val archivedFailure: ArchivedAgentsResult = ArchivedAgentsResult.Failed("No se pudieron cargar los agentes archivados")
+    gate.archivedResult = archivedFailure
+    assertEquals(
+        archivedFailure,
+        gate.archived("m1", 42L),
+    )
+    assertEquals<List<Pair<String?, Long?>>>(listOf("m1" to 42L), gate.archivedCalls)
+
+    gate.purgeResult = false
+    assertFalse(gate.purge("m1:a1"))
+    assertEquals(listOf("m1:a1"), gate.purgeCalls)
+
+    gate.clear()
+    assertEquals(1, gate.clearCalls)
+    assertTrue(gate.agents.first().isEmpty())
 }
 }

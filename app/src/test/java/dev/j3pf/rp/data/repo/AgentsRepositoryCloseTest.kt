@@ -7,6 +7,8 @@ import dev.j3pf.rp.FakeSecretStore
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.data.ports.ArchivedAgentsResult
+import dev.j3pf.rp.data.ports.CloseOutcome
 import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.AgentArchivedList

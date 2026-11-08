@@ -4,6 +4,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dev.j3pf.rp.data.ports.AgentsGate
 import dev.j3pf.rp.data.ports.AppLifecycleMonitor
 import dev.j3pf.rp.data.ports.BackgroundScheduler
 import dev.j3pf.rp.data.ports.BatteryExemption
@@ -17,6 +18,7 @@ import dev.j3pf.rp.data.ports.PlatformInfo
 import dev.j3pf.rp.data.ports.PushEnvelopeCrypto
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.ports.VoiceInputHost
+import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.platform.AndroidAppLifecycleMonitor
@@ -89,4 +91,8 @@ abstract class PortsModule {
     @Binds
     @Singleton
     abstract fun bindBiometricAuthorizer(impl: BiometricAuthorizerAndroid): BiometricAuthorizer
+
+    @Binds
+    @Singleton
+    abstract fun bindAgentsGate(impl: AgentsRepository): AgentsGate
 }

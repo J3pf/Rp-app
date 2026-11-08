@@ -401,3 +401,50 @@ class RecordingAppLifecycleMonitor : AppLifecycleMonitor {
         backgroundCallbacks.value += 1
     }
 }
+
+class FakeAgentsGate(
+    initialAgents: List<AgentSummary> = emptyList(),
+) : AgentsGate {
+    val agentsFlow = MutableStateFlow(initialAgents)
+    override val agents: StateFlow<List<AgentSummary>> = agentsFlow
+
+    var startCalls = 0
+        private set
+    var clearCalls = 0
+        private set
+
+    val closeCalls = mutableListOf<String>()
+    val archivedCalls = mutableListOf<Pair<String?, Long?>>()
+    val purgeCalls = mutableListOf<String>()
+
+    var closeResult: CloseOutcome = CloseOutcome.Closed
+    var archivedResult: ArchivedAgentsResult = ArchivedAgentsResult.Ok(emptyList(), null)
+    var purgeResult: Boolean = true
+
+    override fun start() {
+        startCalls += 1
+    }
+
+    override suspend fun clear() {
+        clearCalls += 1
+        agentsFlow.value = emptyList()
+    }
+
+    override suspend fun close(agentId: String): CloseOutcome {
+        closeCalls += agentId
+        return closeResult
+    }
+
+    override suspend fun archived(
+        machineId: String?,
+        before: Long?,
+    ): ArchivedAgentsResult {
+        archivedCalls += machineId to before
+        return archivedResult
+    }
+
+    override suspend fun purge(agentId: String): Boolean {
+        purgeCalls += agentId
+        return purgeResult
+    }
+}
