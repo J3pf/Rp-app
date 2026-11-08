@@ -97,13 +97,13 @@ A Kotlin Multiplatform + Compose Multiplatform (KMP/CMP) mobile app for **Androi
 You can install the app directly on your device without building it:
 
 1. **Download the APK:**
-   - 📦 **[RP App v0.5.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.5.0)**
-   - Official direct-channel release (no Google services): **[rp-v0.5.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.5.0/rp-v0.5.0-direct.apk)**.
+   - 📦 **[RP App v0.7.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.7.0)**
+   - Official direct-channel release (no Google services): **[rp-v0.7.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.7.0/rp-v0.7.0-direct.apk)**.
 2. **Install on your phone:**
    - **On the phone:** Open the downloaded file and allow your browser or file manager to install unknown apps if prompted.
    - **Over USB with ADB:** Connect a phone with USB debugging enabled and run:
      ```bash
-     adb install -r rp-v0.5.0-direct.apk
+     adb install -r rp-v0.7.0-direct.apk
      ```
 3. **Pair with your relay:**
    - On the relay server, run:

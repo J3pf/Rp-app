@@ -115,7 +115,7 @@ open class MeshRepository
                         }
 
                         MsgType.ERROR -> {
-                            val subId = lastSubscribeEnvelopeId
+                            val subId = synchronized(subscriptionLock) { lastSubscribeEnvelopeId }
                             if (subId != null && envelope.re == subId) {
                                 val msg =
                                     runCatching { envelope.body<ErrorBody>().message }.getOrNull()
@@ -181,6 +181,8 @@ open class MeshRepository
                     val previousMachineId = activeSubscribers.values.lastOrNull()
                     activeSubscribers.remove(owner)
                     if (activeSubscribers.isEmpty()) {
+                        lastSubscribeEnvelopeId = null
+                        lastSubscribedMachineId = null
                         sequenceEnvelope(Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe()))
                     } else {
                         val remainingMachineId = activeSubscribers.values.lastOrNull()
@@ -191,18 +193,28 @@ open class MeshRepository
         }
 
         fun clear() {
-            synchronized(subscriptionLock) {
-                activeSubscribers.clear()
-                lastSubscribeEnvelopeId = null
-                lastSubscribedMachineId = null
+            val fence =
+                synchronized(subscriptionLock) {
+                    activeSubscribers.clear()
+                    lastSubscribeEnvelopeId = null
+                    lastSubscribedMachineId = null
+                    ++decisionSeq
+                }
+            synchronized(sendLock) {
+                if (fence > lastSentSeq) lastSentSeq = fence
             }
             _snapshot.value = null
         }
 
         private fun createSubscribeEnvelope(machineId: String?): Envelope {
             val env = Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId))
-            lastSubscribeEnvelopeId = env.id
-            lastSubscribedMachineId = machineId
+            if (connection.state.value == ConnState.Connected) {
+                lastSubscribeEnvelopeId = env.id
+                lastSubscribedMachineId = machineId
+            } else {
+                lastSubscribeEnvelopeId = null
+                lastSubscribedMachineId = null
+            }
             return env
         }
 

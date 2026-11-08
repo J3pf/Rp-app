@@ -8,10 +8,11 @@ Android and Kotlin Multiplatform (KMP) client for the RemotePi system. Provides 
 - **Android Target**: `compileSdk = 37`, `targetSdk = 36`, `minSdk = 29`.
 - **Modular Architecture**:
   - `:protocol`: Pure Kotlin Multiplatform (targets JVM 17, `iosArm64`, `iosSimulatorArm64`). Contains `@Serializable` protocol types, `ChatReducer`, ULID generators, and domain models.
-  - `:relay-client`: Pure Kotlin Multiplatform (JVM 17, `iosArm64`, `iosSimulatorArm64`). Handles shared HTTP requests, WebSocket correlation bus, session state management, and chat synchronization.
-  - `:shared-ui`: Compose Multiplatform (Android library via AGP 9 `com.android.kotlin.multiplatform.library`, JVM 17, `iosArm64`, `iosSimulatorArm64`). Hosts shared theme, screens, components, and exports `MainViewController` for iOS.
+  - `:data-core`: Pure Kotlin Multiplatform (JVM 17, `iosArm64`, `iosSimulatorArm64`). Hosts the Room KMP database (`RpDatabase`, `MIGRATION_2_3`), 17 domain ports (`SecretStore`, `SettingsStore`, `PushEnvelopeCrypto`, `HostGateway`, `AgentsGate`, `PromptSheetGate`, `AttachmentsGate`, `ChatSessionGate`, `BiometricAuthorizer`, etc.), pure-Kotlin AES-256-GCM encryption (`EncryptedKeyValueSecretStore`, `CommonPushEnvelopeCrypto`), and `SecretStoreIos`.
+  - `:relay-client`: Pure Kotlin Multiplatform (JVM 17, `iosArm64`, `iosSimulatorArm64`). Handles shared HTTP requests (`UrlSessionRelayTransport` on iOS), WebSocket correlation bus (`UrlSessionSocketDriver` on iOS), session state management, and chat synchronization.
+  - `:shared-ui`: Compose Multiplatform (Android library via AGP 9 `com.android.kotlin.multiplatform.library`, JVM 17, `iosArm64`, `iosSimulatorArm64`). Hosts shared theme, 5-screen `RemotePiApp()` navigation shell, `SharedAppController`, `IosAppScope`, `QrScannerView`, and exports `MainViewController` for iOS.
   - `:app`: Android application layer. Implements Jetpack Compose host, Hilt dependency injection, Room database persistence, WorkManager background tasks, OkHttp network adapters, and Android notification channels.
-  - `iosApp/`: Xcode project wrapping `:shared-ui`'s `MainViewController` (`SharedUi.framework`) for iOS 16+.
+  - `iosApp/`: Xcode project wrapping `:shared-ui`'s `MainViewController` (`SharedUi.framework`) and `NotificationService` APNs decrypt extension for iOS 16+.
 
 ## Commands
 

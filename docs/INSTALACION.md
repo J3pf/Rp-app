@@ -7,7 +7,7 @@ This guide explains how to install the **RP** mobile app on **Android** and **iO
 ## 1. System Requirements
 
 - **Mobile device:**
-  - **Android:** Android 8.0 (API 26) or later; Android 12+ (API 31+) recommended for biometric authentication on notification actions.
+  - **Android:** Android 10 (API 29) or later; Android 12+ (API 31+) recommended for biometric authentication on notification actions.
   - **iOS / iPadOS:** iOS 16.0 or later (iPhone and iPad).
 - **Connectivity:** Network access to the **RP Relay** server (same local network, VPN/Tailscale, or a public HTTPS domain). Requires **Rp-relay >= 0.7.0** (for iOS APNs push; **>= 0.6.1** for Android) and **Rp-plugin >= 0.3.0**.
 - **Optional build environment:**
@@ -27,7 +27,7 @@ This guide explains how to install the **RP** mobile app on **Android** and **iO
    👉 **[RP App Releases — GitHub](https://github.com/J3pf/Rp-app/releases)**
 2. Download the `direct` APK (Google-free WebSocket push channel) and install it on your phone or via ADB:
    ```bash
-   adb install -r rp-v0.6.1-direct.apk
+   adb install -r rp-v0.7.0-direct.apk
    ```
 
 #### Option B: Build Android APK locally from source

@@ -39,6 +39,8 @@ import dev.j3pf.rp.platform.DaoDedupStore
 import dev.j3pf.rp.platform.DaoOpenPromptGuard
 import dev.j3pf.rp.platform.WorkManagerBackgroundScheduler
 import javax.inject.Singleton
+import dev.j3pf.rp.data.ports.SecretStore as SecretStorePort
+import dev.j3pf.rp.data.secure.SecretStore as AndroidSecretStore
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -63,9 +65,10 @@ abstract class PortsModule {
     @Singleton
     abstract fun bindSettingsStore(impl: SettingsRepository): SettingsStore
 
+    /** Binds Android Keystore/Tink [AndroidSecretStore] to the shared `:data-core` [SecretStorePort] contract. */
     @Binds
     @Singleton
-    abstract fun bindSecretStore(impl: dev.j3pf.rp.data.secure.SecretStore): dev.j3pf.rp.data.ports.SecretStore
+    abstract fun bindSecretStore(impl: AndroidSecretStore): SecretStorePort
 
     @Binds
     @Singleton

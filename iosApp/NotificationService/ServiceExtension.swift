@@ -18,22 +18,34 @@ import UserNotifications
 final class NotificationService: UNNotificationServiceExtension {
     private static let aad = Data("rp1".utf8)
     private static let keychainService = "dev.j3pf.rp.secrets"
+    private static let sharedAccessGroup = "19410625785.dev.j3pf.rp.iosApp"
     private static let pushKeyAccount = "rp_nse_push_key"
     private static let mutedAgentsAccount = "rp_nse_muted_agents"
     private static let dedupeLock = NSLock()
     private static var seenPromptIds = Set<String>()
 
+    private let handlerLock = NSLock()
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var bestAttemptContent: UNMutableNotificationContent?
+
+    private func deliver(_ content: UNNotificationContent) {
+        handlerLock.lock()
+        let handler = contentHandler
+        contentHandler = nil
+        handlerLock.unlock()
+        handler?(content)
+    }
 
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void,
     ) {
-        self.contentHandler = contentHandler
         let best = (request.content.mutableCopy() as? UNMutableNotificationContent) ?? UNMutableNotificationContent()
         best.userInfo = request.content.userInfo
-        bestAttemptContent = best
+        handlerLock.lock()
+        self.contentHandler = contentHandler
+        self.bestAttemptContent = best
+        handlerLock.unlock()
 
         guard
             let k = request.content.userInfo["k"] as? String,
@@ -43,7 +55,7 @@ final class NotificationService: UNNotificationServiceExtension {
             let plaintext = Self.decryptEnvelope(pushKeyB64: pushKeyB64, nonceB64: nonceB64, cipherB64: cipherB64),
             let json = (try? JSONSerialization.jsonObject(with: Data(plaintext.utf8))) as? [String: Any]
         else {
-            contentHandler(best)
+            deliver(best)
             return
         }
 
@@ -51,7 +63,7 @@ final class NotificationService: UNNotificationServiceExtension {
         if let promptId, !promptId.isEmpty {
             // Register promptId dedupe BEFORE the mute filter (Android-pinned order).
             if !Self.markFirstSeen(promptId: promptId) {
-                contentHandler(best)
+                deliver(best)
                 return
             }
         }
@@ -59,7 +71,7 @@ final class NotificationService: UNNotificationServiceExtension {
         let agentId = json["agentId"] as? String
         let danger = json["danger"] as? String
         if let agentId, Self.isMuted(agentId: agentId, isCritical: danger == "high") {
-            contentHandler(best)
+            deliver(best)
             return
         }
 
@@ -76,18 +88,18 @@ final class NotificationService: UNNotificationServiceExtension {
             if let titleText, !titleText.isEmpty, let messageText, !messageText.isEmpty {
                 best.body = "\(titleText)\n\(messageText)"
             } else {
-                best.body = titleText ?? messageText ?? "Action required"
+                best.body = titleText ?? messageText ?? "Acción requerida"
             }
         case "settled":
-            best.body = previewText ?? messageText ?? "Finished"
+            best.body = previewText ?? messageText ?? "Terminado"
         case "terminal_wait":
             if let titleText, !titleText.isEmpty {
-                best.body = "Waiting for input in terminal: \(titleText)"
+                best.body = "Esperando en la terminal: \(titleText)"
             } else {
-                best.body = "Waiting for input in terminal"
+                best.body = "Esperando en la terminal"
             }
         case "error":
-            best.body = messageText ?? titleText ?? "Agent encountered an error"
+            best.body = messageText ?? titleText ?? "Error en el agente"
         default:
             best.body = titleText ?? previewText ?? messageText ?? best.body
         }
@@ -96,12 +108,15 @@ final class NotificationService: UNNotificationServiceExtension {
             best.threadIdentifier = "rp.agent.\(agentId)"
         }
 
-        contentHandler(best)
+        deliver(best)
     }
 
     override func serviceExtensionTimeWillExpire() {
-        if let contentHandler, let bestAttemptContent {
-            contentHandler(bestAttemptContent)
+        handlerLock.lock()
+        let best = bestAttemptContent
+        handlerLock.unlock()
+        if let best {
+            deliver(best)
         }
     }
 
@@ -154,13 +169,21 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private static func readKeychainString(account: String) -> String? {
-        let query: [String: Any] = [
+        readKeychainString(account: account, accessGroup: sharedAccessGroup)
+            ?? readKeychainString(account: account, accessGroup: nil)
+    }
+
+    private static func readKeychainString(account: String, accessGroup: String?) -> String? {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        if let accessGroup, !accessGroup.isEmpty {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {

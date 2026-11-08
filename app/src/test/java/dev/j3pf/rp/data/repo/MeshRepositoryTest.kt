@@ -274,4 +274,18 @@ class MeshRepositoryTest {
             assertEquals(null, repository.subscribedMachineId)
             assertEquals(null, repository.snapshot.value)
         }
+
+    @Test
+    fun `subscribe before connection establishes sends mesh subscribe upon connect`() =
+        runBlocking {
+            repository.subscribe("machine-pre")
+            assertTrue(repository.isSubscribed)
+            assertEquals("machine-pre", repository.subscribedMachineId)
+
+            acceptSocket()
+            connect()
+
+            val envelope = awaitOutgoing(MsgType.MESH_SUBSCRIBE)
+            assertEquals("machine-pre", envelope.body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
+        }
 }

@@ -4,6 +4,7 @@
 <dict>
 	<key>keychain-access-groups</key>
 	<array>
+		<string>19410625785.dev.j3pf.rp.iosApp</string>
 		<string>$(AppIdentifierPrefix)$(CFBundleIdentifier)</string>
 	</array>
 </dict>
