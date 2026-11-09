@@ -214,6 +214,17 @@ class NotificationFactoryTest {
             assertEquals("Corriendo tests", n.extras.getString(Notification.EXTRA_TEXT))
             assertEquals("⎇ feature/live", n.extras.getString(Notification.EXTRA_SUB_TEXT))
 
+            // Repeated call with identical visible fields should be deduplicated (same Notification instance).
+            factory.showWorking(agent.copy(lastMessagePreview = "otro preview"))
+            val nSame = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
+            assertTrue(n === nSame)
+
+            // When activeTask changes, notification should be updated.
+            factory.showWorking(agent.copy(activeTask = "Compilando APK"))
+            val nUpdated = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
+            assertNotNull(nUpdated)
+            assertEquals("Compilando APK", nUpdated.extras.getString(Notification.EXTRA_TEXT))
+
             factory.cancelWorking("m:s1")
             assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id))
         }

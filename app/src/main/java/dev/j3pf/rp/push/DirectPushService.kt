@@ -32,6 +32,8 @@ import dev.j3pf.rp.protocol.PushAck
 import dev.j3pf.rp.protocol.PushNotify
 import dev.j3pf.rp.protocol.Ulid
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -98,31 +100,41 @@ class DirectPushService : LifecycleService() {
             )
 
         lifecycleScope.launch {
-            combine(socket.state, machines.machinesState) { st, ms -> st to ms }.collect { (st, ms) ->
-                val n = buildNotification(ms.size, st == ConnState.Connected)
-                runCatching { notify(n) }
+            socket.state.collect { st ->
                 if (st is ConnState.Fatal) stopSelf()
             }
         }
 
         lifecycleScope.launch {
+            combine(socket.state, machines.machinesState) { st, ms ->
+                (st == ConnState.Connected) to ms.size
+            }.distinctUntilChanged()
+                .collect { (connected, pcs) ->
+                    val n = buildNotification(pcs, connected)
+                    runCatching { notify(n) }
+                }
+        }
+
+        lifecycleScope.launch {
             val currentlyWorking = mutableSetOf<String>()
-            agents.agents.collect { list ->
-                val working = list.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING }
-                val workingIds = working.map { it.agentId }.toSet()
+            agents.agents
+                .map { list -> list.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING } }
+                .distinctUntilChanged()
+                .collect { working ->
+                    val workingIds = working.map { it.agentId }.toSet()
 
-                val stopped = currentlyWorking - workingIds
-                for (id in stopped) {
-                    factory.cancelWorking(id)
+                    val stopped = currentlyWorking - workingIds
+                    for (id in stopped) {
+                        factory.cancelWorking(id)
+                    }
+
+                    for (a in working) {
+                        factory.showWorking(a)
+                    }
+
+                    currentlyWorking.clear()
+                    currentlyWorking.addAll(workingIds)
                 }
-
-                for (a in working) {
-                    factory.showWorking(a)
-                }
-
-                currentlyWorking.clear()
-                currentlyWorking.addAll(workingIds)
-            }
         }
     }
 

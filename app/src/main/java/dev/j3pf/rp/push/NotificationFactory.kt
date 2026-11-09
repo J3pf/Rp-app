@@ -52,6 +52,7 @@ class NotificationFactory
         private val deduper: NotificationDeduper,
     ) {
         private val nm get() = NotificationManagerCompat.from(context)
+        private val workingSignatures = java.util.concurrent.ConcurrentHashMap<String, String>()
 
         // ───────────────────────────── Prompt ─────────────────────────────
 
@@ -286,13 +287,17 @@ class NotificationFactory
             if (!canNotify()) return
             val machineId = agent.machineId.ifEmpty { "default" }
             val machineName = agent.machineName.ifEmpty { "RP" }
-            channels.ensureMachine(machineId, machineName, agent.machineContext)
             val channel = channels.channelId(machineId, NotifyCategory.TERMINAL)
             val id = stableId("working:${agent.agentId}")
-            val open = openIntent(null, agent.agentId, id)
             val label = agentTitle(agent.sessionName, agent.cwd, agent.agentId)
             val title = "${contextEmoji(agent.machineContext)} $machineName · $label"
             val text = agent.activeTask ?: context.getString(R.string.agent_working_desc)
+            val branch = agent.gitBranch?.takeIf { it.isNotBlank() }.orEmpty()
+            val signature = "$channel|$title|$text|$branch"
+            if (workingSignatures[agent.agentId] == signature && isWorkingNotificationActive(id)) return
+
+            channels.ensureMachine(machineId, machineName, agent.machineContext)
+            val open = openIntent(null, agent.agentId, id)
 
             val builder =
                 NotificationCompat
@@ -309,7 +314,7 @@ class NotificationFactory
                     .setUsesChronometer(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            agent.gitBranch?.takeIf { it.isNotBlank() }?.let { branch ->
+            if (branch.isNotEmpty()) {
                 builder.setSubText("⎇ $branch")
             }
             builder.addAction(
@@ -320,12 +325,25 @@ class NotificationFactory
                         open,
                     ).build(),
             )
+            workingSignatures[agent.agentId] = signature
             nm.notify(WORKING_TAG, id, builder.build())
         }
 
         fun cancelWorking(agentId: String) {
-            nm.cancel(WORKING_TAG, stableId("working:$agentId"))
+            val id = stableId("working:$agentId")
+            val hadSignature = workingSignatures.remove(agentId) != null
+            if (hadSignature || isWorkingNotificationActive(id)) {
+                nm.cancel(WORKING_TAG, id)
+            }
         }
+
+        private fun isWorkingNotificationActive(id: Int): Boolean =
+            runCatching {
+                context
+                    .getSystemService(android.app.NotificationManager::class.java)
+                    .activeNotifications
+                    .any { it.id == id && it.tag == WORKING_TAG }
+            }.getOrDefault(false)
 
         // ───────────────────────────── Estado desde el receiver ─────────────────────────────
 

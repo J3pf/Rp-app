@@ -21,8 +21,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,9 +75,9 @@ fun StatusChip(
     )
 
     val isWorking = (agent.status == AgentStatus.WORKING || agent.status == AgentStatus.COMPACTING) && agent.online
-    val infiniteTransition = rememberInfiniteTransition(label = "statusPulseTransition")
-    val pulseScale by if (isWorking && !reducedMotion) {
-        infiniteTransition.animateFloat(
+    val infiniteTransition = if (isWorking && !reducedMotion) rememberInfiniteTransition(label = "statusPulseTransition") else null
+    val pulseScaleState =
+        infiniteTransition?.animateFloat(
             initialValue = 1.0f,
             targetValue = 2.2f,
             animationSpec =
@@ -89,11 +87,8 @@ fun StatusChip(
                 ),
             label = "pulseScale",
         )
-    } else {
-        remember { mutableFloatStateOf(1.0f) }
-    }
-    val pulseAlpha by if (isWorking && !reducedMotion) {
-        infiniteTransition.animateFloat(
+    val pulseAlphaState =
+        infiniteTransition?.animateFloat(
             initialValue = 0.55f,
             targetValue = 0.0f,
             animationSpec =
@@ -103,9 +98,6 @@ fun StatusChip(
                 ),
             label = "pulseAlpha",
         )
-    } else {
-        remember { mutableFloatStateOf(0.0f) }
-    }
 
     Surface(
         modifier = modifier,
@@ -120,14 +112,15 @@ fun StatusChip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(10.dp)) {
-                if (isWorking && !reducedMotion && pulseAlpha > 0f) {
+                if (pulseScaleState != null && pulseAlphaState != null) {
                     Box(
                         Modifier
                             .size(6.dp)
                             .graphicsLayer {
-                                scaleX = pulseScale
-                                scaleY = pulseScale
-                                alpha = pulseAlpha
+                                val scale = pulseScaleState.value
+                                scaleX = scale
+                                scaleY = scale
+                                alpha = pulseAlphaState.value
                             }.clip(CircleShape)
                             .background(animatedColor),
                     )
