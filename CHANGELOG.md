@@ -3,6 +3,28 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-09
+
+### Added
+- **Android 16 / One UI 8 Promoted Live Activity (`ProgressStyle`) Notifications**:
+  - Full 3-line rich ongoing notification layout (`title` assistant output preview, `subText` project/branch/machine, `text` user prompt & task completion) with segmented progress bar using `android.app.Notification$ProgressStyle` and `FLAG_PROMOTED_ONGOING`.
+  - Unified multi-agent working notification aggregating multiple simultaneous agents into one Live Activity card (`⚡ N agentes activos · <Project>: <task>`) with bullet summaries.
+  - Mutual exclusion between `WORKING_TAG` and `SETTLED_TAG`, preventing stale notification stacks.
+  - Reused `DirectPushService` slot (`id=4200`) as the Live Activity host to eliminate duplicate ongoing notification cards in One UI.
+- **Competitor Battery & Thermal Optimizations**:
+  - Smart Pocket Standby / Auto-Sleep detecting `ACTION_SCREEN_OFF` and sleeping direct WebSockets during inactive periods.
+  - Single-socket foreground multiplexing suspending `DirectPushService` WebSocket while in the interactive foreground.
+  - No-op `AgentSummary` upsert elision in Room DAO.
+  - Capped background `MeshCanvas` at 30 FPS, replaced 120Hz continuous card rotation with 1Hz pulsing, and added `graphicsLayer` isolation.
+- **Chat UX, Slash Commands & Telemetry**:
+  - Full launcher-aware slash command catalog with descriptions and automated trailing space insertion.
+  - In-chat search and tool-type filters.
+  - Active agent quick-switcher in chat screen header.
+  - Live Git dirty (`*`) state tracking and `activeTask` real-time tool telemetry.
+
+### Requires
+- **Rp-relay >= 0.8.0** and **Rp-plugin >= 0.4.0**.
+
 ## [0.7.0] - 2026-11-08
 
 ### Added
