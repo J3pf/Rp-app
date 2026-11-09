@@ -108,10 +108,16 @@ class ChatViewModel
                                         it.status == AgentStatus.COMPACTING
                                 )
                         }.sortedBy { if (it.status == AgentStatus.WAITING_INPUT) 0 else 1 }
+                val enrichedAgent =
+                    agent?.copy(
+                        todoCompleted = if (chat.todoTotalCount > 0) chat.todoCompletedCount else agent.todoCompleted,
+                        todoTotal = if (chat.todoTotalCount > 0) chat.todoTotalCount else agent.todoTotal,
+                        activeTask = chat.activeTaskLabel() ?: agent.activeTask,
+                    )
                 e.copy(
                     chat = chat,
                     syncingHistory = syncing,
-                    agent = agent,
+                    agent = enrichedAgent,
                     otherActiveAgents = siblings,
                     conn = conn,
                     muted = agentId in st.mutedAgents,
@@ -119,6 +125,16 @@ class ChatViewModel
                     chatMessageSpacing = st.chatMessageSpacing,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
+
+        fun getDraft(): String = drafts[agentId].orEmpty()
+
+        fun setDraft(text: String) {
+            if (text.isBlank()) {
+                drafts.remove(agentId)
+            } else {
+                drafts[agentId] = text
+            }
+        }
 
         fun setChoice(c: DeliveryChoice) = extra.update { it.copy(choice = c) }
 
@@ -410,11 +426,13 @@ class ChatViewModel
                         }
                         local.values.forEach(attachmentsRepo::discard)
                         local.clear()
+                        setDraft("")
                         onSent()
                     }
 
                     SendResult.Queued -> {
                         extra.update { it.copy(attachments = emptyList(), message = "Sin conexión: se enviará al volver la red") }
+                        setDraft("")
                         onSent()
                     }
 
@@ -441,5 +459,9 @@ class ChatViewModel
         override fun onCleared() {
             local.values.forEach(attachmentsRepo::discard)
             chats.release(agentId)
+        }
+
+        companion object {
+            private val drafts = java.util.concurrent.ConcurrentHashMap<String, String>()
         }
     }

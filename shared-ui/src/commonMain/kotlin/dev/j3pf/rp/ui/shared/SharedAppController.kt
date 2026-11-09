@@ -196,6 +196,20 @@ class SharedAppController(
         )
     val currentRoute: StateFlow<Any> = _currentRoute.asStateFlow()
     private val backStack = mutableListOf<Any>()
+    private val drafts = mutableMapOf<String, String>()
+
+    fun getDraft(agentId: String): String = drafts[agentId].orEmpty()
+
+    fun setDraft(
+        agentId: String,
+        text: String,
+    ) {
+        if (text.isBlank()) {
+            drafts.remove(agentId)
+        } else {
+            drafts[agentId] = text
+        }
+    }
 
     private val _pairState = MutableStateFlow(PairUiState())
     val pairState: StateFlow<PairUiState> = _pairState.asStateFlow()

@@ -120,8 +120,10 @@ fun ChatTopBar(
                             }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             StatusChip(effectiveAgent)
-                            val hasChanges = diffFileCount > 0
-                            if (!agent.gitBranch.isNullOrBlank()) {
+                            val rawBranch = agent.gitBranch
+                            val hasChanges = diffFileCount > 0 || rawBranch?.endsWith(" *") == true
+                            if (!rawBranch.isNullOrBlank()) {
+                                val cleanBranch = rawBranch.removeSuffix(" *").trim()
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
                                     color =
@@ -133,7 +135,7 @@ fun ChatTopBar(
                                     modifier = Modifier.clickable { onOpenDiff() },
                                 ) {
                                     Text(
-                                        "⎇ ${agent.gitBranch}${if (hasChanges) " *" else ""}",
+                                        "⎇ $cleanBranch${if (hasChanges) " *" else ""}",
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         color =
@@ -146,10 +148,12 @@ fun ChatTopBar(
                                     )
                                 }
                             }
+                            val activeTaskText = if (working) agent.activeTask?.takeIf { it.isNotBlank() } else null
                             val modelText = (model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
                             val thinkingText = thinkingLevel?.takeIf { it.isNotBlank() }
                             val subtitle =
                                 listOfNotNull(
+                                    activeTaskText,
                                     folder.takeIf { it.isNotBlank() },
                                     modelText,
                                     thinkingText,

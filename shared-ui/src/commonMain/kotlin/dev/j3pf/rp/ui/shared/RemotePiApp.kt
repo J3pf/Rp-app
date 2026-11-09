@@ -343,6 +343,8 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                                         state = pendingState,
                                         onOpenPrompt = appController::openPromptSheet,
                                         onSelect = appController::selectContext,
+                                        busyPromptId = busyPromptId,
+                                        onQuickAnswer = { p, ans -> appController.answerPrompt(p.promptId, ans) },
                                     )
                                 }
 
@@ -445,7 +447,13 @@ private fun SharedChatScreen(
     val selectedDiffFile by appController.selectedDiffFile.collectAsState()
     val diffLoading by appController.diffLoading.collectAsState()
 
-    val agent = agents.firstOrNull { it.agentId == agentId }
+    val rawAgent = agents.firstOrNull { it.agentId == agentId }
+    val agent =
+        rawAgent?.copy(
+            todoCompleted = if (chatState.todoTotalCount > 0) chatState.todoCompletedCount else rawAgent.todoCompleted,
+            todoTotal = if (chatState.todoTotalCount > 0) chatState.todoTotalCount else rawAgent.todoTotal,
+            activeTask = chatState.activeTaskLabel() ?: rawAgent.activeTask,
+        )
     val otherActiveAgents =
         remember(agents, agentId) {
             agents
@@ -455,7 +463,7 @@ private fun SharedChatScreen(
                         (it.status == "waiting_input" || it.status == "working" || it.status == "compacting")
                 }.sortedBy { if (it.status == "waiting_input") 0 else 1 }
         }
-    var text by rememberSaveable(agentId) { mutableStateOf("") }
+    var text by rememberSaveable(agentId) { mutableStateOf(appController.getDraft(agentId)) }
     var choice by rememberSaveable(agentId) { mutableStateOf(DeliveryChoice.AUTO) }
     var workingDelivery by rememberSaveable(agentId) { mutableStateOf(Delivery.FOLLOW_UP) }
     var showInfo by remember { mutableStateOf(false) }
@@ -521,7 +529,10 @@ private fun SharedChatScreen(
                 agent = agent,
                 working = working,
                 text = text,
-                onTextChange = { text = it },
+                onTextChange = {
+                    text = it
+                    appController.setDraft(agentId, it)
+                },
                 attachments = emptyList(),
                 canSend = true,
                 sending = false,
@@ -543,7 +554,10 @@ private fun SharedChatScreen(
                         workingDelivery = workingDelivery,
                         working = working,
                         agent = agent,
-                        onSent = { text = "" },
+                        onSent = {
+                            text = ""
+                            appController.setDraft(agentId, "")
+                        },
                     )
                 },
                 isVoiceAvailable = false,
@@ -599,9 +613,15 @@ private fun SharedChatScreen(
             onRequestAdjustment = { filePath ->
                 val prefix = if (text.isBlank()) "Ajusta en $filePath: " else "$text\nAjusta en $filePath: "
                 text = prefix
+                appController.setDraft(agentId, prefix)
                 appController.dismissDiffSheet()
             },
             onDismiss = appController::dismissDiffSheet,
+            onQuickPrompt = { quickText ->
+                text = quickText
+                appController.setDraft(agentId, quickText)
+                appController.dismissDiffSheet()
+            },
         )
     }
 }

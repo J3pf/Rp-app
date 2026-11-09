@@ -247,7 +247,7 @@ fun ChatScreen(
                 .fromApplication(applicationContext, ChatVoiceInputEntryPoint::class.java)
                 .voiceInputHost()
         }
-    var text by rememberSaveable { mutableStateOf("") }
+    var text by rememberSaveable(vm.agentId) { mutableStateOf(vm.getDraft()) }
     var busyPrompt by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(ui.message) {
@@ -282,7 +282,10 @@ fun ChatScreen(
     ChatContent(
         ui = ui.copy(readOnly = readOnly),
         text = text,
-        onText = { text = it },
+        onText = {
+            text = it
+            vm.setDraft(it)
+        },
         onBack = onBack,
         onSend = {
             scope.launch {
@@ -302,7 +305,10 @@ fun ChatScreen(
                         }
                     }
                 }
-                vm.send(text) { text = "" }
+                vm.send(text) {
+                    text = ""
+                    vm.setDraft("")
+                }
             }
         },
         onChoice = vm::setChoice,
@@ -373,9 +379,15 @@ fun ChatScreen(
             onRequestAdjustment = { filePath ->
                 val prefix = if (text.isBlank()) "Ajusta en $filePath: " else "$text\nAjusta en $filePath: "
                 text = prefix
+                vm.setDraft(prefix)
                 vm.closeDiffSheet()
             },
             onDismiss = vm::closeDiffSheet,
+            onQuickPrompt = { quickText ->
+                text = quickText
+                vm.setDraft(quickText)
+                vm.closeDiffSheet()
+            },
         )
     }
 }

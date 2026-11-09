@@ -100,6 +100,18 @@ interface AgentDao {
         now: Long,
     )
 
+    @Query(
+        """UPDATE agents SET todoCompleted = :completed, todoTotal = :total, activeTask = :activeTask
+           WHERE relayId = :relayId AND agentId = :agentId""",
+    )
+    suspend fun updateTelemetry(
+        relayId: String,
+        agentId: String,
+        completed: Int,
+        total: Int,
+        activeTask: String?,
+    )
+
     @Query("DELETE FROM agents WHERE relayId = :relayId")
     suspend fun clear(relayId: String)
 }

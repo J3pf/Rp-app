@@ -1,12 +1,18 @@
 package dev.j3pf.rp.ui.pending
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.j3pf.rp.data.ports.BiometricAuthResult
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.repo.MachinesRepository
@@ -15,6 +21,9 @@ import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.Prompt
+import dev.j3pf.rp.ui.components.rememberActivity
+import dev.j3pf.rp.ui.promptsheet.AnswerUi
+import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -58,11 +67,43 @@ class PendingViewModel
 fun PendingScreen(
     onOpenPrompt: (String) -> Unit,
     vm: PendingViewModel = hiltViewModel(),
+    promptVm: PromptSheetViewModel = hiltViewModel(),
 ) {
     val st by vm.state.collectAsStateWithLifecycle()
+    val promptStatus by promptVm.status.collectAsStateWithLifecycle()
+    val activity = rememberActivity()
+    val scope = rememberCoroutineScope()
+    var busyPromptId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(promptStatus) {
+        when (promptStatus) {
+            AnswerUi.Done, AnswerUi.AlreadyResolved, is AnswerUi.Queued, is AnswerUi.Error -> {
+                promptVm.reset()
+                busyPromptId = null
+            }
+            else -> {}
+        }
+    }
+
     PendingContent(
         state = st,
         onOpenPrompt = onOpenPrompt,
         onSelect = vm::select,
+        busyPromptId = busyPromptId,
+        onQuickAnswer = { p, answer ->
+            scope.launch {
+                if (promptVm.requiresAuth(p)) {
+                    if (activity == null) {
+                        onOpenPrompt(p.promptId)
+                        return@launch
+                    }
+                    if (promptVm.gate.authenticate("Confirma tu identidad", p.title.take(80)) != BiometricAuthResult.OK) {
+                        return@launch
+                    }
+                }
+                busyPromptId = p.promptId
+                promptVm.answer(p.promptId, answer)
+            }
+        },
     )
 }

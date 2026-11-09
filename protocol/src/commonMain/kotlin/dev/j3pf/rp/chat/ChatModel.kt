@@ -133,4 +133,42 @@ data class ChatState(
 ) {
     /** Items + mensaje en streaming, listos para pintar. */
     val display: List<ChatItem> get() = if (streaming != null) items + streaming else items
+
+    val todoCompletedCount: Int get() = todos.count { it.status == "done" }
+
+    val todoTotalCount: Int get() = todos.size
+
+    fun activeTaskLabel(): String? {
+        val runningTool = tools.values.lastOrNull { it.status == ToolStatus.RUNNING }
+        if (runningTool != null) {
+            val argsObj = runningTool.args as? kotlinx.serialization.json.JsonObject
+            val summary = (argsObj?.get("toolSummary") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (!summary.isNullOrBlank()) return summary.take(80)
+            val path = (argsObj?.get("path") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (!path.isNullOrBlank()) {
+                val base = path.substringAfterLast('/')
+                val prefix =
+                    when (runningTool.name) {
+                        "read" -> "Read"
+                        "edit" -> "Edit"
+                        "write" -> "Write"
+                        else -> runningTool.name
+                    }
+                return "$prefix: $base"
+            }
+            val cmd = (argsObj?.get("command") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (!cmd.isNullOrBlank()) {
+                val firstLine = cmd.trim().substringBefore('\n').trim()
+                if (firstLine.isNotEmpty()) return "$ ${firstLine.take(64)}"
+            }
+            val label = (argsObj?.get("label") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (!label.isNullOrBlank() && runningTool.name == "subagent_run") {
+                return "Subagent: ${label.take(56)}"
+            }
+            return runningTool.name
+        }
+        val inProgressTodo = todos.firstOrNull { it.status == "in_progress" }?.title
+        if (!inProgressTodo.isNullOrBlank()) return inProgressTodo
+        return null
+    }
 }

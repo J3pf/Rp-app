@@ -43,8 +43,13 @@ import dev.j3pf.rp.protocol.UserMessage
 import dev.j3pf.rp.protocol.str
 import dev.j3pf.rp.push.SendMessageWorker
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -276,12 +281,30 @@ class ChatRepository
                     now = { System.currentTimeMillis() },
                 )
 
+            private var telemetryJob: Job? = null
+
             override val state: StateFlow<ChatState> get() = core.state
             override val syncing: StateFlow<Boolean> get() = core.syncing
 
-            override fun start() = core.start()
+            override fun start() {
+                core.start()
+                if (telemetryJob == null) {
+                    telemetryJob =
+                        core.state
+                            .map { st -> Triple(st.todoCompletedCount, st.todoTotalCount, st.activeTaskLabel()) }
+                            .distinctUntilChanged()
+                            .onEach { (completed, total, activeTask) ->
+                                val relayId = secrets.current()?.relayId ?: return@onEach
+                                agentDao.updateTelemetry(relayId, agentId, completed, total, activeTask)
+                            }.launchIn(scope)
+                }
+            }
 
-            override fun stop() = core.stop()
+            override fun stop() {
+                telemetryJob?.cancel()
+                telemetryJob = null
+                core.stop()
+            }
 
             override suspend fun subscribe() = core.subscribe()
 

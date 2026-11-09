@@ -96,7 +96,28 @@ class AgentsRepository
                         }
                         MsgType.AGENTS_UPDATE -> {
                             val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@onEach
-                            if (u.upsert.isNotEmpty()) dao.upsert(u.upsert.map { it.toEntity(relayId) })
+                            if (u.upsert.isNotEmpty()) {
+                                val merged =
+                                    u.upsert.map { s ->
+                                        val prev = dao.get(relayId, s.agentId)
+                                        val entity = s.toEntity(relayId)
+                                        if (prev != null) {
+                                            entity.copy(
+                                                todoCompleted = if (s.todoTotal > 0) s.todoCompleted else prev.todoCompleted,
+                                                todoTotal = if (s.todoTotal > 0) s.todoTotal else prev.todoTotal,
+                                                activeTask =
+                                                    when {
+                                                        s.activeTask != null -> s.activeTask
+                                                        s.status == "working" -> prev.activeTask
+                                                        else -> null
+                                                    },
+                                            )
+                                        } else {
+                                            entity
+                                        }
+                                    }
+                                dao.upsert(merged)
+                            }
                             if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
                         }
                         // `agent.closed` no se escucha a propósito: es un frame del puente hacia el relay

@@ -570,4 +570,40 @@ class ChatReducerTest {
         assertTrue(reconciled.fromMobile)
         assertTrue(s.localSent.isEmpty())
     }
+
+    @Test
+    fun `activeTaskLabel y conteo de todos reflejan tarea en progreso y herramienta corriendo`() {
+        var s = ChatState()
+        s =
+            ChatReducer.reduce(
+                s,
+                ev(
+                    1,
+                    """{"type":"todo_update","tasks":[{"id":1,"title":"Analizar repo","status":"done"},{"id":2,"title":"Escribir tests","status":"in_progress"}]}""",
+                ),
+            )
+        assertEquals(1, s.todoCompletedCount)
+        assertEquals(2, s.todoTotalCount)
+        assertEquals("Escribir tests", s.activeTaskLabel())
+
+        s =
+            ChatReducer.reduce(
+                s,
+                ev(
+                    2,
+                    """{"type":"tool_execution_start","toolCallId":"tc-1","toolName":"edit","args":{"path":"/workspace/src/App.kt","summary":"Update App.kt"}}""",
+                ),
+            )
+        assertEquals("Edit: App.kt", s.activeTaskLabel())
+
+        s =
+            ChatReducer.reduce(
+                s,
+                ev(
+                    3,
+                    """{"type":"tool_execution_start","toolCallId":"tc-2","toolName":"bash","args":{"command":"./gradlew test","toolSummary":"Run unit tests"}}""",
+                ),
+            )
+        assertEquals("Run unit tests", s.activeTaskLabel())
+    }
 }

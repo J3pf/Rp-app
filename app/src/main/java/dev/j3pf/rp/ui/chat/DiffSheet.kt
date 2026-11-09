@@ -15,6 +15,7 @@ fun DiffSheet(
     onDiscardFile: (String) -> Unit,
     onRequestAdjustment: (String) -> Unit,
     onDismiss: () -> Unit,
+    onQuickPrompt: ((String) -> Unit)? = null,
 ) {
     SharedDiffSheet(
         diff = diff,
@@ -27,5 +28,6 @@ fun DiffSheet(
         title = stringResource(R.string.diff_title),
         discardLabel = stringResource(R.string.diff_discard),
         requestAdjustmentLabel = "Pedir ajuste",
+        onQuickPrompt = onQuickPrompt,
     )
 }

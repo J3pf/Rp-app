@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +67,7 @@ fun DiffSheet(
     title: String = "Revisión de cambios",
     discardLabel: String = "Descartar",
     requestAdjustmentLabel: String = "Pedir ajuste",
+    onQuickPrompt: ((String) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var confirmDiscardFile by remember { mutableStateOf<String?>(null) }
@@ -173,6 +175,37 @@ fun DiffSheet(
                     )
                 }
                 return@ModalBottomSheet
+            }
+
+            // Quick workflow actions for the whole diff
+            if (onQuickPrompt != null) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    AssistChip(
+                        onClick = {
+                            onQuickPrompt("Haz commit de los cambios actuales usando conventional commits.")
+                        },
+                        label = { Text("✓ Pedir commit", style = MaterialTheme.typography.labelSmall) },
+                    )
+                    AssistChip(
+                        onClick = {
+                            onQuickPrompt("Haz commit de los cambios actuales usando conventional commits y haz git push.")
+                        },
+                        label = { Text("↑ Commit + Push", style = MaterialTheme.typography.labelSmall) },
+                    )
+                    AssistChip(
+                        onClick = {
+                            onQuickPrompt("Revisa el git diff actual en busca de posibles bugs, regresiones o casos borde.")
+                        },
+                        label = { Text("🔍 Revisar bugs", style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
             }
 
             // File Chips
