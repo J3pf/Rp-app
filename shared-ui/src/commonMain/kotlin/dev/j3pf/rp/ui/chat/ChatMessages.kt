@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -208,10 +209,12 @@ private fun UserBubble(
                     )
                 }
                 if (m.text.isNotBlank()) {
-                    Text(
-                        text = m.text,
-                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = textLineHeight),
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = m.text,
+                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = textLineHeight),
+                        )
+                    }
                 }
                 if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
             }
@@ -384,11 +387,13 @@ private fun ThinkingBlock(
                         textStyleOverride = bodyStyle,
                     )
                 } else {
-                    Text(
-                        text = text,
-                        style = bodyStyle,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = text,
+                            style = bodyStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -555,17 +560,19 @@ private fun Mono(
     maxHeight: Int = 200,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
-        Text(
-            text,
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = maxHeight.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(8.dp),
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp,
-            color = color,
-        )
+        SelectionContainer {
+            Text(
+                text,
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(8.dp),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = color,
+            )
+        }
     }
 }
 
@@ -576,20 +583,22 @@ private fun DiffView(
 ) {
     val lines = remember(old, new) { simpleDiff(old, new) }
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-            lines.forEach { l ->
-                val (bg, mark) =
-                    when (l.kind) {
-                        DiffKind.ADDED -> Color(0x3300C853) to "+ "
-                        DiffKind.REMOVED -> Color(0x33D50000) to "- "
-                        DiffKind.SAME -> Color.Transparent to "  "
-                    }
-                Text(
-                    mark + l.text,
-                    Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                )
+        SelectionContainer {
+            Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                lines.forEach { l ->
+                    val (bg, mark) =
+                        when (l.kind) {
+                            DiffKind.ADDED -> Color(0x3300C853) to "+ "
+                            DiffKind.REMOVED -> Color(0x33D50000) to "- "
+                            DiffKind.SAME -> Color.Transparent to "  "
+                        }
+                    Text(
+                        mark + l.text,
+                        Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                    )
+                }
             }
         }
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -194,110 +195,112 @@ fun RpMarkdown(
             else -> 1.dp
         }
 
-    Markdown(
-        markdownState = markdownState,
-        modifier = modifier,
-        colors =
-            markdownColor(
-                text = baseBody.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface,
-                codeBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
-                inlineCodeBackground = inlineCodeBg,
-                dividerColor = MaterialTheme.colorScheme.outlineVariant,
-                tableBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
-        padding =
-            markdownPadding(
-                block = blockPadding,
-                list = listPadding,
-                listItemTop = listItemPadding,
-                listItemBottom = listItemPadding,
-            ),
-        typography =
-            markdownTypography(
-                h1 =
-                    MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize =
-                            when (spacingMode) {
-                                "compact" -> 15.sp
-                                "spacious" -> 18.sp
-                                else -> 17.sp
-                            },
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 18.sp
-                                "spacious" -> 22.sp
-                                else -> 21.sp
-                            },
-                    ),
-                h2 =
-                    MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize =
-                            when (spacingMode) {
-                                "compact" -> 14.sp
-                                "spacious" -> 16.sp
-                                else -> 15.5.sp
-                            },
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 17.sp
-                                "spacious" -> 20.sp
-                                else -> 19.sp
-                            },
-                    ),
-                h3 =
-                    MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize =
-                            when (spacingMode) {
-                                "compact" -> 13.5.sp
-                                "spacious" -> 15.sp
-                                else -> 14.5.sp
-                            },
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 16.sp
-                                "spacious" -> 19.sp
-                                else -> 18.sp
-                            },
-                    ),
-                h4 =
-                    MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 15.sp
-                                "spacious" -> 18.sp
-                                else -> 17.sp
-                            },
-                    ),
-                h5 =
-                    MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                    ),
-                h6 =
-                    MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                    ),
-                text = baseBody,
-                paragraph = baseBody,
-                bullet = baseBody,
-                ordered = baseBody,
-                list = baseBody,
-                inlineCode =
-                    baseBody.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = (baseBody.fontSize.value * 0.9f).sp,
-                        color = inlineCodeColor,
-                    ),
-                quote = baseBody.copy(fontStyle = FontStyle.Italic),
-            ),
-        components = rememberRpMarkdownComponents(),
-    )
+    SelectionContainer {
+        Markdown(
+            markdownState = markdownState,
+            modifier = modifier,
+            colors =
+                markdownColor(
+                    text = baseBody.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface,
+                    codeBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    inlineCodeBackground = inlineCodeBg,
+                    dividerColor = MaterialTheme.colorScheme.outlineVariant,
+                    tableBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            padding =
+                markdownPadding(
+                    block = blockPadding,
+                    list = listPadding,
+                    listItemTop = listItemPadding,
+                    listItemBottom = listItemPadding,
+                ),
+            typography =
+                markdownTypography(
+                    h1 =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize =
+                                when (spacingMode) {
+                                    "compact" -> 15.sp
+                                    "spacious" -> 18.sp
+                                    else -> 17.sp
+                                },
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 18.sp
+                                    "spacious" -> 22.sp
+                                    else -> 21.sp
+                                },
+                        ),
+                    h2 =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize =
+                                when (spacingMode) {
+                                    "compact" -> 14.sp
+                                    "spacious" -> 16.sp
+                                    else -> 15.5.sp
+                                },
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 17.sp
+                                    "spacious" -> 20.sp
+                                    else -> 19.sp
+                                },
+                        ),
+                    h3 =
+                        MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize =
+                                when (spacingMode) {
+                                    "compact" -> 13.5.sp
+                                    "spacious" -> 15.sp
+                                    else -> 14.5.sp
+                                },
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 16.sp
+                                    "spacious" -> 19.sp
+                                    else -> 18.sp
+                                },
+                        ),
+                    h4 =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 15.sp
+                                    "spacious" -> 18.sp
+                                    else -> 17.sp
+                                },
+                        ),
+                    h5 =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                        ),
+                    h6 =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                        ),
+                    text = baseBody,
+                    paragraph = baseBody,
+                    bullet = baseBody,
+                    ordered = baseBody,
+                    list = baseBody,
+                    inlineCode =
+                        baseBody.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = (baseBody.fontSize.value * 0.9f).sp,
+                            color = inlineCodeColor,
+                        ),
+                    quote = baseBody.copy(fontStyle = FontStyle.Italic),
+                ),
+            components = rememberRpMarkdownComponents(),
+        )
+    }
 }
