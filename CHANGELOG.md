@@ -18,6 +18,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adhe
   - Added `NotificationService` app extension (`ServiceExtension.swift`) decrypting `{k,n,c}` push payloads using `CryptoKit.AES.GCM` (AAD `rp1`), reading `pushKey` and `mutedAgents` from the shared Keychain access group, and deduplicating by `promptId`.
 - **Adaptive Window-Size Layouts**:
   - Added `org.jetbrains.compose.material3.adaptive:adaptive:1.3.0` to `:shared-ui` for phone, tablet, foldable, and iPad layouts.
+- **Chat UX, Moshi Theme & Unified Text Selection**:
+  - Added `Moshi (Verde y Oscuro)` (`moshi-dark`) theme option alongside the existing Cute, Sexy, and Dynamic themes, with theme-tinted tool pill borders, icons, and inline code badges.
+  - Opened `🧠 Razonamiento` blocks by default in inline italic style for immediate reasoning visibility.
+  - Unified chat text selection under a single `SelectionContainer` in `MessageList`, added a code block header bar with language label and one-tap `Copiar` button, and added a `Seleccionar` modal dialog next to `Copiar` on assistant messages.
 
 ### Fixed
 - **Mesh Subscription Deadlock & Wire-Order Inversion (`D-2`)**:
