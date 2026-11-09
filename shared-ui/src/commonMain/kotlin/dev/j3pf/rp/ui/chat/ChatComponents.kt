@@ -60,7 +60,9 @@ import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatItem
+import dev.j3pf.rp.chat.PromptCard
 import dev.j3pf.rp.chat.SubagentCardItem
+import dev.j3pf.rp.chat.SystemNote
 import dev.j3pf.rp.chat.ToolRun
 import dev.j3pf.rp.chat.ToolStatus
 import dev.j3pf.rp.chat.UserMsg
@@ -259,6 +261,78 @@ fun TodoBanner(
     }
 }
 
+fun filterChatItems(
+    displayItems: List<ChatItem>,
+    tools: Map<String, ToolRun> = emptyMap(),
+    searchQuery: String = "",
+    hideToolCalls: Boolean = false,
+): List<ChatItem> {
+    val inlineToolCallIds =
+        displayItems
+            .asSequence()
+            .filterIsInstance<AssistantMsg>()
+            .flatMap { it.blocks.asSequence() }
+            .filterIsInstance<Block.ToolCall>()
+            .mapNotNull { it.toolCallId }
+            .toSet()
+    val deduped =
+        if (inlineToolCallIds.isEmpty()) {
+            displayItems
+        } else {
+            displayItems.filterNot { it is SubagentCardItem && it.info.taskId in inlineToolCallIds }
+        }
+    val afterToolFilter =
+        if (!hideToolCalls) {
+            deduped
+        } else {
+            deduped.mapNotNull { item ->
+                when (item) {
+                    is SubagentCardItem -> null
+                    is AssistantMsg -> {
+                        val nonToolBlocks = item.blocks.filterNot { it is Block.ToolCall }
+                        if (nonToolBlocks.isEmpty() && !item.streaming && item.error == null) {
+                            null
+                        } else {
+                            item.copy(blocks = nonToolBlocks)
+                        }
+                    }
+                    else -> item
+                }
+            }
+        }
+    val q = searchQuery.trim()
+    if (q.isEmpty()) return afterToolFilter
+    return afterToolFilter.filter { item ->
+        when (item) {
+            is UserMsg -> item.text.contains(q, ignoreCase = true)
+            is AssistantMsg -> {
+                val blockMatches =
+                    item.blocks.any { block ->
+                        when (block) {
+                            is Block.Text -> block.text.contains(q, ignoreCase = true)
+                            is Block.Thinking -> block.text.contains(q, ignoreCase = true)
+                            is Block.ToolCall -> {
+                                val run = block.toolCallId?.let { tools[it] }
+                                block.name?.contains(q, ignoreCase = true) == true ||
+                                    run?.result?.contains(q, ignoreCase = true) == true
+                            }
+                        }
+                    }
+                blockMatches || item.error?.contains(q, ignoreCase = true) == true
+            }
+            is PromptCard ->
+                item.prompt.title.contains(q, ignoreCase = true) ||
+                    item.prompt.message?.contains(q, ignoreCase = true) == true
+            is SystemNote ->
+                item.text.contains(q, ignoreCase = true) ||
+                    item.detail?.contains(q, ignoreCase = true) == true
+            is SubagentCardItem ->
+                item.info.agent.contains(q, ignoreCase = true) ||
+                    item.info.taskId.contains(q, ignoreCase = true)
+        }
+    }
+}
+
 @Composable
 fun MessageList(
     displayItems: List<ChatItem>,
@@ -272,6 +346,8 @@ fun MessageList(
     chatMessageSpacing: String = "normal",
     unreadCount: Int = 0,
     busyPromptId: String? = null,
+    searchQuery: String = "",
+    hideToolCalls: Boolean = false,
     onAnswerPrompt: (Prompt, Answer) -> Unit = { _, _ -> },
     onRetryUserMessage: (UserMsg) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
@@ -279,20 +355,8 @@ fun MessageList(
 ) {
     val scope = rememberCoroutineScope()
     val items =
-        remember(displayItems) {
-            val inlineToolCallIds =
-                displayItems
-                    .asSequence()
-                    .filterIsInstance<AssistantMsg>()
-                    .flatMap { it.blocks.asSequence() }
-                    .filterIsInstance<Block.ToolCall>()
-                    .mapNotNull { it.toolCallId }
-                    .toSet()
-            if (inlineToolCallIds.isEmpty()) {
-                displayItems
-            } else {
-                displayItems.filterNot { it is SubagentCardItem && it.info.taskId in inlineToolCallIds }
-            }
+        remember(displayItems, tools, searchQuery, hideToolCalls) {
+            filterChatItems(displayItems, tools, searchQuery, hideToolCalls)
         }
 
     if (items.isEmpty()) {
@@ -313,6 +377,17 @@ fun MessageList(
                 Text("Sincronizando historial…", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Descargando los mensajes recientes de la sesión.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (displayItems.isNotEmpty() && (searchQuery.isNotBlank() || hideToolCalls)) {
+                Text("Sin coincidencias", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (searchQuery.isNotBlank()) {
+                        "No se encontraron mensajes con \"${searchQuery.trim()}\"."
+                    } else {
+                        "Todos los elementos actuales son llamadas a herramientas."
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )

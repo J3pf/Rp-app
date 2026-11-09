@@ -446,10 +446,21 @@ private fun SharedChatScreen(
     val diffLoading by appController.diffLoading.collectAsState()
 
     val agent = agents.firstOrNull { it.agentId == agentId }
+    val otherActiveAgents =
+        remember(agents, agentId) {
+            agents
+                .filter {
+                    it.agentId != agentId &&
+                        it.online &&
+                        (it.status == "waiting_input" || it.status == "working" || it.status == "compacting")
+                }.sortedBy { if (it.status == "waiting_input") 0 else 1 }
+        }
     var text by rememberSaveable(agentId) { mutableStateOf("") }
     var choice by rememberSaveable(agentId) { mutableStateOf(DeliveryChoice.AUTO) }
     var workingDelivery by rememberSaveable(agentId) { mutableStateOf(Delivery.FOLLOW_UP) }
     var showInfo by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable(agentId) { mutableStateOf("") }
+    var hideToolCalls by rememberSaveable(agentId) { mutableStateOf(false) }
 
     val working = chatState.working || agent?.status == "working"
     val muted = agentId in settings.mutedAgents
@@ -479,6 +490,23 @@ private fun SharedChatScreen(
                     onToggleMute = { appController.setAgentMuted(agentId, !muted) },
                     onQuit = { appController.quitAgent(chatSession) },
                     onForget = { appController.requestForgetAgent(agentId) },
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    hideToolCalls = hideToolCalls,
+                    onToggleHideToolCalls = { hideToolCalls = !hideToolCalls },
+                    onSendTerminalCommand = { cmd ->
+                        appController.sendChatMessage(
+                            session = chatSession,
+                            text = cmd,
+                            choice = DeliveryChoice.COMMAND,
+                            workingDelivery = workingDelivery,
+                            working = working,
+                            agent = agent,
+                            onSent = {},
+                        )
+                    },
+                    otherActiveAgents = otherActiveAgents,
+                    onSwitchAgent = { targetId -> appController.navigateTo(ChatRoute(targetId)) },
                 )
                 if (agent?.gentleMode == "auto") {
                     AutoDeliveryBanner()
@@ -538,6 +566,8 @@ private fun SharedChatScreen(
             chatFontScale = settings.chatFontScale,
             chatMessageSpacing = settings.chatMessageSpacing,
             busyPromptId = busyPromptId,
+            searchQuery = searchQuery,
+            hideToolCalls = hideToolCalls,
             onAnswerPrompt = { prompt, answer -> appController.answerPrompt(prompt.promptId, answer) },
             onRetryUserMessage = { userMsg ->
                 val cId = userMsg.clientMsgId ?: userMsg.key.removePrefix("local:")

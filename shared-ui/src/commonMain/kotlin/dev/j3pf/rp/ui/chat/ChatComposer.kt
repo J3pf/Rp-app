@@ -161,7 +161,17 @@ fun ChatComposer(
                         } else if (!lowerTrimmed.contains(" ")) {
                             catalog.commands
                                 .filter { it.startsWith(lowerTrimmed) && it != lowerTrimmed }
-                                .map { cmd -> cmd to "$cmd " }
+                                .map { cmd ->
+                                    val desc = catalog.descriptions[cmd]
+                                    val label = if (desc != null) "$cmd · $desc" else cmd
+                                    val replacement =
+                                        if (catalog.subSuggestions.containsKey(cmd) && cmd != "/term") {
+                                            "$cmd "
+                                        } else {
+                                            cmd
+                                        }
+                                    label to replacement
+                                }
                         } else {
                             emptyList()
                         }
@@ -179,14 +189,14 @@ fun ChatComposer(
                     suggestions.forEach { (label, replacement) ->
                         SuggestionChip(
                             onClick = { onTextChange(replacement) },
-                            label = { Text(label) },
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
                             shape = RoundedCornerShape(999.dp),
                         )
                     }
                 }
             }
             val isHerdrAgent = agent?.herdr != null || (agent != null && agent.launcher != "pi")
-            val showQuickShortcuts = showShortcuts && text.isEmpty() && attachments.isEmpty()
+            val showQuickShortcuts = showShortcuts && !isSlashText && attachments.isEmpty()
             if (!isHerdrAgent || isSlashText || showQuickShortcuts) {
                 val composerScrollState = rememberScrollState()
                 Row(
@@ -266,6 +276,7 @@ fun ChatComposer(
                     }
                     if (showQuickShortcuts) {
                         catalog.quickShortcuts.forEach { cmd ->
+                            val desc = catalog.descriptions[cmd]
                             Surface(
                                 shape = RoundedCornerShape(999.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
@@ -275,11 +286,17 @@ fun ChatComposer(
                                         .clip(RoundedCornerShape(999.dp))
                                         .clickable {
                                             showShortcuts = false
-                                            onTextChange("$cmd ")
+                                            val replacement =
+                                                if (catalog.subSuggestions.containsKey(cmd) && cmd != "/term") {
+                                                    "$cmd "
+                                                } else {
+                                                    cmd
+                                                }
+                                            onTextChange(replacement)
                                         },
                             ) {
                                 Text(
-                                    text = cmd,
+                                    text = if (desc != null) "$cmd · $desc" else cmd,
                                     style =
                                         MaterialTheme.typography.labelSmall.copy(
                                             fontFamily = FontFamily.Monospace,

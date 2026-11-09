@@ -2,6 +2,7 @@ package dev.j3pf.rp.ui.chat
 
 import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
+import dev.j3pf.rp.chat.SubagentCardItem
 import dev.j3pf.rp.chat.ToolRun
 import dev.j3pf.rp.chat.ToolStatus
 import dev.j3pf.rp.chat.UserMsg
@@ -42,6 +43,41 @@ class ChatMessagesTest {
         val gentleAgent = AgentSummary(agentId = "m1:5", machineId = "m1", launcher = "gentle-shell")
         assertEquals(SlashCommandCatalogs.GENTLE_SHELL, SlashCommandCatalogs.resolve(gentleAgent))
         assertTrue(SlashCommandCatalogs.GENTLE_SHELL.commands.contains("/mode"))
+        assertTrue(SlashCommandCatalogs.ANTIGRAVITY.commands.contains("/term"))
+        assertEquals("Terminal en vivo", SlashCommandCatalogs.ANTIGRAVITY.descriptions["/term"])
+        assertTrue(SlashCommandCatalogs.ANTIGRAVITY.subSuggestions["/term"]?.contains("enter") == true)
+    }
+
+    @Test
+    fun testFilterChatItemsHideToolsAndSearch() {
+        val u1 = UserMsg(key = "u1", text = "Revisar rendimiento de red")
+        val aToolsOnly =
+            AssistantMsg(
+                key = "a1",
+                blocks = listOf(Block.ToolCall(toolCallId = "t1", name = "bash")),
+            )
+        val aMixed =
+            AssistantMsg(
+                key = "a2",
+                blocks =
+                    listOf(
+                        Block.ToolCall(toolCallId = "t2", name = "read_file"),
+                        Block.Text("La latencia bajó un 40%"),
+                    ),
+            )
+        val sub = SubagentCardItem(key = "s1", info = SubagentInfo(taskId = "s1", agent = "explore"))
+        val all = listOf(u1, aToolsOnly, aMixed, sub)
+
+        val messagesOnly = filterChatItems(all, hideToolCalls = true)
+        assertEquals(2, messagesOnly.size)
+        assertEquals("u1", messagesOnly[0].key)
+        val filteredAssistant = messagesOnly[1] as AssistantMsg
+        assertEquals(1, filteredAssistant.blocks.size)
+        assertEquals("La latencia bajó un 40%", (filteredAssistant.blocks[0] as Block.Text).text)
+
+        val searched = filterChatItems(all, searchQuery = "latencia")
+        assertEquals(1, searched.size)
+        assertEquals("a2", searched[0].key)
     }
 
     @Test

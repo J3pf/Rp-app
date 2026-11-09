@@ -87,6 +87,8 @@ fun ChatContent(
     onSwitchToNormal: () -> Unit = {},
     onRetryUserMessage: (UserMsg) -> Unit = {},
     onOpenDiff: () -> Unit = {},
+    onSendTerminalCommand: ((String) -> Unit)? = null,
+    onSwitchAgent: (String) -> Unit = {},
     busyPromptId: String? = null,
     listState: androidx.compose.foundation.lazy.LazyListState =
         androidx.compose.foundation.lazy
@@ -98,6 +100,8 @@ fun ChatContent(
     val agent = ui.agent
     val working = ui.sending || agent?.status == "working" || ui.chat.working
     var showInfo by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var hideToolCalls by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets =
@@ -124,6 +128,13 @@ fun ChatContent(
                 onToggleMute = onToggleMute,
                 onQuit = onQuit,
                 onForget = onForget,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                hideToolCalls = hideToolCalls,
+                onToggleHideToolCalls = { hideToolCalls = !hideToolCalls },
+                onSendTerminalCommand = onSendTerminalCommand,
+                otherActiveAgents = ui.otherActiveAgents,
+                onSwitchAgent = onSwitchAgent,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -164,6 +175,8 @@ fun ChatContent(
                     ui = ui,
                     modifier = Modifier.fillMaxSize(),
                     busyPromptId = busyPromptId,
+                    searchQuery = searchQuery,
+                    hideToolCalls = hideToolCalls,
                     onAnswerPrompt = onAnswerPrompt,
                     onRetryUserMessage = onRetryUserMessage,
                     listState = listState,
@@ -216,6 +229,7 @@ fun ChatContent(
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
+    onSwitchAgent: (String) -> Unit = {},
     readOnly: Boolean = false,
     vm: ChatViewModel = hiltViewModel(),
     promptVm: PromptSheetViewModel = hiltViewModel(),
@@ -341,6 +355,8 @@ fun ChatScreen(
         onSwitchToNormal = vm::switchToNormal,
         onRetryUserMessage = vm::retryUserMessage,
         onOpenDiff = vm::openDiffSheet,
+        onSendTerminalCommand = vm::sendTerminalCommand,
+        onSwitchAgent = onSwitchAgent,
         busyPromptId = busyPrompt,
         snackbarHostState = snackbar,
         voiceInputHost = voiceInputHost,
@@ -369,6 +385,8 @@ internal fun MessageList(
     ui: ChatUiState,
     modifier: Modifier,
     busyPromptId: String?,
+    searchQuery: String = "",
+    hideToolCalls: Boolean = false,
     onAnswerPrompt: (dev.j3pf.rp.protocol.Prompt, dev.j3pf.rp.protocol.Answer) -> Unit,
     onRetryUserMessage: (UserMsg) -> Unit = {},
     listState: androidx.compose.foundation.lazy.LazyListState =
@@ -394,6 +412,8 @@ internal fun MessageList(
         chatMessageSpacing = ui.chatMessageSpacing,
         unreadCount = ui.unreadCount,
         busyPromptId = busyPromptId,
+        searchQuery = searchQuery,
+        hideToolCalls = hideToolCalls,
         onAnswerPrompt = onAnswerPrompt,
         onRetryUserMessage = onRetryUserMessage,
         listState = listState,

@@ -281,7 +281,7 @@ class NotificationFactory
             nm.notify(SIMPLE_TAG, id, n)
         }
 
-        /** Agente en ejecución: notificación ongoing con cronómetro y barra de progreso indeterminada. */
+        /** Agente en ejecución: notificación ongoing con cronómetro y barra de progreso real o indeterminada. */
         @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         suspend fun showWorking(agent: dev.j3pf.rp.protocol.AgentSummary) {
             if (!canNotify()) return
@@ -291,9 +291,20 @@ class NotificationFactory
             val id = stableId("working:${agent.agentId}")
             val label = agentTitle(agent.sessionName, agent.cwd, agent.agentId)
             val title = "${contextEmoji(agent.machineContext)} $machineName · $label"
-            val text = agent.activeTask ?: context.getString(R.string.agent_working_desc)
+            val hasTodos = agent.todoTotal > 0
+            val doneTodos = if (hasTodos) agent.todoCompleted.coerceIn(0, agent.todoTotal) else 0
+            val baseTask =
+                agent.activeTask?.takeIf { it.isNotBlank() }
+                    ?: agent.lastMessagePreview?.takeIf { it.isNotBlank() }?.let { truncate(it, 100) }
+            val text =
+                if (hasTodos) {
+                    val prefix = "Tareas: $doneTodos/${agent.todoTotal}"
+                    if (baseTask != null) "$prefix · $baseTask" else prefix
+                } else {
+                    baseTask ?: context.getString(R.string.agent_working_desc)
+                }
             val branch = agent.gitBranch?.takeIf { it.isNotBlank() }.orEmpty()
-            val signature = "$channel|$title|$text|$branch"
+            val signature = "$channel|$title|$text|$branch|$doneTodos/${agent.todoTotal}"
             if (workingSignatures[agent.agentId] == signature && isWorkingNotificationActive(id)) return
 
             channels.ensureMachine(machineId, machineName, agent.machineContext)
@@ -310,7 +321,7 @@ class NotificationFactory
                     .setOngoing(true)
                     .setSilent(true)
                     .setOnlyAlertOnce(true)
-                    .setProgress(0, 0, true)
+                    .setProgress(if (hasTodos) agent.todoTotal else 0, doneTodos, !hasTodos)
                     .setUsesChronometer(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setCategory(NotificationCompat.CATEGORY_PROGRESS)

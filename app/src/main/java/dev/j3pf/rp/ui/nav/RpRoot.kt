@@ -282,7 +282,18 @@ fun RpRoot(
                 composable<ChatRoute> { entry ->
                     val agentId = entry.toRoute<ChatRoute>().agentId
                     val readOnly = nav.previousBackStackEntry?.savedStateHandle?.get<String>(ARCHIVED_READ_ONLY_AGENT) == agentId
-                    ChatScreen(onBack = { nav.popBackStack() }, readOnly = readOnly)
+                    ChatScreen(
+                        onBack = { nav.popBackStack() },
+                        onSwitchAgent = { targetId ->
+                            if (targetId != agentId) {
+                                nav.navigate(ChatRoute(targetId)) {
+                                    popUpTo<ChatRoute> { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        readOnly = readOnly,
+                    )
                 }
                 composable<NewAgentRoute> { NewAgentScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack() }) }
                 composable<DevicesRoute> { DevicesScreen(onBack = { nav.popBackStack() }) }

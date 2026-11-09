@@ -23,6 +23,7 @@ import dev.j3pf.rp.data.repo.LocalAttachment
 import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.repo.UploadState
+import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
@@ -39,6 +40,7 @@ import javax.inject.Inject
 
 data class ChatUiState(
     val agent: AgentSummary? = null,
+    val otherActiveAgents: List<AgentSummary> = emptyList(),
     val chat: ChatState = ChatState(),
     val conn: ConnState = ConnState.Disconnected,
     val attachments: List<AttachmentUi> = emptyList(),
@@ -90,15 +92,27 @@ class ChatViewModel
         val state: StateFlow<ChatUiState> =
             combine(
                 combine(session.state, session.syncing, ::Pair),
-                agentsRepo.observe(agentId),
+                combine(agentsRepo.observe(agentId), agentsRepo.agents, ::Pair),
                 connection.state,
                 extra,
                 settingsRepo.settings,
-            ) { (chat, syncing), agent, conn, e, st ->
+            ) { (chat, syncing), (agent, allAgents), conn, e, st ->
+                val siblings =
+                    allAgents
+                        .filter {
+                            it.agentId != agentId &&
+                                it.online &&
+                                (
+                                    it.status == AgentStatus.WAITING_INPUT ||
+                                        it.status == AgentStatus.WORKING ||
+                                        it.status == AgentStatus.COMPACTING
+                                )
+                        }.sortedBy { if (it.status == AgentStatus.WAITING_INPUT) 0 else 1 }
                 e.copy(
                     chat = chat,
                     syncingHistory = syncing,
                     agent = agent,
+                    otherActiveAgents = siblings,
                     conn = conn,
                     muted = agentId in st.mutedAgents,
                     chatFontScale = st.chatFontScale,
@@ -201,6 +215,13 @@ class ChatViewModel
             viewModelScope.launch {
                 session.send("/quit", emptyList(), Delivery.AUTO, DeliveryMethod.AUTO, asCommand = true)
                 onDone()
+            }
+        }
+
+        /** Sends a terminal inspection or control command (such as `/term` or `/term enter`). */
+        fun sendTerminalCommand(cmd: String) {
+            viewModelScope.launch {
+                session.send(cmd, emptyList(), Delivery.AUTO, DeliveryMethod.AUTO, asCommand = true)
             }
         }
 
