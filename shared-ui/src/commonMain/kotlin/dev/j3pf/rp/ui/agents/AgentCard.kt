@@ -312,9 +312,9 @@ fun AgentCard(
                     }
                 }
 
-                if (!a.online) {
+                if (!a.online || !a.herdr?.paneId.isNullOrBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (canResume) {
+                        if (!a.online && canResume) {
                             IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
                                 Icon(
                                     Icons.Filled.PlayArrow,
@@ -333,7 +333,7 @@ fun AgentCard(
                                 )
                             }
                             DropdownMenu(expanded = menu, onDismissRequest = { setMenu(false) }) {
-                                if (canResume) {
+                                if (!a.online && canResume) {
                                     DropdownMenuItem(
                                         text = { Text("Reanudar agente (/resume)") },
                                         onClick = {
@@ -343,7 +343,12 @@ fun AgentCard(
                                     )
                                 }
                                 DropdownMenuItem(
-                                    text = { Text("Olvidar agente", color = MaterialTheme.colorScheme.error) },
+                                    text = {
+                                        Text(
+                                            if (a.online) "Cerrar agente" else "Olvidar agente",
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
                                     onClick = {
                                         setMenu(false)
                                         onForget()

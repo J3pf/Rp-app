@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -90,10 +91,31 @@ class AgentsRepository
                 }.launchIn(scope)
         }
 
-        /** Cierra el pane de Herdr; cuando no hay pane vinculado, archiva el historial con `agent.forget`. */
+        /** Cierra el pane de Herdr; cuando no hay pane vinculado (o cuando otro agente activo ocupa el mismo pane), archiva el historial con `agent.forget`. */
         override suspend fun close(agentId: String): CloseOutcome {
             val relayId = secrets.current()?.relayId ?: return CloseOutcome.Failed("Sin sesión con el relay")
             val ref = AgentRef(agentId)
+            val target = dao.get(relayId, agentId)
+            val sharedActivePane =
+                if (target != null && !target.online && !target.herdrPaneId.isNullOrBlank()) {
+                    agents.firstOrNull()?.any { other ->
+                        other.agentId != agentId &&
+                            other.machineId == target.machineId &&
+                            other.online &&
+                            other.herdr?.paneId == target.herdrPaneId
+                    } == true
+                } else {
+                    false
+                }
+            if (sharedActivePane) {
+                return when (connection.request(Envelope.of(MsgType.AGENT_FORGET, ref, id = Ulid.new()))) {
+                    is WsReply.Ok -> {
+                        dao.delete(relayId, listOf(agentId))
+                        CloseOutcome.Archived
+                    }
+                    else -> CloseOutcome.Failed("No se pudo archivar el agente")
+                }
+            }
             return when (val reply = connection.request(Envelope.of(MsgType.AGENT_CLOSE, ref, id = Ulid.new()))) {
                 is WsReply.Ok -> {
                     dao.delete(relayId, listOf(agentId))

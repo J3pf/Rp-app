@@ -69,6 +69,7 @@ import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.TodoItem
+import dev.j3pf.rp.ui.agents.cleanHerdrTabId
 import dev.j3pf.rp.ui.components.TagChip
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
@@ -147,7 +148,7 @@ fun InfoDialog(
                     "Modelo" to (liveModel ?: agent.model?.label),
                     "Razonamiento" to liveThinking,
                     "Lanzador" to agent.launcher,
-                    "herdr" to agent.herdr?.let { listOfNotNull(it.workspaceId, it.tabId, it.paneId).joinToString(" / ") },
+                    "herdr" to agent.herdr?.let { listOfNotNull(it.workspaceId, cleanHerdrTabId(it.tabId), it.paneId).joinToString(" / ") },
                     "Modo gentle" to agent.gentleMode,
                     "Id" to agent.agentId,
                 ).forEach { (k, v) ->

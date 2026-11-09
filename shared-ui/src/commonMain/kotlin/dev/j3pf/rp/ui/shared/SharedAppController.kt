@@ -789,6 +789,30 @@ class SharedAppController(
     ) {
         scope.launch {
             val ref = AgentRef(agentId)
+            val target = _agents.value.firstOrNull { it.agentId == agentId }
+            val targetPaneId = target?.herdr?.paneId
+            val sharedActivePane =
+                target != null &&
+                    !target.online &&
+                    !targetPaneId.isNullOrBlank() &&
+                    _agents.value.any { other ->
+                        other.agentId != agentId &&
+                            other.machineId == target.machineId &&
+                            other.online &&
+                            other.herdr?.paneId == targetPaneId
+                    }
+            if (sharedActivePane) {
+                when (wsClient.request(Envelope.of(MsgType.AGENT_FORGET, ref, id = newId()))) {
+                    is WsReply.Ok -> {
+                        _agents.update { list -> list.filterNot { it.agentId == agentId } }
+                        onClosed()
+                    }
+                    else -> {
+                        _actionMessage.value = "No se pudo archivar el agente"
+                    }
+                }
+                return@launch
+            }
             when (val reply = wsClient.request(Envelope.of(MsgType.AGENT_CLOSE, ref, id = newId()))) {
                 is WsReply.Ok -> {
                     _agents.update { list -> list.filterNot { it.agentId == agentId } }

@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.agents
 
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.HerdrInfo
 import dev.j3pf.rp.protocol.MachineSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -122,5 +123,43 @@ class AgentsModelsTest {
 
         val noMatch = filterAgentGroups(groups, SessionQuickFilter.ALL, "nonexistent")
         assertTrue(noMatch.isEmpty())
+    }
+
+    @Test
+    fun sortAgentsWithinGroupPreservesExactHerdrVisualOrderWithoutJumping() {
+        val ws1Idle =
+            AgentSummary(
+                agentId = "m1:herdr:ws1",
+                machineId = "m-1",
+                online = true,
+                status = "idle",
+                openPromptCount = 0,
+                lastSeenAt = 100L,
+                herdr = HerdrInfo(paneId = "w1:p1", tabId = "#0001|w1:t1", workspaceId = "w1"),
+            )
+        val ws2Working =
+            AgentSummary(
+                agentId = "m1:herdr:ws2",
+                machineId = "m-1",
+                online = true,
+                status = "working",
+                openPromptCount = 2,
+                lastSeenAt = 9_999L,
+                herdr = HerdrInfo(paneId = "w2:p1", tabId = "#0002|w2:t1", workspaceId = "w2"),
+            )
+        val ws3IdleRecent =
+            AgentSummary(
+                agentId = "m1:herdr:ws3",
+                machineId = "m-1",
+                online = true,
+                status = "idle",
+                openPromptCount = 0,
+                lastSeenAt = 5_000L,
+                herdr = HerdrInfo(paneId = "w3:p1", tabId = "#0003|w3:t1", workspaceId = "w3"),
+            )
+
+        val sorted = sortAgentsWithinGroup(listOf(ws3IdleRecent, ws2Working, ws1Idle))
+        assertEquals(listOf("m1:herdr:ws1", "m1:herdr:ws2", "m1:herdr:ws3"), sorted.map { it.agentId })
+        assertEquals("w1:t1", cleanHerdrTabId(ws1Idle.herdr?.tabId))
     }
 }
