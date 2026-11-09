@@ -2,6 +2,7 @@ package dev.j3pf.rp.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -34,6 +35,7 @@ object AppModule {
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
             .pingInterval(25, TimeUnit.SECONDS)
+            .minWebSocketMessageToCompress(1024L)
             .retryOnConnectionFailure(true)
             .build()
 
@@ -44,6 +46,7 @@ object AppModule {
     ): RpDatabase =
         Room
             .databaseBuilder(ctx, RpDatabase::class.java, "rp.db")
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()

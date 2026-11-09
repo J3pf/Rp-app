@@ -245,4 +245,89 @@ class ChatMessageDispatcherTest {
             dispatcher.dispatch(Envelope.of(MsgType.USER_MESSAGE_ACK, ack))
             // applied without throwing
         }
+
+    @Test
+    fun coalescesBurstMessageDeltasWithinFrameWindowAndFlushesBeforeMessageEnd() =
+        runTest {
+            val state = MutableStateFlow(ChatState(epoch = "E1"))
+            var uiUpdateCalls = 0
+            var clockMs = 1_000L
+
+            val dispatcher =
+                ChatMessageDispatcher(
+                    agentId = "my-agent",
+                    getState = { state.value },
+                    updateState = { transform: (ChatState) -> ChatState ->
+                        uiUpdateCalls++
+                        state.update(transform)
+                    },
+                    onHistory = { _: AgentHistory, _: Boolean -> },
+                    onPersistEvent = {},
+                    onResyncNeeded = {},
+                    onHistoryApplied = {},
+                    onSyncingResolved = {},
+                    now = { clockMs },
+                    scope = this,
+                    frameBatchMs = 32L,
+                )
+
+            fun deltaEnv(
+                seq: Long,
+                delta: String,
+            ) = Envelope.of(
+                MsgType.AGENT_EVENT,
+                AgentEvent(
+                    seq = seq,
+                    epoch = "E1",
+                    agentId = "my-agent",
+                    e =
+                        JsonObject(
+                            mapOf(
+                                "type" to JsonPrimitive("message_delta"),
+                                "contentIndex" to JsonPrimitive(0),
+                                "kind" to JsonPrimitive("text"),
+                                "delta" to JsonPrimitive(delta),
+                            ),
+                        ),
+                ),
+            )
+
+            // First delta emits immediately (leading edge = 0ms latency)
+            dispatcher.dispatch(deltaEnv(1L, "Hola"))
+            assertEquals(1, uiUpdateCalls)
+            assertEquals("Hola", state.value.streaming?.plainText)
+
+            // Subsequent deltas within 32ms are buffered without triggering UI updates
+            clockMs = 1_005L
+            dispatcher.dispatch(deltaEnv(2L, " "))
+            clockMs = 1_010L
+            dispatcher.dispatch(deltaEnv(3L, "mundo"))
+            assertEquals(1, uiUpdateCalls, "Burst deltas within 32ms must not emit separate UI updates")
+
+            // A non-delta event (message_end) flushes pending deltas immediately before applying
+            clockMs = 1_015L
+            val endEvent =
+                AgentEvent(
+                    seq = 4L,
+                    epoch = "E1",
+                    agentId = "my-agent",
+                    e =
+                        JsonObject(
+                            mapOf(
+                                "type" to JsonPrimitive("message_end"),
+                                "message" to
+                                    JsonObject(
+                                        mapOf(
+                                            "role" to JsonPrimitive("assistant"),
+                                            "timestamp" to JsonPrimitive(1_015L),
+                                            "content" to JsonPrimitive("Hola mundo!"),
+                                        ),
+                                    ),
+                            ),
+                        ),
+                )
+            dispatcher.dispatch(Envelope.of(MsgType.AGENT_EVENT, endEvent))
+            assertNull(state.value.streaming)
+            assertEquals(4L, state.value.lastSeq)
+        }
 }

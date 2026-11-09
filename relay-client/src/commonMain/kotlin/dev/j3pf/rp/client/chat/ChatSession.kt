@@ -61,6 +61,7 @@ class ChatSession(
             onHistoryApplied = { syncPolicy.onHistoryReceived() },
             onSyncingResolved = { _syncing.value = false },
             now = now,
+            scope = scope,
         )
 
     fun start() {
@@ -78,6 +79,7 @@ class ChatSession(
     }
 
     fun stop() {
+        dispatcher.flushPending()
         job?.cancel()
         job = null
         syncPolicy.cancelSyncTimeout()

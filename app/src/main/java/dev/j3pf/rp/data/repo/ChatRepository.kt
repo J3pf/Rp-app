@@ -132,12 +132,16 @@ class ChatRepository
                     val records = chatDao.records(relayId, agentId)
                     if (records.isEmpty()) return null
                     var s = ChatState()
+                    val entryRecords = records.filter { it.kind == RecordKind.ENTRY }
                     val entries =
-                        records
-                            .filter { it.kind == RecordKind.ENTRY }
+                        entryRecords
                             .mapNotNull { runCatching { RpJson.decodeFromString(Entry.serializer(), it.json) }.getOrNull() }
                     val epoch = records.lastOrNull { it.epoch != null }?.epoch
-                    if (entries.isNotEmpty()) s = ChatReducer.applyEntries(s, entries, epoch)
+                    if (entries.isNotEmpty()) {
+                        val maxEntrySeq = entryRecords.maxOfOrNull { it.seq } ?: 0L
+                        s = ChatReducer.applyEntries(s, entries, epoch)
+                        if (maxEntrySeq > s.lastSeq) s = s.copy(lastSeq = maxEntrySeq)
+                    }
                     for (r in records.filter { it.kind == RecordKind.EVENT }.sortedBy { it.seq }) {
                         val ev = runCatching { RpJson.decodeFromString(AgentEvent.serializer(), r.json) }.getOrNull() ?: continue
                         s = ChatReducer.reduce(s, ev)
@@ -153,6 +157,7 @@ class ChatRepository
                     val relayId = secrets.current()?.relayId ?: return
                     if (epochChanged) chatDao.clearAgent(relayId, agentId)
                     if (history.entries.isNotEmpty()) {
+                        val snapshotSeq = ((history.liveFromSeq ?: 0L) - 1L).coerceAtLeast(0L)
                         chatDao.deleteKind(relayId, agentId, RecordKind.ENTRY)
                         chatDao.insert(
                             history.entries.map {
@@ -161,7 +166,7 @@ class ChatRepository
                                     agentId = agentId,
                                     kind = RecordKind.ENTRY,
                                     epoch = history.epoch,
-                                    seq = 0,
+                                    seq = snapshotSeq,
                                     json = RpJson.encodeToString(Entry.serializer(), it),
                                 )
                             },

@@ -1,6 +1,7 @@
 package dev.j3pf.rp.client.chat
 
 import dev.j3pf.rp.chat.ChatState
+import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.protocol.AgentSubscribe
 import dev.j3pf.rp.protocol.Envelope
@@ -48,6 +49,40 @@ class ChatSyncPolicyTest {
             assertEquals("agent-1", sub.agentId)
             assertEquals(42L, sub.sinceSeq)
             assertEquals("epoch-1", sub.epoch)
+        }
+
+    @Test
+    fun subscribesWithZeroSinceSeqWhenSnapshotItemsExistAtSeqZero() =
+        runTest {
+            val requests = mutableListOf<Envelope>()
+            val state =
+                ChatState(
+                    lastSeq = 0L,
+                    epoch = "epoch-herdr",
+                    items = listOf(UserMsg(key = "eid1", text = "hola")),
+                )
+            val isSyncing = MutableStateFlow(false)
+
+            val policy =
+                ChatSyncPolicy(
+                    agentId = "agent-1",
+                    scope = this,
+                    requestWs = { env ->
+                        requests.add(env)
+                        WsReply.Ok(Envelope(t = "ok", re = env.id))
+                    },
+                    newId = { "test-id" },
+                    getState = { state },
+                    isSyncing = { isSyncing.value },
+                    setSyncing = { isSyncing.value = it },
+                )
+
+            policy.subscribe()
+
+            assertEquals(1, requests.size)
+            val sub = requests[0].body<AgentSubscribe>()
+            assertEquals(0L, sub.sinceSeq)
+            assertEquals("epoch-herdr", sub.epoch)
         }
 
     @Test

@@ -36,10 +36,16 @@ class ChatSyncPolicy(
             }
         val st = getState()
         if (st.items.isEmpty()) setSyncing(true)
+        val sinceSeq =
+            when {
+                st.lastSeq > 0 -> st.lastSeq
+                st.epoch != null && st.items.isNotEmpty() -> 0L
+                else -> null
+            }
         val req =
             Envelope.of(
                 MsgType.AGENT_SUBSCRIBE,
-                AgentSubscribe(agentId, st.lastSeq.takeIf { it > 0 }, st.epoch),
+                AgentSubscribe(agentId, sinceSeq, st.epoch),
                 id = newId(),
             )
         var attempts = 0

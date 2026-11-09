@@ -375,7 +375,7 @@ fun MessageList(
             if (!listState.isScrollInProgress) {
                 if (isNewItem) {
                     listState.animateScrollToItem(0)
-                } else if (!isScrolledUp) {
+                } else if (!isScrolledUp && (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)) {
                     listState.scrollToItem(0)
                 }
             }
@@ -482,8 +482,9 @@ fun MessageList(
                         contentType = { it::class.simpleName },
                     ) { item ->
                         val reducedMotion = LocalReducedMotion.current
+                        val isStreamingItem = item is AssistantMsg && item.streaming
                         val itemModifier =
-                            if (reducedMotion) {
+                            if (reducedMotion || isStreamingItem) {
                                 Modifier
                             } else {
                                 Modifier.animateItem(
