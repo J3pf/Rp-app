@@ -164,12 +164,7 @@ fun ChatComposer(
                                 .map { cmd ->
                                     val desc = catalog.descriptions[cmd]
                                     val label = if (desc != null) "$cmd · $desc" else cmd
-                                    val replacement =
-                                        if (catalog.subSuggestions.containsKey(cmd) && cmd != "/term") {
-                                            "$cmd "
-                                        } else {
-                                            cmd
-                                        }
+                                    val replacement = if (cmd == "/term") cmd else "$cmd "
                                     label to replacement
                                 }
                         } else {
@@ -286,12 +281,7 @@ fun ChatComposer(
                                         .clip(RoundedCornerShape(999.dp))
                                         .clickable {
                                             showShortcuts = false
-                                            val replacement =
-                                                if (catalog.subSuggestions.containsKey(cmd) && cmd != "/term") {
-                                                    "$cmd "
-                                                } else {
-                                                    cmd
-                                                }
+                                            val replacement = if (cmd == "/term") cmd else "$cmd "
                                             onTextChange(replacement)
                                         },
                             ) {

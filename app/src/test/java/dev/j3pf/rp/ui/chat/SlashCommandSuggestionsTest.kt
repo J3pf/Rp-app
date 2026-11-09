@@ -43,8 +43,8 @@ class SlashCommandSuggestionsTest {
             }
         }
 
-        rule.onNodeWithText("/thinking").assertIsDisplayed()
-        rule.onNodeWithText("/thinking").performClick()
+        rule.onNodeWithText("/thinking", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("/thinking", substring = true).performClick()
         rule.waitForIdle()
 
         assertEquals("/thinking ", currentText)
@@ -159,8 +159,8 @@ class SlashCommandSuggestionsTest {
             }
         }
 
-        rule.onNodeWithText("/model").assertIsDisplayed()
-        rule.onNodeWithText("/model").performClick()
+        rule.onNodeWithText("/model", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("/model", substring = true).performClick()
         rule.waitForIdle()
 
         assertEquals("/model ", currentText)
@@ -217,8 +217,8 @@ class SlashCommandSuggestionsTest {
         }
 
         rule.onNodeWithText("⚡ Comando Antigravity (/)").assertIsDisplayed()
-        rule.onNodeWithText("/goal").assertIsDisplayed()
-        rule.onNodeWithText("/goal").performClick()
+        rule.onNodeWithText("/goal", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("/goal", substring = true).performClick()
         rule.waitForIdle()
 
         assertEquals("/goal ", currentText)
@@ -247,8 +247,8 @@ class SlashCommandSuggestionsTest {
         }
 
         rule.onNodeWithText("⚡ Comando Antigravity (/)").assertIsDisplayed()
-        rule.onNodeWithText("/usage").assertIsDisplayed()
-        rule.onNodeWithText("/usage").performClick()
+        rule.onNodeWithText("/usage", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("/usage", substring = true).performClick()
         rule.waitForIdle()
 
         assertEquals("/usage ", currentText)
@@ -277,8 +277,8 @@ class SlashCommandSuggestionsTest {
         }
 
         rule.onNodeWithText("⚡ Comando Claude (/)").assertIsDisplayed()
-        rule.onNodeWithText("/review").assertIsDisplayed()
-        rule.onNodeWithText("/review").performClick()
+        rule.onNodeWithText("/review", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("/review", substring = true).performClick()
         rule.waitForIdle()
 
         assertEquals("/review ", currentText)
@@ -307,8 +307,8 @@ class SlashCommandSuggestionsTest {
         }
 
         rule.onNodeWithText("⚡ Comando Codex (/)").assertIsDisplayed()
-        rule.onNodeWithText("/review").assertIsDisplayed()
-        rule.onNodeWithText("/review").performClick()
+        rule.onNodeWithText("/review", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("/review", substring = true).performClick()
         rule.waitForIdle()
 
         assertEquals("/review ", currentText)
