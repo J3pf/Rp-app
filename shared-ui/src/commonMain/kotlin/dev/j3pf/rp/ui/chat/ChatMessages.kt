@@ -244,12 +244,16 @@ private fun AssistantBubble(
     var copied by remember(m.key) { mutableStateOf(false) }
     var showSelectDialog by remember(m.key) { mutableStateOf(false) }
     val combinedText =
-        remember(m.blocks) {
-            m.blocks
-                .filterIsInstance<Block.Text>()
-                .map { it.text.trim() }
-                .filter { it.isNotEmpty() }
-                .joinToString("\n\n")
+        remember(m.streaming, m.blocks) {
+            if (m.streaming) {
+                ""
+            } else {
+                m.blocks
+                    .filterIsInstance<Block.Text>()
+                    .map { it.text.trim() }
+                    .filter { it.isNotEmpty() }
+                    .joinToString("\n\n")
+            }
         }
 
     if (showSelectDialog) {

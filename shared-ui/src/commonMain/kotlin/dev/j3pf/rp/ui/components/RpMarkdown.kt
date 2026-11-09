@@ -57,6 +57,7 @@ import dev.snipme.highlights.model.SyntaxLanguage
 import dev.snipme.highlights.model.SyntaxThemes
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 val LocalHighlightDispatcher = compositionLocalOf<CoroutineDispatcher> { Dispatchers.Default }
@@ -71,6 +72,12 @@ fun HighlightedCode(
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val dispatcher = LocalHighlightDispatcher.current
+    val highlightPassCount =
+        remember {
+            object {
+                var count = 0
+            }
+        }
     val annotatedString by
         produceState(
             initialValue = buildAnnotatedString { append(code) },
@@ -79,6 +86,10 @@ fun HighlightedCode(
             isDark,
             dispatcher,
         ) {
+            if (dispatcher === Dispatchers.Default && highlightPassCount.count > 0) {
+                delay(120L)
+            }
+            highlightPassCount.count++
             value =
                 withContext(dispatcher) {
                     val syntaxLanguage = language?.let { SyntaxLanguage.getByName(it) }

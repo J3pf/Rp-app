@@ -433,7 +433,7 @@ fun MessageList(
 
     val lastItem = items.lastOrNull()
     val lastItemKey = lastItem?.key
-    val streamingTextLength = (lastItem as? AssistantMsg)?.plainText?.length ?: 0
+    val streamingTextLength = (lastItem as? AssistantMsg)?.plainTextLength ?: 0
 
     val prevItemsSize =
         remember {

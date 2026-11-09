@@ -60,6 +60,8 @@ data class AssistantMsg(
     val error: String? = null,
 ) : ChatItem {
     val plainText: String get() = blocks.filterIsInstance<Block.Text>().joinToString("\n") { it.text }
+
+    val plainTextLength: Int get() = blocks.sumOf { if (it is Block.Text) it.text.length else 0 }
 }
 
 enum class ToolStatus { RUNNING, OK, ERROR }

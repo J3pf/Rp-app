@@ -17,6 +17,7 @@ import dev.j3pf.rp.R
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.ReconnectingSocket
+import dev.j3pf.rp.data.ports.AppLifecycleMonitor
 import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
@@ -68,6 +69,8 @@ class DirectPushService : LifecycleService() {
 
     @Inject lateinit var networkMonitor: NetworkMonitor
 
+    @Inject lateinit var lifecycleMonitor: AppLifecycleMonitor
+
     private lateinit var socket: ReconnectingSocket
 
     override fun onCreate() {
@@ -106,8 +109,19 @@ class DirectPushService : LifecycleService() {
         }
 
         lifecycleScope.launch {
-            combine(socket.state, machines.machinesState) { st, ms ->
-                (st == ConnState.Connected) to ms.size
+            lifecycleMonitor.isForeground
+                .collect { inForeground ->
+                    if (inForeground) {
+                        socket.stop()
+                    } else if (secrets.current() != null) {
+                        socket.start()
+                    }
+                }
+        }
+
+        lifecycleScope.launch {
+            combine(socket.state, lifecycleMonitor.isForeground, machines.machinesState) { st, fg, ms ->
+                ((st == ConnState.Connected) || fg) to ms.size
             }.distinctUntilChanged()
                 .collect { (connected, pcs) ->
                     val n = buildNotification(pcs, connected)
@@ -148,8 +162,10 @@ class DirectPushService : LifecycleService() {
             stopSelf()
             return START_NOT_STICKY
         }
-        socket.start()
-        socket.retryNow()
+        if (!lifecycleMonitor.isForeground.value) {
+            socket.start()
+            socket.retryNow()
+        }
         return START_STICKY
     }
 

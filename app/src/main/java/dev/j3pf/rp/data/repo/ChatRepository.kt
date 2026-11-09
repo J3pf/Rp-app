@@ -291,6 +291,7 @@ class ChatRepository
                 if (telemetryJob == null) {
                     telemetryJob =
                         core.state
+                            .distinctUntilChanged { a, b -> a.todos === b.todos && a.tools === b.tools && a.working == b.working }
                             .map { st -> Triple(st.todoCompletedCount, st.todoTotalCount, st.activeTaskLabel()) }
                             .distinctUntilChanged()
                             .onEach { (completed, total, activeTask) ->

@@ -1,11 +1,5 @@
 package dev.j3pf.rp.ui.agents
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,10 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,7 +41,6 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.TagChip
-import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.lastSegment
@@ -149,56 +138,20 @@ fun AgentCard(
         }
 
     val isWorking = a.status == "working" && a.online
-    val reducedMotion = LocalReducedMotion.current
-    val pulseTransition = if (isWorking && !reducedMotion) rememberInfiniteTransition(label = "pulse") else null
-    val borderAlphaState =
-        pulseTransition?.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 0.90f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-            label = "borderPulse",
-        )
-    val avatarScaleState =
-        pulseTransition?.animateFloat(
-            initialValue = 1.0f,
-            targetValue = 1.18f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-            label = "avatarScale",
-        )
 
     SurfaceCard(
         onClick = onClick,
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp)
-                .then(
-                    if (borderAlphaState != null) {
-                        Modifier.drawWithContent {
-                            drawContent()
-                            val strokeWidth = 1.5.dp.toPx()
-                            val radius = 18.dp.toPx()
-                            drawRoundRect(
-                                color = statusColor.copy(alpha = borderAlphaState.value),
-                                cornerRadius = CornerRadius(radius, radius),
-                                style = Stroke(width = strokeWidth),
-                            )
-                        }
-                    } else {
-                        Modifier
-                    },
-                ),
+                .padding(horizontal = 16.dp, vertical = 2.dp),
         shape = RoundedCornerShape(18.dp),
         tonalElevation = 1.dp,
-        border = if (borderAlphaState != null) null else BorderStroke(if (isWorking) 1.5.dp else 1.dp, statusColor.copy(alpha = 0.35f)),
+        border =
+            BorderStroke(
+                width = if (isWorking) 1.5.dp else 1.dp,
+                color = statusColor.copy(alpha = if (isWorking) 0.72f else 0.35f),
+            ),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -213,14 +166,7 @@ fun AgentCard(
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = statusColor.copy(alpha = 0.16f),
-                    modifier =
-                        Modifier
-                            .size(24.dp)
-                            .graphicsLayer {
-                                val scale = avatarScaleState?.value ?: 1.0f
-                                this.scaleX = scale
-                                this.scaleY = scale
-                            },
+                    modifier = Modifier.size(24.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -260,24 +206,11 @@ fun AgentCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        val dotAlphaState =
-                            pulseTransition?.animateFloat(
-                                initialValue = 0.4f,
-                                targetValue = 1.0f,
-                                animationSpec =
-                                    infiniteRepeatable(
-                                        animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                                        repeatMode = RepeatMode.Reverse,
-                                    ),
-                                label = "dotAlpha",
-                            )
                         Box(
                             modifier =
                                 Modifier
                                     .size(7.dp)
-                                    .graphicsLayer {
-                                        alpha = dotAlphaState?.value ?: 1.0f
-                                    }.clip(CircleShape)
+                                    .clip(CircleShape)
                                     .background(statusColor),
                         )
                         Text(
