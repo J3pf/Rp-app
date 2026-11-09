@@ -35,7 +35,6 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownPadding
 import com.mikepenz.markdown.model.rememberMarkdownState
-import dev.j3pf.rp.ui.theme.RpColors
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.BoldHighlight
 import dev.snipme.highlights.model.ColorHighlight
@@ -161,8 +160,8 @@ fun RpMarkdown(
     textStyleOverride: TextStyle? = null,
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val inlineCodeColor = if (isDark) RpColors.inlineCodeTextDark else RpColors.inlineCodeTextLight
-    val inlineCodeBg = if (isDark) RpColors.inlineCodeBgDark else RpColors.inlineCodeBgLight
+    val inlineCodeColor = if (isDark) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+    val inlineCodeBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.75f else 0.55f)
     val markdownState =
         rememberMarkdownState(
             content = text,

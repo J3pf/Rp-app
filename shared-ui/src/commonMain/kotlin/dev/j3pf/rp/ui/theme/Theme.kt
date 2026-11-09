@@ -18,6 +18,7 @@ enum class RpThemeChoice(
     AUTO("auto", "Sincronizado con Pi (automático)"),
     GENTLE_CUTE("gentle-cute", "Gentle-Cute"),
     GENTLE_SEXY("gentle-sexy", "Gentle-Sexy"),
+    MOSHI("moshi-dark", "Moshi (Verde y Oscuro)"),
     OMARCHY("omarchy-system", "Omarchy / Gentle Shell"),
     SYSTEM("system", "Material You / Sistema"),
 }
@@ -47,22 +48,22 @@ val CuteDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF80AB),
         onPrimary = Color(0xFF560027),
-        primaryContainer = Color(0xFF5C1335),
+        primaryContainer = Color(0xFF7B003A),
         onPrimaryContainer = Color(0xFFFFD8E4),
         secondary = Color(0xFFCE93D8),
         onSecondary = Color(0xFF38004D),
-        secondaryContainer = Color(0xFF421A52),
+        secondaryContainer = Color(0xFF52006E),
         onSecondaryContainer = Color(0xFFF3DAFF),
-        tertiary = Color(0xFFE5A965),
-        background = Color(0xFF121215),
-        surface = Color(0xFF17171B),
-        surfaceVariant = Color(0xFF222228),
-        surfaceContainerHigh = Color(0xFF1C1C22),
-        onBackground = Color(0xFFECECF1),
-        onSurface = Color(0xFFECECF1),
-        onSurfaceVariant = Color(0xFFA1A1AA),
-        outline = Color(0xFF71717A),
-        outlineVariant = Color(0xFF2E2E36),
+        tertiary = Color(0xFFFF9EBB),
+        background = Color(0xFF1E171E),
+        surface = Color(0xFF281E29),
+        surfaceVariant = Color(0xFF3E2D3F),
+        surfaceContainerHigh = Color(0xFF312233),
+        onBackground = Color(0xFFF0E5EC),
+        onSurface = Color(0xFFF0E5EC),
+        onSurfaceVariant = Color(0xFFE2C8D8),
+        outline = Color(0xFFB594AC),
+        outlineVariant = Color(0xFF5C4259),
     )
 
 // ───────────────────────────── Paleta Gentle-Sexy ─────────────────────────────
@@ -90,22 +91,65 @@ val SexyDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF2A85),
         onPrimary = Color(0xFF4A0022),
-        primaryContainer = Color(0xFF590A30),
+        primaryContainer = Color(0xFF700037),
         onPrimaryContainer = Color(0xFFFFD8E6),
         secondary = Color(0xFFB388FF),
         onSecondary = Color(0xFF2E006A),
-        secondaryContainer = Color(0xFF3B1266),
+        secondaryContainer = Color(0xFF4A0099),
         onSecondaryContainer = Color(0xFFEADBFF),
+        tertiary = Color(0xFFFF79B0),
+        background = Color(0xFF120815),
+        surface = Color(0xFF1B0D20),
+        surfaceVariant = Color(0xFF2E1336),
+        surfaceContainerHigh = Color(0xFF240F2B),
+        onBackground = Color(0xFFFCE4F0),
+        onSurface = Color(0xFFFCE4F0),
+        onSurfaceVariant = Color(0xFFE8C5D8),
+        outline = Color(0xFF914F7F),
+        outlineVariant = Color(0xFF59254A),
+    )
+
+// ───────────────────────────── Paleta Moshi (Verde y Oscuro) ─────────────────────────────
+
+val MoshiLightColors =
+    lightColorScheme(
+        primary = Color(0xFF1F883D),
+        onPrimary = Color(0xFFFFFFFF),
+        primaryContainer = Color(0xFFD2F8DC),
+        onPrimaryContainer = Color(0xFF052E12),
+        secondary = Color(0xFF0969DA),
+        onSecondary = Color(0xFFFFFFFF),
+        secondaryContainer = Color(0xFFDDF4FF),
+        onSecondaryContainer = Color(0xFF03254C),
+        tertiary = Color(0xFF9A4B00),
+        background = Color(0xFFF6F8FA),
+        surface = Color(0xFFFFFFFF),
+        surfaceVariant = Color(0xFFEAEEF2),
+        onBackground = Color(0xFF1F2328),
+        onSurface = Color(0xFF1F2328),
+        outline = Color(0xFF656D76),
+    )
+
+val MoshiDarkColors =
+    darkColorScheme(
+        primary = Color(0xFF3FB950),
+        onPrimary = Color(0xFF062E0E),
+        primaryContainer = Color(0xFF14461E),
+        onPrimaryContainer = Color(0xFFB7F5C0),
+        secondary = Color(0xFF58A6FF),
+        onSecondary = Color(0xFF05254C),
+        secondaryContainer = Color(0xFF123866),
+        onSecondaryContainer = Color(0xFFD1E6FF),
         tertiary = Color(0xFFE5A965),
-        background = Color(0xFF101013),
-        surface = Color(0xFF151519),
-        surfaceVariant = Color(0xFF202026),
-        surfaceContainerHigh = Color(0xFF1B1B21),
-        onBackground = Color(0xFFF2F2F7),
-        onSurface = Color(0xFFF2F2F7),
+        background = Color(0xFF121215),
+        surface = Color(0xFF17171B),
+        surfaceVariant = Color(0xFF222228),
+        surfaceContainerHigh = Color(0xFF1C1C22),
+        onBackground = Color(0xFFECECF1),
+        onSurface = Color(0xFFECECF1),
         onSurfaceVariant = Color(0xFFA1A1AA),
         outline = Color(0xFF71717A),
-        outlineVariant = Color(0xFF2D2D35),
+        outlineVariant = Color(0xFF2E2E36),
     )
 
 // ───────────────────────────── Paleta Omarchy / Gentle Shell ─────────────────────────────
@@ -173,6 +217,7 @@ fun paletteFor(
     when (themeChoice) {
         RpThemeChoice.GENTLE_CUTE -> if (darkTheme) CuteDarkColors else CuteLightColors
         RpThemeChoice.GENTLE_SEXY -> if (darkTheme) SexyDarkColors else SexyLightColors
+        RpThemeChoice.MOSHI -> if (darkTheme) MoshiDarkColors else MoshiLightColors
         RpThemeChoice.OMARCHY -> if (darkTheme) OmarchyDarkColors else OmarchyLightColors
         RpThemeChoice.SYSTEM, RpThemeChoice.AUTO -> if (darkTheme) DefaultDarkColors else DefaultLightColors
     }
@@ -191,6 +236,7 @@ fun resolveThemeChoice(
         return when (norm) {
             "gentle-cute", "gentleman-cute", "cute" -> RpThemeChoice.GENTLE_CUTE
             "gentle-sexy", "gentleman-sexy", "sexy" -> RpThemeChoice.GENTLE_SEXY
+            "moshi", "moshi-dark", "terminal-green" -> RpThemeChoice.MOSHI
             "omarchy", "omarchy-system", "gentle-shell" -> RpThemeChoice.OMARCHY
             "system", "default" -> RpThemeChoice.SYSTEM
             else -> RpThemeChoice.GENTLE_CUTE
@@ -231,6 +277,7 @@ private fun themeForMachine(
             when {
                 text.contains("sexy") -> RpThemeChoice.GENTLE_SEXY
                 text.contains("cute") -> RpThemeChoice.GENTLE_CUTE
+                text.contains("moshi") -> RpThemeChoice.MOSHI
                 text.contains("omarchy") -> RpThemeChoice.OMARCHY
                 else -> null
             }
@@ -254,7 +301,7 @@ private fun themeForMachine(
 @Composable
 expect fun platformDynamicColorScheme(darkTheme: Boolean): ColorScheme?
 
-/** Tema principal de RP con soporte para temas de Pi/Gentle Shell (Gentle-Cute, Gentle-Sexy, Omarchy). */
+/** Tema principal de RP con soporte para temas de Pi/Gentle Shell (Gentle-Cute, Gentle-Sexy, Moshi, Omarchy). */
 @Composable
 fun RpTheme(
     themeChoice: RpThemeChoice = RpThemeChoice.AUTO,
@@ -270,6 +317,10 @@ fun RpTheme(
 
             RpThemeChoice.GENTLE_SEXY -> {
                 if (darkTheme) SexyDarkColors else SexyLightColors
+            }
+
+            RpThemeChoice.MOSHI -> {
+                if (darkTheme) MoshiDarkColors else MoshiLightColors
             }
 
             RpThemeChoice.OMARCHY -> {

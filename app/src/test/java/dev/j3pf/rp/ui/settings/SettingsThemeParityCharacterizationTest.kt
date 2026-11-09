@@ -36,9 +36,10 @@ class SettingsThemeParityCharacterizationTest {
 
         // Fila de la pantalla: muestra el tema actual con su etiqueta exacta.
         rule.onNodeWithText("Tema de la app").performClick()
-        // Five entries: 4 explicit + AUTO, which is absent only while the choice is set.
+        // Six entries: 5 explicit + AUTO, which is absent only while the choice is set.
         rule.onNodeWithText("Gentle-Cute").assertIsDisplayed()
         rule.onNodeWithText("Gentle-Sexy").assertIsDisplayed()
+        rule.onNodeWithText("Moshi (Verde y Oscuro)").assertIsDisplayed()
         rule.onNodeWithText("Omarchy / Gentle Shell").assertIsDisplayed()
         rule.onNodeWithText("Material You / Sistema").assertIsDisplayed()
         // The string exists exactly twice: once as the screen row (current theme = auto), once inside

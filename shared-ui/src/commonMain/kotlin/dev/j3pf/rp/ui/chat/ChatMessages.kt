@@ -297,12 +297,12 @@ private fun AssistantBubble(
                     imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
                     contentDescription = "Copiar",
                     modifier = Modifier.size(13.dp),
-                    tint = if (copied) RpColors.toolAccent else MaterialTheme.colorScheme.outline,
+                    tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
                 Text(
                     text = if (copied) "Copiado" else "Copiar",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (copied) RpColors.toolAccent else MaterialTheme.colorScheme.outline,
+                    color = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 )
             }
         }
@@ -363,15 +363,16 @@ private fun ThinkingBlock(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Text("🧠", fontSize = 12.sp)
             Text(
                 "Razonamiento",
                 style = labelStyle,
-                color = MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
             )
             Text(
                 if (open) "▾" else "▸",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
             )
         }
         AnimatedVisibility(open) {
@@ -463,7 +464,7 @@ fun ToolCard(
                 .clickable { setOpen(!open) },
         shape = cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
         tonalElevation = 0.dp,
     ) {
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
@@ -476,7 +477,7 @@ fun ToolCard(
                     imageVector = if (isReadTool) Icons.Filled.Visibility else Icons.Filled.Build,
                     contentDescription = null,
                     modifier = Modifier.size(15.dp),
-                    tint = RpColors.toolAccent,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     friendlyTitle,
@@ -507,7 +508,7 @@ fun ToolCard(
                 }
                 when (run.status) {
                     ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
-                    ToolStatus.OK -> Text("✓", color = RpColors.toolAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    ToolStatus.OK -> Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     ToolStatus.ERROR -> Text("✕", color = RpColors.danger, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
