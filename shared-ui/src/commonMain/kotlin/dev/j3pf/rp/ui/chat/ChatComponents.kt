@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -404,99 +405,101 @@ fun MessageList(
 
     Box(modifier = modifier.fillMaxWidth()) {
         CompositionLocalProvider(LocalDensity provides scaledDensity) {
-            LazyColumn(
-                state = listState,
-                reverseLayout = true,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = verticalListPadding),
-                verticalArrangement = Arrangement.spacedBy(itemSpacing, Alignment.Bottom),
-            ) {
-                if (isWorking) {
-                    item(key = "working-indicator", contentType = "WorkingIndicator") {
-                        val indHPad =
-                            when (chatMessageSpacing) {
-                                "compact" -> 8.dp
-                                "spacious" -> 14.dp
-                                else -> 10.dp
-                            }
-                        val indVPad =
-                            when (chatMessageSpacing) {
-                                "compact" -> 4.dp
-                                "spacious" -> 9.dp
-                                else -> 6.dp
-                            }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                                shape = RpShapes.bubbleAgent,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+            SelectionContainer {
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = verticalListPadding),
+                    verticalArrangement = Arrangement.spacedBy(itemSpacing, Alignment.Bottom),
+                ) {
+                    if (isWorking) {
+                        item(key = "working-indicator", contentType = "WorkingIndicator") {
+                            val indHPad =
+                                when (chatMessageSpacing) {
+                                    "compact" -> 8.dp
+                                    "spacious" -> 14.dp
+                                    else -> 10.dp
+                                }
+                            val indVPad =
+                                when (chatMessageSpacing) {
+                                    "compact" -> 4.dp
+                                    "spacious" -> 9.dp
+                                    else -> 6.dp
+                                }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = indHPad, vertical = indVPad),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                    shape = RpShapes.bubbleAgent,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                 ) {
-                                    val reducedMotion = LocalReducedMotion.current
-                                    if (reducedMotion) {
-                                        CircularProgressIndicator(
-                                            progress = { 0.75f },
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    } else {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary,
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = indHPad, vertical = indVPad),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        val reducedMotion = LocalReducedMotion.current
+                                        if (reducedMotion) {
+                                            CircularProgressIndicator(
+                                                progress = { 0.75f },
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        } else {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                        val runningTool = tools.values.lastOrNull { it.status == ToolStatus.RUNNING }
+                                        val statusText =
+                                            when {
+                                                sending -> "Enviando mensaje…"
+                                                runningTool != null -> "Ejecutando ${runningTool.name}…"
+                                                else -> "Pensando…"
+                                            }
+                                        Text(
+                                            text = statusText,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Medium,
                                         )
                                     }
-                                    val runningTool = tools.values.lastOrNull { it.status == ToolStatus.RUNNING }
-                                    val statusText =
-                                        when {
-                                            sending -> "Enviando mensaje…"
-                                            runningTool != null -> "Ejecutando ${runningTool.name}…"
-                                            else -> "Pensando…"
-                                        }
-                                    Text(
-                                        text = statusText,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Medium,
-                                    )
                                 }
                             }
                         }
                     }
-                }
-                items(
-                    reversedItems,
-                    key = { it.key },
-                    contentType = { it::class.simpleName },
-                ) { item ->
-                    val reducedMotion = LocalReducedMotion.current
-                    val itemModifier =
-                        if (reducedMotion) {
-                            Modifier
-                        } else {
-                            Modifier.animateItem(
-                                fadeInSpec = null,
-                                fadeOutSpec = null,
+                    items(
+                        reversedItems,
+                        key = { it.key },
+                        contentType = { it::class.simpleName },
+                    ) { item ->
+                        val reducedMotion = LocalReducedMotion.current
+                        val itemModifier =
+                            if (reducedMotion) {
+                                Modifier
+                            } else {
+                                Modifier.animateItem(
+                                    fadeInSpec = null,
+                                    fadeOutSpec = null,
+                                )
+                            }
+                        Box(modifier = itemModifier) {
+                            ChatItemView(
+                                item = item,
+                                tools = tools,
+                                busyPromptId = busyPromptId,
+                                onAnswerPrompt = onAnswerPrompt,
+                                spacingMode = chatMessageSpacing,
+                                onRetryUserMessage = onRetryUserMessage,
                             )
                         }
-                    Box(modifier = itemModifier) {
-                        ChatItemView(
-                            item = item,
-                            tools = tools,
-                            busyPromptId = busyPromptId,
-                            onAnswerPrompt = onAnswerPrompt,
-                            spacingMode = chatMessageSpacing,
-                            onRetryUserMessage = onRetryUserMessage,
-                        )
                     }
                 }
             }

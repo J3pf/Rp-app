@@ -21,9 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -209,12 +211,10 @@ private fun UserBubble(
                     )
                 }
                 if (m.text.isNotBlank()) {
-                    SelectionContainer {
-                        Text(
-                            text = m.text,
-                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = textLineHeight),
-                        )
-                    }
+                    Text(
+                        text = m.text,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = textLineHeight),
+                    )
                 }
                 if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
             }
@@ -242,6 +242,7 @@ private fun AssistantBubble(
         }
     val clipboard = LocalClipboardManager.current
     var copied by remember(m.key) { mutableStateOf(false) }
+    var showSelectDialog by remember(m.key) { mutableStateOf(false) }
     val combinedText =
         remember(m.blocks) {
             m.blocks
@@ -250,6 +251,27 @@ private fun AssistantBubble(
                 .filter { it.isNotEmpty() }
                 .joinToString("\n\n")
         }
+
+    if (showSelectDialog) {
+        AlertDialog(
+            onDismissRequest = { showSelectDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showSelectDialog = false }) {
+                    Text("Cerrar")
+                }
+            },
+            title = { Text("Seleccionar texto") },
+            text = {
+                SelectionContainer {
+                    Text(
+                        text = combinedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                    )
+                }
+            },
+        )
+    }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
         m.blocks.forEachIndexed { i, b ->
@@ -286,27 +308,53 @@ private fun AssistantBubble(
         }
         if (!m.streaming && combinedText.isNotEmpty()) {
             Row(
-                modifier =
-                    Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable {
-                            clipboard.setText(AnnotatedString(combinedText))
-                            copied = true
-                        }.padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(
-                    imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-                    contentDescription = "Copiar",
-                    modifier = Modifier.size(13.dp),
-                    tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                )
-                Text(
-                    text = if (copied) "Copiado" else "Copiar",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                )
+                Row(
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                clipboard.setText(AnnotatedString(combinedText))
+                                copied = true
+                            }.padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                        contentDescription = "Copiar",
+                        modifier = Modifier.size(13.dp),
+                        tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    )
+                    Text(
+                        text = if (copied) "Copiado" else "Copiar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    )
+                }
+                Row(
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { showSelectDialog = true }
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SelectAll,
+                        contentDescription = "Seleccionar texto",
+                        modifier = Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.outline,
+                    )
+                    Text(
+                        text = "Seleccionar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
             }
         }
         if (m.streaming && m.blocks.isEmpty()) {
@@ -387,13 +435,11 @@ private fun ThinkingBlock(
                         textStyleOverride = bodyStyle,
                     )
                 } else {
-                    SelectionContainer {
-                        Text(
-                            text = text,
-                            style = bodyStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        text = text,
+                        style = bodyStyle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -560,19 +606,17 @@ private fun Mono(
     maxHeight: Int = 200,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
-        SelectionContainer {
-            Text(
-                text,
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxHeight.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(8.dp),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
-                color = color,
-            )
-        }
+        Text(
+            text,
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxHeight.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(8.dp),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            color = color,
+        )
     }
 }
 
@@ -583,22 +627,20 @@ private fun DiffView(
 ) {
     val lines = remember(old, new) { simpleDiff(old, new) }
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
-        SelectionContainer {
-            Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-                lines.forEach { l ->
-                    val (bg, mark) =
-                        when (l.kind) {
-                            DiffKind.ADDED -> Color(0x3300C853) to "+ "
-                            DiffKind.REMOVED -> Color(0x33D50000) to "- "
-                            DiffKind.SAME -> Color.Transparent to "  "
-                        }
-                    Text(
-                        mark + l.text,
-                        Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                    )
-                }
+        Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+            lines.forEach { l ->
+                val (bg, mark) =
+                    when (l.kind) {
+                        DiffKind.ADDED -> Color(0x3300C853) to "+ "
+                        DiffKind.REMOVED -> Color(0x33D50000) to "- "
+                        DiffKind.SAME -> Color.Transparent to "  "
+                    }
+                Text(
+                    mark + l.text,
+                    Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                )
             }
         }
     }
