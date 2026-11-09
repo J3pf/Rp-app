@@ -198,7 +198,7 @@ class NotificationFactoryTest {
                     machineId = "01MACH",
                     machineName = "PC Empresa",
                     machineContext = "work",
-                    sessionName = "Refactor UI",
+                    sessionName = "Trazzik · Antigravity request",
                     gitBranch = "feature/live",
                     status = dev.j3pf.rp.protocol.AgentStatus.WORKING,
                     activeTask = "Corriendo tests",
@@ -209,10 +209,9 @@ class NotificationFactoryTest {
             assertNotNull(n)
             assertTrue((n.flags and Notification.FLAG_ONGOING_EVENT) != 0)
             assertEquals(listOf("Abrir"), titles(n))
-            assertTrue(n.extras.getString(Notification.EXTRA_TITLE)!!.contains("PC Empresa"))
-            assertTrue(n.extras.getString(Notification.EXTRA_TITLE)!!.contains("Refactor UI"))
-            assertEquals("Corriendo tests", n.extras.getString(Notification.EXTRA_TEXT))
-            assertEquals("⎇ feature/live", n.extras.getString(Notification.EXTRA_SUB_TEXT))
+            assertEquals("Corriendo tests", n.extras.getString(Notification.EXTRA_TITLE))
+            assertEquals("Trazzik · ⎇ feature/live · PC Empresa", n.extras.getString(Notification.EXTRA_SUB_TEXT))
+            assertEquals("Tú: Antigravity request", n.extras.getString(Notification.EXTRA_TEXT))
 
             // Repeated call with identical visible fields should be deduplicated (same Notification instance).
             factory.showWorking(agent.copy(lastMessagePreview = "otro preview"))
@@ -223,10 +222,67 @@ class NotificationFactoryTest {
             factory.showWorking(agent.copy(activeTask = "Compilando APK"))
             val nUpdated = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
             assertNotNull(nUpdated)
-            assertEquals("Compilando APK", nUpdated.extras.getString(Notification.EXTRA_TEXT))
+            assertEquals("Compilando APK", nUpdated.extras.getString(Notification.EXTRA_TITLE))
 
             factory.cancelWorking("m:s1")
             assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id))
+        }
+    }
+
+    @Test
+    fun `showWorking unifica multiples agentes activos y excluye notificaciones settled del mismo agente`() {
+        runBlocking {
+            val agent1 =
+                dev.j3pf.rp.protocol.AgentSummary(
+                    agentId = "m:s1",
+                    machineId = "01MACH",
+                    machineName = "LUCHO TORRE",
+                    sessionName = "Trazzik · Viewer 3D",
+                    gitBranch = "main",
+                    status = dev.j3pf.rp.protocol.AgentStatus.WORKING,
+                    activeTask = "Analizando escena",
+                )
+            val agent2 =
+                dev.j3pf.rp.protocol.AgentSummary(
+                    agentId = "m:s2",
+                    machineId = "01MACH",
+                    machineName = "LUCHO TORRE",
+                    sessionName = "RemotePi · Notificaciones",
+                    gitBranch = "main",
+                    status = dev.j3pf.rp.protocol.AgentStatus.WORKING,
+                    activeTask = "Compilando APK",
+                )
+
+            factory.showWorking(agent1)
+            factory.showWorking(agent2)
+
+            val id2 = stableId("working:m:s2")
+            val unified = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id2)
+            assertNotNull(unified)
+            assertTrue(unified.extras.getString(Notification.EXTRA_TITLE)!!.contains("2 agentes activos"))
+            assertTrue(unified.extras.getString(Notification.EXTRA_SUB_TEXT)!!.contains("Trazzik"))
+            assertTrue(unified.extras.getString(Notification.EXTRA_TEXT)!!.contains("RemotePi: Compilando APK"))
+            assertTrue(unified.extras.getString(Notification.EXTRA_TEXT)!!.contains("Trazzik: Analizando escena"))
+
+            // When agent2 settles, working notification re-renders for agent1 alone and agent2's working state is cleared.
+            factory.showSettled(
+                PushSettledBody(
+                    agentId = "m:s2",
+                    agentLabel = "RemotePi",
+                    preview = "Compilación lista",
+                    machineId = "01MACH",
+                    machineName = "LUCHO TORRE",
+                ),
+            )
+            val id1 = stableId("working:m:s1")
+            val singleRemaining = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id1)
+            assertNotNull(singleRemaining)
+            assertEquals("Analizando escena", singleRemaining.extras.getString(Notification.EXTRA_TITLE))
+            assertNotNull(shadowOf(nm).getNotification(NotificationFactory.SETTLED_TAG, stableId("settled:m:s2")))
+
+            // If agent2 starts working again, its settled notification is removed.
+            factory.showWorking(agent2.copy(activeTask = "Ejecutando tests"))
+            assertNull(shadowOf(nm).getNotification(NotificationFactory.SETTLED_TAG, stableId("settled:m:s2")))
         }
     }
 

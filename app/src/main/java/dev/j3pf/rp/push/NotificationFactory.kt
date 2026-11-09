@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
@@ -17,6 +18,7 @@ import dev.j3pf.rp.MainActivity
 import dev.j3pf.rp.R
 import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.data.repo.SettingsRepository
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
@@ -26,10 +28,13 @@ import dev.j3pf.rp.protocol.PushSettledBody
 import dev.j3pf.rp.protocol.str
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.contextEmoji
+import dev.j3pf.rp.util.lastSegment
 import dev.j3pf.rp.util.stableId
 import dev.j3pf.rp.util.truncate
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonObject
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,7 +57,36 @@ class NotificationFactory
         private val deduper: NotificationDeduper,
     ) {
         private val nm get() = NotificationManagerCompat.from(context)
-        private val workingSignatures = java.util.concurrent.ConcurrentHashMap<String, String>()
+        private val activeWorkingAgents = ConcurrentHashMap<String, AgentSummary>()
+        private val workingOrder = CopyOnWriteArrayList<String>()
+        private val workingStartTimes = ConcurrentHashMap<String, Long>()
+
+        @Volatile
+        private var currentWorkingNotifId: Int? = null
+
+        @Volatile
+        private var currentWorkingSignature: String? = null
+
+        @Volatile
+        private var foregroundSlotId: Int? = null
+
+        @Volatile
+        private var onForegroundSlotIdle: (() -> Unit)? = null
+
+        fun bindForegroundSlot(
+            notifId: Int,
+            onIdle: () -> Unit,
+        ) {
+            foregroundSlotId = notifId
+            onForegroundSlotIdle = onIdle
+        }
+
+        fun unbindForegroundSlot() {
+            foregroundSlotId = null
+            onForegroundSlotIdle = null
+        }
+
+        fun hasWorkingAgents(): Boolean = activeWorkingAgents.isNotEmpty()
 
         // ───────────────────────────── Prompt ─────────────────────────────
 
@@ -61,6 +95,7 @@ class NotificationFactory
             if (!canNotify()) return
             // Si el agente está preguntando no está "terminado": el aviso anterior es basura en la bandeja.
             nm.cancel(SETTLED_TAG, stableId("settled:${p.agentId}"))
+            pruneOrphanSummaries()
             val s = settings.settings.first()
             val machineName = p.machineName.ifEmpty { "RP" }
             channels.ensureMachine(p.machineId.ifEmpty { "default" }, machineName, p.machineContext)
@@ -213,7 +248,9 @@ class NotificationFactory
         @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
         suspend fun showSettled(s: PushSettledBody) {
             if (!canNotify()) return
+            cancelWorking(s.agentId)
             val machineId = s.machineId.ifEmpty { "default" }
+            val channel = channels.channelId(machineId, NotifyCategory.FINISHED)
             channels.ensureMachine(machineId, s.machineName.ifEmpty { "RP" }, s.machineContext)
             val id = stableId("settled:${s.agentId}")
             val auth = settings.settings.first().requireUnlockToApprove && Build.VERSION.SDK_INT >= 31
@@ -227,16 +264,19 @@ class NotificationFactory
                 }
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
             val replyPi = PendingIntent.getBroadcast(context, id, reply, flags)
+            val rawBody = s.preview ?: s.message ?: "Terminó"
+            val bodyText = cleanPreview(rawBody, maxLen = 140) ?: "Terminó"
             val n =
                 NotificationCompat
-                    .Builder(context, channels.channelId(machineId, NotifyCategory.FINISHED))
+                    .Builder(context, channel)
                     .setSmallIcon(R.drawable.ic_stat_rp)
                     .setContentTitle(
                         "${contextEmoji(s.machineContext)} ${s.machineName.ifEmpty { "RP" }} · ${s.agentLabel.ifEmpty { "agente" }}",
-                    ).setContentText(s.preview ?: s.message ?: "Terminó")
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(s.preview ?: s.message ?: "Terminó"))
+                    ).setContentText(bodyText)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
                     .setContentIntent(openIntent(null, s.agentId, id))
                     .setAutoCancel(true)
+                    .setGroup(SETTLED_GROUP_KEY)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                     .addAction(
                         NotificationCompat.Action
@@ -246,6 +286,7 @@ class NotificationFactory
                             .build(),
                     ).build()
             nm.notify(SETTLED_TAG, id, n)
+            postSettledSummaryIfNeeded(channel)
         }
 
         /** `k=error` y `k=terminal_wait`: aviso simple que abre el chat del agente. */
@@ -281,79 +322,283 @@ class NotificationFactory
             nm.notify(SIMPLE_TAG, id, n)
         }
 
-        /** Agente en ejecución: notificación ongoing con cronómetro y barra de progreso real o indeterminada. */
+        /**
+         * Agente(s) en ejecución: Live Activity promocionada (Android 16 ProgressStyle / One UI 8) con 3 líneas
+         * visibles (actividad en vivo, proyecto/rama/PC y prompt o resumen de múltiples agentes) + barra de progreso.
+         */
         @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
-        suspend fun showWorking(agent: dev.j3pf.rp.protocol.AgentSummary) {
+        suspend fun showWorking(agent: AgentSummary) {
             if (!canNotify()) return
-            val machineId = agent.machineId.ifEmpty { "default" }
-            val machineName = agent.machineName.ifEmpty { "RP" }
-            val channel = channels.channelId(machineId, NotifyCategory.TERMINAL)
-            val id = stableId("working:${agent.agentId}")
-            val label = agentTitle(agent.sessionName, agent.cwd, agent.agentId)
-            val title = "${contextEmoji(agent.machineContext)} $machineName · $label"
-            val hasTodos = agent.todoTotal > 0
-            val doneTodos = if (hasTodos) agent.todoCompleted.coerceIn(0, agent.todoTotal) else 0
-            val baseTask =
-                agent.activeTask?.takeIf { it.isNotBlank() }
-                    ?: agent.lastMessagePreview?.takeIf { it.isNotBlank() }?.let { truncate(it, 100) }
-            val text =
-                if (hasTodos) {
-                    val prefix = "Tareas: $doneTodos/${agent.todoTotal}"
-                    if (baseTask != null) "$prefix · $baseTask" else prefix
-                } else {
-                    baseTask ?: context.getString(R.string.agent_working_desc)
-                }
-            val branch = agent.gitBranch?.takeIf { it.isNotBlank() }.orEmpty()
-            val signature = "$channel|$title|$text|$branch|$doneTodos/${agent.todoTotal}"
-            if (workingSignatures[agent.agentId] == signature && isWorkingNotificationActive(id)) return
+            // Si el agente volvió a trabajar, cualquier notificación previa de "Terminó" es obsoleta.
+            nm.cancel(SETTLED_TAG, stableId("settled:${agent.agentId}"))
+            pruneOrphanSummaries()
 
-            channels.ensureMachine(machineId, machineName, agent.machineContext)
-            val open = openIntent(null, agent.agentId, id)
+            val prev = activeWorkingAgents[agent.agentId]
+            val merged =
+                if (prev == null) {
+                    agent
+                } else {
+                    agent.copy(
+                        sessionName = agent.sessionName?.takeIf { it.isNotBlank() } ?: prev.sessionName,
+                        cwd = agent.cwd?.takeIf { it.isNotBlank() } ?: prev.cwd,
+                        gitBranch = agent.gitBranch?.takeIf { it.isNotBlank() } ?: prev.gitBranch,
+                        activeTask = agent.activeTask?.takeIf { it.isNotBlank() } ?: prev.activeTask,
+                        lastMessagePreview = agent.lastMessagePreview?.takeIf { it.isNotBlank() } ?: prev.lastMessagePreview,
+                        todoTotal = if (agent.todoTotal > 0) agent.todoTotal else prev.todoTotal,
+                        todoCompleted = if (agent.todoTotal > 0) agent.todoCompleted else prev.todoCompleted,
+                    )
+                }
+            activeWorkingAgents[agent.agentId] = merged
+            workingStartTimes.putIfAbsent(agent.agentId, System.currentTimeMillis())
+            if (!workingOrder.contains(agent.agentId)) {
+                workingOrder.add(0, agent.agentId)
+            } else if (!agent.activeTask.isNullOrBlank() && agent.activeTask != prev?.activeTask) {
+                workingOrder.remove(agent.agentId)
+                workingOrder.add(0, agent.agentId)
+            }
+
+            val machineId = merged.machineId.ifEmpty { "default" }
+            val machineName = merged.machineName.ifEmpty { "RP" }
+            channels.ensureMachine(machineId, machineName, merged.machineContext)
+            renderWorkingNotification()
+        }
+
+        fun cancelWorking(agentId: String) {
+            val id = stableId("working:$agentId")
+            val removed = activeWorkingAgents.remove(agentId) != null
+            workingOrder.remove(agentId)
+            workingStartTimes.remove(agentId)
+            val slotId = foregroundSlotId
+
+            if (activeWorkingAgents.isEmpty()) {
+                val activeId = currentWorkingNotifId
+                currentWorkingNotifId = null
+                currentWorkingSignature = null
+                if (activeId != null && activeId != slotId) {
+                    nm.cancel(WORKING_TAG, activeId)
+                }
+                if (removed || isWorkingNotificationActive(id)) {
+                    nm.cancel(WORKING_TAG, id)
+                }
+                cancelOtherWorkingNotifications(keepId = -1)
+                if (slotId != null) {
+                    onForegroundSlotIdle?.invoke()
+                }
+            } else {
+                if (id != currentWorkingNotifId) {
+                    nm.cancel(WORKING_TAG, id)
+                }
+                if (canNotify()) {
+                    renderWorkingNotification()
+                }
+            }
+        }
+
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
+        private fun renderWorkingNotification() {
+            val allWorking =
+                workingOrder.mapNotNull { activeWorkingAgents[it] }.ifEmpty {
+                    activeWorkingAgents.values.toList()
+                }
+            val primary = allWorking.firstOrNull() ?: return
+            val machineId = primary.machineId.ifEmpty { "default" }
+            val machineName = primary.machineName.ifEmpty { "RP" }
+            val channel = channels.channelId(machineId, NotifyCategory.TERMINAL)
+            val slotId = foregroundSlotId
+            val id = slotId ?: stableId("working:${primary.agentId}")
+            val targetTag = if (slotId != null) null else WORKING_TAG
+            val parts = parseAgentParts(primary)
+            val branch = primary.gitBranch?.takeIf { it.isNotBlank() }.orEmpty()
+            val hasTodos = allWorking.any { it.todoTotal > 0 }
+            val totalTodos = allWorking.sumOf { it.todoTotal.coerceAtLeast(0) }
+            val doneTodos = allWorking.sumOf { it.todoCompleted.coerceIn(0, it.todoTotal.coerceAtLeast(0)) }
+
+            val rawTask =
+                primary.activeTask?.takeIf { it.isNotBlank() }
+                    ?: primary.lastMessagePreview?.takeIf { it.isNotBlank() }
+            val cleanTask = cleanPreview(rawTask, maxLen = 100)
+
+            val title: String
+            val subText: String
+            val text: String
+            val expandedText: String
+            val shortCritical: String
+
+            if (allWorking.size == 1) {
+                title = cleanTask ?: "Trabajando en ${parts.project}…"
+                subText =
+                    buildString {
+                        append(parts.project)
+                        if (branch.isNotEmpty()) append(" · ⎇ $branch")
+                        append(" · $machineName")
+                    }
+                val todoPrefix = if (hasTodos) "Tareas: $doneTodos/$totalTodos · " else ""
+                text =
+                    when {
+                        parts.topic != null -> "${todoPrefix}Tú: ${parts.topic}"
+                        cleanTask != null ->
+                            if (hasTodos) {
+                                "Tareas: $doneTodos/$totalTodos · $cleanTask"
+                            } else {
+                                cleanTask
+                            }
+                        else -> "${todoPrefix}${context.getString(R.string.agent_working_desc)}"
+                    }
+                expandedText =
+                    buildString {
+                        append(text)
+                        if (parts.topic != null && cleanTask != null && cleanTask != title) {
+                            append("\n")
+                            append(cleanTask)
+                        }
+                    }
+                shortCritical =
+                    if (hasTodos) {
+                        "${truncate(parts.project, 10)} $doneTodos/$totalTodos"
+                    } else {
+                        truncate(parts.project, 12)
+                    }
+            } else {
+                val otherProjects = allWorking.drop(1).map { parseAgentParts(it).project }.distinct()
+                val primaryActivity = cleanTask ?: parts.topic ?: "Trabajando…"
+                title = "⚡ ${allWorking.size} agentes activos · ${parts.project}: $primaryActivity"
+                subText =
+                    buildString {
+                        append(parts.project)
+                        if (branch.isNotEmpty()) append(" (⎇ $branch)")
+                        if (otherProjects.isNotEmpty()) {
+                            append(" · +${allWorking.size - 1} en curso: ")
+                            append(otherProjects.joinToString(", "))
+                        }
+                    }
+                text =
+                    allWorking.joinToString(" · ") { a ->
+                        val p = parseAgentParts(a)
+                        val t =
+                            cleanPreview(a.activeTask, 36)
+                                ?: cleanPreview(a.lastMessagePreview, 36)
+                                ?: p.topic
+                                ?: "trabajando"
+                        "${p.project}: ${truncate(t, 36)}"
+                    }
+                expandedText =
+                    allWorking.joinToString("\n") { a ->
+                        val p = parseAgentParts(a)
+                        val branchName = a.gitBranch?.takeIf { it.isNotBlank() }
+                        val b = if (branchName != null) " (⎇ $branchName)" else ""
+                        val t =
+                            cleanPreview(a.activeTask, 70)
+                                ?: cleanPreview(a.lastMessagePreview, 70)
+                                ?: p.topic
+                                ?: "Trabajando…"
+                        "• ${p.project}$b: $t"
+                    }
+                shortCritical = "${allWorking.size} agentes"
+            }
+
+            val signature = "$channel|$targetTag|$id|${allWorking.size}|$title|$subText|$text|$doneTodos/$totalTodos"
+            if (currentWorkingSignature == signature &&
+                currentWorkingNotifId == id &&
+                isNotificationActive(targetTag, id)
+            ) {
+                return
+            }
+
+            val prevId = currentWorkingNotifId
+            if (prevId != null && prevId != id && prevId != slotId) {
+                nm.cancel(WORKING_TAG, prevId)
+            }
+            cancelOtherWorkingNotifications(keepId = if (slotId != null) -1 else id)
+
+            val open = openIntent(null, primary.agentId, id)
+            val startTime = workingStartTimes[primary.agentId] ?: System.currentTimeMillis()
+            val isPromotedCapable = Build.VERSION.SDK_INT >= 35
 
             val builder =
                 NotificationCompat
                     .Builder(context, channel)
                     .setSmallIcon(R.drawable.ic_stat_rp)
                     .setContentTitle(title)
+                    .setSubText(subText)
                     .setContentText(text)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
                     .setContentIntent(open)
                     .setOngoing(true)
                     .setSilent(true)
                     .setOnlyAlertOnce(true)
-                    .setProgress(if (hasTodos) agent.todoTotal else 0, doneTodos, !hasTodos)
-                    .setUsesChronometer(true)
+                    .setProgress(if (hasTodos) totalTodos.coerceAtLeast(1) else 100, if (hasTodos) doneTodos else 0, !hasTodos)
+                    .setWhen(startTime)
+                    .setShowWhen(true)
+                    .setUsesChronometer(!isPromotedCapable)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            if (branch.isNotEmpty()) {
-                builder.setSubText("⎇ $branch")
+                    .setCategory(
+                        if (isPromotedCapable) {
+                            NotificationCompat.CATEGORY_STATUS
+                        } else {
+                            NotificationCompat.CATEGORY_PROGRESS
+                        },
+                    ).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .addAction(
+                        NotificationCompat.Action
+                            .Builder(
+                                0,
+                                context.getString(R.string.action_open),
+                                open,
+                            ).build(),
+                    )
+            if (!isPromotedCapable) {
+                builder.setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
             }
-            builder.addAction(
-                NotificationCompat.Action
-                    .Builder(
-                        0,
-                        context.getString(R.string.action_open),
-                        open,
-                    ).build(),
-            )
-            workingSignatures[agent.agentId] = signature
-            nm.notify(WORKING_TAG, id, builder.build())
+
+            val notif = builder.build()
+            if (isPromotedCapable) {
+                notif.flags = notif.flags or FLAG_PROMOTED_ONGOING
+                notif.extras.apply {
+                    remove("androidx.core.app.extra.COMPAT_TEMPLATE")
+                    putString(Notification.EXTRA_TEMPLATE, "android.app.Notification\$ProgressStyle")
+                    putBoolean("android.styledByProgress", true)
+                    putBoolean("android.requestPromotedOngoing", true)
+                    putString("android.shortCriticalText", shortCritical)
+                    putInt(Notification.EXTRA_PROGRESS, if (hasTodos) doneTodos else 0)
+                    putInt(Notification.EXTRA_PROGRESS_MAX, if (hasTodos) totalTodos.coerceAtLeast(1) else 100)
+                    putBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, !hasTodos)
+                    putParcelableArrayList("android.progressPoints", ArrayList<Bundle>())
+                    val segment =
+                        Bundle().apply {
+                            putInt("length", if (hasTodos) totalTodos.coerceAtLeast(1) else 100)
+                            putInt("colorInt", -10777345)
+                            putInt("id", 0)
+                            putInt("semanticStyle", 0)
+                        }
+                    putParcelableArrayList("android.progressSegments", arrayListOf(segment))
+                }
+            }
+
+            currentWorkingNotifId = id
+            currentWorkingSignature = signature
+            nm.notify(targetTag, id, notif)
         }
 
-        fun cancelWorking(agentId: String) {
-            val id = stableId("working:$agentId")
-            val hadSignature = workingSignatures.remove(agentId) != null
-            if (hadSignature || isWorkingNotificationActive(id)) {
-                nm.cancel(WORKING_TAG, id)
-            }
-        }
-
-        private fun isWorkingNotificationActive(id: Int): Boolean =
+        private fun cancelOtherWorkingNotifications(keepId: Int) {
             runCatching {
                 context
                     .getSystemService(android.app.NotificationManager::class.java)
                     .activeNotifications
-                    .any { it.id == id && it.tag == WORKING_TAG }
+                    .filter { it.tag == WORKING_TAG && it.id != keepId }
+                    .forEach { nm.cancel(WORKING_TAG, it.id) }
+            }
+        }
+
+        private fun isWorkingNotificationActive(id: Int): Boolean = isNotificationActive(WORKING_TAG, id)
+
+        private fun isNotificationActive(
+            tag: String?,
+            id: Int,
+        ): Boolean =
+            runCatching {
+                context
+                    .getSystemService(android.app.NotificationManager::class.java)
+                    .activeNotifications
+                    .any { it.id == id && it.tag == tag }
             }.getOrDefault(false)
 
         // ───────────────────────────── Estado desde el receiver ─────────────────────────────
@@ -486,6 +731,90 @@ class NotificationFactory
             nm.notify(SUMMARY_TAG, stableId("summary:$agentId"), summary)
         }
 
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
+        private fun postSettledSummaryIfNeeded(channel: String) {
+            if (!canNotify()) return
+            val activeSettledCount =
+                runCatching {
+                    context
+                        .getSystemService(android.app.NotificationManager::class.java)
+                        .activeNotifications
+                        .count { it.tag == SETTLED_TAG }
+                }.getOrDefault(0)
+            if (activeSettledCount < 2) return
+            val summary =
+                NotificationCompat
+                    .Builder(context, channel)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle("$activeSettledCount agentes terminaron")
+                    .setSubText("$activeSettledCount finalizados")
+                    .setGroup(SETTLED_GROUP_KEY)
+                    .setGroupSummary(true)
+                    .setAutoCancel(true)
+                    .setOnlyAlertOnce(true)
+                    .build()
+            nm.notify(SUMMARY_TAG, stableId("summary:settled"), summary)
+        }
+
+        private data class AgentLabelParts(
+            val project: String,
+            val topic: String?,
+        )
+
+        private fun parseAgentParts(agent: AgentSummary): AgentLabelParts {
+            val rawName = agent.sessionName?.trim().orEmpty()
+            val cwdProject = lastSegment(agent.cwd).takeIf { it.isNotBlank() }
+            if (rawName.contains(" · ")) {
+                val left = rawName.substringBefore(" · ").trim()
+                val right = rawName.substringAfter(" · ").trim()
+                val project = left.ifEmpty { cwdProject ?: agentTitle(agent.sessionName, agent.cwd, agent.agentId) }
+                val topic =
+                    right.takeIf {
+                        it.isNotBlank() &&
+                            !it.equals("sin título", ignoreCase = true) &&
+                            !it.equals("sin titulo", ignoreCase = true) &&
+                            !it.equals("untitled", ignoreCase = true) &&
+                            !it.equals(project, ignoreCase = true)
+                    }
+                return AgentLabelParts(project = project, topic = topic)
+            }
+            val fallbackTitle = agentTitle(agent.sessionName, agent.cwd, agent.agentId)
+            val project = cwdProject ?: fallbackTitle
+            val topic =
+                rawName.takeIf {
+                    it.isNotBlank() &&
+                        !it.equals("sin título", ignoreCase = true) &&
+                        !it.equals("sin titulo", ignoreCase = true) &&
+                        !it.equals("untitled", ignoreCase = true) &&
+                        !it.equals(project, ignoreCase = true)
+                }
+            return AgentLabelParts(project = project, topic = topic)
+        }
+
+        private fun cleanPreview(
+            raw: String?,
+            maxLen: Int = 100,
+        ): String? {
+            if (raw.isNullOrBlank()) return null
+            val cleaned =
+                raw
+                    .lineSequence()
+                    .map { line ->
+                        line
+                            .trim()
+                            .replace(MD_HEADER_REGEX, "")
+                            .replace(MD_BULLET_REGEX, "")
+                    }.filter { it.isNotBlank() }
+                    .joinToString(" ")
+                    .replace("**", "")
+                    .replace("__", "")
+                    .replace("`", "")
+                    .replace(WHITESPACE_REGEX, " ")
+                    .trim()
+            if (cleaned.isEmpty()) return null
+            return truncate(cleaned, maxLen)
+        }
+
         private fun openIntent(
             promptId: String?,
             agentId: String?,
@@ -518,6 +847,15 @@ class NotificationFactory
             const val SIMPLE_TAG = "rp.simple"
             const val SUMMARY_TAG = "rp.summary"
             const val WORKING_TAG = "rp.working"
+
+            const val WORKING_GROUP_KEY = "rp.group.working"
+            const val SETTLED_GROUP_KEY = "rp.group.settled"
+            const val SERVICE_GROUP_KEY = "rp.group.service"
+
+            private const val FLAG_PROMOTED_ONGOING = 0x00040000
+            private val MD_HEADER_REGEX = Regex("^#{1,6}\\s+")
+            private val MD_BULLET_REGEX = Regex("^[-*]\\s+")
+            private val WHITESPACE_REGEX = Regex("\\s+")
 
             /** "Enviando…" nunca debe sobrevivir al flujo que lo publicó. */
             private const val SENDING_TIMEOUT_MS = 30_000L

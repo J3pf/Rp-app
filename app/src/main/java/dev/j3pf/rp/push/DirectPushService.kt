@@ -35,6 +35,8 @@ import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.PushAck
 import dev.j3pf.rp.protocol.PushNotify
 import dev.j3pf.rp.protocol.Ulid
+import dev.j3pf.rp.util.agentTitle
+import dev.j3pf.rp.util.lastSegment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -84,10 +86,31 @@ class DirectPushService : LifecycleService() {
     private val idleStandby = MutableStateFlow(false)
     private var powerReceiver: BroadcastReceiver? = null
 
+    @Volatile
+    private var lastTrayState: ServiceTrayState? = null
+
     override fun onCreate() {
         super.onCreate()
         channels.ensureServiceChannel()
         goForeground(buildNotification(0, false, false))
+        factory.bindForegroundSlot(NOTIF_ID) {
+            val st = lastTrayState
+            val n =
+                if (st != null) {
+                    buildNotification(
+                        pcs = st.pcs,
+                        connected = st.connected,
+                        sleeping = st.sleeping,
+                        workingCount = 0,
+                        totalAgents = st.totalAgents,
+                        waitingCount = st.waitingCount,
+                        projectNames = st.projectNames,
+                    )
+                } else {
+                    buildNotification(0, true, false)
+                }
+            runCatching { notify(n) }
+        }
 
         val powerManager = getSystemService(PowerManager::class.java)
 
@@ -197,7 +220,36 @@ class DirectPushService : LifecycleService() {
                 }
         }
 
-        lifecycleScope.launch {
+        val agentStats =
+            agents.agents
+                .map { list ->
+                    val working = list.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING }
+                    val waiting =
+                        list.count {
+                            it.openPromptCount > 0 ||
+                                it.status == AgentStatus.WAITING_INPUT
+                        }
+                    val targetList = working.ifEmpty { list }
+                    val names =
+                        targetList
+                            .map { a ->
+                                val raw = a.sessionName?.trim().orEmpty()
+                                when {
+                                    raw.contains(" · ") -> raw.substringBefore(" · ").trim()
+                                    else -> lastSegment(a.cwd).ifEmpty { agentTitle(a.sessionName, a.cwd, a.agentId) }
+                                }
+                            }.filter { it.isNotBlank() }
+                            .distinct()
+                            .take(4)
+                    AgentTrayStats(
+                        workingCount = working.size,
+                        totalAgents = list.size,
+                        waitingCount = waiting,
+                        projectNames = names,
+                    )
+                }.distinctUntilChanged()
+
+        val connAndPower =
             combine(
                 socket.state,
                 lifecycleMonitor.isForeground,
@@ -209,9 +261,34 @@ class DirectPushService : LifecycleService() {
                 val sleeping = !fg && !connected && (constrained || standby)
                 Triple(connected, ms.size, sleeping)
             }.distinctUntilChanged()
-                .collect { (connected, pcs, sleeping) ->
-                    val n = buildNotification(pcs, connected, sleeping)
-                    runCatching { notify(n) }
+
+        lifecycleScope.launch {
+            combine(connAndPower, agentStats) { (connected, pcs, sleeping), stats ->
+                ServiceTrayState(
+                    pcs = pcs,
+                    connected = connected,
+                    sleeping = sleeping,
+                    workingCount = stats.workingCount,
+                    totalAgents = stats.totalAgents,
+                    waitingCount = stats.waitingCount,
+                    projectNames = stats.projectNames,
+                )
+            }.distinctUntilChanged()
+                .collect { st ->
+                    lastTrayState = st
+                    if (st.workingCount == 0 && !factory.hasWorkingAgents()) {
+                        val n =
+                            buildNotification(
+                                pcs = st.pcs,
+                                connected = st.connected,
+                                sleeping = st.sleeping,
+                                workingCount = st.workingCount,
+                                totalAgents = st.totalAgents,
+                                waitingCount = st.waitingCount,
+                                projectNames = st.projectNames,
+                            )
+                        runCatching { notify(n) }
+                    }
                 }
         }
 
@@ -257,6 +334,9 @@ class DirectPushService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        if (::factory.isInitialized) {
+            factory.unbindForegroundSlot()
+        }
         powerReceiver?.let { receiver ->
             runCatching { unregisterReceiver(receiver) }
         }
@@ -325,10 +405,31 @@ class DirectPushService : LifecycleService() {
         getSystemService(android.app.NotificationManager::class.java).notify(NOTIF_ID, n)
     }
 
+    private data class AgentTrayStats(
+        val workingCount: Int,
+        val totalAgents: Int,
+        val waitingCount: Int,
+        val projectNames: List<String>,
+    )
+
+    private data class ServiceTrayState(
+        val pcs: Int,
+        val connected: Boolean,
+        val sleeping: Boolean,
+        val workingCount: Int,
+        val totalAgents: Int,
+        val waitingCount: Int,
+        val projectNames: List<String>,
+    )
+
     private fun buildNotification(
         pcs: Int,
         connected: Boolean,
         sleeping: Boolean,
+        workingCount: Int = 0,
+        totalAgents: Int = 0,
+        waitingCount: Int = 0,
+        projectNames: List<String> = emptyList(),
     ): Notification {
         val open =
             PendingIntent.getActivity(
@@ -337,18 +438,41 @@ class DirectPushService : LifecycleService() {
                 Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-        val text =
+        val title =
             when {
                 sleeping -> "RP en reposo · ahorro de batería"
-                !connected -> "Reconectando…"
+                !connected -> "RP reconectando…"
+                workingCount > 0 ->
+                    "RP activo · $workingCount ${if (workingCount == 1) "agente trabajando" else "agentes trabajando"}"
+                totalAgents > 0 ->
+                    "RP conectado · $totalAgents ${if (totalAgents == 1) "agente en línea" else "agentes en línea"}"
                 pcs == 1 -> "RP conectado · 1 PC"
                 pcs > 1 -> "RP conectado · $pcs PCs"
                 else -> getString(R.string.service_title)
             }
+        val subtitle =
+            when {
+                sleeping -> "Se reactivará al encender la pantalla o recibir actividad"
+                !connected -> "Reintentando conexión en segundo plano"
+                workingCount > 0 -> {
+                    val projects = projectNames.joinToString(", ").ifEmpty { "$totalAgents en línea" }
+                    val waitSuffix = if (waitingCount > 0) " · $waitingCount esperando respuesta" else ""
+                    "En curso: $projects$waitSuffix"
+                }
+                totalAgents > 0 -> {
+                    val projects = projectNames.joinToString(", ")
+                    val pcSuffix = if (pcs > 0) " · $pcs ${if (pcs == 1) "PC" else "PCs"}" else ""
+                    if (projects.isNotEmpty()) "Proyectos: $projects$pcSuffix" else "Listo para recibir avisos$pcSuffix"
+                }
+                else -> "Canal directo activo para notificaciones en tiempo real"
+            }
         return NotificationCompat
             .Builder(this, NotificationChannels.SERVICE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rp)
-            .setContentTitle(text)
+            .setContentTitle(title)
+            .setContentText(subtitle)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(subtitle))
+            .setGroup(NotificationFactory.SERVICE_GROUP_KEY)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
