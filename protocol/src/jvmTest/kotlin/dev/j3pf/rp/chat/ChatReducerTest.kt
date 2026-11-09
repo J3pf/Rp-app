@@ -549,4 +549,25 @@ class ChatReducerTest {
         assertEquals("assistant:2000", assistant.key)
         assertEquals(2000L, assistant.at)
     }
+
+    @Test
+    fun `markLocalSent con imagen adjunta reconcilia contra el texto de inbox de Herdr sin duplicar burbuja`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "me sale esto", at = 1000L, imageCount = 1, clientMsgId = "img-msg-1")
+        assertEquals(1, s.items.size)
+
+        val transcriptText =
+            "me sale esto\\n\\n[Archivo adjunto desde el móvil: /home/luisc/.config/rp/inbox/sess/20261109-img.jpg (image/jpeg, 23.8 KB)]"
+        val json =
+            """{"type":"message_end","message":{"role":"user","timestamp":1005,"content":[{"type":"text","text":"$transcriptText"}]}}"""
+        s = ChatReducer.reduce(s, ev(1, json))
+
+        assertEquals(1, s.items.size)
+        val reconciled = s.items.single() as UserMsg
+        assertFalse(reconciled.key.startsWith("local:"))
+        assertEquals("me sale esto", reconciled.text)
+        assertEquals(1, reconciled.imageCount)
+        assertTrue(reconciled.fromMobile)
+        assertTrue(s.localSent.isEmpty())
+    }
 }

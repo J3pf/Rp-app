@@ -736,44 +736,59 @@ object ChatReducer {
         }
     }
 
+    private val MOBILE_ATTACHMENT_RE =
+        Regex("""^\[Archivo adjunto desde el móvil:\s+.+\(([^,()]+),\s*[^()]+\)\]$""")
+    private val MOBILE_ATTACHMENT_UNAVAILABLE_RE =
+        Regex("""^\[Adjunto no disponible:\s+.+\]$""")
+
+    private data class ParsedUserContent(
+        val text: String,
+        val images: Int,
+        val hasMobileAttachment: Boolean,
+    )
+
     private fun userMessage(
         s: ChatState,
         msg: JsonObject,
         fallback: String,
         at: Long = 0,
     ): ChatState {
-        val (text, images) = userContent(msg["content"])
+        val (text, images, hasMobileAttachment) = parseUserContent(msg["content"])
         val trimmed = text.trim()
         val cId = msg.str("clientMsgId")
+        val localIdx =
+            s.items.indexOfFirst {
+                it is UserMsg &&
+                    it.key.startsWith("local:") &&
+                    (
+                        (cId != null && (it.clientMsgId == cId || it.key == "local:$cId")) ||
+                            (trimmed.isNotBlank() && it.text.trim() == trimmed) ||
+                            (trimmed.isBlank() && images > 0 && it.imageCount == images) ||
+                            (trimmed.isBlank() && hasMobileAttachment && it.attachments.isNotEmpty())
+                    )
+            }
         val mobile =
-            msg.bool("rp") == true ||
+            localIdx >= 0 ||
+                hasMobileAttachment ||
+                msg.bool("rp") == true ||
                 msg.str("origin") in setOf("rp", "mobile") ||
                 s.localSent.contains(trimmed) ||
                 (cId != null && s.items.any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId") })
+        val prevLocal = if (localIdx >= 0) s.items[localIdx] as? UserMsg else null
         val item =
             UserMsg(
                 key = keyOf(msg, "user", fallback),
                 text = text,
-                at = msg.lenientLong("timestamp") ?: at,
+                at = msg.lenientLong("timestamp") ?: at.takeIf { it > 0 } ?: prevLocal?.at ?: 0,
                 fromMobile = mobile,
-                imageCount = images,
-                clientMsgId = cId,
+                imageCount = maxOf(images, prevLocal?.imageCount ?: 0),
+                clientMsgId = cId ?: prevLocal?.clientMsgId,
+                attachments = prevLocal?.attachments ?: emptyList(),
+                delivery = prevLocal?.delivery ?: Delivery.AUTO,
+                method = prevLocal?.method ?: DeliveryMethod.AUTO,
+                asCommand = prevLocal?.asCommand ?: false,
             )
         if (s.items.any { it.key == item.key }) return s
-        val localIdx =
-            if (mobile) {
-                s.items.indexOfFirst {
-                    it is UserMsg &&
-                        it.key.startsWith("local:") &&
-                        (
-                            (cId != null && (it.clientMsgId == cId || it.key == "local:$cId")) ||
-                                (trimmed.isNotBlank() && it.text.trim() == trimmed) ||
-                                (trimmed.isBlank() && images > 0 && it.imageCount == images)
-                        )
-                }
-            } else {
-                -1
-            }
         val nextItems =
             if (localIdx >= 0) {
                 s.items.toMutableList().also { it[localIdx] = item }
@@ -848,30 +863,69 @@ object ChatReducer {
 
     /** Texto y número de imágenes de `content` (cadena o lista de bloques). */
     fun userContent(content: JsonElement?): Pair<String, Int> {
-        if (content is JsonPrimitive) return (content.str() ?: "") to 0
-        var images = 0
-        val text =
-            content
-                .arr()
-                .orEmpty()
-                .mapNotNull {
-                    val o = it.obj() ?: return@mapNotNull null
-                    when (o.str("type")) {
-                        "text" -> {
-                            o.str("text")
-                        }
+        val parsed = parseUserContent(content)
+        return parsed.text to parsed.images
+    }
 
-                        "image", "image_ref" -> {
-                            images++
-                            null
-                        }
+    private fun parseUserContent(content: JsonElement?): ParsedUserContent {
+        var blockImages = 0
+        val rawText =
+            if (content is JsonPrimitive) {
+                content.str() ?: ""
+            } else {
+                content
+                    .arr()
+                    .orEmpty()
+                    .mapNotNull {
+                        val o = it.obj() ?: return@mapNotNull null
+                        when (o.str("type")) {
+                            "text" -> {
+                                o.str("text")
+                            }
 
-                        else -> {
-                            null
+                            "image", "image_ref" -> {
+                                blockImages++
+                                null
+                            }
+
+                            else -> {
+                                null
+                            }
                         }
-                    }
-                }.joinToString("\n")
-        return text to images
+                    }.joinToString("\n")
+            }
+
+        var tagImages = 0
+        var hasMobileAttachment = false
+        val keptLines = mutableListOf<String>()
+        for (line in rawText.lines()) {
+            val trimmedLine = line.trim()
+            val match = MOBILE_ATTACHMENT_RE.matchEntire(trimmedLine)
+            if (match != null) {
+                hasMobileAttachment = true
+                val mime = match.groupValues[1].trim()
+                if (mime.startsWith("image/", ignoreCase = true)) {
+                    tagImages++
+                }
+                continue
+            }
+            if (MOBILE_ATTACHMENT_UNAVAILABLE_RE.matches(trimmedLine)) {
+                hasMobileAttachment = true
+                continue
+            }
+            keptLines.add(line)
+        }
+        val cleanedText =
+            if (hasMobileAttachment) {
+                keptLines.joinToString("\n").trimEnd()
+            } else {
+                rawText
+            }
+        return ParsedUserContent(
+            text = cleanedText,
+            images = blockImages + tagImages,
+            hasMobileAttachment = hasMobileAttachment,
+        )
     }
 
     /** Extrae texto de un resultado de herramienta: cadena, bloques `[{type:text,text}]` u objeto con `content`/`output`. */
