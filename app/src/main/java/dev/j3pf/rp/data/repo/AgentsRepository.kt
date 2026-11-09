@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -73,11 +74,25 @@ class AgentsRepository
                     when (env.t) {
                         MsgType.APP_WELCOME -> {
                             val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                            val onlineHerdrMachines =
+                                w.agents
+                                    .filter { it.online && isHerdrManagedSession(it) }
+                                    .map { it.machineId }
+                                    .toSet()
+                            val (staleHerdr, liveAgents) =
+                                w.agents.partition { !it.online && it.machineId in onlineHerdrMachines && isHerdrManagedSession(it) }
                             dao.syncWelcome(
                                 relayId,
-                                w.agents.map { it.toEntity(relayId) },
-                                w.agents.map { it.agentId }.ifEmpty { listOf("") },
+                                liveAgents.map { it.toEntity(relayId) },
+                                liveAgents.map { it.agentId }.ifEmpty { listOf("") },
                             )
+                            if (staleHerdr.isNotEmpty()) {
+                                scope.launch {
+                                    staleHerdr.forEach { stale ->
+                                        connection.request(Envelope.of(MsgType.AGENT_FORGET, AgentRef(stale.agentId), id = Ulid.new()))
+                                    }
+                                }
+                            }
                         }
                         MsgType.AGENTS_UPDATE -> {
                             val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@onEach
@@ -197,4 +212,6 @@ class AgentsRepository
         override suspend fun clear() {
             secrets.current()?.relayId?.let { dao.clear(it) }
         }
+
+        private fun isHerdrManagedSession(agent: AgentSummary): Boolean = agent.herdr != null || agent.agentId.contains(":herdr:")
     }

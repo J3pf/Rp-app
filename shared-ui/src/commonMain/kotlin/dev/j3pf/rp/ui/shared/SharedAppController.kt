@@ -583,11 +583,27 @@ class SharedAppController(
                 _machines.value = welcome.machines
                 _openPrompts.value = welcome.openPrompts
                 val counts = welcome.openPrompts.groupingBy { it.agentId }.eachCount()
+                val onlineHerdrMachines =
+                    welcome.agents
+                        .filter { it.online && (it.herdr != null || it.agentId.contains(":herdr:")) }
+                        .map { it.machineId }
+                        .toSet()
+                val (staleHerdr, liveAgents) =
+                    welcome.agents.partition {
+                        !it.online && it.machineId in onlineHerdrMachines && (it.herdr != null || it.agentId.contains(":herdr:"))
+                    }
                 _agents.value =
-                    welcome.agents.map { a ->
+                    liveAgents.map { a ->
                         val count = counts[a.agentId] ?: a.openPromptCount
                         if (a.openPromptCount == count) a else a.copy(openPromptCount = count)
                     }
+                if (staleHerdr.isNotEmpty()) {
+                    scope.launch {
+                        staleHerdr.forEach { stale ->
+                            wsClient.request(Envelope.of(MsgType.AGENT_FORGET, AgentRef(stale.agentId), id = newId()))
+                        }
+                    }
+                }
             }
 
             MsgType.MACHINES_UPDATE -> {

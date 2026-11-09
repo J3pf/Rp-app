@@ -36,38 +36,41 @@ fun cleanHerdrTabId(rawTabId: String?): String? {
     }
 }
 
+private fun attentionPriorityOf(agent: AgentSummary): Int =
+    when {
+        agent.openPromptCount > 0 || agent.status == "waiting_input" -> 3
+        agent.status == "working" -> 2
+        else -> 1
+    }
+
 /**
- * Ordena agentes dentro de una máquina:
- * - Si los agentes reportan su índice visual de Herdr (`#NNNN|tabId`), mantiene exactamente el orden de Herdr
- *   (con agentes en línea antes que desconectados) sin saltar cuando cambia `status` o `lastSeenAt`.
- * - Para agentes fuera de Herdr (o sin índice), conserva el orden clásico: prompts abiertos primero,
- *   en línea antes que offline, working segundo y `lastSeenAt` más reciente después.
+ * Ordena agentes dentro de una máquina siguiendo el panel `priority` de Herdr:
+ * 1. Agentes en línea antes que desconectados.
+ * 2. Prioridad de atención: esperando respuesta (`openPromptCount > 0` / `waiting_input`) > trabajando (`working`) > inactivo (`idle`).
+ * 3. Dentro del mismo estado, respeta el orden exacto de Herdr (`#NNNN|tabId`, calculado por `state_change_seq`)
+ *    sin que las tarjetas inactivas salten por actualizaciones de `lastSeenAt`.
+ * 4. Para agentes sin índice de Herdr, usa `lastSeenAt` más reciente como desempate.
  */
 fun sortAgentsWithinGroup(agents: List<AgentSummary>): List<AgentSummary> =
     agents.sortedWith { a, b ->
+        val onlineCmp = b.online.compareTo(a.online)
+        if (onlineCmp != 0) return@sortedWith onlineCmp
+
+        val attentionCmp = attentionPriorityOf(b).compareTo(attentionPriorityOf(a))
+        if (attentionCmp != 0) return@sortedWith attentionCmp
+
         val orderA = herdrOrderOf(a)
         val orderB = herdrOrderOf(b)
-        if (orderA != null || orderB != null) {
-            val onlineCmp = b.online.compareTo(a.online)
-            if (onlineCmp != 0) {
-                onlineCmp
-            } else if (orderA != null && orderB != null) {
-                val orderCmp = orderA.compareTo(orderB)
-                if (orderCmp != 0) orderCmp else a.agentId.compareTo(b.agentId)
-            } else if (orderA != null) {
-                -1
-            } else {
-                1
-            }
+        if (orderA != null && orderB != null) {
+            val orderCmp = orderA.compareTo(orderB)
+            if (orderCmp != 0) orderCmp else a.agentId.compareTo(b.agentId)
+        } else if (orderA != null) {
+            -1
+        } else if (orderB != null) {
+            1
         } else {
-            compareValuesBy(
-                b,
-                a,
-                { it.openPromptCount > 0 },
-                { it.online },
-                { it.status == "working" },
-                { it.lastSeenAt ?: 0L },
-            )
+            val seenCmp = (b.lastSeenAt ?: 0L).compareTo(a.lastSeenAt ?: 0L)
+            if (seenCmp != 0) seenCmp else a.agentId.compareTo(b.agentId)
         }
     }
 

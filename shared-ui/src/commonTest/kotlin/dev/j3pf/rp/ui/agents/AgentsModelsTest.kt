@@ -135,7 +135,7 @@ class AgentsModelsTest {
                 status = "idle",
                 openPromptCount = 0,
                 lastSeenAt = 100L,
-                herdr = HerdrInfo(paneId = "w1:p1", tabId = "#0001|w1:t1", workspaceId = "w1"),
+                herdr = HerdrInfo(paneId = "w1:p1", tabId = "#0002|w1:t1", workspaceId = "w1"),
             )
         val ws2Working =
             AgentSummary(
@@ -143,9 +143,9 @@ class AgentsModelsTest {
                 machineId = "m-1",
                 online = true,
                 status = "working",
-                openPromptCount = 2,
-                lastSeenAt = 9_999L,
-                herdr = HerdrInfo(paneId = "w2:p1", tabId = "#0002|w2:t1", workspaceId = "w2"),
+                openPromptCount = 0,
+                lastSeenAt = 50L,
+                herdr = HerdrInfo(paneId = "w2:p1", tabId = "#0004|w2:t1", workspaceId = "w2"),
             )
         val ws3IdleRecent =
             AgentSummary(
@@ -154,12 +154,12 @@ class AgentsModelsTest {
                 online = true,
                 status = "idle",
                 openPromptCount = 0,
-                lastSeenAt = 5_000L,
+                lastSeenAt = 9_999L,
                 herdr = HerdrInfo(paneId = "w3:p1", tabId = "#0003|w3:t1", workspaceId = "w3"),
             )
 
-        val sorted = sortAgentsWithinGroup(listOf(ws3IdleRecent, ws2Working, ws1Idle))
-        assertEquals(listOf("m1:herdr:ws1", "m1:herdr:ws2", "m1:herdr:ws3"), sorted.map { it.agentId })
+        val sorted = sortAgentsWithinGroup(listOf(ws3IdleRecent, ws1Idle, ws2Working))
+        assertEquals(listOf("m1:herdr:ws2", "m1:herdr:ws1", "m1:herdr:ws3"), sorted.map { it.agentId })
         assertEquals("w1:t1", cleanHerdrTabId(ws1Idle.herdr?.tabId))
     }
 }
