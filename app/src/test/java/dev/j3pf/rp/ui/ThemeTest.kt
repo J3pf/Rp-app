@@ -100,8 +100,8 @@ class ThemeTest {
         assertEquals(Color(0xFFFFF0F5), CuteLightColors.surface)
 
         assertEquals(Color(0xFFFF80AB), CuteDarkColors.primary)
-        assertEquals(Color(0xFF1E171E), CuteDarkColors.background)
-        assertEquals(Color(0xFF281E29), CuteDarkColors.surface)
+        assertEquals(Color(0xFF121215), CuteDarkColors.background)
+        assertEquals(Color(0xFF17171B), CuteDarkColors.surface)
     }
 
     @Test
@@ -111,8 +111,8 @@ class ThemeTest {
         assertEquals(Color(0xFFFCE7F3), SexyLightColors.surface)
 
         assertEquals(Color(0xFFFF2A85), SexyDarkColors.primary)
-        assertEquals(Color(0xFF120815), SexyDarkColors.background)
-        assertEquals(Color(0xFF1B0D20), SexyDarkColors.surface)
+        assertEquals(Color(0xFF101013), SexyDarkColors.background)
+        assertEquals(Color(0xFF151519), SexyDarkColors.surface)
     }
 
     @Test

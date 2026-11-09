@@ -95,6 +95,7 @@ fun ChatComposer(
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     var choiceMenu by remember { mutableStateOf(false) }
+    var showShortcuts by remember { mutableStateOf(false) }
 
     val canSendNow = canSend && (text.isNotBlank() || attachments.isNotEmpty())
 
@@ -184,104 +185,110 @@ fun ChatComposer(
                     }
                 }
             }
-            val composerScrollState = rememberScrollState()
-            Row(
-                Modifier
-                    .horizontalEdgeFade(composerScrollState, edgeColor = MaterialTheme.colorScheme.surface)
-                    .horizontalScroll(composerScrollState),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val isHerdrAgent = agent?.herdr != null || (agent != null && agent.launcher != "pi")
-                if (!isHerdrAgent) {
-                    Column {
-                        AssistChip(
-                            onClick = { choiceMenu = true },
-                            shape = RoundedCornerShape(999.dp),
-                            colors =
-                                if (isSlashText) {
-                                    AssistChipDefaults.assistChipColors(
-                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                } else {
-                                    AssistChipDefaults.assistChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+            val isHerdrAgent = agent?.herdr != null || (agent != null && agent.launcher != "pi")
+            val showQuickShortcuts = showShortcuts && text.isEmpty() && attachments.isEmpty()
+            if (!isHerdrAgent || isSlashText || showQuickShortcuts) {
+                val composerScrollState = rememberScrollState()
+                Row(
+                    Modifier
+                        .horizontalEdgeFade(composerScrollState, edgeColor = MaterialTheme.colorScheme.surface)
+                        .horizontalScroll(composerScrollState),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (!isHerdrAgent) {
+                        Column {
+                            AssistChip(
+                                onClick = { choiceMenu = true },
+                                shape = RoundedCornerShape(999.dp),
+                                colors =
+                                    if (isSlashText) {
+                                        AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        )
+                                    } else {
+                                        AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                        )
+                                    },
+                                label = {
+                                    Text(
+                                        text = if (isSlashText) "⚡ Comando ${catalog.launcherLabel} (/)" else "Entrega: ${choice.label}",
+                                        style = MaterialTheme.typography.labelSmall,
                                     )
                                 },
+                            )
+                            DropdownMenu(choiceMenu, { choiceMenu = false }) {
+                                DeliveryChoice.entries.forEach { deliveryChoice ->
+                                    val enabled = deliveryChoice != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
+                                    DropdownMenuItem(
+                                        text = { Text(deliveryChoice.label) },
+                                        enabled = enabled,
+                                        onClick = {
+                                            choiceMenu = false
+                                            onChoice(deliveryChoice)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        if (working) {
+                            FilterChip(
+                                selected = workingDelivery == Delivery.FOLLOW_UP,
+                                onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
+                                shape = RoundedCornerShape(999.dp),
+                                label = { Text("Encolar (follow‑up)", style = MaterialTheme.typography.labelSmall) },
+                            )
+                            FilterChip(
+                                selected = workingDelivery == Delivery.STEER,
+                                onClick = { onWorkingDelivery(Delivery.STEER) },
+                                shape = RoundedCornerShape(999.dp),
+                                label = { Text("Interrumpir y dirigir (steer)", style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    } else if (isSlashText) {
+                        AssistChip(
+                            onClick = {},
+                            shape = RoundedCornerShape(999.dp),
+                            colors =
+                                AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                ),
                             label = {
                                 Text(
-                                    text = if (isSlashText) "⚡ Comando ${catalog.launcherLabel} (/)" else "Entrega: ${choice.label}",
+                                    text = "⚡ Comando ${catalog.launcherLabel} (/)",
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             },
                         )
-                        DropdownMenu(choiceMenu, { choiceMenu = false }) {
-                            DeliveryChoice.entries.forEach { deliveryChoice ->
-                                val enabled = deliveryChoice != DeliveryChoice.COMMAND || text.trimStart().startsWith("/")
-                                DropdownMenuItem(
-                                    text = { Text(deliveryChoice.label) },
-                                    enabled = enabled,
-                                    onClick = {
-                                        choiceMenu = false
-                                        onChoice(deliveryChoice)
-                                    },
+                    }
+                    if (showQuickShortcuts) {
+                        catalog.quickShortcuts.forEach { cmd ->
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                modifier =
+                                    Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .clickable {
+                                            showShortcuts = false
+                                            onTextChange("$cmd ")
+                                        },
+                            ) {
+                                Text(
+                                    text = cmd,
+                                    style =
+                                        MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                        ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                                 )
                             }
-                        }
-                    }
-                    if (working) {
-                        FilterChip(
-                            selected = workingDelivery == Delivery.FOLLOW_UP,
-                            onClick = { onWorkingDelivery(Delivery.FOLLOW_UP) },
-                            shape = RoundedCornerShape(999.dp),
-                            label = { Text("Encolar (follow‑up)", style = MaterialTheme.typography.labelSmall) },
-                        )
-                        FilterChip(
-                            selected = workingDelivery == Delivery.STEER,
-                            onClick = { onWorkingDelivery(Delivery.STEER) },
-                            shape = RoundedCornerShape(999.dp),
-                            label = { Text("Interrumpir y dirigir (steer)", style = MaterialTheme.typography.labelSmall) },
-                        )
-                    }
-                } else if (isSlashText) {
-                    AssistChip(
-                        onClick = {},
-                        shape = RoundedCornerShape(999.dp),
-                        colors =
-                            AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            ),
-                        label = {
-                            Text(
-                                text = "⚡ Comando ${catalog.launcherLabel} (/)",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        },
-                    )
-                }
-                if (text.isEmpty() && attachments.isEmpty()) {
-                    catalog.quickShortcuts.forEach { cmd ->
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                            modifier =
-                                Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .clickable { onTextChange("$cmd ") },
-                        ) {
-                            Text(
-                                text = cmd,
-                                style =
-                                    MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp,
-                                    ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                            )
                         }
                     }
                 }
@@ -293,8 +300,8 @@ fun ChatComposer(
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
                     ) {
-                        IconButton(onClick = { attachMenu = true }, modifier = Modifier.size(42.dp)) {
-                            Icon(Icons.Filled.AttachFile, "Adjuntar", modifier = Modifier.size(20.dp))
+                        IconButton(onClick = { attachMenu = true }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Filled.AttachFile, "Adjuntar", modifier = Modifier.size(19.dp))
                         }
                     }
                     DropdownMenu(attachMenu, { attachMenu = false }) {
@@ -310,6 +317,35 @@ fun ChatComposer(
                             attachMenu = false
                             onCameraCapture()
                         })
+                    }
+                }
+                if (catalog.quickShortcuts.isNotEmpty()) {
+                    Surface(
+                        shape = CircleShape,
+                        color =
+                            if (showShortcuts || isSlashText) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                            },
+                        contentColor =
+                            if (showShortcuts || isSlashText) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                    ) {
+                        IconButton(
+                            onClick = { showShortcuts = !showShortcuts },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Text(
+                                text = ">_",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp,
+                            )
+                        }
                     }
                 }
                 OutlinedTextField(

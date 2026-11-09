@@ -17,7 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -35,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -221,36 +227,34 @@ private fun AssistantBubble(
 ) {
     val blockSpacing =
         when (spacingMode) {
-            "compact" -> 2.dp
-            "spacious" -> 8.dp
-            else -> 4.dp
-        }
-    val hPad =
-        when (spacingMode) {
-            "compact" -> 8.dp
-            "spacious" -> 14.dp
-            else -> 10.dp
+            "compact" -> 4.dp
+            "spacious" -> 10.dp
+            else -> 6.dp
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 4.dp
-            "spacious" -> 9.dp
-            else -> 6.dp
+            "compact" -> 2.dp
+            "spacious" -> 6.dp
+            else -> 4.dp
         }
+    val clipboard = LocalClipboardManager.current
+    var copied by remember(m.key) { mutableStateOf(false) }
+    val combinedText =
+        remember(m.blocks) {
+            m.blocks
+                .filterIsInstance<Block.Text>()
+                .map { it.text.trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
+        }
+
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(blockSpacing)) {
         m.blocks.forEachIndexed { i, b ->
             when (b) {
                 is Block.Text -> {
                     if (b.text.isNotBlank()) {
-                        Surface(
-                            modifier = Modifier.padding(end = 16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RpShapes.bubbleAgent,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                        ) {
-                            Box(Modifier.padding(horizontal = hPad, vertical = vPad)) {
-                                RpMarkdown(b.text, spacingMode = spacingMode)
-                            }
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = vPad)) {
+                            RpMarkdown(b.text, spacingMode = spacingMode)
                         }
                     }
                 }
@@ -277,6 +281,31 @@ private fun AssistantBubble(
                 }
             }
         }
+        if (!m.streaming && combinedText.isNotEmpty()) {
+            Row(
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            clipboard.setText(AnnotatedString(combinedText))
+                            copied = true
+                        }.padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(
+                    imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                    contentDescription = "Copiar",
+                    modifier = Modifier.size(13.dp),
+                    tint = if (copied) RpColors.toolAccent else MaterialTheme.colorScheme.outline,
+                )
+                Text(
+                    text = if (copied) "Copiado" else "Copiar",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (copied) RpColors.toolAccent else MaterialTheme.colorScheme.outline,
+                )
+            }
+        }
         if (m.streaming && m.blocks.isEmpty()) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
         }
@@ -295,73 +324,98 @@ private fun ThinkingBlock(
     key: String,
     spacingMode: String = "normal",
 ) {
-    var open by rememberSaveable(key) { mutableStateOf(false) }
-    val hPad =
-        when (spacingMode) {
-            "compact" -> 8.dp
-            "spacious" -> 14.dp
-            else -> 10.dp
-        }
+    var open by rememberSaveable(key) { mutableStateOf(true) }
     val vPad =
         when (spacingMode) {
-            "compact" -> 4.dp
-            "spacious" -> 8.dp
-            else -> 6.dp
+            "compact" -> 2.dp
+            "spacious" -> 6.dp
+            else -> 4.dp
         }
     val labelStyle =
         when (spacingMode) {
-            "compact" -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
-            "spacious" -> MaterialTheme.typography.labelLarge
-            else -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+            "compact" -> MaterialTheme.typography.labelMedium.copy(fontStyle = FontStyle.Italic)
+            "spacious" -> MaterialTheme.typography.labelLarge.copy(fontStyle = FontStyle.Italic)
+            else -> MaterialTheme.typography.labelMedium.copy(fontStyle = FontStyle.Italic)
         }
-    val cardShape = RoundedCornerShape(8.dp)
+    val bodyStyle =
+        MaterialTheme.typography.bodySmall.copy(
+            fontStyle = FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight =
+                when (spacingMode) {
+                    "compact" -> 16.sp
+                    "spacious" -> 20.sp
+                    else -> 18.sp
+                },
+        )
 
-    Surface(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(cardShape)
-                .clickable { open = !open },
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = cardShape,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        tonalElevation = 0.dp,
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = vPad),
     ) {
-        Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text("🧠", fontSize = 12.sp)
+        Row(
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { open = !open }
+                    .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                "Razonamiento",
+                style = labelStyle,
+                color = MaterialTheme.colorScheme.outline,
+            )
+            Text(
+                if (open) "▾" else "▸",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+        }
+        AnimatedVisibility(open) {
+            Box(Modifier.padding(top = 4.dp)) {
+                if (text.contains('`')) {
+                    RpMarkdown(
+                        text = text,
+                        spacingMode = spacingMode,
+                        textStyleOverride = bodyStyle,
+                    )
+                } else {
                     Text(
-                        "Razonamiento",
-                        style = labelStyle,
-                        color = MaterialTheme.colorScheme.outline,
+                        text = text,
+                        style = bodyStyle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    if (open) "▾" else "▸",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-            AnimatedVisibility(open) {
-                Text(
-                    text,
-                    Modifier.padding(top = 6.dp),
-                    fontStyle = FontStyle.Italic,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
+}
+
+private fun toolDisplayTitle(rawName: String): String {
+    val norm = rawName.lowercase().trim()
+    return when (norm) {
+        "bash", "run_command", "exec", "shell" -> "Run Command"
+        "edit", "edit_file", "replace", "multi_edit" -> "Edit File"
+        "write", "write_file", "create_file" -> "Write File"
+        "read", "read_file", "view", "cat" -> "Read"
+        "call_mcp_tool", "mcp" -> "Call MCP Tool"
+        "grep", "search", "ripgrep" -> "Search"
+        "find", "glob", "ls" -> "Find Files"
+        else ->
+            rawName
+                .split('_', '-')
+                .filter { it.isNotEmpty() }
+                .joinToString(" ") { part -> part.replaceFirstChar { it.uppercaseChar() } }
+                .ifBlank { rawName }
+    }
+}
+
+private fun isReadOnlyTool(rawName: String): Boolean {
+    val norm = rawName.lowercase().trim()
+    return norm in setOf("read", "read_file", "view", "cat", "grep", "search", "find", "glob", "ls")
 }
 
 /** Llamada a herramienta plegable: bash muestra el comando, edit muestra el diff, resultado truncado con "ver más". */
@@ -373,23 +427,25 @@ fun ToolCard(
     val (open, setOpen) = rememberSaveable(run.toolCallId) { mutableStateOf(false) }
     val (more, setMore) = rememberSaveable(run.toolCallId + "m") { mutableStateOf(false) }
     val summary = remember(run.name, run.args) { run.summary() }
+    val friendlyTitle = remember(run.name) { toolDisplayTitle(run.name) }
+    val isReadTool = remember(run.name) { isReadOnlyTool(run.name) }
     val hPad =
         when (spacingMode) {
-            "compact" -> 8.dp
+            "compact" -> 10.dp
             "spacious" -> 14.dp
-            else -> 10.dp
+            else -> 12.dp
         }
     val vPad =
         when (spacingMode) {
-            "compact" -> 4.dp
-            "spacious" -> 8.dp
-            else -> 6.dp
+            "compact" -> 6.dp
+            "spacious" -> 10.dp
+            else -> 8.dp
         }
-    val nameStyle =
+    val titleStyle =
         when (spacingMode) {
-            "compact" -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-            "spacious" -> MaterialTheme.typography.labelLarge
-            else -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            "compact" -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+            "spacious" -> MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium)
+            else -> MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
         }
     val summarySize =
         when (spacingMode) {
@@ -397,7 +453,7 @@ fun ToolCard(
             "spacious" -> 12.sp
             else -> 11.5.sp
         }
-    val cardShape = RoundedCornerShape(8.dp)
+    val cardShape = RoundedCornerShape(10.dp)
 
     Surface(
         modifier =
@@ -407,7 +463,7 @@ fun ToolCard(
                 .clickable { setOpen(!open) },
         shape = cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         tonalElevation = 0.dp,
     ) {
         Column(Modifier.padding(horizontal = hPad, vertical = vPad)) {
@@ -416,33 +472,44 @@ fun ToolCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                when (run.status) {
-                    ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
-                    ToolStatus.OK -> Text("✓", color = RpColors.success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    ToolStatus.ERROR -> Text("✕", color = RpColors.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Text(run.name, style = nameStyle, color = MaterialTheme.colorScheme.primary)
+                Icon(
+                    imageVector = if (isReadTool) Icons.Filled.Visibility else Icons.Filled.Build,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                    tint = RpColors.toolAccent,
+                )
+                Text(
+                    friendlyTitle,
+                    style = titleStyle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    run.name,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                )
                 Text(
                     summary,
                     Modifier.weight(1f),
                     fontFamily = FontFamily.Monospace,
                     fontSize = summarySize,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                run.durationMs?.let {
+                run.durationMs?.takeIf { it >= 100L }?.let {
                     Text(
                         "${it / 100 / 10.0}s",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                     )
                 }
-                Text(
-                    if (open) "▾" else "▸",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline,
-                )
+                when (run.status) {
+                    ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
+                    ToolStatus.OK -> Text("✓", color = RpColors.toolAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    ToolStatus.ERROR -> Text("✕", color = RpColors.danger, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
             }
             AnimatedVisibility(open) {
                 Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

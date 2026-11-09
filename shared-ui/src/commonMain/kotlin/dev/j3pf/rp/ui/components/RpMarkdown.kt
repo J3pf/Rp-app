@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,9 +31,11 @@ import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownPadding
 import com.mikepenz.markdown.model.rememberMarkdownState
+import dev.j3pf.rp.ui.theme.RpColors
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.BoldHighlight
 import dev.snipme.highlights.model.ColorHighlight
@@ -104,7 +108,8 @@ fun HighlightedCode(
 
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         modifier = modifier.fillMaxWidth(),
     ) {
         Text(
@@ -124,7 +129,7 @@ private fun rememberRpMarkdownComponents() =
             Box(
                 Modifier.horizontalEdgeFade(
                     scrollState,
-                    edgeColor = MaterialTheme.colorScheme.surfaceVariant,
+                    edgeColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ),
             ) {
                 MarkdownCodeBlock(model.content, model.node) { code, language, style ->
@@ -137,7 +142,7 @@ private fun rememberRpMarkdownComponents() =
             Box(
                 Modifier.horizontalEdgeFade(
                     scrollState,
-                    edgeColor = MaterialTheme.colorScheme.surfaceVariant,
+                    edgeColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ),
             ) {
                 MarkdownCodeFence(model.content, model.node) { code, language, style ->
@@ -153,7 +158,11 @@ fun RpMarkdown(
     text: String,
     modifier: Modifier = Modifier,
     spacingMode: String = "normal",
+    textStyleOverride: TextStyle? = null,
 ) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val inlineCodeColor = if (isDark) RpColors.inlineCodeTextDark else RpColors.inlineCodeTextLight
+    val inlineCodeBg = if (isDark) RpColors.inlineCodeBgDark else RpColors.inlineCodeBgLight
     val markdownState =
         rememberMarkdownState(
             content = text,
@@ -166,7 +175,7 @@ fun RpMarkdown(
             "spacious" -> 21.sp
             else -> 19.sp
         }
-    val baseBody = MaterialTheme.typography.bodyMedium.copy(lineHeight = bodyLineHeight)
+    val baseBody = textStyleOverride ?: MaterialTheme.typography.bodyMedium.copy(lineHeight = bodyLineHeight)
     val blockPadding =
         when (spacingMode) {
             "compact" -> 0.5.dp
@@ -189,6 +198,14 @@ fun RpMarkdown(
     Markdown(
         markdownState = markdownState,
         modifier = modifier,
+        colors =
+            markdownColor(
+                text = baseBody.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface,
+                codeBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
+                inlineCodeBackground = inlineCodeBg,
+                dividerColor = MaterialTheme.colorScheme.outlineVariant,
+                tableBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
         padding =
             markdownPadding(
                 block = blockPadding,
@@ -274,6 +291,12 @@ fun RpMarkdown(
                 bullet = baseBody,
                 ordered = baseBody,
                 list = baseBody,
+                inlineCode =
+                    baseBody.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = (baseBody.fontSize.value * 0.9f).sp,
+                        color = inlineCodeColor,
+                    ),
                 quote = baseBody.copy(fontStyle = FontStyle.Italic),
             ),
         components = rememberRpMarkdownComponents(),

@@ -158,7 +158,7 @@ class ChatUiDetailedCharacterizationTest {
 
     @Test
 
-    fun `thinking block renders collapsed with the exact label and expands on tap`() {
+    fun `thinking block renders expanded by default with the exact label and collapses on tap`() {
 
         val assistant =
 
@@ -182,11 +182,11 @@ class ChatUiDetailedCharacterizationTest {
 
         rule.onNodeWithText("Razonamiento").assertIsDisplayed()
 
-        rule.onAllNodesWithText("estoy pensando el enfoque").assertCountEquals(0)
+        rule.onNodeWithText("estoy pensando el enfoque").assertIsDisplayed()
 
         rule.onNodeWithText("Razonamiento").performClick()
 
-        rule.onNodeWithText("estoy pensando el enfoque").assertIsDisplayed()
+        rule.onAllNodesWithText("estoy pensando el enfoque").assertCountEquals(0)
 
         rule.onNodeWithText("respuesta visible").assertIsDisplayed()
 

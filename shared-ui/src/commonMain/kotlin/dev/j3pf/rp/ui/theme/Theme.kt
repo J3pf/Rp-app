@@ -47,19 +47,22 @@ val CuteDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF80AB),
         onPrimary = Color(0xFF560027),
-        primaryContainer = Color(0xFF7B003A),
+        primaryContainer = Color(0xFF5C1335),
         onPrimaryContainer = Color(0xFFFFD8E4),
         secondary = Color(0xFFCE93D8),
         onSecondary = Color(0xFF38004D),
-        secondaryContainer = Color(0xFF52006E),
+        secondaryContainer = Color(0xFF421A52),
         onSecondaryContainer = Color(0xFFF3DAFF),
-        tertiary = Color(0xFFFFB74D),
-        background = Color(0xFF1E171E),
-        surface = Color(0xFF281E29),
-        surfaceVariant = Color(0xFF3E2D3F),
-        onBackground = Color(0xFFF0E5EC),
-        onSurface = Color(0xFFF0E5EC),
-        outline = Color(0xFF8E7A8A),
+        tertiary = Color(0xFFE5A965),
+        background = Color(0xFF121215),
+        surface = Color(0xFF17171B),
+        surfaceVariant = Color(0xFF222228),
+        surfaceContainerHigh = Color(0xFF1C1C22),
+        onBackground = Color(0xFFECECF1),
+        onSurface = Color(0xFFECECF1),
+        onSurfaceVariant = Color(0xFFA1A1AA),
+        outline = Color(0xFF71717A),
+        outlineVariant = Color(0xFF2E2E36),
     )
 
 // ───────────────────────────── Paleta Gentle-Sexy ─────────────────────────────
@@ -87,19 +90,22 @@ val SexyDarkColors =
     darkColorScheme(
         primary = Color(0xFFFF2A85),
         onPrimary = Color(0xFF4A0022),
-        primaryContainer = Color(0xFF700037),
+        primaryContainer = Color(0xFF590A30),
         onPrimaryContainer = Color(0xFFFFD8E6),
         secondary = Color(0xFFB388FF),
         onSecondary = Color(0xFF2E006A),
-        secondaryContainer = Color(0xFF4A0099),
+        secondaryContainer = Color(0xFF3B1266),
         onSecondaryContainer = Color(0xFFEADBFF),
-        tertiary = Color(0xFF00E5FF),
-        background = Color(0xFF120815),
-        surface = Color(0xFF1B0D20),
-        surfaceVariant = Color(0xFF2E1336),
-        onBackground = Color(0xFFFCE4F0),
-        onSurface = Color(0xFFFCE4F0),
-        outline = Color(0xFF914F7F),
+        tertiary = Color(0xFFE5A965),
+        background = Color(0xFF101013),
+        surface = Color(0xFF151519),
+        surfaceVariant = Color(0xFF202026),
+        surfaceContainerHigh = Color(0xFF1B1B21),
+        onBackground = Color(0xFFF2F2F7),
+        onSurface = Color(0xFFF2F2F7),
+        onSurfaceVariant = Color(0xFFA1A1AA),
+        outline = Color(0xFF71717A),
+        outlineVariant = Color(0xFF2D2D35),
     )
 
 // ───────────────────────────── Paleta Omarchy / Gentle Shell ─────────────────────────────
@@ -277,9 +283,14 @@ fun RpTheme(
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
-/** Colores semánticos que no existen en Material (peligro, éxito). */
+/** Colores semánticos que no existen en Material (peligro, éxito, herramientas, inline code). */
 object RpColors {
     val danger = Color(0xFFB3261E)
     val warning = Color(0xFFB26A00)
     val success = Color(0xFF2E7D32)
+    val toolAccent = Color(0xFF3FB950)
+    val inlineCodeTextDark = Color(0xFFE5A965)
+    val inlineCodeBgDark = Color(0xFF26221E)
+    val inlineCodeTextLight = Color(0xFF9A4B00)
+    val inlineCodeBgLight = Color(0xFFF3ECE4)
 }
