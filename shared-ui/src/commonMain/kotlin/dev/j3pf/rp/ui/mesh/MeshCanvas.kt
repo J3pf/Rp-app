@@ -119,9 +119,13 @@ fun MeshCanvas(
     LaunchedEffect(hasMovingContent, activeEdgeExpiresAt) {
         frameTime.longValue = currentTimeMillis()
         if (hasMovingContent) {
+            var lastFrameNanos = 0L
             while (isActive) {
-                withFrameNanos {
-                    frameTime.longValue = currentTimeMillis()
+                withFrameNanos { frameNanos ->
+                    if (lastFrameNanos == 0L || frameNanos - lastFrameNanos >= MESH_ANIMATION_INTERVAL_NANOS) {
+                        lastFrameNanos = frameNanos
+                        frameTime.longValue = currentTimeMillis()
+                    }
                 }
             }
         } else if (activeEdgeExpiresAt != null) {
@@ -665,3 +669,4 @@ private const val MIN_ZOOM = 0.4f
 private const val MAX_ZOOM = 2.5f
 private const val ACTIVE_EDGE_MS = 20_000L
 private const val BUBBLE_LIFETIME_MS = 6_000L
+private const val MESH_ANIMATION_INTERVAL_NANOS = 33_000_000L

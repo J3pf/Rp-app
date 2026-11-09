@@ -129,14 +129,22 @@ fun RpRoot(
 
             is NavTarget.Agent -> {
                 if (session != null) {
-                    nav.navigate(ChatRoute(t.agentId)) { launchSingleTop = true }
+                    nav.navigate(ChatRoute(t.agentId)) {
+                        popUpTo<ChatRoute> { inclusive = true }
+                        launchSingleTop = true
+                    }
                     mainVm.consumeTarget()
                 }
             }
 
             is NavTarget.Prompt -> {
                 if (session != null) {
-                    t.agentId?.let { nav.navigate(ChatRoute(it)) { launchSingleTop = true } }
+                    t.agentId?.let {
+                        nav.navigate(ChatRoute(it)) {
+                            popUpTo<ChatRoute> { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
                     mainVm.openPrompt(t.promptId)
                     mainVm.consumeTarget()
                 }

@@ -102,7 +102,8 @@ interface AgentDao {
 
     @Query(
         """UPDATE agents SET todoCompleted = :completed, todoTotal = :total, activeTask = :activeTask
-           WHERE relayId = :relayId AND agentId = :agentId""",
+           WHERE relayId = :relayId AND agentId = :agentId
+           AND (todoCompleted != :completed OR todoTotal != :total OR activeTask IS NOT :activeTask)""",
     )
     suspend fun updateTelemetry(
         relayId: String,

@@ -32,22 +32,24 @@ fun SurfaceCard(
     border: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val reducedMotion = LocalReducedMotion.current
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed && onClick != null && !reducedMotion) RpMotion.PRESSED_SCALE else 1.0f,
-        animationSpec = RpMotion.springSnappy,
-        label = "cardPressScale",
-    )
-
-    val cardModifier =
-        modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-
     if (onClick != null) {
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val reducedMotion = LocalReducedMotion.current
+        val scale by animateFloatAsState(
+            targetValue = if (isPressed && !reducedMotion) RpMotion.PRESSED_SCALE else 1.0f,
+            animationSpec = RpMotion.springSnappy,
+            label = "cardPressScale",
+        )
+        val cardModifier =
+            if (scale != 1.0f) {
+                modifier.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+            } else {
+                modifier
+            }
         Surface(
             onClick = onClick,
             modifier = cardModifier,
@@ -61,7 +63,7 @@ fun SurfaceCard(
         )
     } else {
         Surface(
-            modifier = cardModifier,
+            modifier = modifier,
             shape = shape,
             color = color,
             contentColor = contentColor,

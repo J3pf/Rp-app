@@ -2,10 +2,13 @@ package dev.j3pf.rp.push
 
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -32,6 +35,9 @@ import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.PushAck
 import dev.j3pf.rp.protocol.PushNotify
 import dev.j3pf.rp.protocol.Ulid
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -73,10 +79,49 @@ class DirectPushService : LifecycleService() {
 
     private lateinit var socket: ReconnectingSocket
 
+    private val screenInteractive = MutableStateFlow(true)
+    private val deviceIdleOrSaver = MutableStateFlow(false)
+    private val idleStandby = MutableStateFlow(false)
+    private var powerReceiver: BroadcastReceiver? = null
+
     override fun onCreate() {
         super.onCreate()
         channels.ensureServiceChannel()
-        goForeground(buildNotification(0, false))
+        goForeground(buildNotification(0, false, false))
+
+        val powerManager = getSystemService(PowerManager::class.java)
+
+        fun refreshPowerState() {
+            val interactive = powerManager?.isInteractive ?: true
+            val isDoze = powerManager?.isDeviceIdleMode == true
+            val isSaver = powerManager?.isPowerSaveMode == true
+            screenInteractive.value = interactive
+            deviceIdleOrSaver.value = isDoze || (isSaver && !interactive)
+            if (interactive) {
+                idleStandby.value = false
+            }
+        }
+        refreshPowerState()
+
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context?,
+                    intent: Intent?,
+                ) {
+                    refreshPowerState()
+                }
+            }
+        val filter =
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+                addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+            }
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        powerReceiver = receiver
 
         val client = baseClient.newBuilder().pingInterval(270, TimeUnit.SECONDS).build()
         socket =
@@ -108,23 +153,64 @@ class DirectPushService : LifecycleService() {
             }
         }
 
+        val hasActiveWork =
+            agents.agents
+                .map { list ->
+                    list.any {
+                        it.status == AgentStatus.WORKING ||
+                            it.status == AgentStatus.COMPACTING ||
+                            it.openPromptCount > 0
+                    }
+                }.distinctUntilChanged()
+
         lifecycleScope.launch {
-            lifecycleMonitor.isForeground
-                .collect { inForeground ->
-                    if (inForeground) {
-                        socket.stop()
-                    } else if (secrets.current() != null) {
-                        socket.start()
+            combine(lifecycleMonitor.isForeground, screenInteractive, hasActiveWork) { fg, interactive, active ->
+                !fg && !interactive && !active
+            }.distinctUntilChanged()
+                .collectLatest { canSleep ->
+                    if (canSleep) {
+                        delay(IDLE_STANDBY_TIMEOUT_MS)
+                        idleStandby.value = true
+                    } else {
+                        idleStandby.value = false
                     }
                 }
         }
 
         lifecycleScope.launch {
-            combine(socket.state, lifecycleMonitor.isForeground, machines.machinesState) { st, fg, ms ->
-                ((st == ConnState.Connected) || fg) to ms.size
+            combine(
+                lifecycleMonitor.isForeground,
+                deviceIdleOrSaver,
+                idleStandby,
+                hasActiveWork,
+            ) { inForeground, constrained, standby, active ->
+                val sleeping = (constrained && !active) || standby
+                !inForeground && !sleeping
             }.distinctUntilChanged()
-                .collect { (connected, pcs) ->
-                    val n = buildNotification(pcs, connected)
+                .collect { shouldRunDirectSocket ->
+                    if (!shouldRunDirectSocket) {
+                        socket.stop()
+                    } else if (secrets.current() != null) {
+                        socket.start()
+                        socket.retryNow()
+                    }
+                }
+        }
+
+        lifecycleScope.launch {
+            combine(
+                socket.state,
+                lifecycleMonitor.isForeground,
+                machines.machinesState,
+                deviceIdleOrSaver,
+                idleStandby,
+            ) { st, fg, ms, constrained, standby ->
+                val connected = (st == ConnState.Connected) || fg
+                val sleeping = !fg && !connected && (constrained || standby)
+                Triple(connected, ms.size, sleeping)
+            }.distinctUntilChanged()
+                .collect { (connected, pcs, sleeping) ->
+                    val n = buildNotification(pcs, connected, sleeping)
                     runCatching { notify(n) }
                 }
         }
@@ -162,7 +248,8 @@ class DirectPushService : LifecycleService() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!lifecycleMonitor.isForeground.value) {
+        idleStandby.value = false
+        if (!lifecycleMonitor.isForeground.value && !deviceIdleOrSaver.value) {
             socket.start()
             socket.retryNow()
         }
@@ -170,7 +257,13 @@ class DirectPushService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        socket.stop()
+        powerReceiver?.let { receiver ->
+            runCatching { unregisterReceiver(receiver) }
+        }
+        powerReceiver = null
+        if (::socket.isInitialized) {
+            socket.stop()
+        }
         super.onDestroy()
     }
 
@@ -179,16 +272,23 @@ class DirectPushService : LifecycleService() {
         when (env.t) {
             MsgType.PUSH_NOTIFY ->
                 lifecycleScope.launch {
+                    idleStandby.value = false
                     val n = runCatching { env.body<PushNotify>() }.getOrNull() ?: return@launch
                     router.handleDirect(n.k, n.body, n.pushId)
                     n.pushId?.let { socket.send(Envelope.of(MsgType.PUSH_ACK, PushAck(it)).encode()) }
                 }
-            MsgType.PROMPT_OPENED, MsgType.PROMPT_RESOLVED -> bus.publish(env)
+            MsgType.PROMPT_OPENED, MsgType.PROMPT_RESOLVED -> {
+                if (env.t == MsgType.PROMPT_OPENED) {
+                    idleStandby.value = false
+                }
+                bus.publish(env)
+            }
             MsgType.AGENTS_UPDATE ->
                 lifecycleScope.launch {
                     val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@launch
                     for (a in u.upsert) {
                         if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
+                            idleStandby.value = false
                             factory.showWorking(a)
                         } else {
                             factory.cancelWorking(a.agentId)
@@ -203,6 +303,7 @@ class DirectPushService : LifecycleService() {
                     val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@launch
                     for (a in w.agents) {
                         if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
+                            idleStandby.value = false
                             factory.showWorking(a)
                         } else {
                             factory.cancelWorking(a.agentId)
@@ -227,6 +328,7 @@ class DirectPushService : LifecycleService() {
     private fun buildNotification(
         pcs: Int,
         connected: Boolean,
+        sleeping: Boolean,
     ): Notification {
         val open =
             PendingIntent.getActivity(
@@ -237,6 +339,7 @@ class DirectPushService : LifecycleService() {
             )
         val text =
             when {
+                sleeping -> "RP en reposo · ahorro de batería"
                 !connected -> "Reconectando…"
                 pcs == 1 -> "RP conectado · 1 PC"
                 pcs > 1 -> "RP conectado · $pcs PCs"
@@ -256,6 +359,7 @@ class DirectPushService : LifecycleService() {
 
     companion object {
         private const val NOTIF_ID = 4200
+        private const val IDLE_STANDBY_TIMEOUT_MS = 10 * 60_000L
 
         fun start(context: Context) {
             runCatching {

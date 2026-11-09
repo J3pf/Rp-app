@@ -97,26 +97,30 @@ class AgentsRepository
                         MsgType.AGENTS_UPDATE -> {
                             val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@onEach
                             if (u.upsert.isNotEmpty()) {
-                                val merged =
-                                    u.upsert.map { s ->
+                                val changed =
+                                    u.upsert.mapNotNull { s ->
                                         val prev = dao.get(relayId, s.agentId)
                                         val entity = s.toEntity(relayId)
-                                        if (prev != null) {
-                                            entity.copy(
-                                                todoCompleted = if (s.todoTotal > 0) s.todoCompleted else prev.todoCompleted,
-                                                todoTotal = if (s.todoTotal > 0) s.todoTotal else prev.todoTotal,
-                                                activeTask =
-                                                    when {
-                                                        s.activeTask != null -> s.activeTask
-                                                        s.status == "working" -> prev.activeTask
-                                                        else -> null
-                                                    },
-                                            )
-                                        } else {
-                                            entity
-                                        }
+                                        val merged =
+                                            if (prev != null) {
+                                                entity.copy(
+                                                    todoCompleted = if (s.todoTotal > 0) s.todoCompleted else prev.todoCompleted,
+                                                    todoTotal = if (s.todoTotal > 0) s.todoTotal else prev.todoTotal,
+                                                    activeTask =
+                                                        when {
+                                                            s.activeTask != null -> s.activeTask
+                                                            s.status == "working" -> prev.activeTask
+                                                            else -> null
+                                                        },
+                                                )
+                                            } else {
+                                                entity
+                                            }
+                                        merged.takeIf { it != prev }
                                     }
-                                dao.upsert(merged)
+                                if (changed.isNotEmpty()) {
+                                    dao.upsert(changed)
+                                }
                             }
                             if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
                         }

@@ -97,6 +97,7 @@ import dev.j3pf.rp.ui.nav.AddMachineRoute
 import dev.j3pf.rp.ui.nav.AgentsRoute
 import dev.j3pf.rp.ui.nav.AppTab
 import dev.j3pf.rp.ui.nav.BatteryRoute
+import dev.j3pf.rp.ui.nav.ChatRoute
 import dev.j3pf.rp.ui.nav.DevicesRoute
 import dev.j3pf.rp.ui.nav.MachinesRoute
 import dev.j3pf.rp.ui.nav.MeshRoute
@@ -693,7 +694,9 @@ class SharedAppController(
     fun navigateTo(route: Any) {
         val current = _currentRoute.value
         if (current != route) {
-            storeLock.withLock { backStack.add(current) }
+            if (current !is ChatRoute || route !is ChatRoute) {
+                storeLock.withLock { backStack.add(current) }
+            }
             _currentRoute.value = route
         }
         when (route) {
