@@ -44,24 +44,29 @@ private fun attentionPriorityOf(agent: AgentSummary): Int =
     }
 
 /**
- * Ordena agentes dentro de una máquina siguiendo el panel `priority` de Herdr:
+ * Ordena agentes dentro de una máquina:
  * 1. Agentes en línea antes que desconectados.
- * 2. Prioridad de atención: esperando respuesta (`openPromptCount > 0` / `waiting_input`) > trabajando (`working`) > inactivo (`idle`).
- * 3. Dentro del mismo estado, respeta el orden exacto de Herdr (`#NNNN|tabId`, calculado por `state_change_seq`)
- *    sin que las tarjetas inactivas salten por actualizaciones de `lastSeenAt`.
- * 4. Para agentes sin índice de Herdr, usa `lastSeenAt` más reciente como desempate.
+ * 2. Si los agentes provienen de Herdr (`herdrOrderOf != null`):
+ *    - Preguntas/atención urgente (`openPromptCount > 0` o `waiting_input`) arriba para no bloquear al usuario.
+ *    - En el resto, preserva de forma estricta y estable el **orden visual exacto de Herdr** (`#NNNN|tabId`),
+ *      sin que las tarjetas se desorganicen ni salten por cambios de estado o `lastSeenAt`.
+ * 3. Si el usuario NO usa Herdr (ej. Pi standalone, tmux):
+ *    - Prioridad de atención: `openPromptCount > 0` / `waiting_input` > `working` > `idle`.
+ *    - Desempate por `lastSeenAt` más reciente.
  */
 fun sortAgentsWithinGroup(agents: List<AgentSummary>): List<AgentSummary> =
     agents.sortedWith { a, b ->
         val onlineCmp = b.online.compareTo(a.online)
         if (onlineCmp != 0) return@sortedWith onlineCmp
 
-        val attentionCmp = attentionPriorityOf(b).compareTo(attentionPriorityOf(a))
-        if (attentionCmp != 0) return@sortedWith attentionCmp
-
         val orderA = herdrOrderOf(a)
         val orderB = herdrOrderOf(b)
         if (orderA != null && orderB != null) {
+            val promptA = if (a.openPromptCount > 0 || a.status == "waiting_input") 1 else 0
+            val promptB = if (b.openPromptCount > 0 || b.status == "waiting_input") 1 else 0
+            val promptCmp = promptB.compareTo(promptA)
+            if (promptCmp != 0) return@sortedWith promptCmp
+
             val orderCmp = orderA.compareTo(orderB)
             if (orderCmp != 0) orderCmp else a.agentId.compareTo(b.agentId)
         } else if (orderA != null) {
@@ -69,6 +74,9 @@ fun sortAgentsWithinGroup(agents: List<AgentSummary>): List<AgentSummary> =
         } else if (orderB != null) {
             1
         } else {
+            val attentionCmp = attentionPriorityOf(b).compareTo(attentionPriorityOf(a))
+            if (attentionCmp != 0) return@sortedWith attentionCmp
+
             val seenCmp = (b.lastSeenAt ?: 0L).compareTo(a.lastSeenAt ?: 0L)
             if (seenCmp != 0) seenCmp else a.agentId.compareTo(b.agentId)
         }

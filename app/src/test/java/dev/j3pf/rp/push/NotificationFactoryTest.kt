@@ -22,6 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -283,6 +284,37 @@ class NotificationFactoryTest {
             // If agent2 starts working again, its settled notification is removed.
             factory.showWorking(agent2.copy(activeTask = "Ejecutando tests"))
             assertNull(shadowOf(nm).getNotification(NotificationFactory.SETTLED_TAG, stableId("settled:m:s2")))
+        }
+    }
+
+    @Test
+    fun `showWorking descarta json crudo y bloques de codigo como titulo de notificacion`() {
+        runBlocking {
+            val agentJson =
+                dev.j3pf.rp.protocol.AgentSummary(
+                    agentId = "m:trazzik",
+                    machineId = "01MACH",
+                    machineName = "LUCHO TORRE",
+                    sessionName = "Trazzik · Antigravity request",
+                    gitBranch = "main",
+                    status = dev.j3pf.rp.protocol.AgentStatus.WORKING,
+                    activeTask = null,
+                    lastMessagePreview = "{\"findings\":[{\"location\":\"lib/features/viewer3d/mesh.dart:12\",\"claim\":\"leak\"}]}",
+                )
+            factory.showWorking(agentJson)
+            val id = stableId("working:m:trazzik")
+            val n = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
+            assertNotNull(n)
+            // No debe contener JSON crudo {"findings":...}
+            val title = n.extras.getString(Notification.EXTRA_TITLE).orEmpty()
+            assertFalse(title.contains("{\"findings\""))
+            assertFalse(title.contains("{"))
+            // Debe hacer fallback al topic o proyecto
+            assertEquals("Antigravity request", title)
+            assertEquals("Trazzik · ⎇ main · LUCHO TORRE", n.extras.getString(Notification.EXTRA_SUB_TEXT))
+            assertEquals("Tú: Antigravity request", n.extras.getString(Notification.EXTRA_TEXT))
+
+            factory.cancelWorking("m:trazzik")
         }
     }
 

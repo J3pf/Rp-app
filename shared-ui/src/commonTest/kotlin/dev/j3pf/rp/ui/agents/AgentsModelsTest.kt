@@ -135,7 +135,7 @@ class AgentsModelsTest {
                 status = "idle",
                 openPromptCount = 0,
                 lastSeenAt = 100L,
-                herdr = HerdrInfo(paneId = "w1:p1", tabId = "#0002|w1:t1", workspaceId = "w1"),
+                herdr = HerdrInfo(paneId = "w1:p1", tabId = "#0001|w1:t1", workspaceId = "w1"),
             )
         val ws2Working =
             AgentSummary(
@@ -145,7 +145,7 @@ class AgentsModelsTest {
                 status = "working",
                 openPromptCount = 0,
                 lastSeenAt = 50L,
-                herdr = HerdrInfo(paneId = "w2:p1", tabId = "#0004|w2:t1", workspaceId = "w2"),
+                herdr = HerdrInfo(paneId = "w2:p1", tabId = "#0002|w2:t1", workspaceId = "w2"),
             )
         val ws3IdleRecent =
             AgentSummary(
@@ -159,7 +159,33 @@ class AgentsModelsTest {
             )
 
         val sorted = sortAgentsWithinGroup(listOf(ws3IdleRecent, ws1Idle, ws2Working))
-        assertEquals(listOf("m1:herdr:ws2", "m1:herdr:ws1", "m1:herdr:ws3"), sorted.map { it.agentId })
+        // En Herdr, se preserva el orden exacto de tabs (#0001, #0002, #0003) sin que agentes que trabajan salten
+        assertEquals(listOf("m1:herdr:ws1", "m1:herdr:ws2", "m1:herdr:ws3"), sorted.map { it.agentId })
         assertEquals("w1:t1", cleanHerdrTabId(ws1Idle.herdr?.tabId))
+    }
+
+    @Test
+    fun sortAgentsWithinGroupSurfacesUrgentPromptsInHerdrGroup() {
+        val ws1Idle =
+            AgentSummary(
+                agentId = "m1:herdr:ws1",
+                machineId = "m-1",
+                online = true,
+                status = "idle",
+                openPromptCount = 0,
+                herdr = HerdrInfo(paneId = "w1:p1", tabId = "#0001|w1:t1", workspaceId = "w1"),
+            )
+        val ws2Prompt =
+            AgentSummary(
+                agentId = "m1:herdr:ws2",
+                machineId = "m-1",
+                online = true,
+                status = "waiting_input",
+                openPromptCount = 1,
+                herdr = HerdrInfo(paneId = "w2:p1", tabId = "#0002|w2:t1", workspaceId = "w2"),
+            )
+
+        val sorted = sortAgentsWithinGroup(listOf(ws1Idle, ws2Prompt))
+        assertEquals(listOf("m1:herdr:ws2", "m1:herdr:ws1"), sorted.map { it.agentId })
     }
 }

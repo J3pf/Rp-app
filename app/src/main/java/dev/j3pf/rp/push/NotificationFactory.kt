@@ -425,7 +425,7 @@ class NotificationFactory
             val shortCritical: String
 
             if (allWorking.size == 1) {
-                title = cleanTask ?: "Trabajando en ${parts.project}…"
+                title = cleanTask ?: parts.topic ?: "Trabajando en ${parts.project}…"
                 subText =
                     buildString {
                         append(parts.project)
@@ -791,11 +791,19 @@ class NotificationFactory
             return AgentLabelParts(project = project, topic = topic)
         }
 
+        private fun isRawJsonOrCode(s: String): Boolean {
+            val t = s.trim()
+            if (t.startsWith("{") || t.startsWith("[") || t.startsWith("```")) return true
+            if (t.startsWith("{\"") || t.startsWith("[\"")) return true
+            return false
+        }
+
         private fun cleanPreview(
             raw: String?,
             maxLen: Int = 100,
         ): String? {
             if (raw.isNullOrBlank()) return null
+            if (isRawJsonOrCode(raw)) return null
             val cleaned =
                 raw
                     .lineSequence()
@@ -804,14 +812,16 @@ class NotificationFactory
                             .trim()
                             .replace(MD_HEADER_REGEX, "")
                             .replace(MD_BULLET_REGEX, "")
-                    }.filter { it.isNotBlank() }
+                    }.filter { line ->
+                        line.isNotBlank() && !isRawJsonOrCode(line)
+                    }
                     .joinToString(" ")
                     .replace("**", "")
                     .replace("__", "")
                     .replace("`", "")
                     .replace(WHITESPACE_REGEX, " ")
                     .trim()
-            if (cleaned.isEmpty()) return null
+            if (cleaned.isEmpty() || isRawJsonOrCode(cleaned)) return null
             return truncate(cleaned, maxLen)
         }
 
