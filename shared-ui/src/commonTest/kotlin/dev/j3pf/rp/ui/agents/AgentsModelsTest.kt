@@ -3,6 +3,8 @@ package dev.j3pf.rp.ui.agents
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.HerdrInfo
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.protocol.formatCompactTokens
+import dev.j3pf.rp.protocol.parseHerdrTabMeta
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -187,5 +189,22 @@ class AgentsModelsTest {
 
         val sorted = sortAgentsWithinGroup(listOf(ws1Idle, ws2Prompt))
         assertEquals(listOf("m1:herdr:ws2", "m1:herdr:ws1"), sorted.map { it.agentId })
+    }
+
+    @Test
+    fun parseHerdrTabMetaAndFormatCompactTokens() {
+        val meta = parseHerdrTabMeta("#0002~done@128000/256000|w2:t1")
+        assertEquals(2, meta.orderIndex)
+        assertTrue(meta.isDone)
+        assertEquals(128_000, meta.contextTokens)
+        assertEquals(256_000, meta.contextWindow)
+        assertEquals(50, meta.contextPercent)
+        assertEquals("w2:t1", meta.cleanTabId)
+
+        assertEquals("950", formatCompactTokens(950))
+        assertEquals("9.3k", formatCompactTokens(9_320))
+        assertEquals("118k", formatCompactTokens(118_400))
+        assertEquals("256k", formatCompactTokens(256_000))
+        assertEquals("1.2M", formatCompactTokens(1_200_000))
     }
 }

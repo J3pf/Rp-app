@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.protocol.formatCompactTokens
+import dev.j3pf.rp.protocol.parseHerdrTabMeta
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.TagChip
@@ -522,6 +524,27 @@ fun AgentCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 StatusChip(a)
+                val tabMeta = parseHerdrTabMeta(a.herdr?.tabId)
+                val ctxTokens = a.contextTokens ?: tabMeta.contextTokens
+                val ctxPct = a.contextPercent ?: tabMeta.contextPercent
+                if (ctxPct != null || ctxTokens != null) {
+                    val pressureColor =
+                        when {
+                            (ctxPct ?: 0) >= 85 -> MaterialTheme.colorScheme.error
+                            (ctxPct ?: 0) >= 60 -> RpColors.warning
+                            else -> RpColors.success
+                        }
+                    val ctxLabel =
+                        when {
+                            ctxPct != null && ctxTokens != null -> "🧠 ${ctxPct}% · ${formatCompactTokens(ctxTokens)}"
+                            ctxPct != null -> "🧠 ${ctxPct}%"
+                            else -> "🧠 ${formatCompactTokens(ctxTokens!!)}"
+                        }
+                    TagChip(
+                        text = ctxLabel,
+                        color = pressureColor,
+                    )
+                }
                 if (a.todoTotal > 0) {
                     val percent = a.todoCompleted * 100 / a.todoTotal
                     TagChip(

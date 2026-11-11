@@ -4,6 +4,7 @@ import dev.j3pf.rp.data.db.AgentEntity
 import dev.j3pf.rp.data.db.MachineEntity
 import dev.j3pf.rp.data.db.PromptEntity
 import dev.j3pf.rp.data.db.PromptState
+import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.HerdrInfo
@@ -12,6 +13,7 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.ModelInfo
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.RpJson
+import dev.j3pf.rp.protocol.parseHerdrTabMeta
 import kotlinx.serialization.builtins.ListSerializer
 
 fun MachineSummary.toEntity(relayId: String) =
@@ -46,8 +48,20 @@ fun MachineEntity.toModel() =
             },
     )
 
-fun AgentSummary.toEntity(relayId: String) =
-    AgentEntity(
+fun AgentSummary.toEntity(relayId: String): AgentEntity {
+    val rawTab = herdr?.tabId
+    val encodedTab =
+        if (contextTokens != null && contextWindow != null && contextWindow!! > 0 && (rawTab == null || !rawTab.contains('@'))) {
+            if (rawTab != null && rawTab.contains('|')) {
+                val pipeIdx = rawTab.indexOf('|')
+                "${rawTab.substring(0, pipeIdx)}@$contextTokens/$contextWindow${rawTab.substring(pipeIdx)}"
+            } else {
+                "@$contextTokens/$contextWindow|${rawTab.orEmpty()}"
+            }
+        } else {
+            rawTab
+        }
+    return AgentEntity(
         relayId = relayId,
         agentId = agentId,
         machineId = machineId,
@@ -64,7 +78,7 @@ fun AgentSummary.toEntity(relayId: String) =
         lastMessagePreview = lastMessagePreview,
         launcher = launcher,
         herdrPaneId = herdr?.paneId,
-        herdrTabId = herdr?.tabId,
+        herdrTabId = encodedTab,
         herdrWorkspaceId = herdr?.workspaceId,
         gentleMode = gentleMode,
         redacted = redacted,
@@ -74,9 +88,17 @@ fun AgentSummary.toEntity(relayId: String) =
         todoTotal = todoTotal,
         activeTask = activeTask,
     )
+}
 
-fun AgentEntity.toModel(openPrompts: Int = 0) =
-    AgentSummary(
+fun AgentEntity.toModel(openPrompts: Int = 0): AgentSummary {
+    val tabMeta = parseHerdrTabMeta(herdrTabId)
+    val effectiveStatus =
+        if (status == AgentStatus.IDLE && tabMeta.isDone) {
+            AgentStatus.DONE
+        } else {
+            status
+        }
+    return AgentSummary(
         agentId = agentId,
         machineId = machineId,
         machineName = machineName,
@@ -86,14 +108,14 @@ fun AgentEntity.toModel(openPrompts: Int = 0) =
         cwd = cwd,
         gitBranch = gitBranch,
         model = model?.let { ModelInfo(id = it) },
-        status = status,
+        status = effectiveStatus,
         online = online,
         lastSeenAt = lastSeenAt,
         openPromptCount = openPrompts,
         lastMessagePreview = lastMessagePreview,
         launcher = launcher,
         herdr =
-            if (herdrPaneId != null || herdrWorkspaceId != null || herdrTabId != null) {
+            if (herdrPaneId != null || herdrWorkspaceId != null || tabMeta.cleanTabId != null || tabMeta.orderIndex != null) {
                 HerdrInfo(herdrPaneId, herdrTabId, herdrWorkspaceId)
             } else {
                 null
@@ -105,7 +127,11 @@ fun AgentEntity.toModel(openPrompts: Int = 0) =
         todoCompleted = todoCompleted,
         todoTotal = todoTotal,
         activeTask = activeTask,
+        contextTokens = tabMeta.contextTokens,
+        contextWindow = tabMeta.contextWindow,
+        contextPercent = tabMeta.contextPercent,
     )
+}
 
 fun Prompt.toEntity(
     relayId: String,

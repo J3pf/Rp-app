@@ -470,7 +470,8 @@ object ChatReducer {
         return when (msg.str("role")) {
             "assistant" -> {
                 val item = assistantFrom(msg, keyOf(msg, "assistant", "seq$seq"))
-                s.copy(streaming = null, items = upsert(s.items, item), tools = withCalls(s.tools, item, now))
+                val next = s.copy(streaming = null, items = upsert(s.items, item), tools = withCalls(s.tools, item, now))
+                extractContextUsage(next, msg)
             }
 
             "user" -> {
@@ -682,7 +683,8 @@ object ChatReducer {
 
             EntryKind.ASSISTANT -> {
                 val item = assistantFrom(msg, keyOf(msg, "assistant", "eid${entry.eid}"), entry.at)
-                s.copy(items = upsert(s.items, item), tools = withCalls(s.tools, item, 0))
+                val next = s.copy(items = upsert(s.items, item), tools = withCalls(s.tools, item, 0))
+                extractContextUsage(next, msg)
             }
 
             EntryKind.TOOL_RESULT -> {
@@ -860,6 +862,41 @@ object ChatReducer {
     }
 
     private fun modelLabel(model: JsonObject?): String? = model?.str("id") ?: model?.str("name")
+
+    private fun extractContextUsage(
+        s: ChatState,
+        msg: JsonObject,
+    ): ChatState {
+        val usage = msg.obj("usage") ?: msg.obj("contextUsage") ?: return s
+        val total =
+            usage.int("totalTokens")
+                ?: usage.int("tokens")
+                ?: run {
+                    val inp = usage.int("input") ?: usage.int("input_tokens") ?: 0
+                    val out = usage.int("output") ?: usage.int("output_tokens") ?: 0
+                    val cr =
+                        usage.int("cacheRead")
+                            ?: usage.int("cache_read_tokens")
+                            ?: usage.int("cache_read_input_tokens")
+                            ?: 0
+                    val cw =
+                        usage.int("cacheWrite")
+                            ?: usage.int("cache_write_tokens")
+                            ?: usage.int("cache_creation_input_tokens")
+                            ?: 0
+                    (inp + out + cr + cw).takeIf { it > 0 }
+                }
+                ?: return s
+        if (total <= 0) return s
+        val window = (usage.int("contextWindow") ?: s.contextWindow ?: 200_000).coerceAtLeast(1)
+        val pct =
+            usage.int("contextPercent")
+                ?: kotlin.math
+                    .round((total.toDouble() / window) * 100.0)
+                    .toInt()
+                    .coerceIn(0, 100)
+        return s.copy(contextTokens = total, contextWindow = window, contextPercent = pct)
+    }
 
     /** Texto y número de imágenes de `content` (cadena o lista de bloques). */
     fun userContent(content: JsonElement?): Pair<String, Int> {

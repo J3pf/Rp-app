@@ -157,7 +157,64 @@ data class AgentSummary(
     val todoCompleted: Int = 0,
     val todoTotal: Int = 0,
     val activeTask: String? = null,
+    val contextTokens: Int? = null,
+    val contextWindow: Int? = null,
+    val contextPercent: Int? = null,
 )
+
+data class HerdrTabMeta(
+    val orderIndex: Int? = null,
+    val isDone: Boolean = false,
+    val contextTokens: Int? = null,
+    val contextWindow: Int? = null,
+    val contextPercent: Int? = null,
+    val cleanTabId: String? = null,
+)
+
+private val HERDR_TAB_META_REGEX =
+    Regex("^(?:#(\\d{1,6}))?(~done)?(?:@(\\d+)/(\\d+))?\\|(.*)$")
+
+fun parseHerdrTabMeta(rawTabId: String?): HerdrTabMeta {
+    if (rawTabId == null) return HerdrTabMeta()
+    val match = HERDR_TAB_META_REGEX.matchEntire(rawTabId)
+    if (match != null && (match.groupValues[1].isNotEmpty() || match.groupValues[2].isNotEmpty() || match.groupValues[3].isNotEmpty())) {
+        val order = match.groupValues[1].toIntOrNull()
+        val isDone = match.groupValues[2].isNotEmpty()
+        val tokens = match.groupValues[3].toIntOrNull()
+        val window = match.groupValues[4].toIntOrNull()
+        val percent =
+            if (tokens != null && window != null && window > 0) {
+                ((tokens.toDouble() / window) * 100.0).let { kotlin.math.round(it).toInt().coerceIn(0, 100) }
+            } else {
+                null
+            }
+        val clean = match.groupValues[5].takeIf { it.isNotEmpty() }
+        return HerdrTabMeta(
+            orderIndex = order,
+            isDone = isDone,
+            contextTokens = tokens,
+            contextWindow = window,
+            contextPercent = percent,
+            cleanTabId = clean,
+        )
+    }
+    return HerdrTabMeta(cleanTabId = rawTabId.takeIf { it.isNotEmpty() })
+}
+
+fun formatCompactTokens(tokens: Int): String {
+    if (tokens >= 1_000_000) {
+        val tenths = (tokens + 50_000) / 100_000
+        return if (tenths % 10 == 0) "${tenths / 10}M" else "${tenths / 10}.${tenths % 10}M"
+    }
+    if (tokens >= 10_000) {
+        return "${(tokens + 500) / 1_000}k"
+    }
+    if (tokens >= 1_000) {
+        val tenths = (tokens + 50) / 100
+        return if (tenths % 10 == 0) "${tenths / 10}k" else "${tenths / 10}.${tenths % 10}k"
+    }
+    return tokens.toString()
+}
 
 @Serializable
 data class PromptOption(

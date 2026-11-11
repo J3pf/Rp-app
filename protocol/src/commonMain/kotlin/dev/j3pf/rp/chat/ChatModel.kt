@@ -132,6 +132,10 @@ data class ChatState(
     val todos: List<TodoItem> = emptyList(),
     /** Telemetría de subagentes indexados por taskId. */
     val subagents: Map<String, SubagentInfo> = emptyMap(),
+    /** Uso de ventana de contexto de la sesión actual (tokens usados, capacidad total y porcentaje 0..100). */
+    val contextTokens: Int? = null,
+    val contextWindow: Int? = null,
+    val contextPercent: Int? = null,
 ) {
     /** Items + mensaje en streaming, listos para pintar. */
     val display: List<ChatItem> get() = if (streaming != null) items + streaming else items

@@ -113,6 +113,9 @@ class ChatViewModel
                         todoCompleted = if (chat.todoTotalCount > 0) chat.todoCompletedCount else agent.todoCompleted,
                         todoTotal = if (chat.todoTotalCount > 0) chat.todoTotalCount else agent.todoTotal,
                         activeTask = chat.activeTaskLabel() ?: agent.activeTask,
+                        contextTokens = chat.contextTokens ?: agent.contextTokens,
+                        contextWindow = chat.contextWindow ?: agent.contextWindow,
+                        contextPercent = chat.contextPercent ?: agent.contextPercent,
                     )
                 e.copy(
                     chat = chat,

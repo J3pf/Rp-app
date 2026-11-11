@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -46,7 +48,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.formatCompactTokens
+import dev.j3pf.rp.protocol.parseHerdrTabMeta
 import dev.j3pf.rp.ui.components.StatusChip
+import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.lastSegment
 
@@ -145,6 +150,37 @@ fun ChatTopBar(
                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                             },
                                         fontWeight = FontWeight.Medium,
+                                    )
+                                }
+                            }
+                            val tabMeta = parseHerdrTabMeta(agent.herdr?.tabId)
+                            val ctxPct = agent.contextPercent ?: tabMeta.contextPercent
+                            val ctxTokens = agent.contextTokens ?: tabMeta.contextTokens
+                            if (ctxPct != null || ctxTokens != null) {
+                                val pillColor =
+                                    when {
+                                        (ctxPct ?: 0) >= 85 -> MaterialTheme.colorScheme.error
+                                        (ctxPct ?: 0) >= 60 -> RpColors.warning
+                                        else -> RpColors.success
+                                    }
+                                val pillLabel =
+                                    if (ctxPct != null) {
+                                        "🧠 ${ctxPct}%"
+                                    } else {
+                                        "🧠 ${formatCompactTokens(ctxTokens!!)}"
+                                    }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = pillColor.copy(alpha = 0.14f),
+                                    border = BorderStroke(0.5.dp, pillColor.copy(alpha = 0.45f)),
+                                    modifier = Modifier.clickable { onInfo() },
+                                ) {
+                                    Text(
+                                        pillLabel,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = pillColor,
+                                        fontWeight = FontWeight.SemiBold,
                                     )
                                 }
                             }
@@ -336,6 +372,27 @@ fun ChatTopBar(
                 }
             },
         )
+
+        val topBarMeta = parseHerdrTabMeta(agent?.herdr?.tabId)
+        val topBarCtxPct = agent?.contextPercent ?: topBarMeta.contextPercent
+        if (topBarCtxPct != null && topBarCtxPct > 0) {
+            val pct = topBarCtxPct.coerceIn(0, 100)
+            val barColor =
+                when {
+                    pct >= 85 -> MaterialTheme.colorScheme.error
+                    pct >= 60 -> RpColors.warning
+                    else -> RpColors.success.copy(alpha = 0.78f)
+                }
+            LinearProgressIndicator(
+                progress = { pct / 100f },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                color = barColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+            )
+        }
 
         if (otherActiveAgents.isNotEmpty()) {
             val activeScroll = rememberScrollState()

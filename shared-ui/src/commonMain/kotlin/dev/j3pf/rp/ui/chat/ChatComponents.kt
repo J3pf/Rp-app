@@ -71,6 +71,8 @@ import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.TodoItem
+import dev.j3pf.rp.protocol.formatCompactTokens
+import dev.j3pf.rp.protocol.parseHerdrTabMeta
 import dev.j3pf.rp.ui.agents.cleanHerdrTabId
 import dev.j3pf.rp.ui.components.TagChip
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
@@ -137,6 +139,20 @@ fun InfoDialog(
     liveThinking: String? = null,
     onDismiss: () -> Unit,
 ) {
+    val tabMeta = parseHerdrTabMeta(agent.herdr?.tabId)
+    val ctxTokens = agent.contextTokens ?: tabMeta.contextTokens
+    val ctxWindow = agent.contextWindow ?: tabMeta.contextWindow
+    val ctxPercent = agent.contextPercent ?: tabMeta.contextPercent
+    val contextSummary =
+        when {
+            ctxTokens != null && ctxWindow != null && ctxPercent != null ->
+                "${formatCompactTokens(ctxTokens)} / ${formatCompactTokens(ctxWindow)} tokens ($ctxPercent%)"
+            ctxTokens != null && ctxPercent != null ->
+                "${formatCompactTokens(ctxTokens)} tokens ($ctxPercent%)"
+            ctxPercent != null -> "$ctxPercent%"
+            ctxTokens != null -> "${formatCompactTokens(ctxTokens)} tokens"
+            else -> null
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
@@ -149,6 +165,7 @@ fun InfoDialog(
                     "Rama" to agent.gitBranch,
                     "Modelo" to (liveModel ?: agent.model?.label),
                     "Razonamiento" to liveThinking,
+                    "Contexto" to contextSummary,
                     "Lanzador" to agent.launcher,
                     "herdr" to agent.herdr?.let { listOfNotNull(it.workspaceId, cleanHerdrTabId(it.tabId), it.paneId).joinToString(" / ") },
                     "Modo gentle" to agent.gentleMode,

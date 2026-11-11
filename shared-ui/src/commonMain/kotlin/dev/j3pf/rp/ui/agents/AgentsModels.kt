@@ -3,6 +3,7 @@ package dev.j3pf.rp.ui.agents
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.protocol.parseHerdrTabMeta
 
 enum class SessionQuickFilter(
     val label: String,
@@ -18,23 +19,9 @@ data class MachineGroup(
     val agents: List<AgentSummary>,
 )
 
-private val HERDR_ORDER_PREFIX_REGEX = Regex("^#(\\d{1,6})\\|(.*)$")
+fun herdrOrderOf(agent: AgentSummary): Int? = parseHerdrTabMeta(agent.herdr?.tabId).orderIndex
 
-fun herdrOrderOf(agent: AgentSummary): Int? {
-    val rawTabId = agent.herdr?.tabId ?: return null
-    val match = HERDR_ORDER_PREFIX_REGEX.matchEntire(rawTabId) ?: return null
-    return match.groupValues[1].toIntOrNull()
-}
-
-fun cleanHerdrTabId(rawTabId: String?): String? {
-    if (rawTabId == null) return null
-    val match = HERDR_ORDER_PREFIX_REGEX.matchEntire(rawTabId)
-    return if (match != null) {
-        match.groupValues[2].takeIf { it.isNotEmpty() }
-    } else {
-        rawTabId.takeIf { it.isNotEmpty() }
-    }
-}
+fun cleanHerdrTabId(rawTabId: String?): String? = parseHerdrTabMeta(rawTabId).cleanTabId
 
 private fun attentionPriorityOf(agent: AgentSummary): Int =
     when {

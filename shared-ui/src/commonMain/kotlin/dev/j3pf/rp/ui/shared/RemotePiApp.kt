@@ -453,6 +453,9 @@ private fun SharedChatScreen(
             todoCompleted = if (chatState.todoTotalCount > 0) chatState.todoCompletedCount else rawAgent.todoCompleted,
             todoTotal = if (chatState.todoTotalCount > 0) chatState.todoTotalCount else rawAgent.todoTotal,
             activeTask = chatState.activeTaskLabel() ?: rawAgent.activeTask,
+            contextTokens = chatState.contextTokens ?: rawAgent.contextTokens,
+            contextWindow = chatState.contextWindow ?: rawAgent.contextWindow,
+            contextPercent = chatState.contextPercent ?: rawAgent.contextPercent,
         )
     val otherActiveAgents =
         remember(agents, agentId) {
