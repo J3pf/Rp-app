@@ -339,6 +339,8 @@ object RpColors {
     val danger = Color(0xFFB3261E)
     val warning = Color(0xFFB26A00)
     val success = Color(0xFF2E7D32)
+    val working = Color(0xFF00B0FF)
+    val workingGlow = Color(0xFF00E5FF)
     val toolAccent = Color(0xFF3FB950)
     val inlineCodeTextDark = Color(0xFFE5A965)
     val inlineCodeBgDark = Color(0xFF26221E)

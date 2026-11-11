@@ -38,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.AgentSkeletonList
@@ -300,6 +302,33 @@ fun AgentsContent(
     val totalVisibleAgents = remember(filteredGroups) { filteredGroups.sumOf { it.agents.size } }
     val hasAgy = remember(state.allAgents) { state.allAgents.any { it.launcher == "agy" } }
     val hasPi = remember(state.allAgents) { state.allAgents.any { it.launcher != "agy" } }
+    val reducedMotion = LocalReducedMotion.current
+
+    val currentAgentIds = remember(state.allAgents) { state.allAgents.map { it.agentId }.toSet() }
+    var previousAgentIds by remember { mutableStateOf<Set<String>?>(null) }
+    val topAgent = filteredGroups.firstOrNull()?.agents?.firstOrNull()
+    val topAgentId = topAgent?.agentId
+    var previousTopAgentId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(currentAgentIds, topAgentId) {
+        val prevIds = previousAgentIds
+        val prevTop = previousTopAgentId
+        if (prevIds != null) {
+            val hasNewAgent = (currentAgentIds - prevIds).isNotEmpty()
+            val topBecameActive =
+                prevTop != null && topAgentId != null && topAgentId != prevTop &&
+                    (topAgent.status == AgentStatus.WORKING || topAgent.openPromptCount > 0 || topAgent.status == AgentStatus.WAITING_INPUT)
+            if (hasNewAgent || topBecameActive) {
+                if (!reducedMotion) {
+                    listState.animateScrollToItem(0)
+                } else {
+                    listState.scrollToItem(0)
+                }
+            }
+        }
+        previousAgentIds = currentAgentIds
+        previousTopAgentId = topAgentId
+    }
 
     Scaffold(
         modifier = modifier,
@@ -362,7 +391,6 @@ fun AgentsContent(
                 )
             }
 
-            val reducedMotion = LocalReducedMotion.current
             PullToRefreshBox(
                 isRefreshing = state.refreshing && !reducedMotion,
                 onRefresh = onRefresh,

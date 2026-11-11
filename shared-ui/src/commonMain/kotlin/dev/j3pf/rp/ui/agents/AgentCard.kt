@@ -1,5 +1,12 @@
 package dev.j3pf.rp.ui.agents
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +52,7 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.components.TagChip
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.lastSegment
@@ -71,7 +82,7 @@ fun AgentsHeroStats(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(
                     Modifier.size(8.dp).clip(CircleShape).background(
-                        if (working > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        if (working > 0) RpColors.working else MaterialTheme.colorScheme.outline,
                     ),
                 )
                 Text(
@@ -119,14 +130,17 @@ fun AgentCard(
 ) {
     val (menu, setMenu) = remember { mutableStateOf(false) }
 
+    val isWorking = (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) && a.online
+    val isWaiting = (a.openPromptCount > 0 || a.status == AgentStatus.WAITING_INPUT) && a.online
+    val isDone = a.status == AgentStatus.DONE && a.online
+
     val statusColor =
         when {
             !a.online -> MaterialTheme.colorScheme.outline
-            a.openPromptCount > 0 || a.status == AgentStatus.WAITING_INPUT -> RpColors.warning
-            a.status == AgentStatus.WORKING -> MaterialTheme.colorScheme.primary
-            a.status == AgentStatus.COMPACTING -> MaterialTheme.colorScheme.tertiary
+            isWaiting -> RpColors.warning
+            isWorking -> RpColors.working
             a.status == AgentStatus.ERROR -> RpColors.danger
-            a.status == AgentStatus.DONE -> RpColors.success
+            isDone -> RpColors.success
             else -> MaterialTheme.colorScheme.outline
         }
 
@@ -139,9 +153,70 @@ fun AgentCard(
             rawTitle
         }
 
-    val isWorking = (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) && a.online
-    val isWaiting = (a.openPromptCount > 0 || a.status == AgentStatus.WAITING_INPUT) && a.online
-    val isDone = a.status == AgentStatus.DONE && a.online
+    val reducedMotion = LocalReducedMotion.current
+    val infiniteTransition = if (isWorking && !reducedMotion) rememberInfiniteTransition(label = "workingCardAnim") else null
+
+    val animatedOffset =
+        infiniteTransition?.animateFloat(
+            initialValue = 0f,
+            targetValue = 1000f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 2400, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+            label = "workingBorderOffset",
+        )
+
+    val animatedAlpha =
+        infiniteTransition?.animateFloat(
+            initialValue = 0.65f,
+            targetValue = 0.95f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "workingBorderAlpha",
+        )
+
+    val cardBorder =
+        when {
+            isWorking && animatedOffset != null -> {
+                val offset = animatedOffset.value
+                val alpha = animatedAlpha?.value ?: 0.85f
+                val brush =
+                    Brush.horizontalGradient(
+                        colors =
+                            listOf(
+                                Color(0xFF00B0FF).copy(alpha = alpha),
+                                Color(0xFF818CF8).copy(alpha = alpha),
+                                Color(0xFF00E5FF).copy(alpha = alpha),
+                                Color(0xFF00B0FF).copy(alpha = alpha),
+                            ),
+                        startX = offset,
+                        endX = offset + 700f,
+                        tileMode = TileMode.Repeated,
+                    )
+                BorderStroke(width = 2.dp, brush = brush)
+            }
+
+            isWorking -> {
+                BorderStroke(width = 1.75.dp, color = RpColors.working.copy(alpha = 0.85f))
+            }
+
+            isWaiting -> {
+                BorderStroke(width = 1.5.dp, color = RpColors.warning.copy(alpha = 0.70f))
+            }
+
+            isDone -> {
+                BorderStroke(width = 1.dp, color = RpColors.success.copy(alpha = 0.50f))
+            }
+
+            else -> {
+                BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            }
+        }
 
     SurfaceCard(
         onClick = onClick,
@@ -150,18 +225,8 @@ fun AgentCard(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 2.dp),
         shape = RoundedCornerShape(18.dp),
-        tonalElevation = 1.dp,
-        border =
-            BorderStroke(
-                width = if (isWorking || isWaiting) 1.5.dp else 1.dp,
-                color =
-                    when {
-                        isWorking -> statusColor.copy(alpha = 0.72f)
-                        isWaiting -> RpColors.warning.copy(alpha = 0.65f)
-                        isDone -> RpColors.success.copy(alpha = 0.45f)
-                        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-                    },
-            ),
+        tonalElevation = if (isWorking) 2.dp else 1.dp,
+        border = cardBorder,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -224,7 +289,7 @@ fun AgentCard(
                                     .background(statusColor),
                         )
                         Text(
-                            text = if (a.status == AgentStatus.COMPACTING) "compactando" else "activo ahora",
+                            text = if (a.status == AgentStatus.COMPACTING) "compactando" else "⚡ activo ahora",
                             style = MaterialTheme.typography.labelSmall,
                             color = statusColor,
                             fontWeight = FontWeight.Bold,
@@ -264,7 +329,7 @@ fun AgentCard(
                                     .background(RpColors.success),
                         )
                         Text(
-                            text = "completado",
+                            text = "✓ completado",
                             style = MaterialTheme.typography.labelSmall,
                             color = RpColors.success,
                             fontWeight = FontWeight.Bold,

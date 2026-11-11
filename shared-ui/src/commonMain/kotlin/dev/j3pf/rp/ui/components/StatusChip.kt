@@ -61,7 +61,7 @@ fun StatusChip(
         when {
             !agent.online -> "Desconectado ${relativeTime(agent.lastSeenAt)}".trim() to MaterialTheme.colorScheme.outline
             agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to RpColors.warning
-            agent.status == AgentStatus.WORKING -> "Trabajando" to MaterialTheme.colorScheme.primary
+            agent.status == AgentStatus.WORKING -> "Trabajando" to RpColors.working
             agent.status == AgentStatus.COMPACTING -> "Compactando" to MaterialTheme.colorScheme.tertiary
             agent.status == AgentStatus.ERROR -> "Error" to RpColors.danger
             agent.status == AgentStatus.DONE -> "Completado" to RpColors.success
