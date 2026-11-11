@@ -76,7 +76,8 @@ fun StatusChip(
     )
 
     val isWorking = (agent.status == AgentStatus.WORKING || agent.status == AgentStatus.COMPACTING) && agent.online
-    val infiniteTransition = if (isWorking && !reducedMotion) rememberInfiniteTransition(label = "statusPulseTransition") else null
+    val isWaiting = (agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT) && agent.online
+    val infiniteTransition = if ((isWorking || isWaiting) && !reducedMotion) rememberInfiniteTransition(label = "statusPulseTransition") else null
     val pulseScaleState =
         infiniteTransition?.animateFloat(
             initialValue = 1.0f,

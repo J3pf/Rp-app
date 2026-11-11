@@ -44,6 +44,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -160,19 +161,31 @@ fun AgentCard(
         }
 
     val reducedMotion = LocalReducedMotion.current
-    val infiniteTransition = if (isWorking && !reducedMotion) rememberInfiniteTransition(label = "workingCardAnim") else null
+    val needsAnim = (isWorking || isWaiting || isDone) && !reducedMotion
+    val infiniteTransition = if (needsAnim) rememberInfiniteTransition(label = "cardStateAnim") else null
 
     val orbitProgress =
-        infiniteTransition?.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 2000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart,
-                ),
-            label = "workingOrbitProgress",
-        )
+        if (isWorking) {
+            infiniteTransition?.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = 2000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                label = "workingOrbitProgress",
+            )
+        } else {
+            null
+        }
+
+    val pulseDuration =
+        when {
+            isWorking -> 900
+            isWaiting -> 850
+            else -> 2200
+        }
 
     val pulseProgress =
         infiniteTransition?.animateFloat(
@@ -180,70 +193,119 @@ fun AgentCard(
             targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                    animation = tween(durationMillis = pulseDuration, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Reverse,
                 ),
-            label = "workingPulseProgress",
+            label = "statePulseProgress",
         )
 
     val staticBorder =
         when {
-            isWorking && orbitProgress != null -> null
+            needsAnim && pulseProgress != null -> null
             isWorking -> BorderStroke(width = 1.75.dp, color = RpColors.working.copy(alpha = 0.85f))
-            isWaiting -> BorderStroke(width = 1.5.dp, color = RpColors.warning.copy(alpha = 0.70f))
+            isWaiting -> BorderStroke(width = 1.5.dp, color = RpColors.warning.copy(alpha = 0.75f))
             isDone -> BorderStroke(width = 1.dp, color = RpColors.success.copy(alpha = 0.50f))
             else -> BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
         }
 
     val animatedBorderModifier =
-        if (isWorking && orbitProgress != null) {
-            Modifier.drawWithContent {
-                drawContent()
-                val orbit = orbitProgress.value
-                val pulse = pulseProgress?.value ?: 0.5f
-                val angle = orbit * 2.0 * PI
-                val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
-                val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
-                val radius = maxOf(size.width, size.height) * 0.58f
-                val cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
+        when {
+            isWorking && orbitProgress != null -> {
+                Modifier.drawWithContent {
+                    drawContent()
+                    val orbit = orbitProgress.value
+                    val pulse = pulseProgress?.value ?: 0.5f
+                    val angle = orbit * 2.0 * PI
+                    val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
+                    val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
+                    val radius = maxOf(size.width, size.height) * 0.58f
+                    val cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
 
-                // Halo exterior suave que respira y acompaña al cometa
-                drawRoundRect(
-                    brush =
-                        Brush.radialGradient(
-                            colors =
-                                listOf(
-                                    Color(0xFF00E5FF).copy(alpha = 0.25f + 0.20f * pulse),
-                                    Color(0xFF7C4DFF).copy(alpha = 0.14f + 0.10f * pulse),
-                                    Color.Transparent,
-                                ),
-                            center = Offset(hx, hy),
-                            radius = radius * 1.15f,
-                        ),
-                    cornerRadius = cornerRadius,
-                    style = Stroke(width = 5.dp.toPx()),
-                )
+                    // Halo exterior suave que respira y acompaña al cometa
+                    drawRoundRect(
+                        brush =
+                            Brush.radialGradient(
+                                colors =
+                                    listOf(
+                                        Color(0xFF00E5FF).copy(alpha = 0.25f + 0.20f * pulse),
+                                        Color(0xFF7C4DFF).copy(alpha = 0.14f + 0.10f * pulse),
+                                        Color.Transparent,
+                                    ),
+                                center = Offset(hx, hy),
+                                radius = radius * 1.15f,
+                            ),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 5.dp.toPx()),
+                    )
 
-                // Borde cometa de alto contraste que orbita el perímetro
-                drawRoundRect(
-                    brush =
-                        Brush.radialGradient(
-                            colors =
-                                listOf(
-                                    Color(0xFFFFFFFF),
-                                    Color(0xFF00E5FF),
-                                    Color(0xFF818CF8),
-                                    Color(0xFF00B0FF).copy(alpha = 0.20f),
-                                ),
-                            center = Offset(hx, hy),
-                            radius = radius,
-                        ),
-                    cornerRadius = cornerRadius,
-                    style = Stroke(width = 2.2.dp.toPx()),
-                )
+                    // Borde cometa de alto contraste que orbita el perímetro
+                    drawRoundRect(
+                        brush =
+                            Brush.radialGradient(
+                                colors =
+                                    listOf(
+                                        Color(0xFFFFFFFF),
+                                        Color(0xFF00E5FF),
+                                        Color(0xFF818CF8),
+                                        Color(0xFF00B0FF).copy(alpha = 0.20f),
+                                    ),
+                                center = Offset(hx, hy),
+                                radius = radius,
+                            ),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 2.2.dp.toPx()),
+                    )
+                }
             }
-        } else {
-            Modifier
+
+            isWaiting && pulseProgress != null -> {
+                Modifier.drawWithContent {
+                    drawContent()
+                    val pulse = pulseProgress.value
+                    val cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
+                    val borderColor = lerp(Color(0xFFFF8F00).copy(alpha = 0.50f), Color(0xFFFFD54F), pulse)
+
+                    // Halo ámbar de alerta ("te necesita para continuar")
+                    drawRoundRect(
+                        color = Color(0xFFFFB300).copy(alpha = 0.08f + 0.24f * pulse),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 4.5.dp.toPx()),
+                    )
+
+                    // Borde pulsante ámbar/dorado
+                    drawRoundRect(
+                        color = borderColor,
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = (1.6f + 0.5f * pulse).dp.toPx()),
+                    )
+                }
+            }
+
+            isDone && pulseProgress != null -> {
+                Modifier.drawWithContent {
+                    drawContent()
+                    val breath = pulseProgress.value
+                    val cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
+                    val borderColor = lerp(RpColors.success.copy(alpha = 0.35f), Color(0xFF4ADE80).copy(alpha = 0.88f), breath)
+
+                    // Respiración suave esmeralda ("tarea completada")
+                    drawRoundRect(
+                        color = Color(0xFF00E676).copy(alpha = 0.05f + 0.16f * breath),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 3.5.dp.toPx()),
+                    )
+
+                    drawRoundRect(
+                        color = borderColor,
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 1.4.dp.toPx()),
+                    )
+                }
+            }
+
+            else -> {
+                Modifier
+            }
         }
 
     SurfaceCard(
@@ -254,7 +316,7 @@ fun AgentCard(
                 .padding(horizontal = 16.dp, vertical = 2.dp)
                 .then(animatedBorderModifier),
         shape = RoundedCornerShape(18.dp),
-        tonalElevation = if (isWorking) 2.dp else 1.dp,
+        tonalElevation = if (isWorking || isWaiting) 2.dp else 1.dp,
         border = staticBorder,
     ) {
         Column(
@@ -338,7 +400,7 @@ fun AgentCard(
                                     .background(RpColors.warning),
                         )
                         Text(
-                            text = "esperando",
+                            text = "⚠ esperando",
                             style = MaterialTheme.typography.labelSmall,
                             color = RpColors.warning,
                             fontWeight = FontWeight.Bold,
