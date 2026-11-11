@@ -558,6 +558,12 @@ fun AgentCard(
                         color = if (launcher == "agy") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
                     )
                 }
+                a.model?.label?.takeIf { it.isNotBlank() && it != "default" && it != "antigravity" && it != a.launcher }?.let { modelName ->
+                    TagChip(
+                        text = modelName,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 a.herdr?.let { h ->
                     val loc =
                         listOfNotNull(

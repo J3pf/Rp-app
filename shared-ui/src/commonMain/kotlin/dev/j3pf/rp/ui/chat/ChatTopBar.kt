@@ -1,16 +1,21 @@
 package dev.j3pf.rp.ui.chat
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -154,39 +159,12 @@ fun ChatTopBar(
                                 }
                             }
                             val tabMeta = parseHerdrTabMeta(agent.herdr?.tabId)
-                            val ctxPct = agent.contextPercent ?: tabMeta.contextPercent
-                            val ctxTokens = agent.contextTokens ?: tabMeta.contextTokens
-                            if (ctxPct != null || ctxTokens != null) {
-                                val pillColor =
-                                    when {
-                                        (ctxPct ?: 0) >= 85 -> MaterialTheme.colorScheme.error
-                                        (ctxPct ?: 0) >= 60 -> RpColors.warning
-                                        else -> RpColors.success
-                                    }
-                                val pillLabel =
-                                    if (ctxPct != null) {
-                                        "🧠 ${ctxPct}%"
-                                    } else {
-                                        "🧠 ${formatCompactTokens(ctxTokens!!)}"
-                                    }
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = pillColor.copy(alpha = 0.14f),
-                                    border = BorderStroke(0.5.dp, pillColor.copy(alpha = 0.45f)),
-                                    modifier = Modifier.clickable { onInfo() },
-                                ) {
-                                    Text(
-                                        pillLabel,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = pillColor,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                            }
+                            val hasCtxTelemetry =
+                                (agent.contextPercent ?: tabMeta.contextPercent) != null ||
+                                    (agent.contextTokens ?: tabMeta.contextTokens) != null
                             val activeTaskText = if (working) agent.activeTask?.takeIf { it.isNotBlank() } else null
-                            val modelText = (model ?: agent.model?.label)?.takeIf { it.isNotBlank() }
-                            val thinkingText = thinkingLevel?.takeIf { it.isNotBlank() }
+                            val modelText = if (!hasCtxTelemetry) (model ?: agent.model?.label)?.takeIf { it.isNotBlank() } else null
+                            val thinkingText = if (!hasCtxTelemetry) thinkingLevel?.takeIf { it.isNotBlank() } else null
                             val subtitle =
                                 listOfNotNull(
                                     activeTaskText,
@@ -375,23 +353,127 @@ fun ChatTopBar(
 
         val topBarMeta = parseHerdrTabMeta(agent?.herdr?.tabId)
         val topBarCtxPct = agent?.contextPercent ?: topBarMeta.contextPercent
-        if (topBarCtxPct != null && topBarCtxPct > 0) {
-            val pct = topBarCtxPct.coerceIn(0, 100)
+        val topBarCtxTokens = agent?.contextTokens ?: topBarMeta.contextTokens
+        val topBarCtxWindow = agent?.contextWindow ?: topBarMeta.contextWindow
+        val topBarModelText = (model ?: agent?.model?.label)?.takeIf { it.isNotBlank() && it != "default" }
+        val topBarThinking = thinkingLevel?.takeIf { it.isNotBlank() }
+        val hasTelemetryRow = topBarCtxPct != null || topBarCtxTokens != null
+        if (hasTelemetryRow) {
+            val pct = (topBarCtxPct ?: 0).coerceIn(0, 100)
             val barColor =
                 when {
                     pct >= 85 -> MaterialTheme.colorScheme.error
                     pct >= 60 -> RpColors.warning
-                    else -> RpColors.success.copy(alpha = 0.78f)
+                    else -> RpColors.success
                 }
-            LinearProgressIndicator(
-                progress = { pct / 100f },
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(2.dp),
-                color = barColor,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
-            )
+                        .clickable { onInfo() },
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val launcherTag = agent?.launcher?.takeIf { it.isNotBlank() }
+                        val leftLabel =
+                            buildString {
+                                if (topBarModelText != null) {
+                                    append("✦ ")
+                                    append(topBarModelText)
+                                    if (topBarThinking != null) {
+                                        append(" · ")
+                                        append(topBarThinking)
+                                    }
+                                } else if (launcherTag != null) {
+                                    append("✦ ")
+                                    append(launcherTag)
+                                }
+                            }
+                        Text(
+                            text = leftLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (topBarCtxPct != null || topBarCtxTokens != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                val tokensLabel =
+                                    when {
+                                        topBarCtxTokens != null && topBarCtxWindow != null ->
+                                            "🧠 ${formatCompactTokens(topBarCtxTokens)} / ${formatCompactTokens(topBarCtxWindow)}"
+                                        topBarCtxTokens != null ->
+                                            "🧠 ${formatCompactTokens(topBarCtxTokens)}"
+                                        else -> "🧠 Contexto"
+                                    }
+                                Text(
+                                    text = tokensLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                                if (topBarCtxPct != null) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .width(42.dp)
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    ) {
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxHeight()
+                                                    .fillMaxWidth((pct / 100f).coerceIn(0.06f, 1f))
+                                                    .clip(RoundedCornerShape(999.dp))
+                                                    .background(barColor),
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = barColor.copy(alpha = 0.18f),
+                                        border = BorderStroke(0.8.dp, barColor.copy(alpha = 0.55f)),
+                                    ) {
+                                        Text(
+                                            text = "${topBarCtxPct}%",
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = barColor,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (topBarCtxPct != null && topBarCtxPct > 0) {
+                        LinearProgressIndicator(
+                            progress = { pct / 100f },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(2.dp),
+                            color = barColor.copy(alpha = 0.85f),
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        )
+                    }
+                }
+            }
         }
 
         if (otherActiveAgents.isNotEmpty()) {

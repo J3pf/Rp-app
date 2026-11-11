@@ -143,10 +143,11 @@ fun InfoDialog(
     val ctxTokens = agent.contextTokens ?: tabMeta.contextTokens
     val ctxWindow = agent.contextWindow ?: tabMeta.contextWindow
     val ctxPercent = agent.contextPercent ?: tabMeta.contextPercent
+    val windowNote = if (agent.launcher == "agy" && ctxWindow == 256_000) " · límite compactación" else ""
     val contextSummary =
         when {
             ctxTokens != null && ctxWindow != null && ctxPercent != null ->
-                "${formatCompactTokens(ctxTokens)} / ${formatCompactTokens(ctxWindow)} tokens ($ctxPercent%)"
+                "${formatCompactTokens(ctxTokens)} / ${formatCompactTokens(ctxWindow)} tokens ($ctxPercent%$windowNote)"
             ctxTokens != null && ctxPercent != null ->
                 "${formatCompactTokens(ctxTokens)} tokens ($ctxPercent%)"
             ctxPercent != null -> "$ctxPercent%"
