@@ -17,8 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 
 private fun isPowerOrThermalConstrained(context: Context): Boolean {
     val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
-    if (pm.isPowerSaveMode) return true
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE) {
         return true
     }
     return false

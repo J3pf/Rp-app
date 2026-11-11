@@ -38,9 +38,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +60,9 @@ import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.lastSegment
 import dev.j3pf.rp.ui.util.relativeTime
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun AgentsHeroStats(
@@ -156,66 +162,88 @@ fun AgentCard(
     val reducedMotion = LocalReducedMotion.current
     val infiniteTransition = if (isWorking && !reducedMotion) rememberInfiniteTransition(label = "workingCardAnim") else null
 
-    val animatedOffset =
+    val orbitProgress =
         infiniteTransition?.animateFloat(
             initialValue = 0f,
-            targetValue = 1000f,
+            targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis = 2400, easing = LinearEasing),
+                    animation = tween(durationMillis = 2000, easing = LinearEasing),
                     repeatMode = RepeatMode.Restart,
                 ),
-            label = "workingBorderOffset",
+            label = "workingOrbitProgress",
         )
 
-    val animatedAlpha =
+    val pulseProgress =
         infiniteTransition?.animateFloat(
-            initialValue = 0.65f,
-            targetValue = 0.95f,
+            initialValue = 0f,
+            targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+                    animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Reverse,
                 ),
-            label = "workingBorderAlpha",
+            label = "workingPulseProgress",
         )
 
-    val cardBorder =
+    val staticBorder =
         when {
-            isWorking && animatedOffset != null -> {
-                val offset = animatedOffset.value
-                val alpha = animatedAlpha?.value ?: 0.85f
-                val brush =
-                    Brush.horizontalGradient(
-                        colors =
-                            listOf(
-                                Color(0xFF00B0FF).copy(alpha = alpha),
-                                Color(0xFF818CF8).copy(alpha = alpha),
-                                Color(0xFF00E5FF).copy(alpha = alpha),
-                                Color(0xFF00B0FF).copy(alpha = alpha),
-                            ),
-                        startX = offset,
-                        endX = offset + 700f,
-                        tileMode = TileMode.Repeated,
-                    )
-                BorderStroke(width = 2.dp, brush = brush)
-            }
+            isWorking && orbitProgress != null -> null
+            isWorking -> BorderStroke(width = 1.75.dp, color = RpColors.working.copy(alpha = 0.85f))
+            isWaiting -> BorderStroke(width = 1.5.dp, color = RpColors.warning.copy(alpha = 0.70f))
+            isDone -> BorderStroke(width = 1.dp, color = RpColors.success.copy(alpha = 0.50f))
+            else -> BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        }
 
-            isWorking -> {
-                BorderStroke(width = 1.75.dp, color = RpColors.working.copy(alpha = 0.85f))
-            }
+    val animatedBorderModifier =
+        if (isWorking && orbitProgress != null) {
+            Modifier.drawWithContent {
+                drawContent()
+                val orbit = orbitProgress.value
+                val pulse = pulseProgress?.value ?: 0.5f
+                val angle = orbit * 2.0 * PI
+                val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
+                val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
+                val radius = maxOf(size.width, size.height) * 0.58f
+                val cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
 
-            isWaiting -> {
-                BorderStroke(width = 1.5.dp, color = RpColors.warning.copy(alpha = 0.70f))
-            }
+                // Halo exterior suave que respira y acompaña al cometa
+                drawRoundRect(
+                    brush =
+                        Brush.radialGradient(
+                            colors =
+                                listOf(
+                                    Color(0xFF00E5FF).copy(alpha = 0.25f + 0.20f * pulse),
+                                    Color(0xFF7C4DFF).copy(alpha = 0.14f + 0.10f * pulse),
+                                    Color.Transparent,
+                                ),
+                            center = Offset(hx, hy),
+                            radius = radius * 1.15f,
+                        ),
+                    cornerRadius = cornerRadius,
+                    style = Stroke(width = 5.dp.toPx()),
+                )
 
-            isDone -> {
-                BorderStroke(width = 1.dp, color = RpColors.success.copy(alpha = 0.50f))
+                // Borde cometa de alto contraste que orbita el perímetro
+                drawRoundRect(
+                    brush =
+                        Brush.radialGradient(
+                            colors =
+                                listOf(
+                                    Color(0xFFFFFFFF),
+                                    Color(0xFF00E5FF),
+                                    Color(0xFF818CF8),
+                                    Color(0xFF00B0FF).copy(alpha = 0.20f),
+                                ),
+                            center = Offset(hx, hy),
+                            radius = radius,
+                        ),
+                    cornerRadius = cornerRadius,
+                    style = Stroke(width = 2.2.dp.toPx()),
+                )
             }
-
-            else -> {
-                BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-            }
+        } else {
+            Modifier
         }
 
     SurfaceCard(
@@ -223,10 +251,11 @@ fun AgentCard(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp),
+                .padding(horizontal = 16.dp, vertical = 2.dp)
+                .then(animatedBorderModifier),
         shape = RoundedCornerShape(18.dp),
         tonalElevation = if (isWorking) 2.dp else 1.dp,
-        border = cardBorder,
+        border = staticBorder,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
