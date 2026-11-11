@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.components.StatusChip
@@ -52,7 +53,7 @@ fun AgentsHeroStats(
     machines: List<MachineSummary>,
     modifier: Modifier = Modifier,
 ) {
-    val working = agents.count { it.status == "working" && it.online }
+    val working = agents.count { (it.status == "working" || it.status == "compacting") && it.online }
     val waiting = agents.sumOf { it.openPromptCount }
     val onlineAgents = agents.count { it.online }
 
@@ -121,11 +122,12 @@ fun AgentCard(
     val statusColor =
         when {
             !a.online -> MaterialTheme.colorScheme.outline
-            a.openPromptCount > 0 || a.status == "waiting_input" -> RpColors.warning
-            a.status == "working" -> MaterialTheme.colorScheme.primary
-            a.status == "compacting" -> MaterialTheme.colorScheme.tertiary
-            a.status == "error" -> RpColors.danger
-            else -> RpColors.success
+            a.openPromptCount > 0 || a.status == AgentStatus.WAITING_INPUT -> RpColors.warning
+            a.status == AgentStatus.WORKING -> MaterialTheme.colorScheme.primary
+            a.status == AgentStatus.COMPACTING -> MaterialTheme.colorScheme.tertiary
+            a.status == AgentStatus.ERROR -> RpColors.danger
+            a.status == AgentStatus.DONE -> RpColors.success
+            else -> MaterialTheme.colorScheme.outline
         }
 
     val folder = lastSegment(a.cwd).takeIf { it.isNotEmpty() }
@@ -137,7 +139,9 @@ fun AgentCard(
             rawTitle
         }
 
-    val isWorking = a.status == "working" && a.online
+    val isWorking = (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) && a.online
+    val isWaiting = (a.openPromptCount > 0 || a.status == AgentStatus.WAITING_INPUT) && a.online
+    val isDone = a.status == AgentStatus.DONE && a.online
 
     SurfaceCard(
         onClick = onClick,
@@ -149,8 +153,14 @@ fun AgentCard(
         tonalElevation = 1.dp,
         border =
             BorderStroke(
-                width = if (isWorking) 1.5.dp else 1.dp,
-                color = statusColor.copy(alpha = if (isWorking) 0.72f else 0.35f),
+                width = if (isWorking || isWaiting) 1.5.dp else 1.dp,
+                color =
+                    when {
+                        isWorking -> statusColor.copy(alpha = 0.72f)
+                        isWaiting -> RpColors.warning.copy(alpha = 0.65f)
+                        isDone -> RpColors.success.copy(alpha = 0.45f)
+                        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                    },
             ),
     ) {
         Column(
@@ -200,7 +210,7 @@ fun AgentCard(
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                // Slot dedicado y siempre visible para tiempo relativo de actividad
+                // Slot dedicado y siempre visible para tiempo relativo de actividad / estado
                 if (isWorking) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -214,9 +224,49 @@ fun AgentCard(
                                     .background(statusColor),
                         )
                         Text(
-                            text = "activo ahora",
+                            text = if (a.status == AgentStatus.COMPACTING) "compactando" else "activo ahora",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = statusColor,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
+                } else if (isWaiting) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(RpColors.warning),
+                        )
+                        Text(
+                            text = "esperando",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = RpColors.warning,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
+                } else if (isDone) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(RpColors.success),
+                        )
+                        Text(
+                            text = "completado",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = RpColors.success,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                         )

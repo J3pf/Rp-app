@@ -128,6 +128,7 @@ object AgentStatus {
     const val WAITING_INPUT = "waiting_input"
     const val COMPACTING = "compacting"
     const val ERROR = "error"
+    const val DONE = "done"
 }
 
 @Serializable

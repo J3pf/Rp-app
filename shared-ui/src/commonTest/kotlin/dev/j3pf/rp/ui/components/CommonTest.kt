@@ -16,6 +16,16 @@ class CommonTest {
     }
 
     @Test
+    fun agentStatusConstants() {
+        assertEquals("idle", AgentStatus.IDLE)
+        assertEquals("working", AgentStatus.WORKING)
+        assertEquals("waiting_input", AgentStatus.WAITING_INPUT)
+        assertEquals("compacting", AgentStatus.COMPACTING)
+        assertEquals("error", AgentStatus.ERROR)
+        assertEquals("done", AgentStatus.DONE)
+    }
+
+    @Test
     fun connectionBannerMessages() {
         assertNull(connectionBannerMessage(ConnState.Connected))
         assertEquals("Conectando con el relay…", connectionBannerMessage(ConnState.Connecting))

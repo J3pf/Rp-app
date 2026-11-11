@@ -62,9 +62,10 @@ fun StatusChip(
             !agent.online -> "Desconectado ${relativeTime(agent.lastSeenAt)}".trim() to MaterialTheme.colorScheme.outline
             agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to RpColors.warning
             agent.status == AgentStatus.WORKING -> "Trabajando" to MaterialTheme.colorScheme.primary
-            agent.status == AgentStatus.COMPACTING -> "Compactando" to MaterialTheme.colorScheme.primary
+            agent.status == AgentStatus.COMPACTING -> "Compactando" to MaterialTheme.colorScheme.tertiary
             agent.status == AgentStatus.ERROR -> "Error" to RpColors.danger
-            else -> "Inactivo" to RpColors.success
+            agent.status == AgentStatus.DONE -> "Completado" to RpColors.success
+            else -> "Inactivo" to MaterialTheme.colorScheme.outline
         }
 
     val reducedMotion = LocalReducedMotion.current
