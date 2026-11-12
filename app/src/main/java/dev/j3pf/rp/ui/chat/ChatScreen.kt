@@ -98,7 +98,7 @@ fun ChatContent(
     isVoiceInputAvailable: Boolean = false,
 ) {
     val agent = ui.agent
-    val working = ui.sending || agent?.status == "working" || ui.chat.working
+    val working = ui.isEffectivelyWorking()
     var showInfo by remember { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var hideToolCalls by rememberSaveable { mutableStateOf(false) }
@@ -392,6 +392,20 @@ fun ChatScreen(
     }
 }
 
+internal fun ChatUiState.isEffectivelyWorking(): Boolean {
+    val hasPendingLocalMessage = chat.items.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
+    val isAgentCompleted =
+        agent != null &&
+            (
+                agent.status == dev.j3pf.rp.protocol.AgentStatus.DONE ||
+                    dev.j3pf.rp.protocol
+                        .parseHerdrTabMeta(agent.herdr?.tabId)
+                        .isDone
+            ) &&
+            !hasPendingLocalMessage
+    return sending || agent?.status == "working" || (!isAgentCompleted && chat.working)
+}
+
 @Composable
 internal fun MessageList(
     ui: ChatUiState,
@@ -410,7 +424,7 @@ internal fun MessageList(
         tools = ui.chat.tools,
         sending = ui.sending,
         isWorking =
-            (ui.sending || ui.agent?.status == "working" || ui.chat.working) &&
+            ui.isEffectivelyWorking() &&
                 (
                     ui.chat.streaming == null ||
                         ui.chat.streaming!!

@@ -42,29 +42,25 @@ fun AgentsScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        TextButton(onClick = onOpenArchived) {
-            Text(stringResource(R.string.archived_title), color = MaterialTheme.colorScheme.primary)
-        }
-        AgentsContent(
-            state = state,
-            conn = conn,
-            snackbarHostState = snackbar,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            onOpenChat = onOpenChat,
-            onNewAgent = onNewAgent,
-            onSelect = vm::select,
-            onRefresh = vm::refresh,
-            onResume = { a, machineName ->
-                if (state.machines.find { it.name == machineName }?.hostOnline == true) {
-                    vm.resumeAgent(a) { msg -> scope.launch { snackbar.showSnackbar(msg) } }
-                } else {
-                    scope.launch { snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en $machineName") }
-                }
-            },
-            onForget = vm::forget,
-        )
-    }
+    AgentsContent(
+        state = state,
+        conn = conn,
+        snackbarHostState = snackbar,
+        modifier = Modifier.fillMaxSize(),
+        onOpenChat = onOpenChat,
+        onNewAgent = onNewAgent,
+        onSelect = vm::select,
+        onRefresh = vm::refresh,
+        onResume = { a, machineName ->
+            if (state.machines.find { it.name == machineName }?.hostOnline == true) {
+                vm.resumeAgent(a) { msg -> scope.launch { snackbar.showSnackbar(msg) } }
+            } else {
+                scope.launch { snackbar.showSnackbar("Para reanudar agentes, ejecuta rp-host en $machineName") }
+            }
+        },
+        onForget = vm::forget,
+        onOpenArchived = onOpenArchived,
+    )
 
     lifecycle.forgetAgentId?.let {
         AgentCloseConfirmationDialog(onConfirm = vm::confirmForget, onDismiss = vm::cancelForget)

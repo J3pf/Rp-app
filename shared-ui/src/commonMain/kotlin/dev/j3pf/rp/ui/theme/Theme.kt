@@ -18,7 +18,7 @@ enum class RpThemeChoice(
     AUTO("auto", "Sincronizado con Pi (automático)"),
     GENTLE_CUTE("gentle-cute", "Gentle-Cute"),
     GENTLE_SEXY("gentle-sexy", "Gentle-Sexy"),
-    MOSHI("moshi-dark", "Moshi (Verde y Oscuro)"),
+    MOSHI("moshi-dark", "Terminal (Verde y Oscuro)"),
     OMARCHY("omarchy-system", "Omarchy / Gentle Shell"),
     SYSTEM("system", "Material You / Sistema"),
 }
@@ -236,7 +236,7 @@ fun resolveThemeChoice(
         return when (norm) {
             "gentle-cute", "gentleman-cute", "cute" -> RpThemeChoice.GENTLE_CUTE
             "gentle-sexy", "gentleman-sexy", "sexy" -> RpThemeChoice.GENTLE_SEXY
-            "moshi", "moshi-dark", "terminal-green" -> RpThemeChoice.MOSHI
+            "moshi", "moshi-dark", "terminal-green", "terminal", "matrix" -> RpThemeChoice.MOSHI
             "omarchy", "omarchy-system", "gentle-shell" -> RpThemeChoice.OMARCHY
             "system", "default" -> RpThemeChoice.SYSTEM
             else -> RpThemeChoice.GENTLE_CUTE

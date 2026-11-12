@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -285,6 +286,7 @@ fun AgentsContent(
     onRefresh: () -> Unit,
     onResume: (AgentSummary, String) -> Unit,
     onForget: (String) -> Unit,
+    onOpenArchived: (() -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(),
 ) {
     val isFabExpanded by remember {
@@ -360,6 +362,38 @@ fun AgentsContent(
             AppHeader(
                 greeting = "¿Qué está ejecutando Pi?",
                 title = "Tus Agentes",
+                trailing =
+                    if (onOpenArchived != null) {
+                        {
+                            Surface(
+                                onClick = onOpenArchived,
+                                shape = RoundedCornerShape(999.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Inventory2,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Text(
+                                        text = "Archivados",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        null
+                    },
             )
 
             AgentsHeroStats(

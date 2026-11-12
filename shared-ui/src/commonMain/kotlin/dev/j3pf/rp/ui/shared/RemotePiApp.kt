@@ -481,7 +481,18 @@ private fun SharedChatScreen(
     var searchQuery by rememberSaveable(agentId) { mutableStateOf("") }
     var hideToolCalls by rememberSaveable(agentId) { mutableStateOf(false) }
 
-    val working = chatState.working || agent?.status == "working"
+    val hasPendingLocalMessage =
+        chatState.items.any { it is dev.j3pf.rp.chat.UserMsg && it.key.startsWith("local:") && !it.failed }
+    val isAgentCompleted =
+        agent != null &&
+            (
+                agent.status == dev.j3pf.rp.protocol.AgentStatus.DONE ||
+                    dev.j3pf.rp.protocol
+                        .parseHerdrTabMeta(agent.herdr?.tabId)
+                        .isDone
+            ) &&
+            !hasPendingLocalMessage
+    val working = agent?.status == "working" || (!isAgentCompleted && chatState.working)
     val muted = agentId in settings.mutedAgents
 
     Scaffold(

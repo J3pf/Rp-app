@@ -123,8 +123,11 @@ fun ChatTopBar(
                     )
                     if (agent != null) {
                         val effectiveAgent =
-                            if (working && agent.online && agent.status == "idle") {
-                                agent.copy(status = "working")
+                            if (working && agent.online && (agent.status == "idle" || agent.status == "done")) {
+                                agent.copy(
+                                    status = "working",
+                                    herdr = agent.herdr?.copy(tabId = agent.herdr?.tabId?.replace("|done=1", "")),
+                                )
                             } else {
                                 agent
                             }
