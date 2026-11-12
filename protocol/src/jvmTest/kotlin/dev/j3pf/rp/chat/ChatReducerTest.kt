@@ -606,4 +606,31 @@ class ChatReducerTest {
             )
         assertEquals("Run unit tests", s.activeTaskLabel())
     }
+
+    @Test
+    fun `acked optimistic message does not expire into failed state after 30s and reconciles with PC prefix text`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "hola", at = 1_000L, clientMsgId = "msg-hola")
+        s = ChatReducer.applyUserMessageAck(s, UserMessageAck(clientMsgId = "msg-hola", disposition = "typed"))
+
+        // Even after 35s without a transcript echo yet, an already-ACKed message must NOT turn into failed=true
+        s = ChatReducer.expireOptimisticSends(s, now = 36_000L, timeoutMs = 30_000L)
+        val afterTimeout = s.items.single() as UserMsg
+        assertFalse(afterTimeout.failed)
+        assertEquals("ack:msg-hola", afterTimeout.key)
+
+        // When the PC terminal had a draft prefix ("mira que me sali... envie ") and submitted "hola",
+        // the incoming user message from the transcript replaces the optimistic/ACKed "hola" bubble in-place
+        val combinedText = "mira que me sali en mi celu s25 de mired, estoy con datos envie hola"
+        val json =
+            """{"type":"message_end","message":{"role":"user","timestamp":1050,"content":[{"type":"text","text":"$combinedText"}]}}"""
+        s = ChatReducer.reduce(s, ev(1, json))
+
+        assertEquals(1, s.items.size)
+        val reconciled = s.items.single() as UserMsg
+        assertEquals(combinedText, reconciled.text)
+        assertTrue(reconciled.fromMobile)
+        assertFalse(reconciled.failed)
+        assertTrue(s.localSent.isEmpty())
+    }
 }
