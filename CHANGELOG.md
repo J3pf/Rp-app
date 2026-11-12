@@ -3,6 +3,32 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-11
+
+### Added
+- **Agent State Visual Language (working / done / blocked / idle / waiting)**:
+  - Each agent state renders its own card treatment instead of one generic border: electric-cyan animated border for `working`, emerald breathing glow for `done`, amber warning pulse for blocked or prompted agents.
+  - Working agents also render an orbiting comet border, and a newly invoked agent auto-scrolls into view in the agents list.
+  - Animations stay enabled under battery saver (`Motion.android.kt`), which previously froze the working border into a static outline.
+- **Session Context & Model Telemetry**:
+  - `AgentSummary` and Herdr tab metadata carry `contextTokens`, `contextWindow`, and `contextPercent`, parsed from the Herdr tab id format `#NNNN[~done][@tokens/window]|tabId` (`parseHerdrTabMeta`).
+  - The chat header renders a compact telemetry strip: context percentage chip, `LinearProgressIndicator` bar (warning at 60%, error at 85%), and compact token counts via `formatCompactTokens` (`1.2M`, `45k`, `999`).
+  - Model label and thinking level stay in the strip only when no context telemetry is available, so the header never shows a redundant row.
+  - Top-bar session progress indicator plus a tappable info breakdown.
+
+### Changed
+- **Stable Herdr Agent Ordering**:
+  - With Herdr-provided agents the list preserves Herdr's exact visual order (`#NNNN|tabId`) instead of re-sorting on `lastSeenAt` or state changes; agents with pending prompts (`openPromptCount > 0` / `waiting_input`) are pinned above that order so they never scroll out of reach.
+  - Non-Herdr setups (Pi standalone, tmux) keep attention-first ordering: prompt > working > idle, tie-broken by the most recent `lastSeenAt`.
+
+### Fixed
+- **Notification Previews No Longer Leak Raw Payloads**:
+  - `NotificationFactory` drops `activeTask` previews that are raw JSON or fenced code blocks (`isRawJsonOrCode`) and filters those lines out of multi-line previews, falling back to topic/project text instead of printing `{"..."}` in the shade.
+  - Herdr tab ids are stripped of their metadata prefix before they reach the UI (`cleanHerdrTabId`).
+
+### Requires
+- **Rp-relay >= 0.8.0** and **Rp-plugin >= 0.4.0** (unchanged). Context telemetry is additive: a relay or plugin that does not emit it simply renders no telemetry strip.
+
 ## [0.8.0] - 2026-11-09
 
 ### Added
