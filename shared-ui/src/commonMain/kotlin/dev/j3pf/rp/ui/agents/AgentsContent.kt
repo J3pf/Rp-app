@@ -334,15 +334,17 @@ fun AgentsContent(
         modifier = modifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onNewAgent,
-                expanded = isFabExpanded,
-                shape = RoundedCornerShape(999.dp),
-                icon = { Icon(Icons.Filled.Add, contentDescription = "Nuevo agente") },
-                text = { Text("Nuevo agente", fontWeight = FontWeight.Bold) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            )
+            if (state.groups.isNotEmpty() || !state.canSpawn) {
+                ExtendedFloatingActionButton(
+                    onClick = onNewAgent,
+                    expanded = isFabExpanded,
+                    shape = RoundedCornerShape(999.dp),
+                    icon = { Icon(Icons.Filled.Add, contentDescription = "Nuevo agente") },
+                    text = { Text("Nuevo agente", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
         },
         bottomBar = bottomBar,
         snackbarHost = { SnackbarHost(snackbarHostState) },

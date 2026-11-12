@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -126,7 +127,13 @@ fun RemotePiApp(controller: SharedAppController? = null) {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            when (val current = route) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding(),
+            ) {
+                when (val current = route) {
                 is OnboardingRoute -> {
                     OnboardingContent(
                         onStart = { appController.navigateTo(PairRoute()) },
@@ -396,6 +403,7 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                         )
                     }
                 }
+            }
             }
         }
     }

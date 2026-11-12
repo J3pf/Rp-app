@@ -577,6 +577,7 @@ class SharedAppController(
             Envelope.of(
                 MsgType.APP_HELLO,
                 AppHello(deviceId = s.deviceId, app = AppInfo(version = appVersion)),
+                id = newId(),
             ),
         )
     }

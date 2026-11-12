@@ -197,10 +197,10 @@ object IosAppScope {
         val wsUrlStr =
             when {
                 trimmed.startsWith("https://", ignoreCase = true) ->
-                    "wss://" + trimmed.substring("https://".length) + "/v1/ws"
+                    "wss://" + trimmed.substring("https://".length) + "/ws/app?mode=foreground"
                 trimmed.startsWith("http://", ignoreCase = true) ->
-                    "ws://" + trimmed.substring("http://".length) + "/v1/ws"
-                else -> "wss://$trimmed/v1/ws"
+                    "ws://" + trimmed.substring("http://".length) + "/ws/app?mode=foreground"
+                else -> "wss://$trimmed/ws/app?mode=foreground"
             }
         val nsUrl = NSURL.URLWithString(wsUrlStr) ?: return null
         val req = NSMutableURLRequest(nsUrl, NSURLRequestUseProtocolCachePolicy, 15.0)
