@@ -40,6 +40,7 @@ class SettingsThemeParityCharacterizationTest {
         rule.onNodeWithText("Gentle-Cute").assertIsDisplayed()
         rule.onNodeWithText("Gentle-Sexy").assertIsDisplayed()
         rule.onNodeWithText("Terminal (Verde y Oscuro)").assertIsDisplayed()
+        rule.onNodeWithText("Terminal (Azul y Oscuro)").assertIsDisplayed()
         rule.onNodeWithText("Omarchy / Gentle Shell").assertIsDisplayed()
         rule.onNodeWithText("Material You / Sistema").assertIsDisplayed()
         // The string exists exactly twice: once as the screen row (current theme = auto), once inside

@@ -19,6 +19,7 @@ enum class RpThemeChoice(
     GENTLE_CUTE("gentle-cute", "Gentle-Cute"),
     GENTLE_SEXY("gentle-sexy", "Gentle-Sexy"),
     MOSHI("moshi-dark", "Terminal (Verde y Oscuro)"),
+    TERMINAL_BLUE("terminal-blue", "Terminal (Azul y Oscuro)"),
     OMARCHY("omarchy-system", "Omarchy / Gentle Shell"),
     SYSTEM("system", "Material You / Sistema"),
 }
@@ -152,6 +153,49 @@ val MoshiDarkColors =
         outlineVariant = Color(0xFF2E2E36),
     )
 
+// ───────────────────────────── Paleta Terminal (Azul y Oscuro) ─────────────────────────────
+
+val TerminalBlueLightColors =
+    lightColorScheme(
+        primary = Color(0xFF0969DA),
+        onPrimary = Color(0xFFFFFFFF),
+        primaryContainer = Color(0xFFDDF4FF),
+        onPrimaryContainer = Color(0xFF03254C),
+        secondary = Color(0xFF0F7B99),
+        onSecondary = Color(0xFFFFFFFF),
+        secondaryContainer = Color(0xFFD0F0F8),
+        onSecondaryContainer = Color(0xFF022B36),
+        tertiary = Color(0xFF9A4B00),
+        background = Color(0xFFF6F8FA),
+        surface = Color(0xFFFFFFFF),
+        surfaceVariant = Color(0xFFEAEEF2),
+        onBackground = Color(0xFF1F2328),
+        onSurface = Color(0xFF1F2328),
+        outline = Color(0xFF656D76),
+    )
+
+val TerminalBlueDarkColors =
+    darkColorScheme(
+        primary = Color(0xFF58A6FF),
+        onPrimary = Color(0xFF05254C),
+        primaryContainer = Color(0xFF123866),
+        onPrimaryContainer = Color(0xFFD1E6FF),
+        secondary = Color(0xFF39C5CF),
+        onSecondary = Color(0xFF032B30),
+        secondaryContainer = Color(0xFF0E474E),
+        onSecondaryContainer = Color(0xFFBDF4F9),
+        tertiary = Color(0xFFE5A965),
+        background = Color(0xFF121215),
+        surface = Color(0xFF17171B),
+        surfaceVariant = Color(0xFF222228),
+        surfaceContainerHigh = Color(0xFF1C1C22),
+        onBackground = Color(0xFFECECF1),
+        onSurface = Color(0xFFECECF1),
+        onSurfaceVariant = Color(0xFFA1A1AA),
+        outline = Color(0xFF71717A),
+        outlineVariant = Color(0xFF2E2E36),
+    )
+
 // ───────────────────────────── Paleta Omarchy / Gentle Shell ─────────────────────────────
 
 val OmarchyLightColors =
@@ -218,6 +262,7 @@ fun paletteFor(
         RpThemeChoice.GENTLE_CUTE -> if (darkTheme) CuteDarkColors else CuteLightColors
         RpThemeChoice.GENTLE_SEXY -> if (darkTheme) SexyDarkColors else SexyLightColors
         RpThemeChoice.MOSHI -> if (darkTheme) MoshiDarkColors else MoshiLightColors
+        RpThemeChoice.TERMINAL_BLUE -> if (darkTheme) TerminalBlueDarkColors else TerminalBlueLightColors
         RpThemeChoice.OMARCHY -> if (darkTheme) OmarchyDarkColors else OmarchyLightColors
         RpThemeChoice.SYSTEM, RpThemeChoice.AUTO -> if (darkTheme) DefaultDarkColors else DefaultLightColors
     }
@@ -237,6 +282,7 @@ fun resolveThemeChoice(
             "gentle-cute", "gentleman-cute", "cute" -> RpThemeChoice.GENTLE_CUTE
             "gentle-sexy", "gentleman-sexy", "sexy" -> RpThemeChoice.GENTLE_SEXY
             "moshi", "moshi-dark", "terminal-green", "terminal", "matrix" -> RpThemeChoice.MOSHI
+            "terminal-blue", "blue-dark", "blue" -> RpThemeChoice.TERMINAL_BLUE
             "omarchy", "omarchy-system", "gentle-shell" -> RpThemeChoice.OMARCHY
             "system", "default" -> RpThemeChoice.SYSTEM
             else -> RpThemeChoice.GENTLE_CUTE
@@ -321,6 +367,10 @@ fun RpTheme(
 
             RpThemeChoice.MOSHI -> {
                 if (darkTheme) MoshiDarkColors else MoshiLightColors
+            }
+
+            RpThemeChoice.TERMINAL_BLUE -> {
+                if (darkTheme) TerminalBlueDarkColors else TerminalBlueLightColors
             }
 
             RpThemeChoice.OMARCHY -> {
