@@ -3,6 +3,22 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-11-12
+
+### Added
+- **Terminal (Azul y Oscuro) Theme**:
+  - Added `TERMINAL_BLUE` (`Terminal (Azul y Oscuro)`) theme alongside `Terminal (Verde y Oscuro)` (renamed from `Moshi (Verde y Oscuro)`).
+
+### Fixed
+- **Chat Delivery & Optimistic Reconciliation**:
+  - Transitioned positively ACKed optimistic messages from `local:` to `ack:` so `expireOptimisticSends` never marks delivered messages as failed after 30 seconds.
+  - Reconciled optimistic mobile bubbles with incoming transcript messages that have a pre-existing PC terminal draft prefix, replacing the bubble in place instead of leaving a duplicate.
+- **Done State & Archived Pill UX**:
+  - Cleared stuck `working` / `"Pensando..."` indicator when an agent settles into `done` (`Completado`).
+  - Integrated the `"Archivados"` pill into `AppHeader`'s trailing slot for cleaner hierarchy.
+- **iOS Relay & Layout**:
+  - Removed the diagnostic red box, fixed `/ws/app` WebSocket URL construction, and respected status bar insets on iOS.
+
 ## [0.9.0] - 2026-11-11
 
 ### Added
