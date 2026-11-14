@@ -3,6 +3,22 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-11-14
+
+### Security
+- **Biometric & Lock Enforcement**:
+  - Implemented `IosBiometricAuthorizer` using `LocalAuthentication` (`LAContext`) with a 5-minute grace window invalidated on backgrounding, and wired `appLock` (`LockScreen`) gating into `SharedAppController` and `RemotePiApp`.
+  - Required biometric confirmation unconditionally for `Delivery.TYPED` in `SharedAppController`, guarded background quick-action broadcasts when locked (`KeyguardManager.isDeviceLocked`) and `terminalWait` commands on Android, and attached `VISIBILITY_PRIVATE` `publicVersion` redaction.
+  - Hardened `normalizeRelayUrl` against public cleartext `http://`, replaced non-CSPRNG IDs with `Ulid.new()`, hardened `SecretStore` error handling + corrupted-keyset recovery, set `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` + `rp_nse_muted_agents` clearing on iOS Keychain, and sanitized attachment filenames.
+
+### Fixed
+- **Optimistic Reconciliation, Delivery & Shared UI Parity**:
+  - Preserved unreconciled `UserMsg` items (`local:`, `ack:`, `failed`) across non-epoch-changing snapshot updates in `ChatReducer`, bounded short suffix matches, pruned `localSent`, transitioned HTTP/WS `Ok` sends cleanly to `ack:`, cleared `working` on offline `Queued`, and buffered `(AgentEvent, Long)` updates without clobbering concurrent state.
+  - Updated `SharedChatScreen` to consume `chatState.display`, preserve/normalize `AGENTS_UPDATE` fields, show connection/`terminalWait`/`readOnly` banners, wire `ArchivedAgentsRoute`, keep `"Pensando…"` visible across `ack:` transitions until settled, and fix `MeshCanvas` gesture bounds and draw-scope animations.
+- **iOS APNs Extension & Android Push Lifecycle**:
+  - Embedded `NotificationService.appex` in `iosApp/project.pbxproj`, added `criticalAlways` and `isRawJsonOrCode` filtering in `ServiceExtension.swift`, and added dynamic APNs environment + ping/close handling in `UrlSessionSocketDriver`.
+  - Reconciled `workingNotifIds` across `DirectPushService` and Room, cancelled stale working notifications on disappear/`PushKind.ERROR`, scoped staged attachment cleanup to `toUpload`, and cleared drafts/cache on sign-out.
+
 ## [0.9.1] - 2026-11-12
 
 ### Added
