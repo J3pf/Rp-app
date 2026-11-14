@@ -127,6 +127,7 @@ class MeshRepositoryWireOrderTest {
         private val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         private val secrets = FakeSecretStore(context, testSession(server.url("/").toString()))
         val connection = RelayConnection(secrets, bus, testClient(), scope)
+        val initialConnectedObserved = CountDownLatch(1)
         val deliveryEntered = CountDownLatch(1)
         val releaseDelivery = CountDownLatch(1)
         /** Armed by armPause() and stays armed until releaseDelivery fires on EVERY matching delivery. */
@@ -136,6 +137,11 @@ class MeshRepositoryWireOrderTest {
         private val incoming = LinkedBlockingQueue<Envelope>()
         val repository =
             object : MeshRepository(connection, bus, RelayApi(testClient(), secrets), scope) {
+                override fun handleConnectionState(state: ConnState) {
+                    super.handleConnectionState(state)
+                    if (state == ConnState.Connected) initialConnectedObserved.countDown()
+                }
+
                 override fun deliverEnvelope(
                     env: Envelope,
                     seq: Long,
@@ -181,6 +187,9 @@ class MeshRepositoryWireOrderTest {
         suspend fun startAndConnect() {
             connection.start()
             withTimeout(TIMEOUT_MS) { connection.state.first { it == ConnState.Connected } }
+            check(initialConnectedObserved.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
+                "timed out waiting for MeshRepository observer to process ConnState.Connected"
+            }
         }
 
         fun armPause() {

@@ -132,7 +132,7 @@ open class MeshRepository
         }
 
         // Shared production state handler; called directly by wire-order tests for deterministic observer scheduling.
-        internal fun handleConnectionState(state: ConnState) {
+        internal open fun handleConnectionState(state: ConnState) {
             val envelope =
                 synchronized(subscriptionLock) {
                     if (state == ConnState.Connected) {
