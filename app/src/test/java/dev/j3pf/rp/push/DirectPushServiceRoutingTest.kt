@@ -20,6 +20,7 @@ import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.AgentsUpdate
+import dev.j3pf.rp.protocol.AppWelcome
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Prompt
@@ -44,6 +45,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -53,6 +56,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -68,6 +73,7 @@ class DirectPushServiceRoutingTest {
     private lateinit var notificationManager: NotificationManager
     private lateinit var db: RpDatabase
     private lateinit var secrets: FakeSecretStore
+    private lateinit var settings: SettingsRepository
     private lateinit var bus: MessageBus
     private lateinit var factory: NotificationFactory
     private lateinit var service: DirectPushService
@@ -84,7 +90,7 @@ class DirectPushServiceRoutingTest {
         secrets = FakeSecretStore(context, testSession("https://relay.example"))
         bus = MessageBus()
         repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val settings = SettingsRepository(context)
+        settings = SettingsRepository(context)
         val channels = NotificationChannels(context)
         val deduper = NotificationDeduper(db.dedup())
         factory = NotificationFactory(context, channels, settings, deduper)
@@ -208,5 +214,193 @@ class DirectPushServiceRoutingTest {
         val working = awaitNotification(NotificationFactory.WORKING_TAG, stableId("working:${agent.agentId}"))
         assertEquals("Ejecutando pruebas", working.extras.getString(Notification.EXTRA_TEXT))
         assertTrue((working.flags and Notification.FLAG_ONGOING_EVENT) != 0)
+    }
+
+    @Test
+    fun `app welcome reconciles working agents and cancels stale working notifications`() = runBlocking {
+        val staleAgent =
+            AgentSummary(
+                agentId = "machine:stale-agent",
+                machineId = "M1",
+                machineName = "PC",
+                sessionName = "Stale",
+                status = AgentStatus.WORKING,
+                activeTask = "Running old task",
+            )
+        val activeAgent =
+            AgentSummary(
+                agentId = "machine:active-agent",
+                machineId = "M1",
+                machineName = "PC",
+                sessionName = "Active",
+                status = AgentStatus.WORKING,
+                activeTask = "Running new task",
+            )
+
+        onText(Envelope.of(MsgType.AGENTS_UPDATE, AgentsUpdate(upsert = listOf(staleAgent))))
+        awaitNotification(NotificationFactory.WORKING_TAG, stableId("working:${staleAgent.agentId}"))
+
+        onText(Envelope.of(MsgType.APP_WELCOME, AppWelcome(agents = listOf(activeAgent))))
+        val activeNotif = awaitNotification(NotificationFactory.WORKING_TAG, stableId("working:${activeAgent.agentId}"))
+        assertEquals("Running new task", activeNotif.extras.getString(Notification.EXTRA_TEXT))
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.WORKING_TAG,
+                stableId("working:${staleAgent.agentId}"),
+            ),
+        )
+
+        onText(Envelope.of(MsgType.APP_WELCOME, AppWelcome(agents = emptyList())))
+        withTimeout(5_000) {
+            while (factory.hasWorkingAgents()) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+        }
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.WORKING_TAG,
+                stableId("working:${activeAgent.agentId}"),
+            ),
+        )
+    }
+
+    @Test
+    fun `agents update with non-working status or remove cancels working notification`() = runBlocking {
+        val agentA =
+            AgentSummary(
+                agentId = "machine:agent-a",
+                machineId = "M1",
+                machineName = "PC",
+                sessionName = "AgentA",
+                status = AgentStatus.WORKING,
+                activeTask = "Task A",
+            )
+        val agentB =
+            AgentSummary(
+                agentId = "machine:agent-b",
+                machineId = "M1",
+                machineName = "PC",
+                sessionName = "AgentB",
+                status = AgentStatus.WORKING,
+                activeTask = "Task B",
+            )
+
+        onText(Envelope.of(MsgType.AGENTS_UPDATE, AgentsUpdate(upsert = listOf(agentA, agentB))))
+        awaitNotification(NotificationFactory.WORKING_TAG, stableId("working:${agentB.agentId}"))
+
+        onText(
+            Envelope.of(
+                MsgType.AGENTS_UPDATE,
+                AgentsUpdate(
+                    upsert = listOf(agentA.copy(status = AgentStatus.DONE)),
+                    remove = listOf(agentB.agentId),
+                ),
+            ),
+        )
+        withTimeout(5_000) {
+            while (factory.hasWorkingAgents()) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+        }
+        assertFalse(factory.hasWorkingAgents())
+        assertTrue(
+            notificationManager.activeNotifications.none {
+                it.tag == NotificationFactory.WORKING_TAG
+            },
+        )
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.WORKING_TAG,
+                stableId("working:${agentA.agentId}"),
+            ),
+        )
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.WORKING_TAG,
+                stableId("working:${agentB.agentId}"),
+            ),
+        )
+    }
+
+    @Test
+    fun `push notify error cancels working notification and posts error notification`() = runBlocking {
+        val agent =
+            AgentSummary(
+                agentId = "machine:error-agent",
+                machineId = "M1",
+                machineName = "PC",
+                sessionName = "Project",
+                status = AgentStatus.WORKING,
+                activeTask = "Compiling",
+            )
+        onText(Envelope.of(MsgType.AGENTS_UPDATE, AgentsUpdate(upsert = listOf(agent))))
+        awaitNotification(NotificationFactory.WORKING_TAG, stableId("working:${agent.agentId}"))
+
+        val errorBody =
+            buildJsonObject {
+                put("agentId", agent.agentId)
+                put("agentLabel", "Project")
+                put("machineId", "M1")
+                put("machineName", "PC")
+                put("message", "Process crashed")
+            }
+        onText(Envelope.of(MsgType.PUSH_NOTIFY, PushNotify(k = PushKind.ERROR, body = errorBody)))
+
+        val errorNotif = awaitNotification(NotificationFactory.SIMPLE_TAG, stableId("${PushKind.ERROR}:${agent.agentId}"))
+        assertEquals("Process crashed", errorNotif.extras.getString(Notification.EXTRA_TEXT))
+        assertFalse(factory.hasWorkingAgents())
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.WORKING_TAG,
+                stableId("working:${agent.agentId}"),
+            ),
+        )
+    }
+
+    @Test
+    fun `push notify error for muted agent cancels working notification without posting error notification`() = runBlocking {
+        val agent =
+            AgentSummary(
+                agentId = "machine:muted-error-agent",
+                machineId = "M1",
+                machineName = "PC",
+                sessionName = "MutedProject",
+                status = AgentStatus.WORKING,
+                activeTask = "Running",
+            )
+        onText(Envelope.of(MsgType.AGENTS_UPDATE, AgentsUpdate(upsert = listOf(agent))))
+        awaitNotification(NotificationFactory.WORKING_TAG, stableId("working:${agent.agentId}"))
+
+        settings.setAgentMuted(agent.agentId, true)
+        val errorBody =
+            buildJsonObject {
+                put("agentId", agent.agentId)
+                put("agentLabel", "MutedProject")
+                put("machineId", "M1")
+                put("machineName", "PC")
+                put("message", "Silent failure")
+            }
+        onText(Envelope.of(MsgType.PUSH_NOTIFY, PushNotify(k = PushKind.ERROR, body = errorBody)))
+
+        withTimeout(5_000) {
+            while (factory.hasWorkingAgents()) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+        }
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.WORKING_TAG,
+                stableId("working:${agent.agentId}"),
+            ),
+        )
+        assertNull(
+            shadowOf(notificationManager).getNotification(
+                NotificationFactory.SIMPLE_TAG,
+                stableId("${PushKind.ERROR}:${agent.agentId}"),
+            ),
+        )
     }
 }

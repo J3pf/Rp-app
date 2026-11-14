@@ -5,8 +5,11 @@ import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
 import androidx.test.core.app.ApplicationProvider
+import dev.j3pf.rp.R
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.inMemoryDb
+import dev.j3pf.rp.protocol.AgentStatus
+import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
@@ -32,6 +35,7 @@ import kotlin.test.assertTrue
 class NotificationFactoryTest {
     private lateinit var ctx: Application
     private lateinit var nm: NotificationManager
+    private lateinit var settings: SettingsRepository
     private lateinit var factory: NotificationFactory
 
     @Before
@@ -39,11 +43,12 @@ class NotificationFactoryTest {
         ctx = ApplicationProvider.getApplicationContext()
         shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         nm = ctx.getSystemService(NotificationManager::class.java)
+        settings = SettingsRepository(ctx)
         factory =
             NotificationFactory(
                 ctx,
                 NotificationChannels(ctx),
-                SettingsRepository(ctx),
+                settings,
                 NotificationDeduper(inMemoryDb(ctx).dedup()),
             )
     }
@@ -335,6 +340,165 @@ class NotificationFactoryTest {
             shadowOf(ctx).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
             factory.showPrompt(body())
             assertTrue(shadowOf(nm).allNotifications.isEmpty())
+        }
+    }
+
+    @Test
+    fun `showWorking respects mutedAgents and cancels existing working notification`() {
+        runBlocking {
+            val agent =
+                AgentSummary(
+                    agentId = "m:muted-1",
+                    machineId = "01MACH",
+                    machineName = "PC Empresa",
+                    sessionName = "Repo · Task",
+                    status = AgentStatus.WORKING,
+                    activeTask = "Building",
+                )
+            factory.showWorking(agent)
+            val id = stableId("working:m:muted-1")
+            assertNotNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id))
+            assertTrue(factory.hasWorkingAgents())
+
+            settings.setAgentMuted("m:muted-1", true)
+            factory.showWorking(agent.copy(activeTask = "Still building"))
+
+            assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id))
+            assertFalse(factory.hasWorkingAgents())
+
+            // New muted agent should never post a working notification.
+            val otherMuted = agent.copy(agentId = "m:muted-2")
+            settings.setAgentMuted("m:muted-2", true)
+            factory.showWorking(otherMuted)
+            assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, stableId("working:m:muted-2")))
+        }
+    }
+
+    @Test
+    fun `showWorking with redacted suppresses topic branch activeTask and preview`() {
+        runBlocking {
+            val base =
+                AgentSummary(
+                    agentId = "m:redacted-1",
+                    machineId = "01MACH",
+                    machineName = "PC Empresa",
+                    cwd = "/home/user/ProjectAlpha",
+                    sessionName = "ProjectAlpha · Secret Topic",
+                    gitBranch = "secret-branch",
+                    status = AgentStatus.WORKING,
+                    activeTask = "Secret task details",
+                    lastMessagePreview = "Secret preview",
+                )
+            factory.showWorking(base)
+
+            // Transitioning to redacted=true must clear previously cached sensitive fields.
+            factory.showWorking(base.copy(redacted = true))
+
+            val id = stableId("working:m:redacted-1")
+            val n = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
+            assertNotNull(n)
+            assertEquals(Notification.VISIBILITY_PUBLIC, n.visibility)
+
+            val title = n.extras.getString(Notification.EXTRA_TITLE).orEmpty()
+            val subText = n.extras.getString(Notification.EXTRA_SUB_TEXT).orEmpty()
+            val text = n.extras.getString(Notification.EXTRA_TEXT).orEmpty()
+            assertFalse(title.contains("Secret"))
+            assertFalse(subText.contains("secret-branch"))
+            assertFalse(text.contains("Secret"))
+            assertEquals("Trabajando en ProjectAlpha…", title)
+            assertEquals("ProjectAlpha · PC Empresa", subText)
+
+            factory.cancelWorking("m:redacted-1")
+        }
+    }
+
+    @Test
+    fun `reconcileWorkingAgents cancels stale working notifications`() {
+        runBlocking {
+            val a1 =
+                AgentSummary(
+                    agentId = "m:rec-1",
+                    machineId = "01MACH",
+                    machineName = "PC",
+                    sessionName = "Alpha · One",
+                    status = AgentStatus.WORKING,
+                    activeTask = "Task One",
+                )
+            val a2 =
+                AgentSummary(
+                    agentId = "m:rec-2",
+                    machineId = "01MACH",
+                    machineName = "PC",
+                    sessionName = "Beta · Two",
+                    status = AgentStatus.WORKING,
+                    activeTask = "Task Two",
+                )
+
+            factory.reconcileWorkingAgents(listOf(a1, a2))
+            assertTrue(factory.hasWorkingAgents())
+
+            factory.reconcileWorkingAgents(listOf(a2))
+            assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, stableId("working:m:rec-1")))
+            val remaining = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, stableId("working:m:rec-2"))
+            assertNotNull(remaining)
+            assertEquals("Task Two", remaining.extras.getString(Notification.EXTRA_TITLE))
+
+            factory.reconcileWorkingAgents(emptyList())
+            assertFalse(factory.hasWorkingAgents())
+            assertNull(shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, stableId("working:m:rec-2")))
+        }
+    }
+
+    @Test
+    fun `showPrompt sets private visibility and publicVersion for permission and danger high`() {
+        runBlocking {
+            factory.showPrompt(body(category = PromptCategory.PERMISSION, danger = Danger.MEDIUM))
+            val permNotif = posted()
+            assertEquals(Notification.VISIBILITY_PRIVATE, permNotif.visibility)
+            assertNotNull(permNotif.publicVersion)
+            assertEquals(
+                ctx.getString(R.string.channel_approvals),
+                permNotif.publicVersion.extras.getString(Notification.EXTRA_TEXT),
+            )
+
+            factory.showPrompt(body(category = PromptCategory.QUESTION, danger = Danger.LOW))
+            val lowQuestionNotif = posted()
+            assertNull(lowQuestionNotif.publicVersion)
+        }
+    }
+
+    @Test
+    fun `showPrompt marks actions authenticationRequired and extra based on requireUnlockToApprove`() {
+        runBlocking {
+            settings.setRequireUnlock(true)
+            factory.showPrompt(body(category = PromptCategory.PERMISSION, danger = Danger.HIGH))
+            val gated = posted()
+            assertTrue(gated.actions.isNotEmpty())
+            gated.actions.forEach { action ->
+                assertTrue(action.isAuthenticationRequired)
+                val savedIntent = shadowOf(action.actionIntent).savedIntent
+                assertTrue(savedIntent.getBooleanExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED, false))
+            }
+
+            settings.setRequireUnlock(false)
+            factory.showPrompt(body(category = PromptCategory.PERMISSION, danger = Danger.HIGH))
+            val ungated = posted()
+            assertTrue(ungated.actions.isNotEmpty())
+            ungated.actions.forEach { action ->
+                assertFalse(action.isAuthenticationRequired)
+                val savedIntent = shadowOf(action.actionIntent).savedIntent
+                assertFalse(savedIntent.getBooleanExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED, true))
+            }
+
+            settings.setRequireUnlock(true)
+            factory.showPrompt(body(category = PromptCategory.QUESTION, danger = Danger.LOW))
+            val lowQuestion = posted()
+            assertTrue(lowQuestion.actions.isNotEmpty())
+            lowQuestion.actions.forEach { action ->
+                assertFalse(action.isAuthenticationRequired)
+                val savedIntent = shadowOf(action.actionIntent).savedIntent
+                assertFalse(savedIntent.getBooleanExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED, true))
+            }
         }
     }
 }

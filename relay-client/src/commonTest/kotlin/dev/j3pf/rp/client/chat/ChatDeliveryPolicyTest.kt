@@ -15,8 +15,11 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.UserMessage
 import dev.j3pf.rp.protocol.UserMessageAck
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
@@ -482,5 +485,211 @@ class ChatDeliveryPolicyTest {
             assertEquals(Delivery.STEER, retried.delivery)
             assertEquals(DeliveryMethod.INTERACTIVE, retried.method)
             assertTrue(retried.asCommand)
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun httpOkTransitionsLocalBubbleToAckSoExpiryDoesNotMarkFailed() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+            var fakeNow = 1_000L
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = { ApiResult.Ok(JsonObject(emptyMap())) },
+                    newId = { "msg-http-ok" },
+                    now = { fakeNow },
+                )
+
+            val result =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "hello http",
+                )
+
+            assertTrue(result is SendResult.Delivered)
+            val bubble = state.value.items.filterIsInstance<UserMsg>().single()
+            assertEquals("ack:msg-http-ok", bubble.key)
+            assertFalse(bubble.failed)
+
+            fakeNow = 35_000L
+            advanceTimeBy(31_000L)
+            advanceUntilIdle()
+
+            val afterTimeout = state.value.items.filterIsInstance<UserMsg>().single()
+            assertEquals("ack:msg-http-ok", afterTimeout.key)
+            assertFalse(afterTimeout.failed, "Acked HTTP message must not expire as failed after 30s")
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun wsOkWithNullAckTransitionsLocalBubbleToAckSoExpiryDoesNotMarkFailed() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+            var fakeNow = 1_000L
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { true },
+                    requestWs = { env ->
+                        // Empty payload cannot decode as UserMessageAck -> ack == null branch.
+                        WsReply.Ok(Envelope.of("ack", JsonObject(emptyMap()), re = env.id))
+                    },
+                    httpSendMessage = { ApiResult.Ok(JsonObject(emptyMap())) },
+                    newId = { "msg-ws-null-ack" },
+                    now = { fakeNow },
+                )
+
+            val result =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "hello ws",
+                )
+
+            assertTrue(result is SendResult.Delivered)
+            assertEquals(null, result.ack)
+            val bubble = state.value.items.filterIsInstance<UserMsg>().single()
+            assertEquals("ack:msg-ws-null-ack", bubble.key)
+            assertFalse(bubble.failed)
+
+            fakeNow = 35_000L
+            advanceTimeBy(31_000L)
+            advanceUntilIdle()
+
+            val afterTimeout = state.value.items.filterIsInstance<UserMsg>().single()
+            assertEquals("ack:msg-ws-null-ack", afterTimeout.key)
+            assertFalse(afterTimeout.failed, "Acked WS message with null body must not expire as failed after 30s")
+        }
+
+    @Test
+    fun queuedSendClearsWorkingUnlessOtherAckedPendingMessagesExist() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = { ApiResult.Network(RuntimeException("offline")) },
+                    newId = { "msg-queued-1" },
+                    now = { 1_000L },
+                )
+
+            val firstRes =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "queued alone",
+                )
+
+            assertEquals(SendResult.Queued, firstRes)
+            assertFalse(state.value.working, "Queued send without acked bubbles must clear working")
+
+            // When another non-failed ack: message is already pending, working stays true.
+            state.value =
+                ChatState(
+                    items =
+                        listOf(
+                            UserMsg(
+                                key = "ack:prior-msg",
+                                text = "prior",
+                                at = 500L,
+                                clientMsgId = "prior-msg",
+                                failed = false,
+                            ),
+                        ),
+                    working = true,
+                )
+            val secondRes =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "queued alongside acked",
+                )
+
+            assertEquals(SendResult.Queued, secondRes)
+            assertTrue(state.value.working, "Queued send should preserve working when another ack: bubble is pending")
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun retryRefreshesTimestampAndRestoresLocalKey() =
+        runTest {
+            val platform = TestChatPlatform()
+            var fakeNow = 1_000L
+            val origMsg = UserMessage(agentId = "agent-1", clientMsgId = "msg-retry-1", text = "retry me")
+            platform.putOutbox("relay-1", origMsg, fakeNow)
+
+            val state =
+                MutableStateFlow(
+                    ChatState(
+                        items =
+                            listOf(
+                                UserMsg(
+                                    key = "ack:msg-retry-1",
+                                    text = "retry me",
+                                    at = 1_000L,
+                                    clientMsgId = "msg-retry-1",
+                                    failed = true,
+                                ),
+                            ),
+                        working = false,
+                    ),
+                )
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = { ApiResult.Http(500, "temporary") },
+                    newId = { "unused" },
+                    now = { fakeNow },
+                )
+
+            fakeNow = 50_000L
+            val retryResult =
+                policy.retry(
+                    agentId = "agent-1",
+                    clientMsgId = "msg-retry-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                )
+
+            assertEquals(SendResult.Queued, retryResult)
+            val refreshed = state.value.items.filterIsInstance<UserMsg>().single()
+            assertEquals("local:msg-retry-1", refreshed.key)
+            assertEquals(50_000L, refreshed.at)
+            assertFalse(refreshed.failed)
+            assertTrue("retry me" in state.value.localSent)
+
+            // Advancing 10s (total 60s from original send, 10s from retry) must NOT expire the refreshed bubble.
+            fakeNow = 60_000L
+            advanceTimeBy(10_000L)
+            assertFalse(state.value.items.filterIsInstance<UserMsg>().single().failed)
+
+            // Once 30s elapses from the retry timestamp, it expires cleanly.
+            fakeNow = 81_000L
+            advanceTimeBy(21_000L)
+            advanceUntilIdle()
+            assertTrue(state.value.items.filterIsInstance<UserMsg>().single().failed)
         }
 }

@@ -298,4 +298,161 @@ class RemotePiAppTest {
         assertEquals("mc-1", liveComms.first().commKey)
         assertEquals("hello mesh", liveComms.first().text)
     }
+
+    @Test
+    fun appLockGatingRespectsGraceTimeoutAndUnlockOutcome() {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val secrets = EncryptedKeyValueSecretStore(InMemorySecretKeyValueBacking())
+        val settings = KeyValueSettingsStore()
+        secrets.save(
+            Session(
+                relayId = "0123456789abcdef",
+                relayUrl = "https://relay.example.com",
+                relayName = "Studio Mac",
+                deviceId = "dev-1",
+                deviceToken = "tok-1",
+                pushKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ),
+        )
+
+        var biometricResult = BiometricAuthResult.FAILED
+        var authCalls = 0
+        val controller =
+            createInMemorySocketController(
+                scope = scope,
+                secrets = secrets,
+                settingsStore = settings,
+                biometricAuthorizer =
+                    object : BiometricAuthorizer {
+                        override suspend fun authenticate(reason: String): BiometricAuthResult {
+                            authCalls++
+                            return biometricResult
+                        }
+                    },
+            )
+
+        controller.setAppLock(true)
+        assertTrue(controller.settings.value.appLock)
+        assertFalse(controller.isAppLocked.value)
+
+        // Foregrounding within the 30s grace window must not lock the app.
+        controller.onAppBackgrounded()
+        controller.onAppForegrounded()
+        assertFalse(controller.isAppLocked.value)
+
+        // Failed unlock surfaces cancellation message; OK and UNAVAILABLE clear it and unlock.
+        controller.unlockApp()
+        assertEquals(1, authCalls)
+        assertEquals("Desbloqueo cancelado", controller.appLockMessage.value)
+
+        biometricResult = BiometricAuthResult.OK
+        controller.unlockApp()
+        assertEquals(2, authCalls)
+        assertNull(controller.appLockMessage.value)
+        assertFalse(controller.isAppLocked.value)
+
+        biometricResult = BiometricAuthResult.UNAVAILABLE
+        controller.unlockApp()
+        assertEquals(3, authCalls)
+        assertNull(controller.appLockMessage.value)
+        assertFalse(controller.isAppLocked.value)
+    }
+
+    @Test
+    fun requiresChatSendAuthRequiresBiometricsUnconditionallyForTyped() {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val secrets = EncryptedKeyValueSecretStore(InMemorySecretKeyValueBacking())
+        val settings = KeyValueSettingsStore()
+        secrets.save(
+            Session(
+                relayId = "0123456789abcdef",
+                relayUrl = "https://relay.example.com",
+                relayName = "Studio Mac",
+                deviceId = "dev-1",
+                deviceToken = "tok-1",
+                pushKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ),
+        )
+
+        var biometricResult = BiometricAuthResult.FAILED
+        var biometricInvocations = 0
+        val controller =
+            createInMemorySocketController(
+                scope = scope,
+                secrets = secrets,
+                settingsStore = settings,
+                biometricAuthorizer =
+                    object : BiometricAuthorizer {
+                        override suspend fun authenticate(reason: String): BiometricAuthResult {
+                            biometricInvocations++
+                            return biometricResult
+                        }
+                    },
+            )
+
+        val normalAgent = AgentSummary(agentId = "m1:normal", machineId = "m1", gentleMode = "normal", online = true)
+        val autoAgent = AgentSummary(agentId = "m1:auto", machineId = "m1", gentleMode = "auto", online = true)
+
+        // Even with requireUnlockToApprove = false, DeliveryChoice.TYPED always requires auth.
+        controller.setRequireUnlock(false)
+        assertFalse(controller.settings.value.requireUnlockToApprove)
+        assertTrue(controller.requiresChatSendAuth(null, DeliveryChoice.TYPED))
+        assertTrue(controller.requiresChatSendAuth(normalAgent, DeliveryChoice.TYPED))
+        assertFalse(controller.requiresChatSendAuth(autoAgent, DeliveryChoice.AUTO))
+        assertFalse(controller.requiresChatSendAuth(autoAgent, DeliveryChoice.COMMAND))
+        assertFalse(controller.requiresChatSendAuth(autoAgent, DeliveryChoice.EXTENSION))
+
+        // Enabling requireUnlockToApprove gates AUTO/COMMAND only for auto-mode agents.
+        controller.setRequireUnlock(true)
+        assertTrue(controller.requiresChatSendAuth(autoAgent, DeliveryChoice.AUTO))
+        assertTrue(controller.requiresChatSendAuth(autoAgent, DeliveryChoice.COMMAND))
+        assertFalse(controller.requiresChatSendAuth(normalAgent, DeliveryChoice.AUTO))
+        assertFalse(controller.requiresChatSendAuth(normalAgent, DeliveryChoice.COMMAND))
+        assertFalse(controller.requiresChatSendAuth(autoAgent, DeliveryChoice.EXTENSION))
+
+        // Disable requireUnlockToApprove again and verify sendChatMessage(TYPED) still gates on biometrics.
+        controller.setRequireUnlock(false)
+        val chatSession = controller.chatSessions.open("m1:normal")
+        var sentCount = 0
+
+        controller.sendChatMessage(
+            session = chatSession,
+            text = "echo hello",
+            choice = DeliveryChoice.TYPED,
+            workingDelivery = Delivery.AUTO,
+            working = false,
+            agent = normalAgent,
+            onSent = { sentCount++ },
+        )
+        assertEquals(0, sentCount)
+        assertEquals(1, biometricInvocations)
+        assertEquals("Desbloqueo cancelado", controller.actionMessage.value)
+
+        biometricResult = BiometricAuthResult.UNAVAILABLE
+        controller.sendChatMessage(
+            session = chatSession,
+            text = "echo hello",
+            choice = DeliveryChoice.TYPED,
+            workingDelivery = Delivery.AUTO,
+            working = false,
+            agent = normalAgent,
+            onSent = { sentCount++ },
+        )
+        assertEquals(0, sentCount)
+        assertEquals(2, biometricInvocations)
+        assertEquals("Configura un bloqueo de pantalla para enviar como tecleado", controller.actionMessage.value)
+
+        biometricResult = BiometricAuthResult.OK
+        controller.sendChatMessage(
+            session = chatSession,
+            text = "echo hello",
+            choice = DeliveryChoice.TYPED,
+            workingDelivery = Delivery.AUTO,
+            working = false,
+            agent = normalAgent,
+            onSent = { sentCount++ },
+        )
+        assertEquals(1, sentCount)
+        assertEquals(3, biometricInvocations)
+    }
 }
