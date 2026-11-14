@@ -3,7 +3,53 @@ package dev.j3pf.rp.ui.mesh
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
+import dev.j3pf.rp.protocol.MeshSubagent
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
+import dev.j3pf.rp.ui.mesh.layout.SubagentPlacement
+
+sealed interface MeshNodeDetailTarget {
+    data class Agent(
+        val node: MeshNode,
+    ) : MeshNodeDetailTarget
+
+    data class Subagent(
+        val detail: MeshNodeDetail,
+    ) : MeshNodeDetailTarget
+}
+
+/**
+ * Resolves either a real agent node from [snapshot] or a synthetic `"sub:..."` node from
+ * [layoutResult] into a ready-to-display detail target without triggering `/comms` lookups on
+ * synthetic subagent IDs.
+ */
+fun resolveMeshNodeDetailTarget(
+    agentId: String,
+    snapshot: MeshSnapshot?,
+    layoutResult: MeshLayoutResult?,
+): MeshNodeDetailTarget? {
+    val snap = snapshot ?: return null
+    val directNode = snap.nodes.firstOrNull { it.agentId == agentId }
+    if (directNode != null) return MeshNodeDetailTarget.Agent(directNode)
+    val syntheticNode = layoutResult?.nodes?.get(agentId)?.node ?: return null
+    if (syntheticNode.role != "subagent" || syntheticNode.parentAgentId == null) return null
+    val parentNode = snap.nodes.firstOrNull { it.agentId == syntheticNode.parentAgentId }
+    val matchedSub =
+        parentNode?.subagents?.firstOrNull {
+            SubagentPlacement.nodeId(parentNode.agentId, it.taskId) == agentId
+        }
+    val resolvedNode =
+        syntheticNode.copy(
+            subagents = listOfNotNull(matchedSub),
+            model = matchedSub?.model?.takeIf { it.isNotBlank() } ?: syntheticNode.model,
+        )
+    return MeshNodeDetailTarget.Subagent(
+        MeshNodeDetail(
+            node = resolvedNode,
+            isLoadingComms = false,
+            selectedSubagent = matchedSub,
+        ),
+    )
+}
 
 data class MeshMachineChip(
     val machineId: String?,
@@ -24,6 +70,7 @@ data class MeshNodeDetail(
     val node: MeshNode,
     val recentComms: List<MeshComm> = emptyList(),
     val isLoadingComms: Boolean = false,
+    val selectedSubagent: MeshSubagent? = null,
 )
 
 data class MeshConversationDetail(

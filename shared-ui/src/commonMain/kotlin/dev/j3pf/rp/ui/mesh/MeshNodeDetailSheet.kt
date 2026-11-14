@@ -39,6 +39,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshNode
+import dev.j3pf.rp.protocol.MeshSubagent
+import dev.j3pf.rp.ui.components.RpMarkdown
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +82,8 @@ fun MeshNodeDetailContent(
     initiallyExpandedTechnicalDetails: Boolean = false,
 ) {
     val node = detail.node
+    val selectedSubagent = detail.selectedSubagent
+    val isSubagentView = selectedSubagent != null
     val displayName = formatMeshDisplayName(node)
     val headerSubtitle =
         node.gitBranch
@@ -124,92 +134,78 @@ fun MeshNodeDetailContent(
         DetailLine("Rama git", node.gitBranch ?: "No reportado")
         DetailLine("Modelo", node.model ?: "No reportado")
 
-        SectionTitle("TODOs")
-        node.todos?.let { todos ->
-            DetailLine("Progreso", formatMeshTodos(todos.done, todos.total))
-            DetailLine("En progreso", todos.inProgress.toString())
-            DetailLine("Pendientes", todos.pending.toString())
-            if (todos.blocked > 0) BadgeText("Bloqueadas · ${todos.blocked}", emphasized = true)
-            todos.current?.takeIf { it.isNotBlank() }?.let { current ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        BadgeText("Actual", emphasized = true)
-                        Text(
-                            current,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                }
-            }
-            Text(
-                "Los detalles completos de los elementos TODO no se incluyen en los datos de la red.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-            ?: Text(
-                "No se reporta progreso de TODOs",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-        SectionTitle("Subagentes")
-        if (node.subagents.isEmpty()) {
-            Text("No hay subagentes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            node.subagents.forEach { subagent ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                subagent.label?.takeIf(String::isNotBlank) ?: subagent.agent,
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.weight(1f),
-                            )
-                            BadgeText(formatMeshSubagentStatus(subagent.status), emphasized = subagent.status == "working")
-                        }
-                        DetailLine("Agente", subagent.agent)
-                        subagent.durationMs?.let { DetailLine("Duración", formatDuration(it)) }
-                        subagent.tokens?.let { tokens ->
-                            val count = tokens.total ?: listOfNotNull(tokens.prompt, tokens.completion).sum().takeIf { it > 0 }
-                            count?.let { DetailLine("Tokens", it.toString()) }
-                        }
-                        subagent.tools?.takeIf { it.isNotEmpty() }?.let { DetailLine("Herramientas", it.joinToString(", ")) }
-                        subagent.thinking?.let { DetailLine("Razonamiento", it) }
-                    }
-                }
-            }
-        }
-
-        SectionTitle("Conversaciones recientes")
-        if (detail.isLoadingComms && detail.recentComms.isEmpty()) {
-            Text("Cargando conversaciones…", style = MaterialTheme.typography.bodyMedium)
-        } else if (detail.recentComms.isEmpty()) {
-            Text(
-                "Sin conversaciones recientes",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            detail.recentComms.forEach { comm ->
-                RecentCommRow(node = node, comm = comm)
-                val peerId = peerId(node, comm)
-                val peerName = peerName(node, comm)
-                if (peerId != null) {
-                    OutlinedButton(
-                        onClick = { onViewConversation(peerId) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        if (!isSubagentView) {
+            SectionTitle("TODOs")
+            node.todos?.let { todos ->
+                DetailLine("Progreso", formatMeshTodos(todos.done, todos.total))
+                DetailLine("En progreso", todos.inProgress.toString())
+                DetailLine("Pendientes", todos.pending.toString())
+                if (todos.blocked > 0) BadgeText("Bloqueadas · ${todos.blocked}", emphasized = true)
+                todos.current?.takeIf { it.isNotBlank() }?.let { current ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
-                        Text("Ver conversación con $peerName")
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            BadgeText("Actual", emphasized = true)
+                            Text(
+                                current,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Los detalles completos de los elementos TODO no se incluyen en los datos de la red.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+                ?: Text(
+                    "No se reporta progreso de TODOs",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+        }
+
+        if (selectedSubagent != null) {
+            SectionTitle("Subagente")
+            MeshSubagentCard(selectedSubagent)
+        } else {
+            SectionTitle("Subagentes")
+            if (node.subagents.isEmpty()) {
+                Text("No hay subagentes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                node.subagents.forEach { subagent ->
+                    MeshSubagentCard(subagent)
+                }
+            }
+        }
+
+        if (!isSubagentView) {
+            SectionTitle("Conversaciones recientes")
+            if (detail.isLoadingComms && detail.recentComms.isEmpty()) {
+                Text("Cargando conversaciones…", style = MaterialTheme.typography.bodyMedium)
+            } else if (detail.recentComms.isEmpty()) {
+                Text(
+                    "Sin conversaciones recientes",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                detail.recentComms.forEach { comm ->
+                    RecentCommRow(node = node, comm = comm)
+                    val peerId = peerId(node, comm)
+                    val peerName = peerName(node, comm)
+                    if (peerId != null) {
+                        OutlinedButton(
+                            onClick = { onViewConversation(peerId) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        ) {
+                            Text("Ver conversación con $peerName")
+                        }
                     }
                 }
             }
@@ -253,9 +249,15 @@ fun MeshNodeDetailContent(
             }
         }
 
+        val chatTargetAgentId =
+            if (isSubagentView || node.role == "subagent") {
+                node.parentAgentId ?: node.agentId
+            } else {
+                node.agentId
+            }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
-                onClick = { onOpenChat(node.agentId) },
+                onClick = { onOpenChat(chatTargetAgentId) },
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) {
                 Text("Abrir chat")
@@ -267,6 +269,98 @@ fun MeshNodeDetailContent(
                 Text("Cerrar")
             }
         }
+    }
+}
+
+@Composable
+private fun MeshSubagentCard(subagent: MeshSubagent) {
+    val isActive = subagent.status.equals("working", ignoreCase = true) || subagent.status.equals("running", ignoreCase = true)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    subagent.label?.takeIf(String::isNotBlank) ?: subagent.agent,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                BadgeText(formatMeshSubagentStatus(subagent.status), emphasized = isActive)
+            }
+            DetailLine("Agente", subagent.agent)
+            subagent.model?.takeIf { it.isNotBlank() }?.let { DetailLine("Modelo", it) }
+            subagent.durationMs?.let { DetailLine("Duración", formatDuration(it)) }
+            subagent.tokens?.let { tokens ->
+                val count = tokens.total ?: listOfNotNull(tokens.prompt, tokens.completion).sum().takeIf { it > 0 }
+                count?.let { DetailLine("Tokens", it.toString()) }
+            }
+            subagent.turns?.let { DetailLine("Turnos", it.toString()) }
+            subagent.toolCalls?.let { DetailLine("Llamadas", it.toString()) }
+            subagent.tools?.takeIf { it.isNotEmpty() }?.let { DetailLine("Herramientas", it.joinToString(", ")) }
+            subagent.thinking?.takeIf { it.isNotBlank() }?.let { DetailLine("Razonamiento", it) }
+            subagent.error?.takeIf { it.isNotBlank() }?.let { errorText ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "Error",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            errorText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            }
+            formatSubagentResult(subagent.result)?.let { resultText ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Resultado",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (subagent.result is JsonPrimitive) {
+                            RpMarkdown(text = resultText, spacingMode = "compact")
+                        } else {
+                            Text(
+                                text = resultText,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val MAX_SUBAGENT_RESULT_CHARS = 1_200
+
+private fun formatSubagentResult(result: JsonElement?): String? {
+    if (result == null || result is JsonNull) return null
+    val raw =
+        when (result) {
+            is JsonPrimitive -> result.contentOrNull?.takeIf { it.isNotBlank() }
+            is JsonObject, is JsonArray -> result.toString().takeIf { it.isNotBlank() }
+        } ?: return null
+    return if (raw.length > MAX_SUBAGENT_RESULT_CHARS) {
+        raw.take(MAX_SUBAGENT_RESULT_CHARS).trimEnd() + "\n…"
+    } else {
+        raw
     }
 }
 

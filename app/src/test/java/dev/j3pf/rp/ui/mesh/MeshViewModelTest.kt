@@ -19,11 +19,13 @@ import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshGroup
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
+import dev.j3pf.rp.protocol.MeshSubagent
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.push.NotificationChannels
 import dev.j3pf.rp.testClient
 import dev.j3pf.rp.testSession
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
+import dev.j3pf.rp.ui.mesh.layout.SubagentPlacement
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -479,6 +481,43 @@ class MeshViewModelTest {
                 viewModel.uiState.value.conversationDetail
                     ?.nextBefore,
             )
+        }
+    }
+
+    @Test
+    fun `onNodeClick resolves synthetic subagent node without comms request and ignores unknown ids`() {
+        runBlocking {
+            val sub =
+                MeshSubagent(
+                    taskId = "task-sub-1",
+                    agent = "research",
+                    label = "Investigate AGY",
+                    status = "running",
+                    model = "gemini-4",
+                )
+            val snap =
+                sampleSnapshot().let { base ->
+                    base.copy(nodes = base.nodes.map { if (it.agentId == "c") it.copy(subagents = listOf(sub)) else it })
+                }
+            viewModel.onViewportSizeChanged(400f, 800f)
+            publish(snap)
+
+            val subNodeId = SubagentPlacement.nodeId("c", "task-sub-1")
+            viewModel.onNodeClick(subNodeId)
+
+            val detail = viewModel.uiState.value.nodeDetail
+            assertNotNull(detail)
+            assertEquals(subNodeId, detail.node.agentId)
+            assertEquals("c", detail.node.parentAgentId)
+            assertEquals("subagent", detail.node.role)
+            assertEquals("gemini-4", detail.node.model)
+            assertEquals(sub, detail.selectedSubagent)
+            assertFalse(detail.isLoadingComms)
+            assertEquals(0, server.requestCount)
+
+            viewModel.onNodeClick("sub:c:does-not-exist")
+            assertEquals(subNodeId, viewModel.uiState.value.nodeDetail?.node?.agentId)
+            assertEquals(0, server.requestCount)
         }
     }
 }

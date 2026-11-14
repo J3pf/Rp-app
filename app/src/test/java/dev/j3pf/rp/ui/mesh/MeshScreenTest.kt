@@ -10,9 +10,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -22,9 +24,13 @@ import dev.j3pf.rp.protocol.MeshEdge
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.protocol.MeshSubagent
+import dev.j3pf.rp.protocol.MeshSubagentTokens
 import dev.j3pf.rp.protocol.MeshTodos
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.theme.RpTheme
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -1303,6 +1309,129 @@ class MeshScreenTest {
                 MeshEdge(edgeId = "e-$idx", a = "orch-root", b = s.agentId, count = idx, active = true, lastAction = "send")
             }
         return all to edges
+    }
+
+    @Test
+    fun `subagent detail view hides parent noise shows telemetry and opens parent chat`() {
+        val sub =
+            MeshSubagent(
+                taskId = "task-99",
+                agent = "scout",
+                label = "Audit mesh",
+                status = "running",
+                model = "claude-sonnet-4-5",
+                thinking = "high",
+                durationMs = 4_200L,
+                turns = 4,
+                toolCalls = 9,
+                tokens = MeshSubagentTokens(total = 350L),
+                tools = listOf("read", "grep"),
+                result = JsonPrimitive("Completed **scan**"),
+                error = "Minor warning",
+            )
+        val syntheticSubNode =
+            node("sub:orch-1:deadbeef", "Audit mesh", "subagent", parent = "orch-1").copy(
+                model = "claude-sonnet-4-5",
+                subagents = listOf(sub),
+            )
+        var openedChatId: String? = null
+
+        rule.setContent {
+            RpTheme {
+                MeshNodeDetailContent(
+                    detail =
+                        MeshNodeDetail(
+                            node = syntheticSubNode,
+                            selectedSubagent = sub,
+                            isLoadingComms = false,
+                        ),
+                    onDismiss = {},
+                    onOpenChat = { openedChatId = it },
+                    onViewConversation = {},
+                )
+            }
+        }
+
+        assertEquals(2, rule.onAllNodesWithText("Subagente").fetchSemanticsNodes().size)
+        rule.onNodeWithText("Agente").assertExists()
+        rule.onNodeWithText("scout").assertExists()
+        rule.onNodeWithText("En ejecución").assertExists()
+        assertEquals(2, rule.onAllNodesWithText("claude-sonnet-4-5").fetchSemanticsNodes().size)
+        rule.onNodeWithText("4s").assertExists()
+        rule.onNodeWithText("350").assertExists()
+        rule.onNodeWithText("4").assertExists()
+        rule.onNodeWithText("9").assertExists()
+        rule.onNodeWithText("read, grep").assertExists()
+        rule.onNodeWithText("high").assertExists()
+        rule.onNodeWithText("Minor warning").assertExists()
+        rule.onNodeWithText("Resultado").assertExists()
+
+        rule.onNodeWithText("No se reporta progreso de TODOs").assertDoesNotExist()
+        rule.onNodeWithText("Conversaciones recientes").assertDoesNotExist()
+        rule.onNodeWithText("Sin conversaciones recientes").assertDoesNotExist()
+
+        rule.onNodeWithText("Abrir chat").performScrollTo().performClick()
+        assertEquals("orch-1", openedChatId)
+    }
+
+    @Test
+    fun `subordinate detail sheet preserves own chat target and parent subagent cards render json truncation and blank handling`() {
+        val longResult = "x".repeat(1_250)
+        val jsonSub =
+            MeshSubagent(
+                taskId = "t-json",
+                agent = "builder",
+                label = "JSON Task",
+                status = "done",
+                model = "gpt-5",
+                turns = 2,
+                toolCalls = 5,
+                result = buildJsonObject { put("ok", true) },
+            )
+        val longAndValidSub =
+            MeshSubagent(
+                taskId = "t-long",
+                agent = "verifier",
+                label = "Long Task",
+                status = "completed",
+                result = JsonPrimitive(longResult),
+            )
+        val blankSub =
+            MeshSubagent(
+                taskId = "t-blank",
+                agent = "cleaner",
+                label = "Blank Task",
+                status = "done",
+                result = JsonPrimitive("   "),
+            )
+        val subordinateNode =
+            node("subord-1", "Worker Alpha", "subordinate", parent = "orch-1").copy(
+                subagents = listOf(jsonSub, longAndValidSub, blankSub),
+            )
+        var openedChatId: String? = null
+
+        rule.setContent {
+            RpTheme {
+                MeshNodeDetailContent(
+                    detail = MeshNodeDetail(node = subordinateNode, selectedSubagent = null),
+                    onDismiss = {},
+                    onOpenChat = { openedChatId = it },
+                    onViewConversation = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("TODOs").assertExists()
+        rule.onNodeWithText("Conversaciones recientes").assertExists()
+        rule.onNodeWithText("gpt-5").assertExists()
+        rule.onNodeWithText("""{"ok":true}""").assertExists()
+        rule.onNodeWithText("x".repeat(1_200), substring = true).assertExists()
+        rule.onNodeWithText("…", substring = true).assertExists()
+        rule.onNodeWithText("x".repeat(1_201), substring = true).assertDoesNotExist()
+        assertEquals(2, rule.onAllNodesWithText("Resultado").fetchSemanticsNodes().size)
+
+        rule.onNodeWithText("Abrir chat").performScrollTo().performClick()
+        assertEquals("subord-1", openedChatId)
     }
 
     private fun node(

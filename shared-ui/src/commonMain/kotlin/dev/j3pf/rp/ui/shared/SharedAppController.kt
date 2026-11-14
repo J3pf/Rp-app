@@ -94,10 +94,12 @@ import dev.j3pf.rp.ui.mesh.MeshConversationDetail
 import dev.j3pf.rp.ui.mesh.MeshGroupChip
 import dev.j3pf.rp.ui.mesh.MeshMachineChip
 import dev.j3pf.rp.ui.mesh.MeshNodeDetail
+import dev.j3pf.rp.ui.mesh.MeshNodeDetailTarget
 import dev.j3pf.rp.ui.mesh.MeshUiState
 import dev.j3pf.rp.ui.mesh.formatMeshDisplayName
 import dev.j3pf.rp.ui.mesh.isIdLooking
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
+import dev.j3pf.rp.ui.mesh.resolveMeshNodeDetailTarget
 import dev.j3pf.rp.ui.nav.AboutRoute
 import dev.j3pf.rp.ui.nav.AddMachineRoute
 import dev.j3pf.rp.ui.nav.AgentsRoute
@@ -1652,8 +1654,16 @@ class SharedAppController(
     }
 
     fun selectMeshNode(agentId: String) {
-        val nodes = _meshState.value.snapshot?.nodes ?: return
-        val node = nodes.firstOrNull { it.agentId == agentId } ?: return
+        val state = _meshState.value
+        val node =
+            when (val target = resolveMeshNodeDetailTarget(agentId, state.snapshot, state.layoutResult)) {
+                is MeshNodeDetailTarget.Subagent -> {
+                    _meshState.update { it.copy(nodeDetail = target.detail, conversationDetail = null) }
+                    return
+                }
+                is MeshNodeDetailTarget.Agent -> target.node
+                null -> return
+            }
         _meshState.update {
             it.copy(nodeDetail = MeshNodeDetail(node = node, isLoadingComms = true), conversationDetail = null)
         }

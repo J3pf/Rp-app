@@ -22,12 +22,17 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshCommEvent
+import dev.j3pf.rp.protocol.MeshNode
+import dev.j3pf.rp.protocol.MeshSnapshot
+import dev.j3pf.rp.protocol.MeshSubagent
+import dev.j3pf.rp.protocol.MeshSubagentTokens
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
 import dev.j3pf.rp.ui.chat.DeliveryChoice
 import dev.j3pf.rp.ui.components.ALL_MACHINES
+import dev.j3pf.rp.ui.mesh.layout.SubagentPlacement
 import dev.j3pf.rp.ui.nav.AgentsRoute
 import dev.j3pf.rp.ui.nav.AppTab
 import dev.j3pf.rp.ui.nav.ChatRoute
@@ -41,9 +46,13 @@ import dev.j3pf.rp.ui.util.lastSegment
 import dev.j3pf.rp.ui.util.parseColor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -454,5 +463,122 @@ class RemotePiAppTest {
         )
         assertEquals(1, sentCount)
         assertEquals(3, biometricInvocations)
+    }
+
+    @Test
+    fun selectMeshNodeResolvesSyntheticSubagentWithoutCommsFetchAndIgnoresUnknownIds() {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val secrets = EncryptedKeyValueSecretStore(InMemorySecretKeyValueBacking())
+        val settings = KeyValueSettingsStore()
+        secrets.save(
+            Session(
+                relayId = "0123456789abcdef",
+                relayUrl = "https://relay.example.com",
+                relayName = "Studio Mac",
+                deviceId = "dev-1",
+                deviceToken = "tok-1",
+                pushKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ),
+        )
+
+        val activeSubagent =
+            MeshSubagent(
+                taskId = "task-1",
+                agent = "scout",
+                label = "Inspect layout",
+                status = "working",
+                model = "claude-sonnet-4-5",
+                thinking = "medium",
+                durationMs = 4_200L,
+                turns = 3,
+                toolCalls = 7,
+                tokens = MeshSubagentTokens(prompt = 120L, completion = 80L, total = 200L),
+                result = JsonPrimitive("Found 2 layout rules"),
+                tools = listOf("read", "grep"),
+            )
+        val fallbackSubagent =
+            MeshSubagent(
+                taskId = "task-2",
+                agent = "worker",
+                status = "running",
+                model = null,
+            )
+        val parentNode =
+            MeshNode(
+                agentId = "m1:parent",
+                machineId = "m1",
+                machineName = "MacBook",
+                name = "Parent Orchestrator",
+                model = "gpt-5",
+                status = "working",
+                online = true,
+                role = "orchestrator",
+                subagents = listOf(activeSubagent, fallbackSubagent),
+            )
+        val snapshotJson = Json.encodeToString(MeshSnapshot(nodes = listOf(parentNode)))
+        val requestedUrls = mutableListOf<String>()
+        val httpTransport =
+            object : RelayHttpTransport {
+                override suspend fun execute(request: RelayHttpRequest): ApiResult<RelayHttpResponse> {
+                    requestedUrls += request.url
+                    return when {
+                        request.url.contains("/comms") -> ApiResult.Ok(RelayHttpResponse(200, """{"items":[]}"""))
+                        request.url.contains("/v1/mesh") -> ApiResult.Ok(RelayHttpResponse(200, snapshotJson))
+                        else -> ApiResult.Ok(RelayHttpResponse(200, "{}"))
+                    }
+                }
+            }
+
+        val controller =
+            createInMemorySocketController(
+                scope = scope,
+                secrets = secrets,
+                settingsStore = settings,
+                httpTransport = httpTransport,
+            )
+
+        controller.refreshMesh()
+        val syntheticId = SubagentPlacement.nodeId("m1:parent", "task-1")
+        val fallbackSyntheticId = SubagentPlacement.nodeId("m1:parent", "task-2")
+        val layoutNodes = assertNotNull(controller.meshState.value.layoutResult).nodes
+        assertNotNull(layoutNodes[syntheticId])
+        assertNotNull(layoutNodes[fallbackSyntheticId])
+
+        // Selecting synthetic subagent resolves details from layout/parent without calling /comms
+        controller.selectMeshNode(syntheticId)
+        val subDetail = controller.meshState.value.nodeDetail
+        assertNotNull(subDetail)
+        assertEquals(syntheticId, subDetail.node.agentId)
+        assertEquals("subagent", subDetail.node.role)
+        assertEquals("m1:parent", subDetail.node.parentAgentId)
+        assertEquals("claude-sonnet-4-5", subDetail.node.model)
+        assertEquals(listOf(activeSubagent), subDetail.node.subagents)
+        assertEquals(activeSubagent, subDetail.selectedSubagent)
+        assertFalse(subDetail.isLoadingComms)
+        assertNull(controller.meshState.value.conversationDetail)
+        assertTrue(requestedUrls.none { it.contains("/comms") })
+
+        // Selecting synthetic subagent without its own model keeps parent/synthetic model
+        controller.selectMeshNode(fallbackSyntheticId)
+        val fallbackDetail = controller.meshState.value.nodeDetail
+        assertNotNull(fallbackDetail)
+        assertEquals(fallbackSubagent, fallbackDetail.selectedSubagent)
+        assertEquals("gpt-5", fallbackDetail.node.model)
+        assertTrue(requestedUrls.none { it.contains("/comms") })
+
+        // Unknown synthetic ID leaves nodeDetail null after dismissal and skips /comms
+        controller.dismissMeshNodeDetail()
+        assertNull(controller.meshState.value.nodeDetail)
+        controller.selectMeshNode("sub:m1:parent:unknown")
+        assertNull(controller.meshState.value.nodeDetail)
+        assertTrue(requestedUrls.none { it.contains("/comms") })
+
+        // Selecting a real node still triggers /comms fetch and leaves selectedSubagent null
+        controller.selectMeshNode("m1:parent")
+        val parentDetail = controller.meshState.value.nodeDetail
+        assertNotNull(parentDetail)
+        assertEquals("m1:parent", parentDetail.node.agentId)
+        assertNull(parentDetail.selectedSubagent)
+        assertTrue(requestedUrls.any { it.contains("/comms") })
     }
 }

@@ -129,10 +129,23 @@ class MeshViewModel
         }
 
         fun onNodeClick(agentId: String) {
+            val state = _uiState.value
             val node =
-                _uiState.value.snapshot
-                    ?.nodes
-                    ?.firstOrNull { it.agentId == agentId } ?: return
+                when (val target = resolveMeshNodeDetailTarget(agentId, state.snapshot, state.layoutResult)) {
+                    is MeshNodeDetailTarget.Subagent -> {
+                        nodeCommsJob?.cancel()
+                        conversationJob?.cancel()
+                        _uiState.update {
+                            it.copy(
+                                nodeDetail = target.detail,
+                                conversationDetail = null,
+                            )
+                        }
+                        return
+                    }
+                    is MeshNodeDetailTarget.Agent -> target.node
+                    null -> return
+                }
             nodeCommsJob?.cancel()
             conversationJob?.cancel()
             _uiState.update {
