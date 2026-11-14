@@ -35,6 +35,7 @@ data object SettingsRoute
 @Serializable
 data class ChatRoute(
     val agentId: String,
+    val readOnly: Boolean = false,
 )
 
 @Serializable

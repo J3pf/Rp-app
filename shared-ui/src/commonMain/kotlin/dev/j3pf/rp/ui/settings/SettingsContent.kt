@@ -154,7 +154,7 @@ fun SettingsContent(
     modifier: Modifier = Modifier,
     onSelectFontScale: (Float) -> Unit = {},
     onSelectMessageSpacing: (String) -> Unit = {},
-    versionName: String = "1.0.0",
+    versionName: String = "0.9.1",
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -495,7 +495,7 @@ fun MachinesContent(
         machines.forEach { m ->
             ListItem(
                 leadingContent = { ColorDot(parseColor(m.color), size = 14) },
-                headlineContent = { Text("${contextEmoji(m.context)} ${m.name}") },
+                headlineContent = { Text("${contextEmoji(m.context)} ${m.name}".trim()) },
                 supportingContent = {
                     Text("${contextLabel(m.context)} · ${if (m.online) "en línea" else "sin conexión"} · ${m.agentCount} agentes")
                 },
@@ -761,7 +761,7 @@ private fun MachinePrefsCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ColorDot(parseColor(m.color), size = 12)
-                Text("  ${contextEmoji(m.context)} ${m.name}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text("  ${"${contextEmoji(m.context)} ${m.name}".trim()}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 Text("Silenciar")
                 Switch(p?.mute ?: false, onMute)
             }

@@ -32,9 +32,12 @@ import dev.j3pf.rp.data.ports.SecretStore
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.data.repo.PairResult
+import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.secure.EncryptedKeyValueSecretStore
 import dev.j3pf.rp.data.secure.InMemorySecretKeyValueBacking
 import dev.j3pf.rp.data.secure.Session
+import dev.j3pf.rp.protocol.AgentArchivedList
+import dev.j3pf.rp.protocol.AgentArchivedRequest
 import dev.j3pf.rp.protocol.AgentEvent
 import dev.j3pf.rp.protocol.AgentHistory
 import dev.j3pf.rp.protocol.AgentRef
@@ -44,6 +47,7 @@ import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.AppHello
 import dev.j3pf.rp.protocol.AppInfo
 import dev.j3pf.rp.protocol.AppWelcome
+import dev.j3pf.rp.protocol.ArchivedAgentSummary
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
@@ -78,7 +82,9 @@ import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptResolved
 import dev.j3pf.rp.protocol.QuietHours
 import dev.j3pf.rp.protocol.ResolvedBy
+import dev.j3pf.rp.protocol.Ulid
 import dev.j3pf.rp.protocol.UserMessage
+import dev.j3pf.rp.protocol.normalized
 import dev.j3pf.rp.ui.agents.AgentsUiState
 import dev.j3pf.rp.ui.agents.MachineGroup
 import dev.j3pf.rp.ui.agents.sortAgentsWithinGroup
@@ -96,6 +102,7 @@ import dev.j3pf.rp.ui.nav.AboutRoute
 import dev.j3pf.rp.ui.nav.AddMachineRoute
 import dev.j3pf.rp.ui.nav.AgentsRoute
 import dev.j3pf.rp.ui.nav.AppTab
+import dev.j3pf.rp.ui.nav.ArchivedAgentsRoute
 import dev.j3pf.rp.ui.nav.BatteryRoute
 import dev.j3pf.rp.ui.nav.ChatRoute
 import dev.j3pf.rp.ui.nav.DevicesRoute
@@ -131,7 +138,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 /** Default [BiometricAuthorizer] for non-device/headless environments. */
 object PermissiveBiometricAuthorizer : BiometricAuthorizer {
@@ -199,18 +205,43 @@ class SharedAppController(
     private val backStack = mutableListOf<Any>()
     private val drafts = mutableMapOf<String, String>()
 
-    fun getDraft(agentId: String): String = drafts[agentId].orEmpty()
+    fun getDraft(agentId: String): String = storeLock.withLock { drafts[agentId].orEmpty() }
 
     fun setDraft(
         agentId: String,
         text: String,
     ) {
-        if (text.isBlank()) {
-            drafts.remove(agentId)
-        } else {
-            drafts[agentId] = text
+        storeLock.withLock {
+            if (text.isBlank()) {
+                drafts.remove(agentId)
+            } else {
+                drafts[agentId] = text
+            }
         }
     }
+
+    private val _archivedAgents = MutableStateFlow<List<ArchivedAgentSummary>>(emptyList())
+    val archivedAgents: StateFlow<List<ArchivedAgentSummary>> = _archivedAgents.asStateFlow()
+
+    private val _archivedNextBefore = MutableStateFlow<Long?>(null)
+    val archivedNextBefore: StateFlow<Long?> = _archivedNextBefore.asStateFlow()
+
+    private val _archivedLoading = MutableStateFlow(false)
+    val archivedLoading: StateFlow<Boolean> = _archivedLoading.asStateFlow()
+
+    private val _archivedError = MutableStateFlow<String?>(null)
+    val archivedError: StateFlow<String?> = _archivedError.asStateFlow()
+
+    private val _isAppLocked = MutableStateFlow(false)
+    val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
+
+    private val _appLockMessage = MutableStateFlow<String?>(null)
+    val appLockMessage: StateFlow<String?> = _appLockMessage.asStateFlow()
+
+    private var backgroundedAtMs: Long = 0L
+
+    private val _interactiveUnavailable = MutableStateFlow(false)
+    val interactiveUnavailable: StateFlow<Boolean> = _interactiveUnavailable.asStateFlow()
 
     private val _pairState = MutableStateFlow(PairUiState())
     val pairState: StateFlow<PairUiState> = _pairState.asStateFlow()
@@ -418,10 +449,14 @@ class SharedAppController(
                         storeLock.withLock {
                             chatHistoryStore.clear()
                             outboxStore.clear()
+                            drafts.clear()
                         }
                         _machines.value = emptyList()
                         _agents.value = emptyList()
                         _openPrompts.value = emptyList()
+                        _archivedAgents.value = emptyList()
+                        _archivedNextBefore.value = null
+                        _archivedError.value = null
                     }
 
                     override suspend fun clearCredentialsAndSettings() {
@@ -608,10 +643,21 @@ class SharedAppController(
                     welcome.agents.partition {
                         !it.online && it.machineId in onlineHerdrMachines && (it.herdr != null || it.agentId.contains(":herdr:"))
                     }
+                val prevById = _agents.value.associateBy { it.agentId }
                 _agents.value =
-                    liveAgents.map { a ->
+                    liveAgents.map { raw ->
+                        val a = raw.normalized()
+                        val prev = prevById[a.agentId]
                         val count = counts[a.agentId] ?: a.openPromptCount
-                        if (a.openPromptCount == count) a else a.copy(openPromptCount = count)
+                        val activeTask = a.activeTask ?: if (a.status == "working") prev?.activeTask else null
+                        val todoCompleted = if (a.todoTotal > 0) a.todoCompleted else if (a.status == "working") (prev?.todoCompleted ?: 0) else 0
+                        val todoTotal = if (a.todoTotal > 0) a.todoTotal else if (a.status == "working") (prev?.todoTotal ?: 0) else 0
+                        a.copy(
+                            openPromptCount = count,
+                            activeTask = activeTask,
+                            todoCompleted = todoCompleted,
+                            todoTotal = todoTotal,
+                        )
                     }
                 if (staleHerdr.isNotEmpty()) {
                     scope.launch {
@@ -638,9 +684,20 @@ class SharedAppController(
                 _agents.update { current ->
                     val map = current.associateBy { it.agentId }.toMutableMap()
                     upd.remove.forEach { map.remove(it) }
-                    upd.upsert.forEach { a ->
+                    upd.upsert.forEach { raw ->
+                        val a = raw.normalized()
+                        val prev = map[a.agentId]
                         val count = counts[a.agentId] ?: a.openPromptCount
-                        map[a.agentId] = if (a.openPromptCount == count) a else a.copy(openPromptCount = count)
+                        val activeTask = a.activeTask ?: if (a.status == "working") prev?.activeTask else null
+                        val todoCompleted = if (a.todoTotal > 0) a.todoCompleted else if (a.status == "working") (prev?.todoCompleted ?: 0) else 0
+                        val todoTotal = if (a.todoTotal > 0) a.todoTotal else if (a.status == "working") (prev?.todoTotal ?: 0) else 0
+                        map[a.agentId] =
+                            a.copy(
+                                openPromptCount = count,
+                                activeTask = activeTask,
+                                todoCompleted = todoCompleted,
+                                todoTotal = todoTotal,
+                            )
                     }
                     map.values.toList()
                 }
@@ -705,6 +762,94 @@ class SharedAppController(
             is DevicesRoute -> loadDevices()
             is AddMachineRoute -> generatePairCode()
             is NewAgentRoute -> initNewAgentForm()
+            is ArchivedAgentsRoute -> loadArchived()
+            is ChatRoute -> _interactiveUnavailable.value = false
+        }
+    }
+
+    fun onAppBackgrounded() {
+        backgroundedAtMs = currentTimeMillis()
+    }
+
+    fun onAppForegrounded() {
+        val bgAt = backgroundedAtMs
+        backgroundedAtMs = 0L
+        if (_settings.value.appLock && secrets.current() != null && bgAt > 0L) {
+            if (currentTimeMillis() - bgAt > APP_LOCK_TIMEOUT_MS) {
+                _isAppLocked.value = true
+                _appLockMessage.value = null
+            }
+        }
+    }
+
+    fun unlockApp() {
+        scope.launch {
+            _appLockMessage.value = null
+            when (biometricAuthorizer.authenticate("Desbloquear RemotePi")) {
+                BiometricAuthResult.OK -> {
+                    _isAppLocked.value = false
+                }
+                BiometricAuthResult.FAILED -> {
+                    _appLockMessage.value = "Desbloqueo cancelado"
+                }
+                BiometricAuthResult.UNAVAILABLE -> {
+                    _isAppLocked.value = false
+                }
+            }
+        }
+    }
+
+    fun loadArchived(before: Long? = null) {
+        if (before == null) {
+            _archivedLoading.value = true
+            _archivedError.value = null
+        }
+        scope.launch {
+            val req = AgentArchivedRequest(before = before, limit = 30)
+            val reply = wsClient.request(Envelope.of(MsgType.AGENT_ARCHIVED_LIST, req, id = newId()))
+            when (reply) {
+                is WsReply.Ok -> {
+                    val res = runCatching { reply.envelope.body<AgentArchivedList>() }.getOrNull()
+                    if (res != null) {
+                        _archivedAgents.update { prev ->
+                            if (before == null) res.agents else (prev + res.agents).distinctBy { it.agentId }
+                        }
+                        _archivedNextBefore.value = res.nextBefore
+                    }
+                }
+                is WsReply.Error -> {
+                    _archivedError.value = reply.message.ifEmpty { reply.code }
+                }
+                WsReply.Timeout -> {
+                    _archivedError.value = "Tiempo de espera agotado"
+                }
+                WsReply.NotConnected -> {
+                    _archivedError.value = "Sin conexión con el relay"
+                }
+            }
+            _archivedLoading.value = false
+        }
+    }
+
+    fun loadMoreArchived() {
+        val next = _archivedNextBefore.value ?: return
+        if (_archivedLoading.value) return
+        loadArchived(next)
+    }
+
+    fun purgeArchived(agentId: String) {
+        scope.launch {
+            when (val reply = wsClient.request(Envelope.of(MsgType.AGENT_PURGE, AgentRef(agentId), id = newId()))) {
+                is WsReply.Ok -> {
+                    _archivedAgents.update { list -> list.filterNot { it.agentId == agentId } }
+                }
+                is WsReply.Error -> {
+                    _archivedError.value = reply.message.ifEmpty { "No se pudo eliminar" }
+                }
+                else -> {
+                    _archivedError.value = "No se pudo eliminar"
+                }
+            }
         }
     }
 
@@ -956,8 +1101,12 @@ class SharedAppController(
         agent: AgentSummary?,
         choice: DeliveryChoice,
     ): Boolean =
-        _settings.value.requireUnlockToApprove &&
-            (choice == DeliveryChoice.TYPED || (choice == DeliveryChoice.AUTO && agent?.gentleMode == "auto"))
+        when (choice) {
+            DeliveryChoice.TYPED -> true
+            DeliveryChoice.AUTO, DeliveryChoice.COMMAND ->
+                _settings.value.requireUnlockToApprove && agent?.gentleMode == "auto"
+            DeliveryChoice.EXTENSION -> false
+        }
 
     fun answerPrompt(
         promptId: String,
@@ -1099,12 +1248,36 @@ class SharedAppController(
                 }
             }
             onSent()
-            session.send(
-                text = trimmed,
-                delivery = delivery,
-                method = method,
-                asCommand = asCommand,
-            )
+            _interactiveUnavailable.value = false
+            val res =
+                session.send(
+                    text = trimmed,
+                    delivery = delivery,
+                    method = method,
+                    asCommand = asCommand,
+                )
+            if (res == SendResult.Failed("interactive_unavailable")) {
+                _interactiveUnavailable.value = true
+            }
+        }
+    }
+
+    fun switchToNormal(session: ChatSession) {
+        scope.launch {
+            _interactiveUnavailable.value = false
+            val res =
+                session.send(
+                    text = "/gentle-mode normal",
+                    delivery = Delivery.AUTO,
+                    method = DeliveryMethod.API,
+                    asCommand = true,
+                )
+            when (res) {
+                is SendResult.Failed -> {
+                    _actionMessage.value = "No se pudo cambiar a modo Normal: ${res.reason}"
+                }
+                else -> {}
+            }
         }
     }
 
@@ -1773,8 +1946,9 @@ class SharedAppController(
     }
 
     companion object {
-        const val APP_VERSION = "0.7.0"
+        const val APP_VERSION = "0.9.1"
         const val SOLO_GROUP_ID = "solo"
+        private const val APP_LOCK_TIMEOUT_MS = 30_000L
         private const val MAX_MESH_LIVE_COMMS = 20
         private const val MAX_MESH_ACTIVE_BUBBLES = 50
         private const val MESH_BUBBLE_LIFETIME_MS = 6_000L
@@ -1994,7 +2168,10 @@ class SharedAppController(
                     else -> "https://$trimmed"
                 }
             val afterScheme = withScheme.substringAfter("://", "")
-            if (afterScheme.isBlank() || afterScheme.contains(' ')) return null
+            val authority = afterScheme.substringBefore('/')
+            if (authority.isBlank() || authority.contains(' ') || authority.startsWith(':') || authority.startsWith('/')) {
+                return null
+            }
             return withScheme
         }
 
@@ -2067,19 +2244,9 @@ class SharedAppController(
             return out.decodeToString(0, outIdx)
         }
 
-        private fun newId(): String {
-            val bytes = Random.nextBytes(8)
-            val sb = StringBuilder(16)
-            for (b in bytes) {
-                val v = b.toInt() and 0xFF
-                sb.append(HEX_LOWER[(v ushr 4) and 0x0F])
-                sb.append(HEX_LOWER[v and 0x0F])
-            }
-            return sb.toString()
-        }
+        private fun newId(): String = Ulid.new()
 
         private const val HEX_UPPER = "0123456789ABCDEF"
-        private const val HEX_LOWER = "0123456789abcdef"
     }
 }
 

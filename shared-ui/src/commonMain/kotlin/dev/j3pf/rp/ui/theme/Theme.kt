@@ -324,6 +324,7 @@ private fun themeForMachine(
                 text.contains("sexy") -> RpThemeChoice.GENTLE_SEXY
                 text.contains("cute") -> RpThemeChoice.GENTLE_CUTE
                 text.contains("moshi") -> RpThemeChoice.MOSHI
+                text.contains("terminal-blue") || text.contains("blue-dark") -> RpThemeChoice.TERMINAL_BLUE
                 text.contains("omarchy") -> RpThemeChoice.OMARCHY
                 else -> null
             }

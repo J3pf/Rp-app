@@ -425,15 +425,15 @@ private fun Modifier.workingCardBorder(
     return this.drawWithCache {
         val strokePx = 1.5.dp.toPx()
         val cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())
-        val offset = progress * (size.width + size.height)
-        val brush =
-            Brush.linearGradient(
-                colors = listOf(primaryColor, secondaryColor, primaryColor),
-                start = Offset(offset, offset),
-                end = Offset(offset + size.width, offset + size.height),
-            )
         onDrawWithContent {
             drawContent()
+            val offset = progress * (size.width + size.height)
+            val brush =
+                Brush.linearGradient(
+                    colors = listOf(primaryColor, secondaryColor, primaryColor),
+                    start = Offset(offset, offset),
+                    end = Offset(offset + size.width, offset + size.height),
+                )
             drawRoundRect(
                 brush = brush,
                 style = Stroke(width = strokePx),

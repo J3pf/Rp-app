@@ -163,7 +163,7 @@ fun AgentCard(
         }
 
     val reducedMotion = LocalReducedMotion.current
-    val needsAnim = (isWorking || isWaiting || isDone) && !reducedMotion
+    val needsAnim = (isWorking || isWaiting) && !reducedMotion
     val infiniteTransition = if (needsAnim) rememberInfiniteTransition(label = "cardStateAnim") else null
 
     val orbitProgress =

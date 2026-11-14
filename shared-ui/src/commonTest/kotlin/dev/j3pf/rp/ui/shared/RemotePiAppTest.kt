@@ -127,7 +127,7 @@ class RemotePiAppTest {
 
     @Test
     fun keyValueSettingsStoreNotifiesInitialMutedAgentsAndAppVersionIsCurrent() {
-        assertEquals("0.7.0", SharedAppController.APP_VERSION)
+        assertEquals("0.9.1", SharedAppController.APP_VERSION)
         val backing = InMemorySecretKeyValueBacking()
         backing.putString(SettingsKeys.K_MUTED_AGENTS, "m1:a1,m1:a2")
         var syncedMuted: Set<String> = emptySet()

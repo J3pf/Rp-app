@@ -126,7 +126,14 @@ fun ChatTopBar(
                             if (working && agent.online && (agent.status == "idle" || agent.status == "done")) {
                                 agent.copy(
                                     status = "working",
-                                    herdr = agent.herdr?.copy(tabId = agent.herdr?.tabId?.replace("|done=1", "")),
+                                    herdr =
+                                        agent.herdr?.copy(
+                                            tabId =
+                                                agent.herdr
+                                                    ?.tabId
+                                                    ?.replace("|done=1", "")
+                                                    ?.replace("~done", ""),
+                                        ),
                                 )
                             } else {
                                 agent

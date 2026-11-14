@@ -461,10 +461,11 @@ fun MessageList(
         }
 
     LaunchedEffect(lastItemKey, items.size, streamingTextLength) {
-        val isNewItem = items.size != prevItemsSize.value || lastItemKey?.startsWith("local:") == true
+        val isLocalOrAck = lastItemKey?.startsWith("local:") == true || lastItemKey?.startsWith("ack:") == true
+        val isNewItem = items.size != prevItemsSize.value || isLocalOrAck
         prevItemsSize.value = items.size
 
-        if (lastItemKey != null && (!isScrolledUp || lastItemKey.startsWith("local:"))) {
+        if (lastItemKey != null && (!isScrolledUp || isLocalOrAck)) {
             if (!listState.isScrollInProgress) {
                 if (isNewItem) {
                     listState.animateScrollToItem(0)

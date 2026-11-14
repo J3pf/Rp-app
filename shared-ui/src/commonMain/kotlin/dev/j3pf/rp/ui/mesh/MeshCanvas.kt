@@ -37,7 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -100,27 +100,14 @@ fun MeshCanvas(
                 .orEmpty()
         }
 
-    val nowMs = frameTime.longValue
-    val activeEdgeExpiresAt =
-        layout
-            ?.edges
-            ?.mapNotNull { edge ->
-                edge.edge.lastAt
-                    ?.plus(ACTIVE_EDGE_MS + 1)
-                    ?.takeIf { it > nowMs }
-            }?.minOrNull()
-    val hasMovingContent =
-        !reducedMotion &&
-            (
-                layout?.edges?.any { it.edge.pendingAsk } == true ||
-                    activeBubbles.any { it.expiresAtMs > nowMs }
-            )
-
-    LaunchedEffect(hasMovingContent, activeEdgeExpiresAt) {
-        frameTime.longValue = currentTimeMillis()
-        if (hasMovingContent) {
+    LaunchedEffect(layout, activeBubbles, reducedMotion) {
+        var now = currentTimeMillis()
+        frameTime.longValue = now
+        val hasPendingAsk = !reducedMotion && layout?.edges?.any { it.edge.pendingAsk } == true
+        val maxBubbleExpiresAt = if (reducedMotion) 0L else (activeBubbles.maxOfOrNull { it.expiresAtMs } ?: 0L)
+        if (hasPendingAsk || maxBubbleExpiresAt > now) {
             var lastFrameNanos = 0L
-            while (isActive) {
+            while (isActive && (hasPendingAsk || currentTimeMillis() < maxBubbleExpiresAt)) {
                 withFrameNanos { frameNanos ->
                     if (lastFrameNanos == 0L || frameNanos - lastFrameNanos >= MESH_ANIMATION_INTERVAL_NANOS) {
                         lastFrameNanos = frameNanos
@@ -128,8 +115,19 @@ fun MeshCanvas(
                     }
                 }
             }
-        } else if (activeEdgeExpiresAt != null) {
-            delay((activeEdgeExpiresAt - currentTimeMillis()).coerceAtLeast(1L))
+            frameTime.longValue = currentTimeMillis()
+        }
+        now = currentTimeMillis()
+        val nextEdgeExpiry =
+            layout
+                ?.edges
+                ?.mapNotNull { edge ->
+                    edge.edge.lastAt
+                        ?.plus(ACTIVE_EDGE_MS + 1)
+                        ?.takeIf { it > now }
+                }?.minOrNull()
+        if (nextEdgeExpiry != null) {
+            delay((nextEdgeExpiry - now).coerceAtLeast(1L))
             frameTime.longValue = currentTimeMillis()
         }
     }
@@ -156,6 +154,11 @@ fun MeshCanvas(
 
     val cardHeights = remember { mutableStateMapOf<String, Float>() }
     val textMeasurer = rememberTextMeasurer()
+
+    LaunchedEffect(layout) {
+        val currentIds = layout?.nodes?.keys ?: emptySet()
+        cardHeights.keys.retainAll(currentIds)
+    }
 
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
@@ -211,7 +214,7 @@ fun MeshCanvas(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
+                    .pointerInput(bounds, widthDp, heightDp, autoFitScale) {
                         detectTransformGestures { centroid, pan, zoomChange, _ ->
                             val oldZoom = zoom
                             val newZoom = (oldZoom * zoomChange).coerceIn(0.40f, 2.50f)
@@ -420,7 +423,18 @@ fun MeshCanvas(
 
                             // Speech bubble with message preview positioned clear of every card.
                             val bubbleText = formatMeshCommText(comm.text)
-                            val bubbleHalfWidth = speechBubbleHalfWidth(bubbleText, textMeasurer, density)
+                            val display = if (bubbleText.length > 25) bubbleText.take(24) + "…" else bubbleText
+                            val textLayoutResult =
+                                textMeasurer.measure(
+                                    text = display,
+                                    style =
+                                        TextStyle(
+                                            fontSize = 10.sp,
+                                            color = scheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center,
+                                        ),
+                                )
+                            val bubbleHalfWidth = (textLayoutResult.size.width / density.density + 16f) / 2f
                             val safeMidpointY =
                                 safeCommBubbleCenterY(
                                     midpointY = midpointY,
@@ -431,14 +445,12 @@ fun MeshCanvas(
                                     bubbleHalfWidth = bubbleHalfWidth,
                                 )
                             drawSpeechBubble(
-                                textMeasurer = textMeasurer,
+                                textLayoutResult = textLayoutResult,
                                 density = density,
                                 centerX = midpointX,
                                 centerY = safeMidpointY,
-                                text = bubbleText,
                                 width = bubbleHalfWidth * 2f,
                                 background = scheme.surfaceVariant,
-                                foreground = scheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -565,37 +577,14 @@ private fun pointAlongEdge(
     return Offset(last.x, last.y)
 }
 
-private fun speechBubbleHalfWidth(
-    text: String,
-    textMeasurer: TextMeasurer,
-    density: Density,
-): Float {
-    val display = if (text.length > 25) text.take(24) + "…" else text
-    val measured = textMeasurer.measure(display, TextStyle(fontSize = 10.sp))
-    return (measured.size.width / density.density + 16f) / 2f
-}
-
 private fun DrawScope.drawSpeechBubble(
-    textMeasurer: TextMeasurer,
+    textLayoutResult: TextLayoutResult,
     density: Density,
     centerX: Float,
     centerY: Float,
-    text: String,
     width: Float,
     background: Color,
-    foreground: Color,
 ) {
-    val display = if (text.length > 25) text.take(24) + "…" else text
-    val textLayoutResult =
-        textMeasurer.measure(
-            text = display,
-            style =
-                TextStyle(
-                    fontSize = 10.sp,
-                    color = foreground,
-                    textAlign = TextAlign.Center,
-                ),
-        )
     drawRoundRect(
         color = background,
         topLeft = Offset(centerX - width / 2f, centerY - 9f),

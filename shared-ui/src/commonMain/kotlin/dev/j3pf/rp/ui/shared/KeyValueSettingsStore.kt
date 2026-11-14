@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class KeyValueSettingsStore(
     private val backing: SecretKeyValueBacking = InMemorySecretKeyValueBacking(),
     private val onMutedAgentsChanged: (Set<String>) -> Unit = {},
+    private val onCriticalAlwaysChanged: (Boolean) -> Unit = {},
 ) : SettingsStore {
     private val _state = MutableStateFlow(load())
     val state: StateFlow<AppSettings> = _state.asStateFlow()
@@ -25,6 +26,7 @@ class KeyValueSettingsStore(
 
     init {
         onMutedAgentsChanged(_state.value.mutedAgents)
+        onCriticalAlwaysChanged(_state.value.criticalAlways)
     }
 
     override suspend fun setSelectedContext(v: String) {
@@ -41,6 +43,7 @@ class KeyValueSettingsStore(
 
     override suspend fun setCriticalAlways(v: Boolean) {
         update(SettingsKeys.K_CRITICAL_ALWAYS, v.toString()) { copy(criticalAlways = v) }
+        onCriticalAlwaysChanged(v)
     }
 
     override suspend fun setAppLock(v: Boolean) {
@@ -111,6 +114,7 @@ class KeyValueSettingsStore(
         SettingsKeys.ALL_NAMES.forEach { backing.remove(it) }
         _state.value = AppSettings()
         onMutedAgentsChanged(emptySet())
+        onCriticalAlwaysChanged(true)
     }
 
     private fun update(
