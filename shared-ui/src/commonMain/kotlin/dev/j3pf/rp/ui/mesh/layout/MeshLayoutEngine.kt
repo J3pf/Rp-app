@@ -635,6 +635,7 @@ class MeshLayoutEngine(
                     parentAgentId = agente.agentId,
                     role = "subagent",
                     status = subagente.status,
+                    model = subagente.model ?: agente.model,
                     subagents = emptyList(),
                     todos = null,
                     activity = null,

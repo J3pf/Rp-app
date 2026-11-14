@@ -542,7 +542,9 @@ class RemotePiAppTest {
         val fallbackSyntheticId = SubagentPlacement.nodeId("m1:parent", "task-2")
         val layoutNodes = assertNotNull(controller.meshState.value.layoutResult).nodes
         assertNotNull(layoutNodes[syntheticId])
+        assertEquals("claude-sonnet-4-5", layoutNodes[syntheticId]!!.node.model)
         assertNotNull(layoutNodes[fallbackSyntheticId])
+        assertEquals("gpt-5", layoutNodes[fallbackSyntheticId]!!.node.model)
 
         // Selecting synthetic subagent resolves details from layout/parent without calling /comms
         controller.selectMeshNode(syntheticId)
