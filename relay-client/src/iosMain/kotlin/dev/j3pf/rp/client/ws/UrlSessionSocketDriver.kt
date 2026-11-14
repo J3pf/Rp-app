@@ -118,7 +118,7 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
 
         private fun schedulePing(socket: NSURLSessionWebSocketTask) {
             val delayNs = PING_INTERVAL_SECONDS * NSEC_PER_SEC.toLong()
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs), dispatch_get_global_queue(QOS_CLASS_UTILITY.toLong(), 0u)) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
                 if (state.open.load() != OPEN || state.terminal.load() != ACTIVE) return@dispatch_after
                 socket.sendPingWithPongReceiveHandler { error ->
                     if (error != null) {

@@ -648,7 +648,9 @@ class ChatReducerTest {
                     "e1",
                     "assistant",
                     900L,
-                    RpJson.parseToJsonElement("""{"role":"assistant","timestamp":900,"content":[{"type":"text","text":"Listo"}]}""") as JsonObject,
+                    RpJson.parseToJsonElement(
+                        """{"role":"assistant","timestamp":900,"content":[{"type":"text","text":"Listo"}]}""",
+                    ) as JsonObject,
                 ),
             )
         s = ChatReducer.applyEntries(s, preEntries, epoch = "E1")
