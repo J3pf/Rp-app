@@ -3,6 +3,12 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-11-14
+
+### Fixed
+- **iOS Build & Multiplatform ULID**: Replaced unresolved `QOS_CLASS_UTILITY` with `DISPATCH_QUEUE_PRIORITY_DEFAULT` in `UrlSessionSocketDriver` and moved `Ulid` into `:protocol` `commonMain` backed by `expect`/`actual` `platformRandomBytes` across JVM and iOS.
+- **Mesh Wire-Order Test Determinism**: Awaited initial `ConnState.Connected` observation in `MeshRepositoryWireOrderTest` so startup observer callbacks do not race test assertions.
+
 ## [0.9.2] - 2026-11-14
 
 ### Security
