@@ -3,6 +3,12 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-11-14
+
+### Added
+- **Interactive Synthetic Subagent Node Detail in Mesh**: Wired both `SharedAppController.selectMeshNode` and Android `MeshViewModel.onNodeClick` through `resolveMeshNodeDetailTarget` so tapping synthetic `"sub:..."` child nodes opens `MeshNodeDetailSheet` with focused subagent telemetry (`agent`, `status`, `model`, `duration`, `tokens`, `toolCalls`, `turns`, `tools`, `thinking`, `result`, `error`), hides parent TODOs/recent-comms noise without firing invalid `/comms` fetches, preserves `subagente.model` on synthetic layout nodes, and routes `"Abrir chat"` directly to the parent agent chat.
+- **Enriched Parent Subagent Cards**: Displayed `model`, `turns`, `toolCalls`, and formatted/truncated `result`/`error` details cleanly across subagent cards in normal parent detail sheets.
+
 ## [0.9.3] - 2026-11-14
 
 ### Fixed
