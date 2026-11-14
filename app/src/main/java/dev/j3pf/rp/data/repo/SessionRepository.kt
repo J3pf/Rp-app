@@ -15,6 +15,7 @@ import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.push.DirectPushService
 import dev.j3pf.rp.push.NotificationChannels
 import dev.j3pf.rp.push.PushTokenProvider
+import dev.j3pf.rp.ui.chat.ChatViewModel
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -107,6 +108,8 @@ class SessionRepository
             hosts.clear()
             mesh.clear()
             dedup.clear()
+            ChatViewModel.clearDrafts()
+            AttachmentsRepository.clearCache(context)
         }
 
         companion object {

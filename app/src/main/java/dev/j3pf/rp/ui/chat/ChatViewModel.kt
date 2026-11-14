@@ -64,6 +64,7 @@ data class ChatUiState(
     val selectedDiffFile: String? = null,
     val showForgetConfirmation: Boolean = false,
     val readOnly: Boolean = false,
+    val requireUnlockToApprove: Boolean = true,
 ) {
     val isAuto get() = agent?.gentleMode == "auto"
     val canSend get() = !sending && attachments.none { it.state != UploadState.DONE && it.state != UploadState.ERROR }
@@ -108,10 +109,11 @@ class ChatViewModel
                                         it.status == AgentStatus.COMPACTING
                                 )
                         }.sortedBy { if (it.status == AgentStatus.WAITING_INPUT) 0 else 1 }
+                val hasHistoryEpoch = chat.epoch != null
                 val enrichedAgent =
                     agent?.copy(
-                        todoCompleted = if (chat.todoTotalCount > 0) chat.todoCompletedCount else agent.todoCompleted,
-                        todoTotal = if (chat.todoTotalCount > 0) chat.todoTotalCount else agent.todoTotal,
+                        todoCompleted = if (hasHistoryEpoch) chat.todoCompletedCount else agent.todoCompleted,
+                        todoTotal = if (hasHistoryEpoch) chat.todoTotalCount else agent.todoTotal,
                         activeTask = chat.activeTaskLabel() ?: agent.activeTask,
                         contextTokens = chat.contextTokens ?: agent.contextTokens,
                         contextWindow = chat.contextWindow ?: agent.contextWindow,
@@ -126,6 +128,7 @@ class ChatViewModel
                     muted = agentId in st.mutedAgents,
                     chatFontScale = st.chatFontScale,
                     chatMessageSpacing = st.chatMessageSpacing,
+                    requireUnlockToApprove = st.requireUnlockToApprove,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
@@ -240,6 +243,20 @@ class ChatViewModel
         /** Sends a terminal inspection or control command (such as `/term` or `/term enter`). */
         fun sendTerminalCommand(cmd: String) {
             viewModelScope.launch {
+                val s = state.value
+                if (s.isAuto && s.requireUnlockToApprove) {
+                    when (gate.authenticate("Enviar comando de terminal", "Este comando actúa sobre la terminal en modo Auto")) {
+                        dev.j3pf.rp.data.ports.BiometricAuthResult.OK -> {}
+                        dev.j3pf.rp.data.ports.BiometricAuthResult.UNAVAILABLE -> {
+                            extra.update { it.copy(message = "Configura un bloqueo de pantalla para enviar comandos de terminal") }
+                            return@launch
+                        }
+                        dev.j3pf.rp.data.ports.BiometricAuthResult.FAILED -> {
+                            extra.update { it.copy(message = "Desbloqueo cancelado") }
+                            return@launch
+                        }
+                    }
+                }
                 session.send(cmd, emptyList(), Delivery.AUTO, DeliveryMethod.AUTO, asCommand = true)
             }
         }
@@ -288,7 +305,7 @@ class ChatViewModel
         /** ¿Este envío cuenta como "tecleado" y por tanto debe pedir biometría? (válida 5 min) */
         fun needsAuth(): Boolean {
             val s = state.value
-            return s.choice == DeliveryChoice.TYPED || (s.choice == DeliveryChoice.AUTO && s.isAuto)
+            return s.choice == DeliveryChoice.TYPED || (s.requireUnlockToApprove && s.choice == DeliveryChoice.AUTO && s.isAuto)
         }
 
         // ───────────────────────────── Adjuntos ─────────────────────────────
@@ -373,7 +390,9 @@ class ChatViewModel
             val body = text.trim()
             if (body.isEmpty() && s.attachments.isEmpty()) return
             if (!s.canSend) return
-            val refs = s.attachments.mapNotNull { it.toRef() }
+            val sentAttachments = s.attachments.mapNotNull { a -> a.toRef()?.let { a.id to it } }
+            val sentIds = sentAttachments.map { it.first }.toSet()
+            val refs = sentAttachments.map { it.second }
             val failed = s.attachments.count { it.state == UploadState.ERROR }
             if (failed > 0) {
                 extra.update { it.copy(message = "Quita los adjuntos con error antes de enviar") }
@@ -399,7 +418,7 @@ class ChatViewModel
                         val unavailable = err == "interactive_unavailable" || err == "herdr_unavailable"
                         extra.update {
                             it.copy(
-                                attachments = emptyList(),
+                                attachments = it.attachments.filterNot { a -> a.id in sentIds },
                                 interactiveUnavailable = unavailable,
                                 message =
                                     when (err) {
@@ -427,14 +446,19 @@ class ChatViewModel
                                     },
                             )
                         }
-                        local.values.forEach(attachmentsRepo::discard)
-                        local.clear()
+                        sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
                         setDraft("")
                         onSent()
                     }
 
                     SendResult.Queued -> {
-                        extra.update { it.copy(attachments = emptyList(), message = "Sin conexión: se enviará al volver la red") }
+                        extra.update {
+                            it.copy(
+                                attachments = it.attachments.filterNot { a -> a.id in sentIds },
+                                message = "Sin conexión: se enviará al volver la red",
+                            )
+                        }
+                        sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
                         setDraft("")
                         onSent()
                     }
@@ -466,5 +490,9 @@ class ChatViewModel
 
         companion object {
             private val drafts = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+            fun clearDrafts() {
+                drafts.clear()
+            }
         }
     }

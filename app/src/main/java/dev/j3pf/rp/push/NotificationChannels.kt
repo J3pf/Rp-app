@@ -54,7 +54,7 @@ class NotificationChannels
         ) {
             val fingerprint = "$name|$contextKind"
             if (ensuredMachines[machineId] == fingerprint) return
-            val title = "${contextEmoji(contextKind)} $name"
+            val title = "${contextEmoji(contextKind)} $name".trim()
             nm.createNotificationChannelGroup(NotificationChannelGroup(groupId(machineId), title))
             for (cat in NotifyCategory.all) {
                 val (label, importance) =

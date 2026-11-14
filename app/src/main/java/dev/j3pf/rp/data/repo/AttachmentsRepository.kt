@@ -180,6 +180,8 @@ class AttachmentsRepository
             listOf(dir, cameraDir).forEach { d -> d.listFiles()?.filter { it.lastModified() < limit }?.forEach { it.delete() } }
         }
 
+        fun clearAll() = clearCache(context)
+
         private fun describe(uri: Uri): Pair<String, String> {
             var name: String? = null
             context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -193,7 +195,12 @@ class AttachmentsRepository
             return (name ?: ("archivo$fallbackExt")) to mime
         }
 
-        private fun sanitize(name: String) = name.replace(UNSAFE_FILENAME_REGEX, "_").take(120).ifEmpty { "archivo" }
+        private fun sanitize(name: String) =
+            name
+                .replace(UNSAFE_FILENAME_REGEX, "_")
+                .trimStart('.')
+                .take(120)
+                .ifEmpty { "archivo" }
 
         @SuppressLint("ExifInterface") // android.media.ExifInterface is sufficient for local image orientation on minSdk 29+
         private fun compress(src: File): File? =
@@ -245,9 +252,15 @@ class AttachmentsRepository
                 out
             }.getOrNull()
 
-        private companion object {
-            const val MAX_DIM = 2048
-            val COMPRESSIBLE = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
-            val UNSAFE_FILENAME_REGEX = Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
+        companion object {
+            private const val MAX_DIM = 2048
+            private val COMPRESSIBLE = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
+            private val UNSAFE_FILENAME_REGEX = Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
+
+            fun clearCache(context: Context) {
+                listOf(File(context.cacheDir, "attachments"), File(context.cacheDir, "camera")).forEach { d ->
+                    runCatching { d.listFiles()?.forEach { it.delete() } }
+                }
+            }
         }
     }

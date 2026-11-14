@@ -293,24 +293,11 @@ class DirectPushService : LifecycleService() {
         }
 
         lifecycleScope.launch {
-            val currentlyWorking = mutableSetOf<String>()
             agents.agents
                 .map { list -> list.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING } }
                 .distinctUntilChanged()
                 .collect { working ->
-                    val workingIds = working.map { it.agentId }.toSet()
-
-                    val stopped = currentlyWorking - workingIds
-                    for (id in stopped) {
-                        factory.cancelWorking(id)
-                    }
-
-                    for (a in working) {
-                        factory.showWorking(a)
-                    }
-
-                    currentlyWorking.clear()
-                    currentlyWorking.addAll(workingIds)
+                    factory.reconcileWorkingAgents(working)
                 }
         }
     }
@@ -381,14 +368,11 @@ class DirectPushService : LifecycleService() {
             MsgType.APP_WELCOME ->
                 lifecycleScope.launch {
                     val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@launch
-                    for (a in w.agents) {
-                        if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
-                            idleStandby.value = false
-                            factory.showWorking(a)
-                        } else {
-                            factory.cancelWorking(a.agentId)
-                        }
+                    val working = w.agents.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING }
+                    if (working.isNotEmpty()) {
+                        idleStandby.value = false
                     }
+                    factory.reconcileWorkingAgents(working)
                 }
         }
     }

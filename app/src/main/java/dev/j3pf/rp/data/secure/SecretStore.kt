@@ -91,7 +91,7 @@ open class SecretStore
                 .recoverCatching {
                     synchronized(aeadLock) { resetCorruptedKeyset() }
                     writeEncryptedSession(session)
-                }
+                }.getOrThrow()
             _session.value = session
         }
 
@@ -118,13 +118,25 @@ open class SecretStore
 
         private fun load(): Session? =
             runCatching {
+                val hasStoredSession = prefs.contains(K_RELAY_ID) || prefs.contains(K_TOKEN)
+                val relayId = get(K_RELAY_ID)
+                val relayUrl = get(K_URL)
+                val deviceId = get(K_DEVICE_ID)
+                val deviceToken = get(K_TOKEN)
+                val pushKey = get(K_PUSH_KEY)
+                if (relayId == null || relayUrl == null || deviceId == null || deviceToken == null || pushKey == null) {
+                    if (hasStoredSession) {
+                        synchronized(aeadLock) { resetCorruptedKeyset() }
+                    }
+                    return null
+                }
                 Session(
-                    relayId = get(K_RELAY_ID) ?: return null,
-                    relayUrl = get(K_URL) ?: return null,
+                    relayId = relayId,
+                    relayUrl = relayUrl,
                     relayName = get(K_NAME) ?: "",
-                    deviceId = get(K_DEVICE_ID) ?: return null,
-                    deviceToken = get(K_TOKEN) ?: return null,
-                    pushKey = get(K_PUSH_KEY) ?: return null,
+                    deviceId = deviceId,
+                    deviceToken = deviceToken,
+                    pushKey = pushKey,
                 )
             }.getOrNull()
 

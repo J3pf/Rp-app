@@ -87,6 +87,9 @@ class PushRouter
 
                 PushKind.ERROR, PushKind.TERMINAL_WAIT -> {
                     val agentId = body.str("agentId") ?: return false
+                    if (k == PushKind.ERROR) {
+                        factory.cancelWorking(agentId)
+                    }
                     val key = "$k:${pushId ?: (agentId + ":" + (body.str("title") ?: body.str("message") ?: "").hashCode())}"
                     if (!deduper.firstSeen(key)) return true
                     if (agentId in settings.current().mutedAgents) return true

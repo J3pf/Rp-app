@@ -59,6 +59,7 @@ class PromptActionReceiver : BroadcastReceiver() {
         const val EXTRA_NOTIF_ID = "notifId"
         const val EXTRA_ANSWER_KIND = "answerKind"
         const val EXTRA_OPTION_ID = "optionId"
+        const val EXTRA_AUTH_REQUIRED = "authRequired"
         const val KEY_TEXT = "rp_reply_text"
         const val ANSWER_CONFIRM_YES = "confirm_yes"
         const val ANSWER_CONFIRM_NO = "confirm_no"
@@ -99,6 +100,7 @@ class PromptActionHandler
             intent: Intent,
         ) {
             val promptId = intent.getStringExtra(PromptActionReceiver.EXTRA_PROMPT_ID) ?: return
+            if (isLockedAndAuthRequired(context, intent)) return
             val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, NotificationFactory.notificationId(promptId))
             val label = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_LABEL).orEmpty()
             val answer =
@@ -155,6 +157,7 @@ class PromptActionHandler
             intent: Intent,
         ) {
             val agentId = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_ID) ?: return
+            if (isLockedAndAuthRequired(context, intent, defaultToSetting = true)) return
             val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, 0)
             val text =
                 RemoteInput
@@ -194,5 +197,21 @@ class PromptActionHandler
                     ChatRepository.enqueueSend(context)
                 }
             }
+        }
+
+        private suspend fun isLockedAndAuthRequired(
+            context: Context,
+            intent: Intent,
+            defaultToSetting: Boolean = false,
+        ): Boolean {
+            val authRequired =
+                if (intent.hasExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED)) {
+                    intent.getBooleanExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED, false)
+                } else {
+                    defaultToSetting && factory.requireUnlockToApprove()
+                }
+            if (!authRequired) return false
+            val km = runCatching { context.getSystemService(android.app.KeyguardManager::class.java) }.getOrNull()
+            return km?.isDeviceLocked == true
         }
     }

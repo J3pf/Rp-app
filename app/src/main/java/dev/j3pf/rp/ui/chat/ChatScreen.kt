@@ -393,17 +393,25 @@ fun ChatScreen(
 }
 
 internal fun ChatUiState.isEffectivelyWorking(): Boolean {
-    val hasPendingLocalMessage = chat.items.any { it is UserMsg && it.key.startsWith("local:") && !it.failed }
-    val isAgentCompleted =
+    val hasPendingLocalMessage =
+        chat.items.any {
+            it is UserMsg &&
+                (it.key.startsWith("local:") || it.key.startsWith("ack:")) &&
+                !it.failed
+        }
+    val isAgentSettled =
         agent != null &&
             (
                 agent.status == dev.j3pf.rp.protocol.AgentStatus.DONE ||
+                    agent.status == dev.j3pf.rp.protocol.AgentStatus.IDLE ||
+                    agent.status == dev.j3pf.rp.protocol.AgentStatus.WAITING_INPUT ||
+                    agent.status == dev.j3pf.rp.protocol.AgentStatus.ERROR ||
                     dev.j3pf.rp.protocol
                         .parseHerdrTabMeta(agent.herdr?.tabId)
                         .isDone
             ) &&
             !hasPendingLocalMessage
-    return sending || agent?.status == "working" || (!isAgentCompleted && chat.working)
+    return sending || agent?.status == "working" || (!isAgentSettled && chat.working)
 }
 
 @Composable
@@ -568,29 +576,4 @@ internal fun Composer(
 @InstallIn(SingletonComponent::class)
 interface ChatVoiceInputEntryPoint {
     fun voiceInputHost(): AndroidVoiceInputHost
-}
-
-@Composable
-private fun AttachmentChip(
-    a: AttachmentUi,
-    onRemove: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    val state =
-        when (a.state) {
-            UploadState.PREPARING -> AttachmentUploadState.PREPARING
-            UploadState.READY -> AttachmentUploadState.READY
-            UploadState.UPLOADING -> AttachmentUploadState.UPLOADING
-            UploadState.DONE -> AttachmentUploadState.DONE
-            UploadState.ERROR -> AttachmentUploadState.ERROR
-        }
-    dev.j3pf.rp.ui.chat.AttachmentChip(
-        name = a.name,
-        size = a.size,
-        state = state,
-        progress = a.progress,
-        error = a.error,
-        onRemove = onRemove,
-        onRetry = onRetry,
-    )
 }

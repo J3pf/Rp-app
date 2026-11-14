@@ -104,8 +104,22 @@ class AgentsRepository
                                         val merged =
                                             if (prev != null) {
                                                 entity.copy(
-                                                    todoCompleted = if (s.todoTotal > 0) s.todoCompleted else prev.todoCompleted,
-                                                    todoTotal = if (s.todoTotal > 0) s.todoTotal else prev.todoTotal,
+                                                    todoCompleted =
+                                                        if (s.todoTotal > 0) {
+                                                            s.todoCompleted
+                                                        } else if (s.status == "working") {
+                                                            prev.todoCompleted
+                                                        } else {
+                                                            0
+                                                        },
+                                                    todoTotal =
+                                                        if (s.todoTotal > 0) {
+                                                            s.todoTotal
+                                                        } else if (s.status == "working") {
+                                                            prev.todoTotal
+                                                        } else {
+                                                            0
+                                                        },
                                                     activeTask =
                                                         when {
                                                             s.activeTask != null -> s.activeTask
