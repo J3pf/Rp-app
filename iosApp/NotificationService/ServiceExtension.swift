@@ -21,6 +21,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private static let sharedAccessGroup = "19410625785.dev.j3pf.rp.iosApp"
     private static let pushKeyAccount = "rp_nse_push_key"
     private static let mutedAgentsAccount = "rp_nse_muted_agents"
+    private static let criticalAlwaysAccount = "rp_nse_critical_always"
     private static let dedupeLock = NSLock()
     private static var seenPromptIds = Set<String>()
 
@@ -79,9 +80,10 @@ final class NotificationService: UNNotificationServiceExtension {
         let agentLabel = ((json["agentLabel"] as? String)?.isEmpty == false ? (json["agentLabel"] as? String) : nil) ?? "agent"
         best.title = "\(machineName) · \(agentLabel)"
 
-        let titleText = (json["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let previewText = (json["preview"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let messageText = (json["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let redacted = (json["redacted"] as? Bool) == true
+        let titleText = redacted ? nil : Self.cleanPreview((json["title"] as? String))
+        let previewText = redacted ? nil : Self.cleanPreview((json["preview"] as? String))
+        let messageText = redacted ? nil : Self.cleanPreview((json["message"] as? String))
 
         switch k {
         case "prompt":
@@ -127,12 +129,36 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private static func isMuted(agentId: String, isCritical: Bool) -> Bool {
-        if isCritical { return false }
+        let criticalAlways = (readKeychainString(account: criticalAlwaysAccount) ?? "true") != "false"
+        if isCritical && criticalAlways { return false }
         guard let raw = readKeychainString(account: mutedAgentsAccount), !raw.isEmpty else {
             return false
         }
         let muted = Set(raw.split(separator: ",").map(String.init))
         return muted.contains(agentId)
+    }
+
+    private static func isRawJsonOrCode(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.hasPrefix("{") || t.hasPrefix("[") || t.hasPrefix("```")
+    }
+
+    private static func cleanPreview(_ raw: String?, maxLen: Int = 140) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || isRawJsonOrCode(trimmed) { return nil }
+        let cleaned = trimmed
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !isRawJsonOrCode($0) }
+            .joined(separator: " ")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || isRawJsonOrCode(cleaned) { return nil }
+        if cleaned.count <= maxLen { return cleaned }
+        return String(cleaned.prefix(maxLen)) + "…"
     }
 
     private static func decryptEnvelope(

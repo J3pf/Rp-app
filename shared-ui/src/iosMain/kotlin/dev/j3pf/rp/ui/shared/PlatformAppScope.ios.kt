@@ -6,22 +6,29 @@ import dev.j3pf.rp.client.session.SessionPushPlatform
 import dev.j3pf.rp.client.ws.ReconnectingSocketPolicy
 import dev.j3pf.rp.client.ws.UrlSessionSocketDriver
 import dev.j3pf.rp.data.net.WsReply
+import dev.j3pf.rp.data.ports.BiometricAuthResult
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.secure.EncryptedKeyValueSecretStore
 import dev.j3pf.rp.data.secure.IosKeychainBridge
 import dev.j3pf.rp.data.secure.SecretKeyValueBacking
 import dev.j3pf.rp.data.secure.SecretStoreIos
 import dev.j3pf.rp.data.settings.SettingsKeys
 import dev.j3pf.rp.ui.push.IosPushRegistrationBridge
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
 import platform.Foundation.NSURLRequestUseProtocolCachePolicy
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.setValue
+import platform.LocalAuthentication.LAContext
+import platform.LocalAuthentication.LAPolicyDeviceOwnerAuthentication
 import platform.UIKit.UIDevice
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.resume
 
 /**
  * Swift-facing bridge in `SharedUi` so `iOSApp.swift` can register native `Security.framework`
@@ -65,6 +72,13 @@ object IosKeychainStoreBridge {
         putHook?.invoke("rp_nse_muted_agents", mutedAgentsCsv, accessGroup)
     }
 
+    internal fun putCriticalAlways(
+        criticalAlways: Boolean,
+        accessGroup: String?,
+    ) {
+        putHook?.invoke("rp_nse_critical_always", criticalAlways.toString(), accessGroup)
+    }
+
     private class SwiftHookSecretBacking(
         private val accessGroup: String?,
     ) : SecretKeyValueBacking {
@@ -78,6 +92,8 @@ object IosKeychainStoreBridge {
                 EncryptedKeyValueSecretStore.K_TOKEN,
                 EncryptedKeyValueSecretStore.K_PUSH_KEY,
                 EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY,
+                "rp_nse_muted_agents",
+                "rp_nse_critical_always",
             )
 
         override fun getString(key: String): String? = getHook?.invoke(key, accessGroup)
@@ -120,6 +136,27 @@ private class NsUserDefaultsSettingsBacking : SecretKeyValueBacking {
     }
 }
 
+object IosBiometricAuthorizer : BiometricAuthorizer {
+    @OptIn(ExperimentalForeignApi::class)
+    override suspend fun authenticate(reason: String): BiometricAuthResult =
+        suspendCancellableCoroutine { cont ->
+            val context = LAContext()
+            val canEval = context.canEvaluatePolicy(LAPolicyDeviceOwnerAuthentication, error = null)
+            if (!canEval) {
+                cont.resume(BiometricAuthResult.UNAVAILABLE)
+                return@suspendCancellableCoroutine
+            }
+            context.evaluatePolicy(
+                policy = LAPolicyDeviceOwnerAuthentication,
+                localizedReason = reason,
+            ) { success, _ ->
+                if (cont.isActive) {
+                    cont.resume(if (success) BiometricAuthResult.OK else BiometricAuthResult.FAILED)
+                }
+            }
+        }
+}
+
 /**
  * iOS composition root (`IosAppScope`, O3/O4) wiring `SecretStoreIos`, `NSUserDefaults`-backed
  * `SettingsStore`, `UrlSessionRelayTransport`, `UrlSessionSocketDriver`, `ReconnectingSocketPolicy`,
@@ -127,6 +164,18 @@ private class NsUserDefaultsSettingsBacking : SecretKeyValueBacking {
  */
 object IosAppScope {
     const val DEFAULT_KEYCHAIN_ACCESS_GROUP = "19410625785.dev.j3pf.rp.iosApp"
+
+    @Volatile
+    var activeController: SharedAppController? = null
+        private set
+
+    fun onAppBackgrounded() {
+        activeController?.onAppBackgrounded()
+    }
+
+    fun onAppForegrounded() {
+        activeController?.onAppForegrounded()
+    }
 
     fun createController(
         scope: CoroutineScope,
@@ -138,6 +187,9 @@ object IosAppScope {
                 backing = NsUserDefaultsSettingsBacking(),
                 onMutedAgentsChanged = { muted ->
                     IosKeychainStoreBridge.putMutedAgents(muted.joinToString(","), accessGroup)
+                },
+                onCriticalAlwaysChanged = { criticalAlways ->
+                    IosKeychainStoreBridge.putCriticalAlways(criticalAlways, accessGroup)
                 },
             )
         val httpTransport = UrlSessionRelayTransport()
@@ -163,12 +215,13 @@ object IosAppScope {
                 secrets = secrets,
                 settingsStore = settingsStore,
                 httpTransport = httpTransport,
+                biometricAuthorizer = IosBiometricAuthorizer,
                 pushPlatform = SessionPushPlatform.IOS,
                 deviceNameProvider = {
                     val name = UIDevice.currentDevice.name
                     name.ifBlank { "iPhone" }
                 },
-                apnsEnvironmentProvider = { IosPushRegistrationBridge.DEFAULT_APNS_ENVIRONMENT },
+                apnsEnvironmentProvider = { IosPushRegistrationBridge.apnsEnvironment },
                 currentApnsTokenProvider = { IosPushRegistrationBridge.lastApnsTokenHex },
                 startSocketConnection = { socketPolicy.start() },
                 stopSocketConnection = { socketPolicy.stop() },
@@ -178,12 +231,13 @@ object IosAppScope {
                 connState = socketPolicy.state,
             )
         controllerRef = controller
+        activeController = controller
         val applePushRegistration = ApplePushRegistration { controller.sessionPolicy }
         IosPushRegistrationBridge.registration = applePushRegistration
         val cachedToken = IosPushRegistrationBridge.lastApnsTokenHex
         if (cachedToken != null && secrets.current() != null) {
             scope.launch {
-                applePushRegistration.register(cachedToken, IosPushRegistrationBridge.DEFAULT_APNS_ENVIRONMENT)
+                applePushRegistration.register(cachedToken, IosPushRegistrationBridge.apnsEnvironment)
             }
         }
         return controller

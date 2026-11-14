@@ -6,14 +6,30 @@ import UIKit
 @main
 struct iOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         KeychainStoreHelper.installBridge()
+        #if DEBUG
+        SharedUi.IosPushRegistrationBridge.shared.apnsEnvironment = "sandbox"
+        #else
+        SharedUi.IosPushRegistrationBridge.shared.apnsEnvironment = "production"
+        #endif
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            switch newPhase {
+            case .background:
+                SharedUi.IosAppScope.shared.onAppBackgrounded()
+            case .active:
+                SharedUi.IosAppScope.shared.onAppForegrounded()
+            default:
+                break
+            }
         }
     }
 }

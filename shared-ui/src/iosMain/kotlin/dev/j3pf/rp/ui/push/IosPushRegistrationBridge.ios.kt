@@ -21,6 +21,10 @@ import kotlin.concurrent.Volatile
 object IosPushRegistrationBridge {
     const val DEFAULT_APNS_ENVIRONMENT = "sandbox"
 
+    /** Current APNs environment ("sandbox" or "production"); defaults to [DEFAULT_APNS_ENVIRONMENT]. */
+    @Volatile
+    var apnsEnvironment: String = DEFAULT_APNS_ENVIRONMENT
+
     /**
      * Composition-root anchor for iOS APNs registration. Set once by the iOS composition root,
      * before first use; until then registration stays INERT BY DESIGN: [register] returns false
@@ -39,7 +43,7 @@ object IosPushRegistrationBridge {
         val hex = apnsToken?.let { apnsTokenHex(it) }
         lastApnsTokenHex = hex
         val registration = registration ?: return false
-        return registration.register(hex, DEFAULT_APNS_ENVIRONMENT)
+        return registration.register(hex, apnsEnvironment)
     }
 
     @OptIn(ExperimentalForeignApi::class)
@@ -59,6 +63,6 @@ object IosPushRegistrationBridge {
     ): Boolean {
         val hex = apnsToken?.let { apnsTokenHex(it) }
         lastApnsTokenHex = hex
-        return registration.register(hex, DEFAULT_APNS_ENVIRONMENT)
+        return registration.register(hex, apnsEnvironment)
     }
 }

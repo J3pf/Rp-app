@@ -12,7 +12,32 @@
 		D30000010000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D30000010000000000000017 /* Assets.xcassets */; };
 		D3000001000000000000001C /* SharedUi.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3000001000000000000001B /* SharedUi.framework */; };
 		D30000010000000000N00N1 /* ServiceExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000010000000000N00N3 /* ServiceExtension.swift */; };
+		D30000010000000000N00NE /* NotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D30000010000000000N00N2 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D30000010000000000N00NC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D30000010000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D30000010000000000N00N6;
+			remoteInfo = NotificationService;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D30000010000000000N00NF /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D30000010000000000N00NE /* NotificationService.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D30000010000000000000012 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -106,10 +131,12 @@
 				D3000001000000000000000B /* Sources */,
 				D3000001000000000000000C /* Frameworks */,
 				D3000001000000000000000D /* Resources */,
+				D30000010000000000N00NF /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D30000010000000000N00ND /* PBXTargetDependency */,
 			);
 			name = iosApp;
 			productName = iosApp;
@@ -245,6 +272,14 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		D30000010000000000N00ND /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D30000010000000000N00N6 /* NotificationService */;
+			targetProxy = D30000010000000000N00NC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 		D30000010000000000N00N7 /* Build configuration list for PBXNativeTarget "NotificationService" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -270,7 +305,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).NotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PRODUCT_MODULE_NAME = NotificationService;
@@ -297,7 +332,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).NotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PRODUCT_MODULE_NAME = NotificationService;
@@ -448,7 +483,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -477,7 +512,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
