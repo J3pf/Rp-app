@@ -77,16 +77,34 @@ object ChatReducer {
         epoch: String? = state.epoch,
     ): ChatState {
         val epochChanged = epoch != null && state.epoch != null && epoch != state.epoch
+        val preservedPending =
+            if (epochChanged) {
+                emptyList()
+            } else {
+                state.items.filter { item ->
+                    item is UserMsg && (item.key.startsWith("local:") || item.key.startsWith("ack:") || item.failed)
+                }
+            }
         var s =
             state.copy(
-                items = emptyList(),
+                items = preservedPending,
                 tools = emptyMap(),
                 streaming = null,
                 epoch = epoch ?: state.epoch,
                 todos = if (epochChanged) emptyList() else state.todos,
                 subagents = if (epochChanged) emptyMap() else state.subagents,
+                localSent = if (epochChanged) emptySet() else state.localSent,
             )
         for (e in entries) s = applyEntry(s, e)
+        if (preservedPending.isNotEmpty()) {
+            val (stillPending, replayed) =
+                s.items.partition { item ->
+                    item is UserMsg && (item.key.startsWith("local:") || item.key.startsWith("ack:") || item.failed)
+                }
+            if (stillPending.isNotEmpty()) {
+                s = s.copy(items = replayed + stillPending)
+            }
+        }
         if (s.subagents.isNotEmpty()) {
             val enrichedTools =
                 s.tools.mapValues { (id, run) ->
@@ -184,6 +202,7 @@ object ChatReducer {
         ack: dev.j3pf.rp.protocol.UserMessageAck,
     ): ChatState {
         val isFailure = ack.isFailure || ack.disposition == "rejected"
+        val failedTexts = mutableSetOf<String>()
         val nextItems =
             state.items.map { item ->
                 if (
@@ -194,6 +213,9 @@ object ChatReducer {
                             item.key == "ack:${ack.clientMsgId}"
                     )
                 ) {
+                    if (isFailure && item.text.isNotBlank()) {
+                        failedTexts.add(item.text.trim())
+                    }
                     val nextKey =
                         if (!isFailure && item.key.startsWith("local:")) {
                             "ack:${ack.clientMsgId}"
@@ -211,7 +233,8 @@ object ChatReducer {
             } else {
                 state.working
             }
-        return state.copy(items = nextItems, working = nextWorking)
+        val nextLocalSent = pruneLocalSent(state.localSent, nextItems, failedTexts)
+        return state.copy(items = nextItems, working = nextWorking, localSent = nextLocalSent)
     }
 
     /** Marca como fallido un envío local que no pudo completarse. */
@@ -220,16 +243,20 @@ object ChatReducer {
         clientMsgId: String,
     ): ChatState {
         val targetKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
+        val ackKey = "ack:${clientMsgId.removePrefix("local:")}"
+        val failedTexts = mutableSetOf<String>()
         val nextItems =
             state.items.map { item ->
-                if (item is UserMsg && (item.key == targetKey || item.clientMsgId == clientMsgId)) {
+                if (item is UserMsg && (item.key == targetKey || item.key == ackKey || item.clientMsgId == clientMsgId)) {
+                    if (item.text.isNotBlank()) failedTexts.add(item.text.trim())
                     item.copy(failed = true)
                 } else {
                     item
                 }
             }
         val hasOtherPending = nextItems.any { it is UserMsg && (it.key.startsWith("local:") || it.key.startsWith("ack:")) && !it.failed }
-        return state.copy(items = nextItems, working = hasOtherPending)
+        val nextLocalSent = pruneLocalSent(state.localSent, nextItems, failedTexts)
+        return state.copy(items = nextItems, working = hasOtherPending, localSent = nextLocalSent)
     }
 
     /** Vence burbujas optimistas que no recibieron confirmación tras [timeoutMs]. */
@@ -239,10 +266,12 @@ object ChatReducer {
         timeoutMs: Long = 30_000L,
     ): ChatState {
         var modified = false
+        val expiredTexts = mutableSetOf<String>()
         val nextItems =
             state.items.map { item ->
                 if (item is UserMsg && item.key.startsWith("local:") && !item.failed && (now - item.at) > timeoutMs) {
                     modified = true
+                    if (item.text.isNotBlank()) expiredTexts.add(item.text.trim())
                     item.copy(failed = true)
                 } else {
                     item
@@ -250,7 +279,8 @@ object ChatReducer {
             }
         if (!modified) return state
         val hasOtherPending = nextItems.any { it is UserMsg && (it.key.startsWith("local:") || it.key.startsWith("ack:")) && !it.failed }
-        return state.copy(items = nextItems, working = hasOtherPending)
+        val nextLocalSent = pruneLocalSent(state.localSent, nextItems, expiredTexts)
+        return state.copy(items = nextItems, working = hasOtherPending, localSent = nextLocalSent)
     }
 
     /** Elimina un mensaje local / optimista (p. ej. para reintentar el envío tras fallo). */
@@ -260,12 +290,35 @@ object ChatReducer {
     ): ChatState {
         val targetKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
         val ackKey = "ack:${clientMsgId.removePrefix("local:")}"
+        val removedTexts = mutableSetOf<String>()
         val nextItems =
-            state.items.filterNot {
-                it is UserMsg && (it.clientMsgId == clientMsgId || it.key == targetKey || it.key == ackKey)
+            state.items.filterNot { item ->
+                val match = item is UserMsg && (item.clientMsgId == clientMsgId || item.key == targetKey || item.key == ackKey)
+                if (match && item.text.isNotBlank()) {
+                    removedTexts.add(item.text.trim())
+                }
+                match
             }
         val hasPending = nextItems.any { it is UserMsg && (it.key.startsWith("local:") || it.key.startsWith("ack:")) && !it.failed }
-        return state.copy(items = nextItems, working = hasPending)
+        val nextLocalSent = pruneLocalSent(state.localSent, nextItems, removedTexts)
+        return state.copy(items = nextItems, working = hasPending, localSent = nextLocalSent)
+    }
+
+    private fun pruneLocalSent(
+        current: Set<String>,
+        items: List<ChatItem>,
+        candidatesToRemove: Set<String>,
+    ): Set<String> {
+        if (candidatesToRemove.isEmpty() || current.isEmpty()) return current
+        val stillActiveTexts =
+            items
+                .asSequence()
+                .filterIsInstance<UserMsg>()
+                .filter { (it.key.startsWith("local:") || it.key.startsWith("ack:")) && !it.failed }
+                .map { it.text.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+        return current - (candidatesToRemove - stillActiveTexts)
     }
 
     // ───────────────────────────── Eventos ─────────────────────────────
@@ -766,6 +819,17 @@ object ChatReducer {
         val hasMobileAttachment: Boolean,
     )
 
+    private fun matchesLocalText(
+        trimmed: String,
+        localText: String,
+    ): Boolean {
+        if (trimmed.isBlank() || localText.isEmpty()) return false
+        if (trimmed == localText) return true
+        if (localText.length < 3 || !trimmed.endsWith(localText)) return false
+        val boundaryIdx = trimmed.length - localText.length - 1
+        return boundaryIdx < 0 || !trimmed[boundaryIdx].isLetterOrDigit()
+    }
+
     private fun userMessage(
         s: ChatState,
         msg: JsonObject,
@@ -779,14 +843,13 @@ object ChatReducer {
             s.items.indexOfFirst {
                 if (it !is UserMsg || (!it.key.startsWith("local:") && !it.key.startsWith("ack:"))) {
                     false
+                } else if (cId != null && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId")) {
+                    true
+                } else if (it.failed || (cId != null && it.clientMsgId != null)) {
+                    false
                 } else {
                     val localText = it.text.trim()
-                    (cId != null && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId")) ||
-                        (
-                            trimmed.isNotBlank() &&
-                                localText.isNotEmpty() &&
-                                (localText == trimmed || trimmed.endsWith(localText))
-                        ) ||
+                    matchesLocalText(trimmed, localText) ||
                         (trimmed.isBlank() && images > 0 && it.imageCount == images) ||
                         (trimmed.isBlank() && hasMobileAttachment && it.attachments.isNotEmpty())
                 }
@@ -797,8 +860,7 @@ object ChatReducer {
                 hasMobileAttachment ||
                 msg.bool("rp") == true ||
                 msg.str("origin") in setOf("rp", "mobile") ||
-                s.localSent.contains(trimmed) ||
-                s.localSent.any { it.isNotEmpty() && trimmed.endsWith(it) } ||
+                s.localSent.any { matchesLocalText(trimmed, it) } ||
                 (cId != null && s.items.any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId") })
         val item =
             UserMsg(
@@ -816,7 +878,14 @@ object ChatReducer {
         if (s.items.any { it.key == item.key }) return s
         val nextItems =
             if (localIdx >= 0) {
-                s.items.toMutableList().also { it[localIdx] = item }
+                s.items.toMutableList().also { list ->
+                    if (fallback.startsWith("eid")) {
+                        list.removeAt(localIdx)
+                        list.add(item)
+                    } else {
+                        list[localIdx] = item
+                    }
+                }
             } else {
                 s.items + item
             }

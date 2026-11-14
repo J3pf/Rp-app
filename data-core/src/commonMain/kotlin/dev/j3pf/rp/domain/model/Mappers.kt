@@ -48,15 +48,20 @@ fun MachineEntity.toModel() =
             },
     )
 
+private val TAB_CONTEXT_META_REGEX = Regex("@\\d+/\\d+(?=\\|)")
+
 fun AgentSummary.toEntity(relayId: String): AgentEntity {
     val rawTab = herdr?.tabId
     val encodedTab =
-        if (contextTokens != null && contextWindow != null && contextWindow!! > 0 && (rawTab == null || !rawTab.contains('@'))) {
-            if (rawTab != null && rawTab.contains('|')) {
-                val pipeIdx = rawTab.indexOf('|')
-                "${rawTab.substring(0, pipeIdx)}@$contextTokens/$contextWindow${rawTab.substring(pipeIdx)}"
-            } else {
-                "@$contextTokens/$contextWindow|${rawTab.orEmpty()}"
+        if (contextTokens != null && contextWindow != null && contextWindow!! > 0) {
+            when {
+                rawTab == null -> "@$contextTokens/$contextWindow|"
+                rawTab.contains('|') -> {
+                    val stripped = rawTab.replace(TAB_CONTEXT_META_REGEX, "")
+                    val pipeIdx = stripped.indexOf('|')
+                    "${stripped.substring(0, pipeIdx)}@$contextTokens/$contextWindow${stripped.substring(pipeIdx)}"
+                }
+                else -> "@$contextTokens/$contextWindow|$rawTab"
             }
         } else {
             rawTab

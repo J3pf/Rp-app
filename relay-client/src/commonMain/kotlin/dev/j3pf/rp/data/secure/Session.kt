@@ -10,5 +10,10 @@ data class Session(
     /** Clave AES‑256 (base64) para descifrar los pushes de FCM. */
     val pushKey: String,
 ) {
-    val wsBase: String get() = relayUrl.trimEnd('/').replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
+    val wsBase: String
+        get() =
+            relayUrl
+                .trimEnd('/')
+                .replaceFirst("https://", "wss://")
+                .replaceFirst("http://", "ws://")
 }

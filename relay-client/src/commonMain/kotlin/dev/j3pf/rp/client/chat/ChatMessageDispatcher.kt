@@ -55,23 +55,40 @@ class ChatMessageDispatcher(
     private val delayMs: suspend (Long) -> Unit = { delay(it) },
 ) {
     private val batchLock = RelayLock()
-    private var pendingStreamState: ChatState? = null
+    private val pendingStreamEvents = mutableListOf<Pair<AgentEvent, Long>>()
     private var flushJob: Job? = null
     private var lastUiEmitMs: Long = Long.MIN_VALUE / 2
 
+    private fun applyBatchEvents(events: List<Pair<AgentEvent, Long>>): ChatState {
+        var latest = getState()
+        updateState { current ->
+            var s = current
+            for ((ev, ts) in events) {
+                s = ChatReducer.reduce(s, ev, ts)
+            }
+            latest = s
+            s
+        }
+        return latest
+    }
+
     fun flushPending() {
-        val buffered =
+        val eventsToFlush =
             batchLock.withLock {
                 flushJob?.cancel()
                 flushJob = null
-                val s = pendingStreamState
-                pendingStreamState = null
-                if (s != null) lastUiEmitMs = now()
-                s
+                if (pendingStreamEvents.isEmpty()) {
+                    emptyList()
+                } else {
+                    val copy = pendingStreamEvents.toList()
+                    pendingStreamEvents.clear()
+                    lastUiEmitMs = now()
+                    copy
+                }
             }
-        if (buffered != null) {
-            updateState { buffered }
-            if (buffered.items.isNotEmpty() || buffered.streaming != null) onSyncingResolved()
+        if (eventsToFlush.isNotEmpty()) {
+            val applied = applyBatchEvents(eventsToFlush)
+            if (applied.items.isNotEmpty() || applied.streaming != null) onSyncingResolved()
         }
     }
 
@@ -94,26 +111,30 @@ class ChatMessageDispatcher(
                 val batchScope = scope
                 if (batchScope != null && frameBatchMs > 0L && evType in BATCHABLE_STREAM_EVENTS) {
                     val currentNow = now()
-                    var emitImmediately: ChatState? = null
+                    var emitImmediately: List<Pair<AgentEvent, Long>>? = null
                     var triggerResync = false
                     batchLock.withLock {
-                        val before = pendingStreamState ?: getState()
+                        var preview = getState()
+                        for ((bufferedEv, ts) in pendingStreamEvents) {
+                            preview = ChatReducer.reduce(preview, bufferedEv, ts)
+                        }
+                        val before = preview
                         val after = ChatReducer.reduce(before, ev, currentNow)
                         if (after.needsResync && !before.needsResync) {
                             flushJob?.cancel()
                             flushJob = null
-                            pendingStreamState = null
+                            emitImmediately = pendingStreamEvents.toList() + (ev to currentNow)
+                            pendingStreamEvents.clear()
                             lastUiEmitMs = currentNow
-                            emitImmediately = after
                             triggerResync = true
                         } else {
                             val elapsed = currentNow - lastUiEmitMs
                             if (elapsed >= frameBatchMs && flushJob == null) {
-                                pendingStreamState = null
+                                emitImmediately = pendingStreamEvents.toList() + (ev to currentNow)
+                                pendingStreamEvents.clear()
                                 lastUiEmitMs = currentNow
-                                emitImmediately = after
                             } else {
-                                pendingStreamState = after
+                                pendingStreamEvents.add(ev to currentNow)
                                 if (flushJob == null) {
                                     val waitMs = (frameBatchMs - elapsed).coerceIn(1L, frameBatchMs)
                                     flushJob =
@@ -125,8 +146,8 @@ class ChatMessageDispatcher(
                             }
                         }
                     }
-                    emitImmediately?.let { s ->
-                        updateState { s }
+                    emitImmediately?.let { events ->
+                        val s = applyBatchEvents(events)
                         if (s.items.isNotEmpty() || s.streaming != null) onSyncingResolved()
                         if (triggerResync) onResyncNeeded()
                     }
@@ -134,9 +155,14 @@ class ChatMessageDispatcher(
                 }
 
                 flushPending()
-                val before = getState()
-                val after = ChatReducer.reduce(before, ev, now())
-                updateState { after }
+                val currentNow = now()
+                var before = getState()
+                var after = before
+                updateState { current ->
+                    before = current
+                    after = ChatReducer.reduce(current, ev, currentNow)
+                    after
+                }
                 if (after.items.isNotEmpty()) onSyncingResolved()
                 if (after.lastSeq != before.lastSeq && evType in PERSISTED_EVENTS) {
                     onPersistEvent(ev)

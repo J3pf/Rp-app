@@ -633,4 +633,61 @@ class ChatReducerTest {
         assertFalse(reconciled.failed)
         assertTrue(s.localSent.isEmpty())
     }
+
+    @Test
+    fun `applyEntries preserves pending local and acked bubbles and reconciles them when snapshot includes the echo`() {
+        var s = ChatState(epoch = "E1")
+        s = ChatReducer.markLocalSent(s, text = "hola desde movil", at = 1_000L, clientMsgId = "m1")
+        s = ChatReducer.applyUserMessageAck(s, UserMessageAck(clientMsgId = "m1", disposition = "typed"))
+        s = ChatReducer.markLocalSent(s, text = "segundo pendiente", at = 1_100L, clientMsgId = "m2")
+
+        // Snapshot before m1 or m2 is written to the transcript: both remain at the tail
+        val preEntries =
+            listOf(
+                Entry(
+                    "e1",
+                    "assistant",
+                    900L,
+                    RpJson.parseToJsonElement("""{"role":"assistant","timestamp":900,"content":[{"type":"text","text":"Listo"}]}""") as JsonObject,
+                ),
+            )
+        s = ChatReducer.applyEntries(s, preEntries, epoch = "E1")
+        assertEquals(3, s.items.size)
+        assertEquals("ack:m1", s.items[1].key)
+        assertEquals("local:m2", s.items[2].key)
+
+        // Snapshot once m1 is in the transcript (with PC prefix), while m2 is still pending
+        val postEntries =
+            preEntries +
+                Entry(
+                    "e2",
+                    "user",
+                    1_020L,
+                    RpJson.parseToJsonElement(
+                        """{"role":"user","timestamp":1020,"content":[{"type":"text","text":"borrador pc hola desde movil"}]}""",
+                    ) as JsonObject,
+                )
+        s = ChatReducer.applyEntries(s, postEntries, epoch = "E1")
+        assertEquals(3, s.items.size)
+        val reconciledM1 = s.items[1] as UserMsg
+        assertEquals("user:1020", reconciledM1.key)
+        assertTrue(reconciledM1.fromMobile)
+        assertEquals("m1", reconciledM1.clientMsgId)
+        assertEquals("local:m2", s.items[2].key)
+    }
+
+    @Test
+    fun `short or mid-word suffix does not false-match unrelated PC user message`() {
+        var s = ChatState()
+        s = ChatReducer.markLocalSent(s, text = "ola", at = 1_000L, clientMsgId = "m-ola")
+        val pcMsg =
+            """{"type":"message_end","message":{"role":"user","timestamp":1010,"content":[{"type":"text","text":"revisa la consola"}]}}"""
+        s = ChatReducer.reduce(s, ev(1, pcMsg))
+        // "consola" ends with "ola" mid-word, so it must NOT consume the pending "ola" mobile bubble
+        assertEquals(2, s.items.size)
+        val pending = s.items[0] as UserMsg
+        val pc = s.items[1] as UserMsg
+        assertEquals("local:m-ola", pending.key)
+        assertFalse(pc.fromMobile)
+    }
 }

@@ -84,6 +84,7 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
             state.open.store(OPEN)
             state.listener.onOpen(webSocketTask)
             receiveNext(webSocketTask)
+            schedulePing(webSocketTask)
         }
 
         override fun URLSession(
@@ -109,8 +110,23 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
                 state.fail(webSocketTask, didCompleteWithError, this@UrlSessionSocketDriver::removeState)
             } else if (state.terminal.compareAndSet(ACTIVE, TERMINAL)) {
                 state.open.store(CLOSED)
+                state.listener.onClosed(1000, "")
                 removeState(webSocketTask)
                 state.session?.finishTasksAndInvalidate()
+            }
+        }
+
+        private fun schedulePing(socket: NSURLSessionWebSocketTask) {
+            val delayNs = PING_INTERVAL_SECONDS * NSEC_PER_SEC.toLong()
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs), dispatch_get_global_queue(QOS_CLASS_UTILITY.toLong(), 0u)) {
+                if (state.open.load() != OPEN || state.terminal.load() != ACTIVE) return@dispatch_after
+                socket.sendPingWithPongReceiveHandler { error ->
+                    if (error != null) {
+                        state.fail(socket, error, this@UrlSessionSocketDriver::removeState)
+                    } else {
+                        schedulePing(socket)
+                    }
+                }
             }
         }
 
@@ -159,6 +175,7 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
         const val OPEN = 1
         const val CLOSED = 0
         const val TERMINAL = 1
+        const val PING_INTERVAL_SECONDS = 20L
     }
 }
 

@@ -98,6 +98,10 @@ class ChatSession(
         syncPolicy.subscribe()
     }
 
+    fun refresh() {
+        scope.launch { subscribe() }
+    }
+
     suspend fun onMessage(env: Envelope) {
         dispatcher.dispatch(env)
     }

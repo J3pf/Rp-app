@@ -34,7 +34,8 @@ interface SecretKeyValueBacking {
  * In-memory [SecretKeyValueBacking] implementation for common tests and unsigned fallback.
  */
 class InMemorySecretKeyValueBacking : SecretKeyValueBacking {
-    private val map = mutableMapOf<String, String>()
+    @Volatile
+    private var map: Map<String, String> = emptyMap()
 
     override fun getString(key: String): String? = map[key]
 
@@ -42,15 +43,15 @@ class InMemorySecretKeyValueBacking : SecretKeyValueBacking {
         key: String,
         value: String,
     ) {
-        map[key] = value
+        map = map + (key to value)
     }
 
     override fun remove(key: String) {
-        map.remove(key)
+        map = map - key
     }
 
     override fun clear() {
-        map.clear()
+        map = emptyMap()
     }
 }
 

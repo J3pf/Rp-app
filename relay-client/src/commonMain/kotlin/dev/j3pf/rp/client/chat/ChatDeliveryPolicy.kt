@@ -58,10 +58,13 @@ class ChatDeliveryPolicy(
         updateState {
             if (clientMsgId != null) {
                 val targetKey = if (cId.startsWith("local:")) cId else "local:$cId"
+                val ackKey = "ack:${cId.removePrefix("local:")}"
                 val nextItems =
                     it.items.map { item ->
-                        if (item is UserMsg && (item.clientMsgId == cId || item.key == targetKey)) {
+                        if (item is UserMsg && (item.clientMsgId == cId || item.key == targetKey || item.key == ackKey)) {
                             item.copy(
+                                key = targetKey,
+                                at = timestamp,
                                 failed = false,
                                 attachments = attachments,
                                 delivery = delivery,
@@ -72,7 +75,9 @@ class ChatDeliveryPolicy(
                             item
                         }
                     }
-                it.copy(items = nextItems, working = true)
+                val trimmed = text.trim()
+                val nextLocalSent = if (trimmed.isNotBlank()) it.localSent + trimmed else it.localSent
+                it.copy(items = nextItems, localSent = nextLocalSent, working = true)
             } else {
                 ChatReducer.markLocalSent(
                     it,
@@ -92,10 +97,7 @@ class ChatDeliveryPolicy(
 
         scope.launch {
             delayMs(30_000L)
-            val stillPending = platform.isOutboxPending(s.relayId, msg.clientMsgId)
-            if (!stillPending) {
-                updateState { ChatReducer.expireOptimisticSends(it, now = now()) }
-            }
+            updateState { ChatReducer.expireOptimisticSends(it, now = now()) }
         }
         return deliver(msg, updateState)
     }
@@ -114,6 +116,12 @@ class ChatDeliveryPolicy(
                     if (ack != null) {
                         updateState { ChatReducer.applyUserMessageAck(it, ack) }
                         return if (ack.isFailure) SendResult.Failed(ack.error ?: "rechazado") else SendResult.Delivered(ack)
+                    }
+                    updateState {
+                        ChatReducer.applyUserMessageAck(
+                            it,
+                            UserMessageAck(clientMsgId = msg.clientMsgId, disposition = "delivered"),
+                        )
                     }
                     return SendResult.Delivered(null)
                 }
@@ -140,6 +148,12 @@ class ChatDeliveryPolicy(
         return when (val r = httpSendMessage(msg)) {
             is ApiResult.Ok -> {
                 platform.deleteOutbox(msg.clientMsgId)
+                updateState {
+                    ChatReducer.applyUserMessageAck(
+                        it,
+                        UserMessageAck(clientMsgId = msg.clientMsgId, disposition = "delivered"),
+                    )
+                }
                 SendResult.Delivered(null)
             }
 
@@ -150,12 +164,20 @@ class ChatDeliveryPolicy(
                     SendResult.Failed(if (r.code == 404) "El agente ya no existe" else "HTTP ${r.code}")
                 } else {
                     platform.enqueueBackgroundSend()
+                    updateState { state ->
+                        val hasAcked = state.items.any { it is UserMsg && it.key.startsWith("ack:") && !it.failed }
+                        state.copy(working = hasAcked)
+                    }
                     SendResult.Queued
                 }
             }
 
             is ApiResult.Network -> {
                 platform.enqueueBackgroundSend()
+                updateState { state ->
+                    val hasAcked = state.items.any { it is UserMsg && it.key.startsWith("ack:") && !it.failed }
+                    state.copy(working = hasAcked)
+                }
                 SendResult.Queued
             }
         }
@@ -170,23 +192,31 @@ class ChatDeliveryPolicy(
         val s = platform.currentSession() ?: return SendResult.Failed("sin sesión")
         val msg = platform.findOutboxMessage(s.relayId, clientMsgId)
         if (msg != null) {
+            val timestamp = now()
             updateState { state ->
                 val targetKey = if (clientMsgId.startsWith("local:")) clientMsgId else "local:$clientMsgId"
+                val ackKey = "ack:${clientMsgId.removePrefix("local:")}"
                 val nextItems =
                     state.items.map { item ->
-                        if (item is UserMsg && (item.clientMsgId == clientMsgId || item.key == targetKey)) {
-                            item.copy(failed = false)
+                        if (item is UserMsg && (item.clientMsgId == clientMsgId || item.key == targetKey || item.key == ackKey)) {
+                            item.copy(key = targetKey, at = timestamp, failed = false)
                         } else {
                             item
                         }
                     }
-                state.copy(items = nextItems, working = true)
+                val trimmed = msg.text.trim()
+                val nextLocalSent = if (trimmed.isNotBlank()) state.localSent + trimmed else state.localSent
+                state.copy(items = nextItems, localSent = nextLocalSent, working = true)
+            }
+            scope.launch {
+                delayMs(30_000L)
+                updateState { ChatReducer.expireOptimisticSends(it, now = now()) }
             }
             return deliver(msg, updateState)
         }
         val localMsg =
             getState().items.filterIsInstance<UserMsg>().firstOrNull {
-                it.clientMsgId == clientMsgId || it.key == "local:$clientMsgId"
+                it.clientMsgId == clientMsgId || it.key == "local:$clientMsgId" || it.key == "ack:$clientMsgId"
             }
         if (localMsg != null) {
             return send(

@@ -201,6 +201,41 @@ fun parseHerdrTabMeta(rawTabId: String?): HerdrTabMeta {
     return HerdrTabMeta(cleanTabId = rawTabId.takeIf { it.isNotEmpty() })
 }
 
+fun AgentSummary.normalized(): AgentSummary {
+    val tabMeta = parseHerdrTabMeta(herdr?.tabId)
+    val effectiveStatus =
+        if (status == AgentStatus.IDLE && tabMeta.isDone) {
+            AgentStatus.DONE
+        } else {
+            status
+        }
+    val tokens = contextTokens ?: tabMeta.contextTokens
+    val window = contextWindow ?: tabMeta.contextWindow
+    val percent =
+        contextPercent
+            ?: tabMeta.contextPercent
+            ?: if (tokens != null && window != null && window > 0) {
+                kotlin.math.round((tokens.toDouble() / window) * 100.0).toInt().coerceIn(0, 100)
+            } else {
+                null
+            }
+    return if (
+        effectiveStatus == status &&
+            tokens == contextTokens &&
+            window == contextWindow &&
+            percent == contextPercent
+    ) {
+        this
+    } else {
+        copy(
+            status = effectiveStatus,
+            contextTokens = tokens,
+            contextWindow = window,
+            contextPercent = percent,
+        )
+    }
+}
+
 fun formatCompactTokens(tokens: Int): String {
     if (tokens >= 1_000_000) {
         val tenths = (tokens + 50_000) / 100_000
