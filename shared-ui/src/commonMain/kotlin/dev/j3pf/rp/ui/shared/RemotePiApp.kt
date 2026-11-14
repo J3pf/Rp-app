@@ -63,7 +63,6 @@ import dev.j3pf.rp.ui.diff.DiffSheet
 import dev.j3pf.rp.ui.mesh.MeshScreenContent
 import dev.j3pf.rp.ui.nav.AboutRoute
 import dev.j3pf.rp.ui.nav.AddMachineRoute
-import dev.j3pf.rp.ui.nav.AgentsRoute
 import dev.j3pf.rp.ui.nav.AppBottomBar
 import dev.j3pf.rp.ui.nav.AppTab
 import dev.j3pf.rp.ui.nav.ArchivedAgentsRoute
@@ -170,294 +169,294 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                         message = appLockMessage,
                     )
                 } else {
-                when (val current = route) {
-                is OnboardingRoute -> {
-                    OnboardingContent(
-                        onStart = { appController.navigateTo(PairRoute()) },
-                    )
-                }
-
-                is PairRoute -> {
-                    PairContent(
-                        state = pairState,
-                        initialUrl = current.url,
-                        initialCode = current.code,
-                        onScan = { appController.navigateTo(ScanRoute) },
-                        onPair = appController::pair,
-                        onClearError = appController::clearPairError,
-                    )
-                }
-
-                is ScanRoute -> {
-                    QrScannerView(
-                        onResult = appController::onQrScanned,
-                        onCancel = { appController.navigateBack() },
-                    )
-                }
-
-                is ChatRoute -> {
-                    SharedChatScreen(
-                        agentId = current.agentId,
-                        readOnly = current.readOnly,
-                        appController = appController,
-                        snackbarHostState = snackbarHostState,
-                    )
-                }
-
-                is ArchivedAgentsRoute -> {
-                    SharedArchivedScreen(
-                        agents = archivedAgents,
-                        loading = archivedLoading,
-                        error = archivedError,
-                        nextBefore = archivedNextBefore,
-                        onBack = { appController.navigateBack() },
-                        onOpenChat = { id -> appController.navigateTo(ChatRoute(id, readOnly = true)) },
-                        onPurge = appController::purgeArchived,
-                        onRetry = { appController.loadArchived() },
-                        onLoadMore = appController::loadMoreArchived,
-                    )
-                }
-
-                is NewAgentRoute -> {
-                    val canGoUp =
-                        remember(newAgentUi.form.path, newAgentUi.host) {
-                            val p = newAgentUi.form.path.trimEnd('/', '\\')
-                            val roots = newAgentUi.host?.roots.orEmpty()
-                            p.isNotBlank() &&
-                                roots.none { it.trimEnd('/', '\\') == p } &&
-                                (p.contains('/') || p.contains('\\'))
-                        }
-                    NewAgentContent(
-                        ui = newAgentUi,
-                        onBack = { appController.navigateBack() },
-                        onPickMachine = appController::pickNewAgentMachine,
-                        onOpenDir = appController::openNewAgentDir,
-                        onEnterDir = appController::enterNewAgentSubDir,
-                        onUpDir = appController::upNewAgentDir,
-                        canGoUp = canGoUp,
-                        onSetLauncher = { l -> appController.updateNewAgentForm { it.copy(launcher = l) } },
-                        onSetBackend = { b -> appController.updateNewAgentForm { it.copy(backend = b) } },
-                        onSetName = { n -> appController.updateNewAgentForm { it.copy(name = n) } },
-                        onSetPrompt = { p -> appController.updateNewAgentForm { it.copy(initialPrompt = p) } },
-                        onCreate = appController::createNewAgent,
-                        herdrSection = {
-                            HerdrPlacementSection(
-                                ui = newAgentUi,
-                                onSetPlacement = appController::setNewAgentPlacement,
-                                onSetWorkspace = { id -> appController.updateNewAgentForm { it.copy(workspaceId = id) } },
-                                onSetPane = { id -> appController.updateNewAgentForm { it.copy(paneId = id) } },
-                                onSetDirection = { d -> appController.updateNewAgentForm { it.copy(direction = d) } },
-                                onRefreshLayout = appController::loadNewAgentHerdrLayout,
+                    when (val current = route) {
+                        is OnboardingRoute -> {
+                            OnboardingContent(
+                                onStart = { appController.navigateTo(PairRoute()) },
                             )
-                        },
-                        snackbarHostState = snackbarHostState,
-                    )
-                }
-
-                is DevicesRoute -> {
-                    DevicesContent(
-                        devices = devices,
-                        onBack = { appController.navigateBack() },
-                        onRevoke = appController::revokeDevice,
-                    )
-                }
-
-                is MachinesRoute -> {
-                    MachinesContent(
-                        machines = machines,
-                        onBack = { appController.navigateBack() },
-                        onEditMachine = appController::editMachine,
-                        onRevokeMachine = appController::revokeMachine,
-                    )
-                }
-
-                is AddMachineRoute -> {
-                    val clipboard = LocalClipboardManager.current
-                    AddMachineContent(
-                        relayUrl = settingsState.session?.relayUrl.orEmpty(),
-                        pairCode = pairCode,
-                        onBack = { appController.navigateBack() },
-                        onCopyCommand = { cmd -> clipboard.setText(AnnotatedString(cmd)) },
-                        onNewCode = appController::generatePairCode,
-                    )
-                }
-
-                is NotificationSettingsRoute -> {
-                    NotificationSettingsContent(
-                        health = HealthState(),
-                        settings = settings,
-                        machines = machines,
-                        agents = agents,
-                        onBack = { appController.navigateBack() },
-                        onOpenSystemSettings = {},
-                        onSendTestNotification = appController::sendTestNotification,
-                        onSetDirectPush = appController::setDirectPush,
-                        onSetCategory = appController::setCategoryEnabled,
-                        onSetCriticalAlways = appController::setCriticalAlways,
-                        onUnmuteAgent = { id -> appController.setAgentMuted(id, false) },
-                        onSetMachineMute = appController::setMachineMute,
-                        onSetQuietHours = appController::setMachineQuietHours,
-                        onSetMachineCategory = appController::setMachineCategory,
-                    )
-                }
-
-                is SecuritySettingsRoute -> {
-                    SecurityContent(
-                        settings = settings,
-                        onBack = { appController.navigateBack() },
-                        onSetRequireUnlock = appController::setRequireUnlock,
-                        onSetAppLock = appController::setAppLock,
-                        onSetFlagSecure = appController::setFlagSecure,
-                    )
-                }
-
-                is BatteryRoute -> {
-                    BatteryContent(
-                        batteryExcluded = true,
-                        onBack = { appController.navigateBack() },
-                        onRequestIgnoreBatteryOptimizations = {},
-                        onOpenBatterySettings = {},
-                    )
-                }
-
-                is AboutRoute -> {
-                    AboutContent(
-                        versionName = appController.appVersion,
-                        versionCode = "1",
-                        flavor = "APNs",
-                        onBack = { appController.navigateBack() },
-                    )
-                }
-
-                else -> {
-                    val selectedTab =
-                        when (current) {
-                            is MeshRoute -> AppTab.MESH
-                            is PendingRoute -> AppTab.PENDING
-                            is SettingsRoute -> AppTab.SETTINGS
-                            else -> AppTab.AGENTS
                         }
-                    Scaffold(
-                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                        snackbarHost = { SnackbarHost(snackbarHostState) },
-                        bottomBar = {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                if (selectedTab == AppTab.AGENTS) {
-                                    QuotaDynamicIsland(
-                                        machines = agentsState.machines,
-                                        selectedMachineId =
-                                            if (agentsState.selected == "all") null else agentsState.selected,
-                                    )
-                                }
-                                AppBottomBar(
-                                    selectedTab = selectedTab,
-                                    pending = openPrompts.size,
-                                    onSelectTab = appController::selectTab,
-                                )
-                            }
-                        },
-                    ) { innerPadding ->
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(innerPadding),
-                        ) {
-                            when (selectedTab) {
-                                AppTab.AGENTS -> {
-                                    AgentsContent(
-                                        state = agentsState,
-                                        conn = conn,
-                                        snackbarHostState = snackbarHostState,
-                                        bottomBar = {},
-                                        onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
-                                        onNewAgent = { appController.navigateTo(NewAgentRoute) },
-                                        onSelect = appController::selectContext,
-                                        onRefresh = appController::refreshAll,
-                                        onResume = { agent, _ -> appController.resumeAgent(agent) },
-                                        onForget = appController::requestForgetAgent,
-                                        onOpenArchived = { appController.navigateTo(ArchivedAgentsRoute) },
-                                    )
-                                }
 
-                                AppTab.MESH -> {
-                                    MeshScreenContent(
-                                        uiState = meshState.copy(isConnected = conn == ConnState.Connected),
-                                        onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
-                                        onToggleListView = appController::toggleMeshListView,
-                                        onSelectMachine = appController::selectMeshMachine,
-                                        onSelectGroup = appController::selectMeshGroup,
-                                        onNodeClick = appController::selectMeshNode,
-                                        onEdgeClick = appController::onMeshEdgeClick,
-                                        onViewportSizeChanged = appController::onMeshViewportSizeChanged,
-                                        onDismissNodeDetail = appController::dismissMeshNodeDetail,
-                                        onViewConversation = appController::openMeshConversation,
-                                        onDismissConversation = appController::dismissMeshConversation,
-                                        onLoadMoreConversation = appController::loadMoreMeshConversation,
-                                        onRetry = { appController.refreshMesh() },
-                                    )
-                                }
+                        is PairRoute -> {
+                            PairContent(
+                                state = pairState,
+                                initialUrl = current.url,
+                                initialCode = current.code,
+                                onScan = { appController.navigateTo(ScanRoute) },
+                                onPair = appController::pair,
+                                onClearError = appController::clearPairError,
+                            )
+                        }
 
-                                AppTab.PENDING -> {
-                                    PendingContent(
-                                        state = pendingState,
-                                        onOpenPrompt = appController::openPromptSheet,
-                                        onSelect = appController::selectContext,
-                                        busyPromptId = busyPromptId,
-                                        onQuickAnswer = { p, ans -> appController.answerPrompt(p.promptId, ans) },
-                                    )
-                                }
+                        is ScanRoute -> {
+                            QrScannerView(
+                                onResult = appController::onQrScanned,
+                                onCancel = { appController.navigateBack() },
+                            )
+                        }
 
-                                AppTab.SETTINGS -> {
-                                    SettingsContent(
-                                        state = settingsState,
-                                        onNav = appController::navigateSettingsDest,
-                                        onSelectTheme = appController::setTheme,
-                                        onLogout = appController::logout,
-                                        onSelectFontScale = appController::setChatFontScale,
-                                        onSelectMessageSpacing = appController::setChatMessageSpacing,
-                                        versionName = appController.appVersion,
+                        is ChatRoute -> {
+                            SharedChatScreen(
+                                agentId = current.agentId,
+                                readOnly = current.readOnly,
+                                appController = appController,
+                                snackbarHostState = snackbarHostState,
+                            )
+                        }
+
+                        is ArchivedAgentsRoute -> {
+                            SharedArchivedScreen(
+                                agents = archivedAgents,
+                                loading = archivedLoading,
+                                error = archivedError,
+                                nextBefore = archivedNextBefore,
+                                onBack = { appController.navigateBack() },
+                                onOpenChat = { id -> appController.navigateTo(ChatRoute(id, readOnly = true)) },
+                                onPurge = appController::purgeArchived,
+                                onRetry = { appController.loadArchived() },
+                                onLoadMore = appController::loadMoreArchived,
+                            )
+                        }
+
+                        is NewAgentRoute -> {
+                            val canGoUp =
+                                remember(newAgentUi.form.path, newAgentUi.host) {
+                                    val p = newAgentUi.form.path.trimEnd('/', '\\')
+                                    val roots = newAgentUi.host?.roots.orEmpty()
+                                    p.isNotBlank() &&
+                                        roots.none { it.trimEnd('/', '\\') == p } &&
+                                        (p.contains('/') || p.contains('\\'))
+                                }
+                            NewAgentContent(
+                                ui = newAgentUi,
+                                onBack = { appController.navigateBack() },
+                                onPickMachine = appController::pickNewAgentMachine,
+                                onOpenDir = appController::openNewAgentDir,
+                                onEnterDir = appController::enterNewAgentSubDir,
+                                onUpDir = appController::upNewAgentDir,
+                                canGoUp = canGoUp,
+                                onSetLauncher = { l -> appController.updateNewAgentForm { it.copy(launcher = l) } },
+                                onSetBackend = { b -> appController.updateNewAgentForm { it.copy(backend = b) } },
+                                onSetName = { n -> appController.updateNewAgentForm { it.copy(name = n) } },
+                                onSetPrompt = { p -> appController.updateNewAgentForm { it.copy(initialPrompt = p) } },
+                                onCreate = appController::createNewAgent,
+                                herdrSection = {
+                                    HerdrPlacementSection(
+                                        ui = newAgentUi,
+                                        onSetPlacement = appController::setNewAgentPlacement,
+                                        onSetWorkspace = { id -> appController.updateNewAgentForm { it.copy(workspaceId = id) } },
+                                        onSetPane = { id -> appController.updateNewAgentForm { it.copy(paneId = id) } },
+                                        onSetDirection = { d -> appController.updateNewAgentForm { it.copy(direction = d) } },
+                                        onRefreshLayout = appController::loadNewAgentHerdrLayout,
                                     )
+                                },
+                                snackbarHostState = snackbarHostState,
+                            )
+                        }
+
+                        is DevicesRoute -> {
+                            DevicesContent(
+                                devices = devices,
+                                onBack = { appController.navigateBack() },
+                                onRevoke = appController::revokeDevice,
+                            )
+                        }
+
+                        is MachinesRoute -> {
+                            MachinesContent(
+                                machines = machines,
+                                onBack = { appController.navigateBack() },
+                                onEditMachine = appController::editMachine,
+                                onRevokeMachine = appController::revokeMachine,
+                            )
+                        }
+
+                        is AddMachineRoute -> {
+                            val clipboard = LocalClipboardManager.current
+                            AddMachineContent(
+                                relayUrl = settingsState.session?.relayUrl.orEmpty(),
+                                pairCode = pairCode,
+                                onBack = { appController.navigateBack() },
+                                onCopyCommand = { cmd -> clipboard.setText(AnnotatedString(cmd)) },
+                                onNewCode = appController::generatePairCode,
+                            )
+                        }
+
+                        is NotificationSettingsRoute -> {
+                            NotificationSettingsContent(
+                                health = HealthState(),
+                                settings = settings,
+                                machines = machines,
+                                agents = agents,
+                                onBack = { appController.navigateBack() },
+                                onOpenSystemSettings = {},
+                                onSendTestNotification = appController::sendTestNotification,
+                                onSetDirectPush = appController::setDirectPush,
+                                onSetCategory = appController::setCategoryEnabled,
+                                onSetCriticalAlways = appController::setCriticalAlways,
+                                onUnmuteAgent = { id -> appController.setAgentMuted(id, false) },
+                                onSetMachineMute = appController::setMachineMute,
+                                onSetQuietHours = appController::setMachineQuietHours,
+                                onSetMachineCategory = appController::setMachineCategory,
+                            )
+                        }
+
+                        is SecuritySettingsRoute -> {
+                            SecurityContent(
+                                settings = settings,
+                                onBack = { appController.navigateBack() },
+                                onSetRequireUnlock = appController::setRequireUnlock,
+                                onSetAppLock = appController::setAppLock,
+                                onSetFlagSecure = appController::setFlagSecure,
+                            )
+                        }
+
+                        is BatteryRoute -> {
+                            BatteryContent(
+                                batteryExcluded = true,
+                                onBack = { appController.navigateBack() },
+                                onRequestIgnoreBatteryOptimizations = {},
+                                onOpenBatterySettings = {},
+                            )
+                        }
+
+                        is AboutRoute -> {
+                            AboutContent(
+                                versionName = appController.appVersion,
+                                versionCode = "1",
+                                flavor = "APNs",
+                                onBack = { appController.navigateBack() },
+                            )
+                        }
+
+                        else -> {
+                            val selectedTab =
+                                when (current) {
+                                    is MeshRoute -> AppTab.MESH
+                                    is PendingRoute -> AppTab.PENDING
+                                    is SettingsRoute -> AppTab.SETTINGS
+                                    else -> AppTab.AGENTS
+                                }
+                            Scaffold(
+                                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                                snackbarHost = { SnackbarHost(snackbarHostState) },
+                                bottomBar = {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        if (selectedTab == AppTab.AGENTS) {
+                                            QuotaDynamicIsland(
+                                                machines = agentsState.machines,
+                                                selectedMachineId =
+                                                    if (agentsState.selected == "all") null else agentsState.selected,
+                                            )
+                                        }
+                                        AppBottomBar(
+                                            selectedTab = selectedTab,
+                                            pending = openPrompts.size,
+                                            onSelectTab = appController::selectTab,
+                                        )
+                                    }
+                                },
+                            ) { innerPadding ->
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .padding(innerPadding),
+                                ) {
+                                    when (selectedTab) {
+                                        AppTab.AGENTS -> {
+                                            AgentsContent(
+                                                state = agentsState,
+                                                conn = conn,
+                                                snackbarHostState = snackbarHostState,
+                                                bottomBar = {},
+                                                onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
+                                                onNewAgent = { appController.navigateTo(NewAgentRoute) },
+                                                onSelect = appController::selectContext,
+                                                onRefresh = appController::refreshAll,
+                                                onResume = { agent, _ -> appController.resumeAgent(agent) },
+                                                onForget = appController::requestForgetAgent,
+                                                onOpenArchived = { appController.navigateTo(ArchivedAgentsRoute) },
+                                            )
+                                        }
+
+                                        AppTab.MESH -> {
+                                            MeshScreenContent(
+                                                uiState = meshState.copy(isConnected = conn == ConnState.Connected),
+                                                onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
+                                                onToggleListView = appController::toggleMeshListView,
+                                                onSelectMachine = appController::selectMeshMachine,
+                                                onSelectGroup = appController::selectMeshGroup,
+                                                onNodeClick = appController::selectMeshNode,
+                                                onEdgeClick = appController::onMeshEdgeClick,
+                                                onViewportSizeChanged = appController::onMeshViewportSizeChanged,
+                                                onDismissNodeDetail = appController::dismissMeshNodeDetail,
+                                                onViewConversation = appController::openMeshConversation,
+                                                onDismissConversation = appController::dismissMeshConversation,
+                                                onLoadMoreConversation = appController::loadMoreMeshConversation,
+                                                onRetry = { appController.refreshMesh() },
+                                            )
+                                        }
+
+                                        AppTab.PENDING -> {
+                                            PendingContent(
+                                                state = pendingState,
+                                                onOpenPrompt = appController::openPromptSheet,
+                                                onSelect = appController::selectContext,
+                                                busyPromptId = busyPromptId,
+                                                onQuickAnswer = { p, ans -> appController.answerPrompt(p.promptId, ans) },
+                                            )
+                                        }
+
+                                        AppTab.SETTINGS -> {
+                                            SettingsContent(
+                                                state = settingsState,
+                                                onNav = appController::navigateSettingsDest,
+                                                onSelectTheme = appController::setTheme,
+                                                onLogout = appController::logout,
+                                                onSelectFontScale = appController::setChatFontScale,
+                                                onSelectMessageSpacing = appController::setChatMessageSpacing,
+                                                versionName = appController.appVersion,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            }
 
-            if (pendingForgetAgentId != null) {
-                SharedAgentCloseConfirmationDialog(
-                    onConfirm = {
-                        val closingChatAgent = (route as? ChatRoute)?.agentId == pendingForgetAgentId
-                        appController.confirmForgetAgent {
-                            if (closingChatAgent) {
-                                appController.navigateBack()
+                if (pendingForgetAgentId != null) {
+                    SharedAgentCloseConfirmationDialog(
+                        onConfirm = {
+                            val closingChatAgent = (route as? ChatRoute)?.agentId == pendingForgetAgentId
+                            appController.confirmForgetAgent {
+                                if (closingChatAgent) {
+                                    appController.navigateBack()
+                                }
                             }
-                        }
-                    },
-                    onDismiss = appController::cancelForgetAgent,
-                )
-            }
+                        },
+                        onDismiss = appController::cancelForgetAgent,
+                    )
+                }
 
-            val promptId = activePromptId
-            if (promptId != null) {
-                val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
-                PromptSheetChrome(
-                    state = promptSheetState,
-                    onDismissRequest = appController::dismissPromptSheet,
-                    errorMessage = promptSheetError,
-                    authMessage = promptSheetAuthMessage,
-                ) {
-                    if (activePrompt != null) {
-                        PromptContent(
-                            prompt = activePrompt,
-                            busy = busyPromptId == activePrompt.promptId,
-                            onAnswer = { ans -> appController.answerPrompt(activePrompt.promptId, ans) },
-                        )
+                val promptId = activePromptId
+                if (promptId != null) {
+                    val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
+                    PromptSheetChrome(
+                        state = promptSheetState,
+                        onDismissRequest = appController::dismissPromptSheet,
+                        errorMessage = promptSheetError,
+                        authMessage = promptSheetAuthMessage,
+                    ) {
+                        if (activePrompt != null) {
+                            PromptContent(
+                                prompt = activePrompt,
+                                busy = busyPromptId == activePrompt.promptId,
+                                onAnswer = { ans -> appController.answerPrompt(activePrompt.promptId, ans) },
+                            )
+                        }
                     }
                 }
-            }
             }
         }
     }

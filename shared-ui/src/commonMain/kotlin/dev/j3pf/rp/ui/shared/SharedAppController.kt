@@ -650,8 +650,24 @@ class SharedAppController(
                         val prev = prevById[a.agentId]
                         val count = counts[a.agentId] ?: a.openPromptCount
                         val activeTask = a.activeTask ?: if (a.status == "working") prev?.activeTask else null
-                        val todoCompleted = if (a.todoTotal > 0) a.todoCompleted else if (a.status == "working") (prev?.todoCompleted ?: 0) else 0
-                        val todoTotal = if (a.todoTotal > 0) a.todoTotal else if (a.status == "working") (prev?.todoTotal ?: 0) else 0
+                        val todoCompleted =
+                            if (a.todoTotal >
+                                0
+                            ) {
+                                a.todoCompleted
+                            } else if (a.status == "working") {
+                                (prev?.todoCompleted ?: 0)
+                            } else {
+                                0
+                            }
+                        val todoTotal =
+                            if (a.todoTotal > 0) {
+                                a.todoTotal
+                            } else if (a.status == "working") {
+                                (prev?.todoTotal ?: 0)
+                            } else {
+                                0
+                            }
                         a.copy(
                             openPromptCount = count,
                             activeTask = activeTask,
@@ -689,8 +705,24 @@ class SharedAppController(
                         val prev = map[a.agentId]
                         val count = counts[a.agentId] ?: a.openPromptCount
                         val activeTask = a.activeTask ?: if (a.status == "working") prev?.activeTask else null
-                        val todoCompleted = if (a.todoTotal > 0) a.todoCompleted else if (a.status == "working") (prev?.todoCompleted ?: 0) else 0
-                        val todoTotal = if (a.todoTotal > 0) a.todoTotal else if (a.status == "working") (prev?.todoTotal ?: 0) else 0
+                        val todoCompleted =
+                            if (a.todoTotal >
+                                0
+                            ) {
+                                a.todoCompleted
+                            } else if (a.status == "working") {
+                                (prev?.todoCompleted ?: 0)
+                            } else {
+                                0
+                            }
+                        val todoTotal =
+                            if (a.todoTotal > 0) {
+                                a.todoTotal
+                            } else if (a.status == "working") {
+                                (prev?.todoTotal ?: 0)
+                            } else {
+                                0
+                            }
                         map[a.agentId] =
                             a.copy(
                                 openPromptCount = count,

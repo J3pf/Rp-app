@@ -460,7 +460,7 @@ fun ChatTopBar(
                                         border = BorderStroke(0.8.dp, barColor.copy(alpha = 0.55f)),
                                     ) {
                                         Text(
-                                            text = "${topBarCtxPct}%",
+                                            text = "$topBarCtxPct%",
                                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = barColor,

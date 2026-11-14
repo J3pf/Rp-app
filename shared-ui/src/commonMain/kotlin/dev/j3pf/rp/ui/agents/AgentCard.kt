@@ -536,8 +536,8 @@ fun AgentCard(
                         }
                     val ctxLabel =
                         when {
-                            ctxPct != null && ctxTokens != null -> "🧠 ${ctxPct}% · ${formatCompactTokens(ctxTokens)}"
-                            ctxPct != null -> "🧠 ${ctxPct}%"
+                            ctxPct != null && ctxTokens != null -> "🧠 $ctxPct% · ${formatCompactTokens(ctxTokens)}"
+                            ctxPct != null -> "🧠 $ctxPct%"
                             else -> "🧠 ${formatCompactTokens(ctxTokens!!)}"
                         }
                     TagChip(

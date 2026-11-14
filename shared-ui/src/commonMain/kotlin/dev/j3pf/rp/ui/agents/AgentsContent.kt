@@ -318,7 +318,9 @@ fun AgentsContent(
         if (prevIds != null) {
             val hasNewAgent = (currentAgentIds - prevIds).isNotEmpty()
             val topBecameActive =
-                prevTop != null && topAgentId != null && topAgentId != prevTop &&
+                prevTop != null &&
+                    topAgentId != null &&
+                    topAgentId != prevTop &&
                     (topAgent.status == AgentStatus.WORKING || topAgent.openPromptCount > 0 || topAgent.status == AgentStatus.WAITING_INPUT)
             if (hasNewAgent || topBecameActive) {
                 if (!reducedMotion) {
