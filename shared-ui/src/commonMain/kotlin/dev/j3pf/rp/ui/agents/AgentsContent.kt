@@ -5,10 +5,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,16 +21,18 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.data.net.ConnState
@@ -57,15 +63,21 @@ import dev.j3pf.rp.data.repo.AppSettings
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
+import dev.j3pf.rp.ui.components.ALL_MACHINES
 import dev.j3pf.rp.ui.components.AgentSkeletonList
 import dev.j3pf.rp.ui.components.AppHeader
 import dev.j3pf.rp.ui.components.ColorDot
 import dev.j3pf.rp.ui.components.ConnectionBanner
 import dev.j3pf.rp.ui.components.EmptyState
-import dev.j3pf.rp.ui.components.MachineHeroDropdown
+import dev.j3pf.rp.ui.components.MachineSelectionMenu
 import dev.j3pf.rp.ui.components.QuotaDynamicIsland
+import dev.j3pf.rp.ui.components.SurfaceCard
+import dev.j3pf.rp.ui.components.horizontalEdgeFade
+import dev.j3pf.rp.ui.components.resolveMachineHeroState
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
-import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.RpShapes
+import dev.j3pf.rp.ui.theme.rpSemantic
+import dev.j3pf.rp.ui.theme.rpSurfaces
 import dev.j3pf.rp.ui.util.parseColor
 
 @Composable
@@ -105,8 +117,8 @@ fun SessionsSectionHeader(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RpShapes.pill,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                 ) {
                     Text(
                         text = "$totalCount",
@@ -118,57 +130,67 @@ fun SessionsSectionHeader(
                 }
             }
 
+            val filterScrollState = rememberScrollState()
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
             ) {
-                val visibleFilters =
-                    buildList {
-                        add(SessionQuickFilter.ALL)
-                        add(SessionQuickFilter.ACTIVE)
-                        if (hasAgy) add(SessionQuickFilter.AGY)
-                        if (hasPi) add(SessionQuickFilter.PI)
-                    }
-                visibleFilters.forEach { filter ->
-                    val isSelected = selectedFilter == filter
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color =
-                            if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                            },
-                        border =
-                            if (isSelected) {
-                                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                            } else {
-                                null
-                            },
-                        modifier =
-                            Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .clickable { onSelectFilter(filter) },
-                    ) {
-                        Text(
-                            text = filter.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier =
+                        Modifier
+                            .weight(1f, fill = false)
+                            .horizontalEdgeFade(scrollState = filterScrollState, length = 14.dp)
+                            .horizontalScroll(filterScrollState),
+                ) {
+                    val visibleFilters =
+                        buildList {
+                            add(SessionQuickFilter.ALL)
+                            add(SessionQuickFilter.ACTIVE)
+                            if (hasAgy) add(SessionQuickFilter.AGY)
+                            if (hasPi) add(SessionQuickFilter.PI)
+                        }
+                    visibleFilters.forEach { filter ->
+                        val isSelected = selectedFilter == filter
+                        Surface(
+                            shape = RpShapes.pill,
                             color =
                                 if (isSelected) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                    MaterialTheme.colorScheme.primaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
                                 },
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                        )
+                            border =
+                                if (isSelected) {
+                                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                                } else {
+                                    null
+                                },
+                            modifier =
+                                Modifier
+                                    .clip(RpShapes.pill)
+                                    .clickable { onSelectFilter(filter) },
+                        ) {
+                            Text(
+                                text = filter.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color =
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            )
+                        }
                     }
                 }
 
                 IconButton(
                     onClick = onToggleSearch,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Icon(
                         imageVector = if (searchActive) Icons.Filled.Close else Icons.Filled.Search,
@@ -191,7 +213,7 @@ fun SessionsSectionHeader(
                 onValueChange = onSearchQueryChange,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                shape = RpShapes.medium,
                 placeholder = {
                     Text(
                         "Filtrar por proyecto, tema o rama...",
@@ -229,16 +251,17 @@ fun MachineHeader(
     machine: MachineSummary,
     modifier: Modifier = Modifier,
 ) {
+    val semantic = MaterialTheme.colorScheme.rpSemantic
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            ColorDot(parseColor(machine.color), size = 12)
+            ColorDot(parseColor(machine.color), size = 10)
             Text(
                 text = machine.name,
                 style = MaterialTheme.typography.titleSmall,
@@ -247,12 +270,12 @@ fun MachineHeader(
             Text(
                 text = if (machine.online) "● en línea" else "○ sin conexión",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (machine.online) RpColors.success else MaterialTheme.colorScheme.outline,
+                color = if (machine.online) semantic.success else MaterialTheme.colorScheme.outline,
             )
             if (machine.hostOnline) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                    shape = RpShapes.extraSmall,
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
                 ) {
                     Text(
                         text = "rp-host ✓",
@@ -264,6 +287,139 @@ fun MachineHeader(
                 }
             }
         }
+    }
+}
+
+/** Cabecera unificada de control: selector de máquina y métricas en vivo en una sola tarjeta. */
+@Composable
+private fun AgentsControlDeck(
+    machines: List<MachineSummary>,
+    agents: List<AgentSummary>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val singleMachine = machines.singleOrNull()
+    val activeMachine =
+        when {
+            selected == ALL_MACHINES && singleMachine != null -> singleMachine
+            else -> machines.firstOrNull { it.machineId == selected }
+        }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val heroState =
+        remember(machines, agents, selected, primaryColor) {
+            resolveMachineHeroState(machines, agents, selected, primaryColor)
+        }
+    val surfaces = MaterialTheme.colorScheme.rpSurfaces
+
+    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        SurfaceCard(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RpShapes.card,
+            color = surfaces.elevatedDeck,
+            tonalElevation = 2.dp,
+            border = BorderStroke(1.dp, heroState.selectedColor.copy(alpha = 0.36f)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Surface(
+                    shape = RpShapes.small,
+                    color = heroState.selectedColor.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, heroState.selectedColor.copy(alpha = 0.35f)),
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Computer,
+                            contentDescription = null,
+                            tint = heroState.selectedColor,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = heroState.selectedTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (activeMachine?.hostOnline == true) {
+                            Surface(
+                                shape = RpShapes.extraSmall,
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.70f),
+                            ) {
+                                Text(
+                                    text = "rp-host ✓",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = heroState.selectedSubtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Surface(
+                    shape = RpShapes.small,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                    border = BorderStroke(1.dp, surfaces.hairline),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        if (machines.size > 1) {
+                            Text(
+                                text = "PC",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Filled.ArrowDropDown,
+                            contentDescription = "Desplegar máquinas",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = surfaces.hairline)
+
+            AgentsHeroStatsRow(
+                agents = agents,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
+
+        MachineSelectionMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            machines = machines,
+            agents = agents,
+            selected = selected,
+            onSelect = onSelect,
+        )
     }
 }
 
@@ -342,7 +498,7 @@ fun AgentsContent(
                 ExtendedFloatingActionButton(
                     onClick = onNewAgent,
                     expanded = isFabExpanded,
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RpShapes.pill,
                     icon = { Icon(Icons.Filled.Add, contentDescription = "Nuevo agente") },
                     text = { Text("Nuevo agente", fontWeight = FontWeight.Bold) },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -369,12 +525,13 @@ fun AgentsContent(
                         {
                             Surface(
                                 onClick = onOpenArchived,
-                                shape = RoundedCornerShape(999.dp),
+                                modifier = Modifier.defaultMinSize(minHeight = 36.dp),
+                                shape = RpShapes.pill,
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.rpSurfaces.hairline),
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
@@ -398,18 +555,11 @@ fun AgentsContent(
                     },
             )
 
-            AgentsHeroStats(
-                agents = state.allAgents,
-                machines = state.machines,
-            )
-
-            // Switcher de máquinas tipo Hardware Context Bar (design.md §1 y §6)
-            MachineHeroDropdown(
+            AgentsControlDeck(
                 machines = state.machines,
                 agents = state.allAgents,
                 selected = state.selected,
                 onSelect = onSelect,
-                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
             )
 
             if (state.allAgents.isNotEmpty()) {
@@ -443,59 +593,67 @@ fun AgentsContent(
                     }
 
                     state.groups.isEmpty() -> {
-                        Column(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState()),
-                        ) {
-                            EmptyState(
-                                title = "Aún no hay agentes",
-                                subtitle =
-                                    if (state.machines.isEmpty()) {
-                                        "Empareja una PC con `/rp pair` y abre Pi en ella para comenzar."
-                                    } else {
-                                        "Abre Pi con el plugin rp en tus PCs y tus sesiones aparecerán aquí."
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minHeight = maxHeight)
+                                        .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                EmptyState(
+                                    title = "Aún no hay agentes",
+                                    subtitle =
+                                        if (state.machines.isEmpty()) {
+                                            "Empareja una PC con /rp pair y abre Pi en ella para comenzar."
+                                        } else {
+                                            "Abre Pi con el plugin rp en tus PCs y tus sesiones aparecerán aquí."
+                                        },
+                                    actionLabel = if (state.canSpawn) "Nuevo agente" else null,
+                                    onAction = if (state.canSpawn) onNewAgent else null,
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.SmartToy,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(32.dp),
+                                        )
                                     },
-                                actionLabel = if (state.canSpawn) "Nuevo agente" else null,
-                                onAction = if (state.canSpawn) onNewAgent else null,
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.SmartToy,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(32.dp),
-                                    )
-                                },
-                            )
+                                )
+                            }
                         }
                     }
 
                     filteredGroups.isEmpty() -> {
-                        Column(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState()),
-                        ) {
-                            EmptyState(
-                                title = "Sin sesiones que coincidan",
-                                subtitle = "Prueba cambiando el filtro rápido o limpiando la búsqueda.",
-                                actionLabel = "Mostrar todas",
-                                onAction = {
-                                    quickFilter = SessionQuickFilter.ALL
-                                    searchQuery = ""
-                                    searchActive = false
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Search,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(32.dp),
-                                    )
-                                },
-                            )
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minHeight = maxHeight)
+                                        .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                EmptyState(
+                                    title = "Sin sesiones que coincidan",
+                                    subtitle = "Prueba cambiando el filtro rápido o limpiando la búsqueda.",
+                                    actionLabel = "Mostrar todas",
+                                    onAction = {
+                                        quickFilter = SessionQuickFilter.ALL
+                                        searchQuery = ""
+                                        searchActive = false
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Search,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(32.dp),
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
 
@@ -503,7 +661,7 @@ fun AgentsContent(
                         val showGroupHeaders = filteredGroups.size > 1
                         LazyColumn(
                             state = listState,
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             filteredGroups.forEach { g ->

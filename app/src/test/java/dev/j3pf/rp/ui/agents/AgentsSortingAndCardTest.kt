@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.protocol.ModelInfo
 import dev.j3pf.rp.ui.theme.RpTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -349,5 +350,33 @@ class AgentsSortingAndCardTest {
         // are NOT rendered as standalone chips on the screen
         rule.onNodeWithText("Empresa").assertDoesNotExist()
         rule.onNodeWithText("Personal").assertDoesNotExist()
+    }
+
+    @Test
+    fun `AgentCard keeps row 1 header limited to folder and git branch without duplicating model`() {
+        val agent =
+            AgentSummary(
+                agentId = "a-model-header",
+                machineId = "m1",
+                sessionName = "Gateway Auth",
+                cwd = "/workspace/api",
+                gitBranch = "feat/auth",
+                model = ModelInfo(provider = "anthropic", id = "claude-3-5-sonnet"),
+                status = "working",
+                online = true,
+            )
+
+        rule.setContent {
+            RpTheme {
+                AgentCard(
+                    a = agent,
+                    onClick = {},
+                    onForget = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("📁 api · ⎇ feat/auth").assertIsDisplayed()
+        rule.onNodeWithText("claude-3-5-sonnet").assertIsDisplayed()
     }
 }

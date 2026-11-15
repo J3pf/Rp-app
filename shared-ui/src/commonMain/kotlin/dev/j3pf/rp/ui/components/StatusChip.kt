@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,8 +30,9 @@ import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
-import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpMotion
+import dev.j3pf.rp.ui.theme.RpShapes
+import dev.j3pf.rp.ui.theme.rpSemantic
 import dev.j3pf.rp.ui.util.relativeTime
 
 @Composable
@@ -57,14 +57,15 @@ fun StatusChip(
     agent: AgentSummary,
     modifier: Modifier = Modifier,
 ) {
+    val semantic = MaterialTheme.colorScheme.rpSemantic
     val (text, targetColor) =
         when {
             !agent.online -> "Desconectado ${relativeTime(agent.lastSeenAt)}".trim() to MaterialTheme.colorScheme.outline
-            agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to RpColors.warning
-            agent.status == AgentStatus.WORKING -> "Trabajando" to RpColors.working
+            agent.openPromptCount > 0 || agent.status == AgentStatus.WAITING_INPUT -> "Esperando respuesta" to semantic.warning
+            agent.status == AgentStatus.WORKING -> "Trabajando" to semantic.working
             agent.status == AgentStatus.COMPACTING -> "Compactando" to MaterialTheme.colorScheme.tertiary
-            agent.status == AgentStatus.ERROR -> "Error" to RpColors.danger
-            agent.status == AgentStatus.DONE -> "Completado" to RpColors.success
+            agent.status == AgentStatus.ERROR -> "Error" to semantic.danger
+            agent.status == AgentStatus.DONE -> "Completado" to semantic.success
             else -> "Inactivo" to MaterialTheme.colorScheme.outline
         }
 
@@ -110,9 +111,9 @@ fun StatusChip(
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        color = animatedColor.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, animatedColor.copy(alpha = 0.25f)),
+        shape = RpShapes.extraSmall,
+        color = animatedColor.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, animatedColor.copy(alpha = 0.28f)),
         contentColor = animatedColor,
     ) {
         Row(
@@ -154,9 +155,9 @@ fun TagChip(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = RpShapes.extraSmall,
         color = color.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.20f)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.22f)),
         contentColor = color,
     ) {
         Text(
@@ -175,4 +176,27 @@ fun TagChip(
     color: Color,
 ) {
     TagChip(text = text, modifier = Modifier, color = color)
+}
+
+/** Etiqueta discreta de baja jerarquía para metadata técnica secundaria (lanzador, modelo, sesión). */
+@Composable
+fun MetaTag(
+    text: String,
+    modifier: Modifier = Modifier,
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RpShapes.extraSmall,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
+        contentColor = contentColor,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
 }

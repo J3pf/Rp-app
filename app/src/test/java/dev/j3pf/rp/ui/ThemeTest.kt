@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.ui.theme.CuteDarkColors
@@ -15,7 +16,9 @@ import dev.j3pf.rp.ui.theme.SexyDarkColors
 import dev.j3pf.rp.ui.theme.SexyLightColors
 import dev.j3pf.rp.ui.theme.paletteFor
 import dev.j3pf.rp.ui.theme.resolveThemeChoice
+import dev.j3pf.rp.ui.theme.rpSemantic
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThemeTest {
@@ -169,5 +172,22 @@ class ThemeTest {
             org.junit.Assert.assertNotEquals("Base de skeleton no debe coincidir con surfaceVariant", palette.surfaceVariant, base)
             org.junit.Assert.assertNotEquals("Highlight de skeleton debe distinguirse de la base", base, highlight)
         }
+    }
+
+    @Test
+    fun `rpSemantic adapta contraste en temas oscuros sin romper valores claros`() {
+        val darkPalettes = listOf(CuteDarkColors, SexyDarkColors, OmarchyDarkColors, DefaultDarkColors)
+        darkPalettes.forEach { palette ->
+            val semantic = palette.rpSemantic
+            assertTrue("danger debe destacar sobre fondo oscuro", semantic.danger.luminance() > 0.25f)
+            assertTrue("warning debe destacar sobre fondo oscuro", semantic.warning.luminance() > 0.35f)
+            assertTrue("success debe destacar sobre fondo oscuro", semantic.success.luminance() > 0.35f)
+            assertTrue("working debe destacar sobre fondo oscuro", semantic.working.luminance() > 0.30f)
+        }
+
+        val lightSemantic = CuteLightColors.rpSemantic
+        assertEquals(RpColors.danger, lightSemantic.danger)
+        assertEquals(RpColors.warning, lightSemantic.warning)
+        assertEquals(RpColors.success, lightSemantic.success)
     }
 }

@@ -2,13 +2,18 @@ package dev.j3pf.rp.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** Escala de espaciado coherente y armoniosa para todo RP. */
 object RpSpacing {
@@ -39,6 +44,102 @@ object RpShapes {
     val bubbleUser = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp)
     val bubbleAgent = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
 }
+
+/** Escala de formas Material 3 unificada con RpShapes. */
+val RpMaterialShapes: Shapes =
+    Shapes(
+        extraSmall = RpShapes.extraSmall,
+        small = RpShapes.small,
+        medium = RpShapes.medium,
+        large = RpShapes.large,
+        extraLarge = RpShapes.extraLarge,
+    )
+
+private val BaseTypography = Typography()
+
+/** Tipografía del sistema con tracking refinado y cifras tabulares en métricas. */
+val RpTypography: Typography =
+    BaseTypography.copy(
+        headlineMedium =
+            BaseTypography.headlineMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.4).sp,
+            ),
+        headlineSmall =
+            BaseTypography.headlineSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.3).sp,
+            ),
+        titleMedium =
+            BaseTypography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.1).sp,
+            ),
+        titleSmall =
+            BaseTypography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+            ),
+        labelLarge =
+            BaseTypography.labelLarge.copy(
+                fontFeatureSettings = "tnum",
+            ),
+        labelMedium =
+            BaseTypography.labelMedium.copy(
+                fontFeatureSettings = "tnum",
+            ),
+        labelSmall =
+            BaseTypography.labelSmall.copy(
+                fontFeatureSettings = "tnum",
+                letterSpacing = 0.2.sp,
+            ),
+    )
+
+/** Colores semánticos adaptados al contraste del fondo (claro u oscuro). */
+data class RpSemanticColors(
+    val danger: Color,
+    val warning: Color,
+    val success: Color,
+    val working: Color,
+    val onWarning: Color,
+)
+
+private val DarkSemanticColors =
+    RpSemanticColors(
+        danger = Color(0xFFFF6E6E),
+        warning = Color(0xFFFFC14D),
+        success = Color(0xFF4ADE80),
+        working = Color(0xFF38BDF8),
+        onWarning = Color(0xFF1F1600),
+    )
+
+private val LightSemanticColors =
+    RpSemanticColors(
+        danger = RpColors.danger,
+        warning = RpColors.warning,
+        success = RpColors.success,
+        working = Color(0xFF0284C7),
+        onWarning = Color.White,
+    )
+
+val ColorScheme.rpSemantic: RpSemanticColors
+    get() = if (background.luminance() < 0.5f) DarkSemanticColors else LightSemanticColors
+
+/** Superficies y separadores derivados del tema para jerarquía visual sin ruido. */
+data class RpSurfaceTokens(
+    val elevatedDeck: Color,
+    val insetBlock: Color,
+    val hairline: Color,
+)
+
+val ColorScheme.rpSurfaces: RpSurfaceTokens
+    get() {
+        val isDark = background.luminance() < 0.5f
+        return RpSurfaceTokens(
+            elevatedDeck = lerp(surface, surfaceVariant, if (isDark) 0.30f else 0.24f),
+            insetBlock = lerp(surface, background, if (isDark) 0.42f else 0.35f),
+            hairline = outlineVariant.copy(alpha = if (isDark) 0.45f else 0.38f),
+        )
+    }
 
 /** Tokens de resplandor / glow derivados del colorScheme. */
 data class RpGlowTokens(

@@ -305,164 +305,184 @@ fun MachineHeroDropdown(
             }
         }
 
-        DropdownMenu(
+        MachineSelectionMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.fillMaxWidth(0.92f),
-        ) {
-            val totalAgents = agents.size
-            val totalPrompts = agents.sumOf { it.openPromptCount }
-            DropdownMenuItem(
-                text = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ColorDot(MaterialTheme.colorScheme.primary, size = 10)
-                            Column {
-                                Text(
-                                    "Todas las máquinas",
-                                    fontWeight = if (selected == ALL_MACHINES) FontWeight.Bold else FontWeight.Normal,
-                                )
-                                Text(
-                                    "$totalAgents agentes${if (totalPrompts > 0) " · $totalPrompts pendientes" else ""}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        if (selected == ALL_MACHINES) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp),
+            machines = machines,
+            agents = agents,
+            selected = selected,
+            onSelect = onSelect,
+        )
+    }
+}
+
+/** Menú desplegable reutilizable para elegir máquina, contexto o vista global. */
+@Composable
+fun MachineSelectionMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    machines: List<MachineSummary>,
+    agents: List<AgentSummary>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier.fillMaxWidth(0.92f),
+    ) {
+        val totalAgents = agents.size
+        val totalPrompts = agents.sumOf { it.openPromptCount }
+        DropdownMenuItem(
+            text = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ColorDot(MaterialTheme.colorScheme.primary, size = 10)
+                        Column {
+                            Text(
+                                "Todas las máquinas",
+                                fontWeight = if (selected == ALL_MACHINES) FontWeight.Bold else FontWeight.Normal,
+                            )
+                            Text(
+                                "$totalAgents agentes${if (totalPrompts > 0) " · $totalPrompts pendientes" else ""}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
-                },
-                onClick = {
-                    onSelect(ALL_MACHINES)
-                    expanded = false
-                },
+                    if (selected == ALL_MACHINES) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            },
+            onClick = {
+                onSelect(ALL_MACHINES)
+                onDismissRequest()
+            },
+        )
+
+        val contexts = machines.map { it.context }.distinct()
+        if (contexts.size > 1) {
+            Text(
+                text = "POR CONTEXTO",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
-
-            val contexts = machines.map { it.context }.distinct()
-            if (contexts.size > 1) {
-                Text(
-                    text = "POR CONTEXTO",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-                contexts.forEach { ctx ->
-                    val ms = machines.filter { it.context == ctx }
-                    val count = agents.count { it.machineContext == ctx }
-                    val prompts = agents.filter { it.machineContext == ctx }.sumOf { it.openPromptCount }
-                    DropdownMenuItem(
-                        text = {
+            contexts.forEach { ctx ->
+                val ms = machines.filter { it.context == ctx }
+                val count = agents.count { it.machineContext == ctx }
+                val prompts = agents.filter { it.machineContext == ctx }.sumOf { it.openPromptCount }
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    ColorDot(parseColor(ms.firstOrNull()?.color), size = 10)
-                                    Column {
-                                        Text(
-                                            contextLabel(ctx),
-                                            fontWeight = if (selected == ctx) FontWeight.Bold else FontWeight.Normal,
-                                        )
-                                        Text(
-                                            "$count agentes${if (prompts > 0) " · $prompts" else ""}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                                if (selected == ctx) {
-                                    Icon(
-                                        Icons.Filled.Check,
-                                        null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
+                                ColorDot(parseColor(ms.firstOrNull()?.color), size = 10)
+                                Column {
+                                    Text(
+                                        contextLabel(ctx),
+                                        fontWeight = if (selected == ctx) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                    Text(
+                                        "$count agentes${if (prompts > 0) " · $prompts" else ""}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
-                        },
-                        onClick = {
-                            onSelect(ctx)
-                            expanded = false
-                        },
-                    )
-                }
+                            if (selected == ctx) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        onSelect(ctx)
+                        onDismissRequest()
+                    },
+                )
             }
+        }
 
-            if (machines.isNotEmpty()) {
-                Text(
-                    text = "MÁQUINAS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-                machines.forEach { m ->
-                    val count = agents.count { it.machineId == m.machineId }
-                    DropdownMenuItem(
-                        text = {
+        if (machines.isNotEmpty()) {
+            Text(
+                text = "MÁQUINAS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            machines.forEach { m ->
+                val count = agents.count { it.machineId == m.machineId }
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    ColorDot(parseColor(m.color), size = 10)
-                                    Column {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        ) {
-                                            Text(
-                                                m.name,
-                                                fontWeight = if (selected == m.machineId) FontWeight.Bold else FontWeight.Normal,
-                                            )
-                                            Text(
-                                                if (m.online) "●" else "○",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (m.online) RpColors.success else MaterialTheme.colorScheme.outline,
-                                            )
-                                        }
-                                        val hostBadge = if (m.hostOnline) " · rp-host ✓" else ""
+                                ColorDot(parseColor(m.color), size = 10)
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
                                         Text(
-                                            "${contextLabel(m.context)} · $count agentes$hostBadge",
+                                            m.name,
+                                            fontWeight = if (selected == m.machineId) FontWeight.Bold else FontWeight.Normal,
+                                        )
+                                        Text(
+                                            if (m.online) "●" else "○",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = if (m.online) RpColors.success else MaterialTheme.colorScheme.outline,
                                         )
                                     }
-                                }
-                                if (selected == m.machineId) {
-                                    Icon(
-                                        Icons.Filled.Check,
-                                        null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
+                                    val hostBadge = if (m.hostOnline) " · rp-host ✓" else ""
+                                    Text(
+                                        "${contextLabel(m.context)} · $count agentes$hostBadge",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
-                        },
-                        onClick = {
-                            onSelect(m.machineId)
-                            expanded = false
-                        },
-                    )
-                }
+                            if (selected == m.machineId) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        onSelect(m.machineId)
+                        onDismissRequest()
+                    },
+                )
             }
         }
     }

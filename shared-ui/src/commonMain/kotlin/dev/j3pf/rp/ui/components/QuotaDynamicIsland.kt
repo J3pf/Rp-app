@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -44,8 +46,9 @@ import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MachineQuota
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.QuotaWindow
-import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
+import dev.j3pf.rp.ui.theme.rpSemantic
+import dev.j3pf.rp.ui.theme.rpSurfaces
 import dev.j3pf.rp.ui.util.currentTimeMillis
 import dev.j3pf.rp.ui.util.parseColor
 import dev.j3pf.rp.ui.util.parseIsoEpochSeconds
@@ -79,12 +82,15 @@ fun QuotaDynamicIsland(
         }
     }
 
-    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
             key = { page -> machineIds[page] },
-            pageSpacing = 0.dp,
+            pageSpacing = 8.dp,
         ) { page ->
             val (machine, quotas) = machinesWithQuotas[page]
             QuotaMachinePill(
@@ -97,7 +103,7 @@ fun QuotaDynamicIsland(
 
         if (machinesWithQuotas.size > 1) {
             Row(
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -136,37 +142,38 @@ private fun QuotaMachinePill(
     onQuotaClick: (MachineQuota) -> Unit,
 ) {
     val accentColor = parseColor(machine.color)
+    val islandSurface = MaterialTheme.colorScheme.rpSurfaces.elevatedDeck
+    val scrollState = rememberScrollState()
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.30f),
+        shape = RpShapes.card,
+        color = islandSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 3.dp,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.32f)),
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.28f)),
     ) {
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
-                    .horizontalScroll(rememberScrollState()),
+                    .horizontalEdgeFade(scrollState = scrollState, edgeColor = islandSurface, length = 16.dp)
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Surface(
                 shape = RpShapes.pill,
-                color = accentColor.copy(alpha = 0.16f),
-                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                color = accentColor.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.30f)),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
-                    Text(
-                        text = "⚡",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+                    ColorDot(accentColor, size = 6)
                     Text(
                         text = machine.name,
                         style = MaterialTheme.typography.labelSmall,
@@ -200,16 +207,21 @@ private fun QuotaProviderPill(
 
     Surface(
         onClick = onClick,
-        modifier = Modifier.defaultMinSize(minHeight = 32.dp),
-        shape = RpShapes.pill,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f)),
+        modifier = Modifier.defaultMinSize(minHeight = 36.dp),
+        shape = RpShapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.30f)),
     ) {
         Column(
-            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier =
+                Modifier
+                    .width(IntrinsicSize.Max)
+                    .widthIn(min = 84.dp)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalArrangement = Arrangement.Center,
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -226,6 +238,7 @@ private fun QuotaProviderPill(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.weight(1f))
                 Text(
                     text = primaryWindow?.let { formatPercent(it.usedPercent) } ?: "—",
                     style = MaterialTheme.typography.labelSmall,
@@ -233,12 +246,14 @@ private fun QuotaProviderPill(
                     fontWeight = FontWeight.ExtraBold,
                 )
             }
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(4.dp))
             LinearProgressIndicator(
                 progress = { animatedProgress },
-                modifier = Modifier.width(64.dp).height(2.5.dp),
+                modifier = Modifier.fillMaxWidth().height(3.dp).clip(RpShapes.pill),
                 color = statusColor,
-                trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f),
+                gapSize = 0.dp,
+                drawStopIndicator = {},
             )
         }
     }
@@ -334,9 +349,11 @@ private fun QuotaWindowDetail(
             }
             LinearProgressIndicator(
                 progress = { (window.usedPercent / 100.0).toFloat().coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(5.dp),
+                modifier = Modifier.fillMaxWidth().height(5.dp).clip(RpShapes.pill),
                 color = statusColor,
                 trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                gapSize = 0.dp,
+                drawStopIndicator = {},
             )
             Text(
                 text = "Usado ${formatPercent(window.usedPercent)} · Disponible ${formatPercent(window.remainingPercent)}",
@@ -378,13 +395,15 @@ private fun QuotaWindow.displayLabel(): String =
     label?.takeIf { it.isNotBlank() } ?: id.replace('-', ' ').replace('_', ' ').replaceFirstChar { it.uppercase() }
 
 @Composable
-private fun MachineQuota.statusColor(usedPercent: Double?): Color =
-    when {
-        !ok -> MaterialTheme.colorScheme.error
-        (usedPercent ?: 0.0) > 90.0 -> RpColors.danger
-        (usedPercent ?: 0.0) >= 70.0 -> RpColors.warning
-        else -> RpColors.success
+private fun MachineQuota.statusColor(usedPercent: Double?): Color {
+    val semantic = MaterialTheme.colorScheme.rpSemantic
+    return when {
+        !ok -> semantic.danger
+        (usedPercent ?: 0.0) > 90.0 -> semantic.danger
+        (usedPercent ?: 0.0) >= 70.0 -> semantic.warning
+        else -> semantic.success
     }
+}
 
 fun formatQuotaPercent(value: Double): String = formatPercent(value)
 

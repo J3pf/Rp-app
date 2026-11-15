@@ -382,7 +382,12 @@ fun RpTheme(
                 dynamicScheme ?: if (darkTheme) DefaultDarkColors else DefaultLightColors
             }
         }
-    MaterialTheme(colorScheme = scheme, content = content)
+    MaterialTheme(
+        colorScheme = scheme,
+        typography = RpTypography,
+        shapes = RpMaterialShapes,
+        content = content,
+    )
 }
 
 /** Colores semánticos que no existen en Material (peligro, éxito, herramientas, inline code). */

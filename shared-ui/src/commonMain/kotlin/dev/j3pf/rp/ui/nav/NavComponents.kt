@@ -27,7 +27,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.j3pf.rp.ui.theme.RpColors
+import dev.j3pf.rp.ui.theme.rpSemantic
+import dev.j3pf.rp.ui.theme.rpSurfaces
 
 enum class AppTab(
     val route: Any,
@@ -46,7 +47,9 @@ fun AppBottomBar(
     pending: Int = 0,
     onSelectTab: (AppTab) -> Unit = {},
 ) {
-    val strokeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+    val semantic = MaterialTheme.colorScheme.rpSemantic
+    val surfaces = MaterialTheme.colorScheme.rpSurfaces
+    val strokeColor = surfaces.hairline
     Surface(
         modifier =
             modifier.drawBehind {
@@ -57,8 +60,8 @@ fun AppBottomBar(
                     strokeWidth = 1.dp.toPx(),
                 )
             },
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.22f),
-        tonalElevation = 4.dp,
+        color = surfaces.elevatedDeck,
+        tonalElevation = 2.dp,
     ) {
         NavigationBar(
             containerColor = Color.Transparent,
@@ -76,8 +79,8 @@ fun AppBottomBar(
                                 BadgedBox(
                                     badge = {
                                         if (pending > 0) {
-                                            Badge(containerColor = RpColors.warning) {
-                                                Text("$pending", color = MaterialTheme.colorScheme.onPrimary)
+                                            Badge(containerColor = semantic.warning) {
+                                                Text("$pending", color = semantic.onWarning)
                                             }
                                         }
                                     },
