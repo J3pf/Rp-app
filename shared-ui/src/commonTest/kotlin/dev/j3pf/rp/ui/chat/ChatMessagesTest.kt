@@ -132,4 +132,17 @@ class ChatMessagesTest {
         assertNotNull(subagent.cost)
         assertEquals("0.042", formatCost(subagent.cost!!))
     }
+
+    @Test
+    fun testToolDisplayTitleSpanishLabels() {
+        assertEquals("Ejecutar comando", toolDisplayTitle("run_command"))
+        assertEquals("Ejecutar comando", toolDisplayTitle("bash"))
+        assertEquals("Leer", toolDisplayTitle("read_file"))
+        assertEquals("Editar archivo", toolDisplayTitle("edit_file"))
+        assertEquals("Escribir archivo", toolDisplayTitle("write_file"))
+        assertEquals("Buscar", toolDisplayTitle("grep"))
+        assertEquals("Buscar archivos", toolDisplayTitle("glob"))
+        assertEquals("Herramienta MCP", toolDisplayTitle("call_mcp_tool"))
+        assertEquals("Custom Tool", toolDisplayTitle("custom_tool"))
+    }
 }

@@ -1,14 +1,17 @@
 package dev.j3pf.rp.ui.chat
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -18,6 +21,7 @@ import dev.j3pf.rp.chat.ChatItem
 import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.protocol.AgentSummary
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -239,7 +243,7 @@ class ChatBottomAnchorTest {
     @Test
     fun `scrolled up user sees jump to latest button with unread count`() {
         val initialMessages: List<ChatItem> =
-            (1..25).map { i ->
+            (1..40).map { i ->
                 UserMsg(key = "msg-$i", text = "Historial mensaje #$i", at = 1000L + i) as ChatItem
             }
 
@@ -257,8 +261,8 @@ class ChatBottomAnchorTest {
         }
 
         // El usuario hace scroll hacia arriba en el historial
-        rule.onNodeWithText("Historial mensaje #25").assertIsDisplayed()
-        rule.onNodeWithText("Historial mensaje #25").performTouchInput {
+        rule.onNodeWithText("Historial mensaje #40").assertIsDisplayed()
+        rule.onRoot().performTouchInput {
             swipeDown()
         }
 
@@ -283,6 +287,76 @@ class ChatBottomAnchorTest {
         rule.onNodeWithText("Más recientes (2)").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Nuevo mensaje en vivo 2").assertIsDisplayed()
+    }
+
+    @Test
+    fun `bottom anchored user auto-scrolls when multiple new messages arrive at once without showing jump pill`() {
+        val initialMessages: List<ChatItem> =
+            (1..40).map { i ->
+                UserMsg(key = "msg-$i", text = "Historial mensaje #$i", at = 1000L + i) as ChatItem
+            }
+
+        val idleAgent = sampleAgent.copy(status = "done")
+        var currentAgent by mutableStateOf(idleAgent)
+        var currentChatState by mutableStateOf(ChatState(items = initialMessages))
+        lateinit var listState: androidx.compose.foundation.lazy.LazyListState
+
+        rule.setContent {
+            listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            RpTheme {
+                MessageList(
+                    ui = ChatUiState(agent = currentAgent, chat = currentChatState),
+                    modifier = Modifier.fillMaxSize(),
+                    busyPromptId = null,
+                    onAnswerPrompt = { _: dev.j3pf.rp.protocol.Prompt, _: dev.j3pf.rp.protocol.Answer -> },
+                    listState = listState,
+                )
+            }
+        }
+
+        rule.onNodeWithText("Historial mensaje #40").assertIsDisplayed()
+        // El usuario sigue en la zona inferior (offset <= 48px) mientras el chat estaba en "done"
+        rule.runOnIdle {
+            kotlinx.coroutines.runBlocking {
+                listState.scrollToItem(0, 24)
+            }
+        }
+        rule.waitForIdle()
+        assertTrue(
+            "Con offset=24px en el fondo, el botón 'Más recientes' aún no debe mostrarse",
+            rule.onAllNodesWithText("Más recientes", substring = true).fetchSemanticsNodes().isEmpty(),
+        )
+
+        // El agente pasa a working (inserta working-indicator en index 0) y llegan 3 elementos nuevos de golpe
+        currentAgent = sampleAgent
+        val batchMessages: List<ChatItem> =
+            listOf(
+                UserMsg(key = "batch-1", text = "si adelante", at = 6000L),
+                AssistantMsg(
+                    key = "batch-2",
+                    blocks = listOf(Block.Thinking("Preparando comando en background...")),
+                    at = 6001L,
+                ),
+                AssistantMsg(
+                    key = "batch-3",
+                    blocks = listOf(Block.Text("Lancé en background el comando y ya quedó corriendo.")),
+                    at = 6002L,
+                ),
+            )
+        currentChatState = ChatState(items = initialMessages + batchMessages)
+        rule.waitForIdle()
+        rule.waitUntil(5000L) {
+            rule
+                .onAllNodesWithText("Lancé en background el comando y ya quedó corriendo.")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+
+        rule.onNodeWithText("Lancé en background el comando y ya quedó corriendo.").assertIsDisplayed()
+        assertTrue(
+            "No debe aparecer el botón 'Más recientes' cuando el usuario ya estaba abajo",
+            rule.onAllNodesWithText("Más recientes", substring = true).fetchSemanticsNodes().isEmpty(),
+        )
     }
 
     @Test
@@ -318,5 +392,173 @@ class ChatBottomAnchorTest {
 
         rule.waitForIdle()
         assertEquals(failedMsg, retriedMsg)
+    }
+
+    @Test
+    fun `jump pill click stays pinned to bottom when streaming delta arrives mid-scroll`() {
+        val initialMessages: List<ChatItem> =
+            (1..60).map { i ->
+                UserMsg(key = "msg-$i", text = "History message #$i", at = 1000L + i) as ChatItem
+            }
+
+        var currentChatState by mutableStateOf(ChatState(items = initialMessages))
+        lateinit var listState: androidx.compose.foundation.lazy.LazyListState
+
+        rule.setContent {
+            listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            RpTheme {
+                CompositionLocalProvider(LocalReducedMotion provides true) {
+                    MessageList(
+                        ui = ChatUiState(chat = currentChatState),
+                        modifier = Modifier.fillMaxSize(),
+                        busyPromptId = null,
+                        onAnswerPrompt = { _: dev.j3pf.rp.protocol.Prompt, _: dev.j3pf.rp.protocol.Answer -> },
+                        listState = listState,
+                    )
+                }
+            }
+        }
+
+        rule.runOnIdle {
+            kotlinx.coroutines.runBlocking {
+                listState.scrollToItem(30)
+            }
+        }
+        rule.waitForIdle()
+
+        currentChatState =
+            ChatState(
+                items = initialMessages,
+                streaming =
+                    AssistantMsg(
+                        key = "stream-1",
+                        blocks = listOf(Block.Text("Streaming chunk 1")),
+                        streaming = true,
+                    ),
+            )
+        rule.waitForIdle()
+        rule.onNodeWithText("Más recientes (1)").assertIsDisplayed()
+
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.onNodeWithText("Más recientes (1)").performClick()
+            repeat(2) {
+                rule.mainClock.advanceTimeByFrame()
+            }
+
+            // Streaming text delta arrives while animateScrollToItem(0) is still mid-flight.
+            currentChatState =
+                ChatState(
+                    items = initialMessages,
+                    streaming =
+                        AssistantMsg(
+                            key = "stream-1",
+                            blocks = listOf(Block.Text("Streaming chunk 1 + delta 2")),
+                            streaming = true,
+                        ),
+                )
+            repeat(5) {
+                rule.mainClock.advanceTimeByFrame()
+                assertTrue(
+                    "Jump pill must stay hidden while animating back to bottom",
+                    rule.onAllNodesWithText("Más recientes", substring = true).fetchSemanticsNodes().isEmpty(),
+                )
+            }
+            rule.mainClock.autoAdvance = true
+            rule.waitForIdle()
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+
+        rule.onNodeWithText("Streaming chunk 1 + delta 2").assertIsDisplayed()
+        assertTrue(
+            "Jump pill must remain hidden after reaching bottom",
+            rule.onAllNodesWithText("Más recientes", substring = true).fetchSemanticsNodes().isEmpty(),
+        )
+    }
+
+    @Test
+    fun `prepending older history at bottom does not show phantom unread count on later scroll up`() {
+        val initialMessages: List<ChatItem> =
+            (10..50).map { i ->
+                UserMsg(key = "msg-$i", text = "History message #$i", at = 1000L + i) as ChatItem
+            }
+
+        var currentChatState by mutableStateOf(ChatState(items = initialMessages))
+
+        rule.setContent {
+            RpTheme {
+                MessageList(
+                    ui = ChatUiState(chat = currentChatState),
+                    modifier = Modifier.fillMaxSize(),
+                    busyPromptId = null,
+                    onAnswerPrompt = { _: dev.j3pf.rp.protocol.Prompt, _: dev.j3pf.rp.protocol.Answer -> },
+                )
+            }
+        }
+
+        rule.onNodeWithText("History message #50").assertIsDisplayed()
+
+        val olderHistory: List<ChatItem> =
+            (1..5).map { i ->
+                UserMsg(key = "old-$i", text = "Older message #$i", at = 100L + i) as ChatItem
+            }
+        currentChatState = ChatState(items = olderHistory + initialMessages)
+        rule.waitForIdle()
+
+        rule.onRoot().performTouchInput {
+            swipeDown()
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Más recientes").assertIsDisplayed()
+        assertTrue(
+            "Must not display phantom unread count from prepended older history",
+            rule.onAllNodesWithText("Más recientes (5)").fetchSemanticsNodes().isEmpty(),
+        )
+    }
+
+    @Test
+    fun `clearing empty search filter keeps hoisted scrolled position and jump pill`() {
+        val initialMessages: List<ChatItem> =
+            (1..40).map { i ->
+                UserMsg(key = "msg-$i", text = "History message #$i", at = 1000L + i) as ChatItem
+            }
+
+        var searchQuery by mutableStateOf("")
+        lateinit var listState: androidx.compose.foundation.lazy.LazyListState
+
+        rule.setContent {
+            listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            RpTheme {
+                MessageList(
+                    ui = ChatUiState(chat = ChatState(items = initialMessages)),
+                    modifier = Modifier.fillMaxSize(),
+                    busyPromptId = null,
+                    searchQuery = searchQuery,
+                    onAnswerPrompt = { _: dev.j3pf.rp.protocol.Prompt, _: dev.j3pf.rp.protocol.Answer -> },
+                    listState = listState,
+                )
+            }
+        }
+
+        rule.runOnIdle {
+            kotlinx.coroutines.runBlocking {
+                listState.scrollToItem(20)
+            }
+        }
+        rule.waitForIdle()
+        val scrolledIndexBeforeFilter = listState.firstVisibleItemIndex
+        assertTrue("Expected list to stay scrolled up before filtering", scrolledIndexBeforeFilter > 0)
+        rule.onNodeWithText("Más recientes").assertIsDisplayed()
+
+        searchQuery = "no-match-anywhere"
+        rule.waitForIdle()
+        rule.onNodeWithText("Sin coincidencias").assertIsDisplayed()
+
+        searchQuery = ""
+        rule.waitForIdle()
+        assertEquals(scrolledIndexBeforeFilter, listState.firstVisibleItemIndex)
+        rule.onNodeWithText("Más recientes").assertIsDisplayed()
     }
 }

@@ -41,13 +41,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -79,7 +82,10 @@ import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.ui.util.humanSize
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 @Composable
 fun AttachmentChip(
@@ -351,6 +357,43 @@ fun filterChatItems(
     }
 }
 
+private fun isBottomScrolledUp(
+    index: Int,
+    offset: Int,
+    working: Boolean,
+): Boolean {
+    val maxBottomIndex = if (working) 1 else 0
+    return index > maxBottomIndex || (index == maxBottomIndex && offset > 48)
+}
+
+private class ScrollAnchorTracker(
+    initialSize: Int,
+    initialLastKey: String?,
+    initialStreamingLength: Int,
+    initialIsWorking: Boolean,
+) {
+    var settledSize = initialSize
+    var settledLastKey = initialLastKey
+    var settledStreamingLength = initialStreamingLength
+    var settledIsWorking = initialIsWorking
+    var autoScrolling by mutableStateOf(false)
+    var pendingForce = false
+    var pendingAnimate = false
+    var activeScrollGeneration = 0
+    val scrollSignals = Channel<Unit>(Channel.CONFLATED)
+
+    fun scheduleScroll(
+        animate: Boolean,
+        force: Boolean,
+    ) {
+        activeScrollGeneration++
+        pendingForce = pendingForce || force
+        pendingAnimate = pendingAnimate || animate
+        autoScrolling = true
+        scrollSignals.trySend(Unit)
+    }
+}
+
 @Composable
 fun MessageList(
     displayItems: List<ChatItem>,
@@ -371,7 +414,6 @@ fun MessageList(
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
     val items =
         remember(displayItems, tools, searchQuery, hideToolCalls) {
             filterChatItems(displayItems, tools, searchQuery, hideToolCalls)
@@ -418,34 +460,15 @@ fun MessageList(
     }
 
     val reversedItems = remember(items) { items.asReversed() }
+    val currentIsWorking by rememberUpdatedState(isWorking)
 
     val isScrolledUp by remember {
         derivedStateOf {
-            val maxBottomIndex = if (isWorking) 1 else 0
-            listState.firstVisibleItemIndex > maxBottomIndex ||
-                (listState.firstVisibleItemIndex == maxBottomIndex && listState.firstVisibleItemScrollOffset > 48)
-        }
-    }
-
-    val itemsCountWhenScrolledUp = remember { mutableIntStateOf(items.size) }
-
-    LaunchedEffect(isScrolledUp) {
-        if (!isScrolledUp) {
-            itemsCountWhenScrolledUp.intValue = items.size
-        }
-    }
-
-    val unreadNewItems by remember(items.size, unreadCount) {
-        derivedStateOf {
-            if (isScrolledUp) {
-                if (unreadCount > 0) {
-                    unreadCount
-                } else {
-                    (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
-                }
-            } else {
-                0
-            }
+            isBottomScrolledUp(
+                index = listState.firstVisibleItemIndex,
+                offset = listState.firstVisibleItemScrollOffset,
+                working = currentIsWorking,
+            )
         }
     }
 
@@ -453,28 +476,130 @@ fun MessageList(
     val lastItemKey = lastItem?.key
     val streamingTextLength = (lastItem as? AssistantMsg)?.plainTextLength ?: 0
 
-    val prevItemsSize =
-        remember {
-            object {
-                var value = items.size
-            }
+    var pinnedToBottom by remember(listState) {
+        mutableStateOf(
+            !isBottomScrolledUp(
+                index = listState.firstVisibleItemIndex,
+                offset = listState.firstVisibleItemScrollOffset,
+                working = isWorking,
+            ),
+        )
+    }
+    val itemsCountWhenScrolledUp = remember(listState) { mutableIntStateOf(items.size) }
+    val tracker =
+        remember(listState) {
+            ScrollAnchorTracker(
+                initialSize = items.size,
+                initialLastKey = lastItemKey,
+                initialStreamingLength = streamingTextLength,
+                initialIsWorking = isWorking,
+            )
         }
 
-    LaunchedEffect(lastItemKey, items.size, streamingTextLength) {
-        val isLocalOrAck = lastItemKey?.startsWith("local:") == true || lastItemKey?.startsWith("ack:") == true
-        val isNewItem = items.size != prevItemsSize.value || isLocalOrAck
-        prevItemsSize.value = items.size
+    // Read pre-layout scroll position during composition before LazyColumn measures
+    // newly prepended items or a toggled working indicator, which shift item indices.
+    val contentChanged =
+        items.size != tracker.settledSize ||
+            lastItemKey != tracker.settledLastKey ||
+            streamingTextLength != tracker.settledStreamingLength ||
+            isWorking != tracker.settledIsWorking
+    val preLayoutScrolledUp =
+        if (contentChanged) {
+            isBottomScrolledUp(
+                index = listState.firstVisibleItemIndex,
+                offset = listState.firstVisibleItemScrollOffset,
+                working = tracker.settledIsWorking,
+            )
+        } else {
+            false
+        }
 
-        if (lastItemKey != null && (!isScrolledUp || isLocalOrAck)) {
-            if (!listState.isScrollInProgress) {
-                if (isNewItem) {
-                    listState.animateScrollToItem(0)
-                } else if (!isScrolledUp && (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)) {
-                    listState.scrollToItem(0)
+    SideEffect {
+        if (contentChanged) {
+            val userScrolling = !tracker.autoScrolling && listState.isScrollInProgress
+            if (!tracker.autoScrolling && !userScrolling) {
+                pinnedToBottom = !preLayoutScrolledUp
+            }
+            val isLocalOrAck =
+                lastItemKey?.startsWith("local:") == true ||
+                    lastItemKey?.startsWith("ack:") == true
+            if (isLocalOrAck) {
+                pinnedToBottom = true
+            }
+            if (pinnedToBottom && !userScrolling) {
+                itemsCountWhenScrolledUp.intValue = items.size
+                val isNewItem = items.size != tracker.settledSize || isLocalOrAck
+                val workingChanged = isWorking != tracker.settledIsWorking
+                tracker.scheduleScroll(
+                    animate = isNewItem || workingChanged,
+                    force = false,
+                )
+            }
+            tracker.settledSize = items.size
+            tracker.settledLastKey = lastItemKey
+            tracker.settledStreamingLength = streamingTextLength
+            tracker.settledIsWorking = isWorking
+        }
+    }
+
+    LaunchedEffect(listState, tracker) {
+        snapshotFlow {
+            Triple(isScrolledUp, listState.isScrollInProgress, tracker.autoScrolling)
+        }.collect { (scrolledUp, scrolling, isAutoScrolling) ->
+            if (isAutoScrolling) return@collect
+            if (scrolledUp) {
+                pinnedToBottom = false
+            } else {
+                pinnedToBottom = true
+                if (!scrolling) {
+                    itemsCountWhenScrolledUp.intValue = tracker.settledSize
                 }
             }
         }
     }
+
+    LaunchedEffect(tracker) {
+        for (signal in tracker.scrollSignals) {
+            val force = tracker.pendingForce
+            val animate = tracker.pendingAnimate
+            val generation = tracker.activeScrollGeneration
+            tracker.pendingForce = false
+            tracker.pendingAnimate = false
+
+            if (!force && listState.isScrollInProgress) {
+                if (tracker.activeScrollGeneration == generation) {
+                    tracker.autoScrolling = false
+                }
+                continue
+            }
+            tracker.autoScrolling = true
+            try {
+                if (animate) {
+                    listState.animateScrollToItem(0)
+                } else if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
+                    listState.scrollToItem(0)
+                }
+            } catch (_: CancellationException) {
+                // Distinguish Compose user-drag interruption (MutationInterruptedException) from scope teardown.
+                coroutineContext.ensureActive()
+            } finally {
+                if (tracker.activeScrollGeneration == generation) {
+                    tracker.autoScrolling = false
+                }
+            }
+        }
+    }
+
+    val unreadNewItems =
+        if (!pinnedToBottom) {
+            if (unreadCount > 0) {
+                unreadCount
+            } else {
+                (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
+            }
+        } else {
+            0
+        }
 
     val baseDensity = LocalDensity.current
     val scaledDensity =
@@ -556,7 +681,7 @@ fun MessageList(
                                         val statusText =
                                             when {
                                                 sending -> "Enviando mensaje…"
-                                                runningTool != null -> "Ejecutando ${runningTool.name}…"
+                                                runningTool != null -> "Ejecutando: ${toolDisplayTitle(runningTool.name)}…"
                                                 else -> "Pensando…"
                                             }
                                         Text(
@@ -616,7 +741,7 @@ fun MessageList(
             }
 
         AnimatedVisibility(
-            visible = isScrolledUp,
+            visible = !pinnedToBottom && isScrolledUp,
             enter = enterTransition,
             exit = exitTransition,
             modifier =
@@ -626,9 +751,9 @@ fun MessageList(
         ) {
             Surface(
                 onClick = {
-                    scope.launch {
-                        listState.animateScrollToItem(0)
-                    }
+                    pinnedToBottom = true
+                    itemsCountWhenScrolledUp.intValue = tracker.settledSize
+                    tracker.scheduleScroll(animate = true, force = true)
                 },
                 shape = RpShapes.pill,
                 color = MaterialTheme.colorScheme.primaryContainer,

@@ -450,16 +450,20 @@ private fun ThinkingBlock(
     }
 }
 
-private fun toolDisplayTitle(rawName: String): String {
+internal fun toolDisplayTitle(rawName: String): String {
     val norm = rawName.lowercase().trim()
     return when (norm) {
-        "bash", "run_command", "exec", "shell" -> "Run Command"
-        "edit", "edit_file", "replace", "multi_edit" -> "Edit File"
-        "write", "write_file", "create_file" -> "Write File"
-        "read", "read_file", "view", "cat" -> "Read"
-        "call_mcp_tool", "mcp" -> "Call MCP Tool"
-        "grep", "search", "ripgrep" -> "Search"
-        "find", "glob", "ls" -> "Find Files"
+        "bash", "run_command", "exec", "shell" -> "Ejecutar comando"
+        "edit", "edit_file", "replace", "multi_edit" -> "Editar archivo"
+        "write", "write_file", "create_file" -> "Escribir archivo"
+        "read", "read_file", "view", "cat" -> "Leer"
+        "call_mcp_tool", "mcp" -> "Herramienta MCP"
+        "grep", "search", "ripgrep" -> "Buscar"
+        "find", "glob", "ls" -> "Buscar archivos"
+        "search_web" -> "Buscar en web"
+        "manage_task" -> "Gestionar tarea"
+        "send_message" -> "Enviar mensaje"
+        "schedule" -> "Programar tarea"
         else ->
             rawName
                 .split('_', '-')

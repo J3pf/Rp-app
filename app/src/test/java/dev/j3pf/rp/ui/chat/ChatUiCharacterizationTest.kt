@@ -99,7 +99,8 @@ class ChatUiCharacterizationTest {
                 ChatItemView(item = assistant, tools = tools, busyPromptId = null, onAnswerPrompt = { _, _ -> })
             }
         }
-        // Cabecera colapsada: nombre de la herramienta y estado OK, sin resultado todavía.
+        // Cabecera colapsada: título legible, nombre técnico de la herramienta y estado OK, sin resultado todavía.
+        rule.onNodeWithText("Ejecutar comando").assertIsDisplayed()
         rule.onNodeWithText("bash").assertIsDisplayed()
         rule.onAllNodesWithText("ver más").assertCountEquals(0)
         // Expandir la tarjeta (click profundo en el header) muestra el resultado y el toggle.
