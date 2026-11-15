@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
@@ -74,7 +73,7 @@ fun ChatTopBar(
     muted: Boolean,
     readOnly: Boolean,
     onBack: () -> Unit,
-    onAbort: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onAbort: () -> Unit = {},
     onOpenDiff: () -> Unit,
     onFontScaleChange: (Float) -> Unit,
     onMessageSpacingChange: (String) -> Unit,
@@ -89,10 +88,16 @@ fun ChatTopBar(
     onSendTerminalCommand: ((String) -> Unit)? = null,
     otherActiveAgents: List<AgentSummary> = emptyList(),
     onSwitchAgent: (String) -> Unit = {},
+    showQuickShortcuts: Boolean = false,
+    onToggleQuickShortcuts: (() -> Unit)? = null,
 ) {
     var showQuitDialog by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
     var showTerminalBar by remember { mutableStateOf(false) }
+    val catalog =
+        remember(agent?.launcher, agent?.model?.id, agent?.model?.provider) {
+            SlashCommandCatalogs.resolve(agent)
+        }
     val canPeekTerminal =
         !readOnly &&
             onSendTerminalCommand != null &&
@@ -197,9 +202,6 @@ fun ChatTopBar(
             },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
             actions = {
-                if (working) {
-                    IconButton(onClick = onAbort) { Icon(Icons.Filled.Stop, "Interrumpir", tint = MaterialTheme.colorScheme.error) }
-                }
                 if (diffFileCount > 0) {
                     AssistChip(
                         onClick = onOpenDiff,
@@ -251,6 +253,23 @@ fun ChatTopBar(
                                 menu = false
                                 showTerminalBar = true
                                 onSendTerminalCommand("/term")
+                            },
+                        )
+                    }
+                    if (!readOnly && onToggleQuickShortcuts != null && catalog.quickShortcuts.isNotEmpty()) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (showQuickShortcuts) {
+                                        "Ocultar comandos (/)"
+                                    } else {
+                                        "Comandos rápidos (/)"
+                                    },
+                                )
+                            },
+                            onClick = {
+                                menu = false
+                                onToggleQuickShortcuts()
                             },
                         )
                     }

@@ -12,12 +12,12 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -83,7 +83,7 @@ fun QuotaDynamicIsland(
     }
 
     Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         HorizontalPager(
@@ -157,11 +157,11 @@ private fun QuotaMachinePill(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .horizontalEdgeFade(scrollState = scrollState, edgeColor = islandSurface, length = 16.dp)
+                    .horizontalEdgeFade(scrollState = scrollState, edgeColor = islandSurface, length = 14.dp)
                     .horizontalScroll(scrollState)
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Surface(
                 shape = RpShapes.pill,
@@ -207,8 +207,8 @@ private fun QuotaProviderPill(
 
     Surface(
         onClick = onClick,
-        modifier = Modifier.defaultMinSize(minHeight = 36.dp),
-        shape = RpShapes.medium,
+        modifier = Modifier.defaultMinSize(minHeight = 32.dp),
+        shape = RpShapes.pill,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.30f)),
     ) {
@@ -216,13 +216,11 @@ private fun QuotaProviderPill(
             modifier =
                 Modifier
                     .width(IntrinsicSize.Max)
-                    .widthIn(min = 84.dp)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 9.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.Center,
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -238,7 +236,6 @@ private fun QuotaProviderPill(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.weight(1f))
                 Text(
                     text = primaryWindow?.let { formatPercent(it.usedPercent) } ?: "—",
                     style = MaterialTheme.typography.labelSmall,
@@ -246,15 +243,24 @@ private fun QuotaProviderPill(
                     fontWeight = FontWeight.ExtraBold,
                 )
             }
-            Spacer(Modifier.height(4.dp))
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier.fillMaxWidth().height(3.dp).clip(RpShapes.pill),
-                color = statusColor,
-                trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f),
-                gapSize = 0.dp,
-                drawStopIndicator = {},
-            )
+            Spacer(Modifier.height(3.dp))
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.5.dp)
+                        .clip(RpShapes.pill)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(animatedProgress)
+                            .clip(RpShapes.pill)
+                            .background(statusColor),
+                )
+            }
         }
     }
 }

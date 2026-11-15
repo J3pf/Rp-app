@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -161,7 +162,14 @@ class ChatUiCharacterizationTest {
 
     // ───────────────────────── CH15/CH16 composer ─────────────────────────
 
-    private fun setChatContent(ui: ChatUiState, text: String = "/", onChoice: (DeliveryChoice) -> Unit = {}, onSteer: (String) -> Unit = {}, onOpenDiff: () -> Unit = {}) {
+    private fun setChatContent(
+        ui: ChatUiState,
+        text: String = "/",
+        onChoice: (DeliveryChoice) -> Unit = {},
+        onSteer: (String) -> Unit = {},
+        onOpenDiff: () -> Unit = {},
+        onAbort: () -> Unit = {},
+    ) {
         rule.setContent {
             RpTheme {
                 ChatContent(
@@ -169,6 +177,7 @@ class ChatUiCharacterizationTest {
                     text = text,
                     onText = {},
                     onSend = {},
+                    onAbort = onAbort,
                     onChoice = onChoice,
                     onWorkingDelivery = onSteer,
                     onPicked = {},
@@ -178,6 +187,72 @@ class ChatUiCharacterizationTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun `working composer moves abort button to right slot and omits bottom shortcut glyph`() {
+        var aborted = 0
+        setChatContent(
+            ChatUiState(agent = idle.copy(status = "working")),
+            text = "",
+            onAbort = { aborted++ },
+        )
+        rule.onAllNodesWithText(">_").assertCountEquals(0)
+        rule.onNodeWithContentDescription("Interrumpir").performClick()
+        assertEquals(1, aborted)
+
+        rule.onNodeWithContentDescription("Menú").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Comandos rápidos (/)").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("/status · Estado de sesión").assertIsDisplayed()
+    }
+
+    @Test
+    fun `working ChatComposer keeps trailing voice mic when blank and switches to Send with draft text`() {
+        var aborted = 0
+        var voiceToggled = 0
+        val draft = androidx.compose.runtime.mutableStateOf("")
+        rule.setContent {
+            RpTheme {
+                ChatComposer(
+                    agent = idle,
+                    working = true,
+                    text = draft.value,
+                    onTextChange = { draft.value = it },
+                    attachments = emptyList(),
+                    canSend = draft.value.isNotBlank(),
+                    sending = false,
+                    choice = DeliveryChoice.AUTO,
+                    onChoice = {},
+                    workingDelivery = dev.j3pf.rp.protocol.Delivery.FOLLOW_UP,
+                    onWorkingDelivery = {},
+                    onPickDocuments = {},
+                    onPickImages = {},
+                    onCameraCapture = {},
+                    onRemoveAttachment = {},
+                    onRetryAttachment = {},
+                    onSend = {},
+                    isVoiceAvailable = true,
+                    isListening = false,
+                    onVoiceToggle = { voiceToggled++ },
+                    onVoiceStop = {},
+                    voiceListeningText = "Escuchando…",
+                    voiceInputDescription = "Entrada de voz",
+                    onAbort = { aborted++ },
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("Interrumpir").performClick()
+        rule.onNodeWithContentDescription("Entrada de voz").performClick()
+        assertEquals(1, aborted)
+        assertEquals(1, voiceToggled)
+
+        rule.runOnIdle { draft.value = "hola" }
+        rule.waitForIdle()
+        rule.onAllNodesWithText(">_").assertCountEquals(0)
+        rule.onNodeWithContentDescription("Enviar").assertIsDisplayed()
     }
 
     @Test

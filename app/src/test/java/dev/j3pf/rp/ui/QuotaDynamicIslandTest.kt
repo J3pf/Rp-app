@@ -1,8 +1,12 @@
 package dev.j3pf.rp.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -10,6 +14,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
 import dev.j3pf.rp.protocol.MachineQuota
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.QuotaWindow
@@ -97,6 +103,33 @@ class QuotaDynamicIslandTest {
         rule.waitForIdle()
         rule.onNodeWithText("Máquina Dos").assertIsDisplayed()
         rule.onNodeWithText("Claude Dos").assertIsDisplayed()
+    }
+
+    @Test
+    fun `varios proveedores caben juntos sin estirarse en ancho de telefono`() {
+        val machine =
+            machine(
+                "multi-provider",
+                "LUCHO TORRE",
+                quotas =
+                    listOf(
+                        claudeQuota(label = "Codex (Pi)", usedPercent = 42.0),
+                        claudeQuota(label = "Claude", usedPercent = 18.0),
+                    ),
+            )
+
+        rule.setContent {
+            RpTheme {
+                Box(Modifier.width(380.dp)) {
+                    QuotaDynamicIsland(listOf(machine))
+                }
+            }
+        }
+
+        val codexBounds = rule.onNodeWithText("Codex (Pi)").getUnclippedBoundsInRoot()
+        val claudeBounds = rule.onNodeWithText("Claude").getUnclippedBoundsInRoot()
+        assert(codexBounds.width < 120.dp) { "Expected compact pill for Codex (Pi), got ${codexBounds.width}" }
+        assert(claudeBounds.right <= 380.dp) { "Expected second provider visible side-by-side, right=${claudeBounds.right}" }
     }
 
     @Test

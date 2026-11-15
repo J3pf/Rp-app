@@ -102,6 +102,7 @@ fun ChatContent(
     var showInfo by remember { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var hideToolCalls by rememberSaveable { mutableStateOf(false) }
+    var showQuickShortcuts by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets =
@@ -135,6 +136,8 @@ fun ChatContent(
                 onSendTerminalCommand = onSendTerminalCommand,
                 otherActiveAgents = ui.otherActiveAgents,
                 onSwitchAgent = onSwitchAgent,
+                showQuickShortcuts = showQuickShortcuts,
+                onToggleQuickShortcuts = { showQuickShortcuts = !showQuickShortcuts },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -205,6 +208,9 @@ fun ChatContent(
                     onRetryAttachment = onRetryAttachment,
                     newCameraTarget = newCameraTarget,
                     onSend = onSend,
+                    onAbort = onAbort,
+                    showShortcuts = showQuickShortcuts,
+                    onDismissShortcuts = { showQuickShortcuts = false },
                     voiceInputHost = voiceInputHost,
                     isVoiceInputAvailable = isVoiceInputAvailable,
                 )
@@ -468,6 +474,9 @@ internal fun Composer(
     onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri,
     onSend: () -> Unit,
+    onAbort: () -> Unit = {},
+    showShortcuts: Boolean = false,
+    onDismissShortcuts: () -> Unit = {},
     voiceInputHost: VoiceInputHost? = null,
     isVoiceInputAvailable: Boolean = false,
 ) {
@@ -569,6 +578,9 @@ internal fun Composer(
         onVoiceStop = voiceInput::stopListening,
         voiceListeningText = stringResource(R.string.voice_listening),
         voiceInputDescription = stringResource(R.string.action_voice_input),
+        onAbort = onAbort,
+        showShortcuts = showShortcuts,
+        onDismissShortcuts = onDismissShortcuts,
     )
 }
 

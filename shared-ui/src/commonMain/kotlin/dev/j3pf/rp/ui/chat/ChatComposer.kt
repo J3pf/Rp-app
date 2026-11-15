@@ -16,8 +16,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -92,10 +94,12 @@ fun ChatComposer(
     onVoiceStop: () -> Unit,
     voiceListeningText: String,
     voiceInputDescription: String,
+    onAbort: () -> Unit = {},
+    showShortcuts: Boolean = false,
+    onDismissShortcuts: () -> Unit = {},
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     var choiceMenu by remember { mutableStateOf(false) }
-    var showShortcuts by remember { mutableStateOf(false) }
 
     val canSendNow = canSend && (text.isNotBlank() || attachments.isNotEmpty())
 
@@ -280,7 +284,7 @@ fun ChatComposer(
                                     Modifier
                                         .clip(RoundedCornerShape(999.dp))
                                         .clickable {
-                                            showShortcuts = false
+                                            onDismissShortcuts()
                                             val replacement = if (cmd == "/term") cmd else "$cmd "
                                             onTextChange(replacement)
                                         },
@@ -296,6 +300,19 @@ fun ChatComposer(
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                                 )
                             }
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            modifier = Modifier.clip(CircleShape).clickable { onDismissShortcuts() },
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Ocultar comandos rápidos",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(5.dp).size(14.dp),
+                            )
                         }
                     }
                 }
@@ -326,35 +343,10 @@ fun ChatComposer(
                         })
                     }
                 }
-                if (catalog.quickShortcuts.isNotEmpty()) {
-                    Surface(
-                        shape = CircleShape,
-                        color =
-                            if (showShortcuts || isSlashText) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-                            },
-                        contentColor =
-                            if (showShortcuts || isSlashText) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                    ) {
-                        IconButton(
-                            onClick = { showShortcuts = !showShortcuts },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Text(
-                                text = ">_",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp,
-                            )
-                        }
-                    }
-                }
+                val haptic = LocalHapticFeedback.current
+                val hasDraft = text.isNotBlank() || attachments.isNotEmpty()
+                val isAbortMode = working && !hasDraft && !sending && !isListening
+                val isVoiceMode = !working && !hasDraft && !sending && isVoiceAvailable
                 OutlinedTextField(
                     value = text,
                     onValueChange = onTextChange,
@@ -369,65 +361,109 @@ fun ChatComposer(
                             },
                         )
                     },
+                    trailingIcon =
+                        if (isAbortMode && isVoiceAvailable) {
+                            {
+                                IconButton(
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onVoiceToggle()
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Mic,
+                                        contentDescription = voiceInputDescription,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        },
                     maxLines = 6,
                 )
-                val isVoiceMode = !canSendNow && !sending && isVoiceAvailable
                 Surface(
                     shape = CircleShape,
                     color =
                         when {
-                            isListening -> MaterialTheme.colorScheme.errorContainer
+                            isListening || isAbortMode -> MaterialTheme.colorScheme.errorContainer
                             canSendNow -> MaterialTheme.colorScheme.primary
                             else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
                         },
                     contentColor =
                         when {
-                            isListening -> MaterialTheme.colorScheme.onErrorContainer
+                            isListening || isAbortMode -> MaterialTheme.colorScheme.onErrorContainer
                             canSendNow -> MaterialTheme.colorScheme.onPrimary
                             else -> MaterialTheme.colorScheme.outline
                         },
                     border =
-                        if (!canSendNow && !isListening) {
+                        if (!canSendNow && !isListening && !isAbortMode) {
                             BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         } else {
                             null
                         },
                 ) {
-                    val haptic = LocalHapticFeedback.current
-                    if (isVoiceMode || isListening) {
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (isListening) {
+                    when {
+                        isListening -> {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onVoiceStop()
-                                } else {
-                                    onVoiceToggle()
-                                }
-                            },
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            Icon(
-                                if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
-                                contentDescription = voiceInputDescription,
-                                modifier = Modifier.size(20.dp),
-                            )
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(Icons.Filled.MicOff, contentDescription = voiceInputDescription, modifier = Modifier.size(20.dp))
+                            }
                         }
-                    } else {
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSend()
-                            },
-                            enabled = canSendNow && !sending,
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            if (sending) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            } else {
+                        hasDraft || sending -> {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSend()
+                                },
+                                enabled = canSendNow && !sending,
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                if (sending) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                } else {
+                                    Icon(Icons.AutoMirrored.Filled.Send, "Enviar", modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                        isAbortMode -> {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onAbort()
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(Icons.Filled.Stop, contentDescription = "Interrumpir", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        isVoiceMode -> {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onVoiceToggle()
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(Icons.Filled.Mic, contentDescription = voiceInputDescription, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        else -> {
+                            IconButton(
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.size(44.dp),
+                            ) {
                                 Icon(Icons.AutoMirrored.Filled.Send, "Enviar", modifier = Modifier.size(20.dp))
                             }
                         }

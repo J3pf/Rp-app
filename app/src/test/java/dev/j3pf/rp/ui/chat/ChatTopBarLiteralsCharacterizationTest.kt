@@ -265,6 +265,42 @@ class ChatTopBarLiteralsCharacterizationTest {
         rule.waitForIdle()
         assertEquals(1, opened)
     }
+
+    @Test
+    fun `top bar alone omits abort icon and overflow menu toggles quick commands without bottom glyph`() {
+        var toggled = 0
+        rule.setContent {
+            RpTheme {
+                ChatTopBar(
+                    agent = online.copy(status = "working"),
+                    sessionName = "tarea",
+                    model = null,
+                    thinkingLevel = null,
+                    working = true,
+                    diffFileCount = 0,
+                    chatFontScale = 1f,
+                    chatMessageSpacing = "normal",
+                    muted = false,
+                    readOnly = false,
+                    onBack = {},
+                    onAbort = {},
+                    onOpenDiff = {},
+                    onFontScaleChange = {},
+                    onMessageSpacingChange = {},
+                    onInfo = {},
+                    onToggleMute = {},
+                    onQuit = {},
+                    onForget = {},
+                    onToggleQuickShortcuts = { toggled++ },
+                )
+            }
+        }
+        rule.onAllNodesWithContentDescription("Interrumpir").assertCountEquals(0)
+        openMenu()
+        rule.onNodeWithText("Comandos rápidos (/)").performClick()
+        rule.waitForIdle()
+        assertEquals(1, toggled)
+    }
 }
 
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertExists() = assertExists()

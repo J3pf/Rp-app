@@ -85,7 +85,7 @@ class ChatBottomAnchorTest {
 
         val composerTop =
             rule
-                .onNodeWithContentDescription("Enviar")
+                .onNodeWithContentDescription("Interrumpir")
                 .fetchSemanticsNode()
                 .boundsInRoot.top
         val lastLineBounds =
@@ -144,7 +144,7 @@ class ChatBottomAnchorTest {
 
         val composerTop =
             rule
-                .onNodeWithContentDescription("Enviar")
+                .onNodeWithContentDescription("Interrumpir")
                 .fetchSemanticsNode()
                 .boundsInRoot.top
 

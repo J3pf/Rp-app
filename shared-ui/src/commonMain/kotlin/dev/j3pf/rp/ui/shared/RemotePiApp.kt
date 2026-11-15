@@ -661,6 +661,7 @@ private fun SharedChatScreen(
     var showInfo by remember { mutableStateOf(false) }
     var searchQuery by rememberSaveable(agentId) { mutableStateOf("") }
     var hideToolCalls by rememberSaveable(agentId) { mutableStateOf(false) }
+    var showQuickShortcuts by remember(agentId) { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
 
     val hasPendingLocalMessage =
@@ -725,6 +726,8 @@ private fun SharedChatScreen(
                     },
                     otherActiveAgents = otherActiveAgents,
                     onSwitchAgent = { targetId -> appController.navigateTo(ChatRoute(targetId)) },
+                    showQuickShortcuts = showQuickShortcuts,
+                    onToggleQuickShortcuts = { showQuickShortcuts = !showQuickShortcuts },
                 )
             }
         },
@@ -780,6 +783,9 @@ private fun SharedChatScreen(
                     onVoiceStop = {},
                     voiceListeningText = "",
                     voiceInputDescription = "Entrada de voz",
+                    onAbort = { chatSession.abort() },
+                    showShortcuts = showQuickShortcuts,
+                    onDismissShortcuts = { showQuickShortcuts = false },
                 )
             }
         },
