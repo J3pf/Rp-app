@@ -46,9 +46,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
@@ -58,6 +62,35 @@ import dev.j3pf.rp.ui.components.StatusChip
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.lastSegment
+
+internal data class ChatHeaderTitleParts(
+    val project: String?,
+    val topic: String?,
+    val fallback: String,
+)
+
+internal fun resolveChatHeaderTitle(
+    rawTitle: String,
+    folder: String,
+): ChatHeaderTitleParts {
+    val cleanRaw = rawTitle.trim()
+    val cleanFolder = folder.trim()
+    if (cleanFolder.isEmpty()) {
+        return ChatHeaderTitleParts(project = null, topic = null, fallback = cleanRaw.ifEmpty { "Agente" })
+    }
+    if (cleanRaw == cleanFolder || cleanRaw.startsWith("$cleanFolder (") || cleanRaw == "[redacted]") {
+        return ChatHeaderTitleParts(project = null, topic = null, fallback = cleanRaw)
+    }
+    if (cleanRaw.startsWith("$cleanFolder · ")) {
+        val topic = cleanRaw.removePrefix("$cleanFolder · ").trim()
+        return if (topic.isNotEmpty()) {
+            ChatHeaderTitleParts(project = cleanFolder, topic = topic, fallback = cleanRaw)
+        } else {
+            ChatHeaderTitleParts(project = null, topic = null, fallback = cleanFolder)
+        }
+    }
+    return ChatHeaderTitleParts(project = cleanFolder, topic = cleanRaw, fallback = "$cleanFolder · $cleanRaw")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,15 +145,23 @@ fun ChatTopBar(
             title = {
                 val rawTitle = agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: sessionName ?: "Agente"
                 val folder = agent?.cwd?.let { lastSegment(it) }.orEmpty()
-                val displayTopic =
-                    if (folder.isNotEmpty() && rawTitle.startsWith("$folder · ")) {
-                        rawTitle.removePrefix("$folder · ").trim()
+                val headerParts = resolveChatHeaderTitle(rawTitle = rawTitle, folder = folder)
+                val headerText =
+                    if (headerParts.project != null && headerParts.topic != null) {
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)) {
+                                append(headerParts.project)
+                            }
+                            withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                append(" · ${headerParts.topic}")
+                            }
+                        }
                     } else {
-                        rawTitle
+                        AnnotatedString(headerParts.fallback)
                     }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        displayTopic,
+                        text = headerText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleSmall,
@@ -183,7 +224,6 @@ fun ChatTopBar(
                             val subtitle =
                                 listOfNotNull(
                                     activeTaskText,
-                                    folder.takeIf { it.isNotBlank() },
                                     modelText,
                                     thinkingText,
                                 ).joinToString(" · ")

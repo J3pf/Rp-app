@@ -146,7 +146,7 @@ private fun QuotaMachinePill(
     val scrollState = rememberScrollState()
     Surface(
         modifier = modifier,
-        shape = RpShapes.card,
+        shape = RpShapes.large,
         color = islandSurface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 2.dp,

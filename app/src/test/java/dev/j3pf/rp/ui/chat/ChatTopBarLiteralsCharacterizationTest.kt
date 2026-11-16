@@ -301,6 +301,58 @@ class ChatTopBarLiteralsCharacterizationTest {
         rule.waitForIdle()
         assertEquals(1, toggled)
     }
+
+    @Test
+    fun `header title preserves folder prefix once and omits folder from subtitle when unnamed`() {
+        rule.setContent {
+            RpTheme {
+                androidx.compose.foundation.layout.Column {
+                    ChatTopBar(
+                        agent = online.copy(sessionName = "project · refactor auth"),
+                        sessionName = null,
+                        model = null,
+                        thinkingLevel = null,
+                        working = false,
+                        diffFileCount = 0,
+                        chatFontScale = 1f,
+                        chatMessageSpacing = "normal",
+                        muted = false,
+                        readOnly = false,
+                        onBack = {},
+                        onOpenDiff = {},
+                        onFontScaleChange = {},
+                        onMessageSpacingChange = {},
+                        onInfo = {},
+                        onToggleMute = {},
+                        onQuit = {},
+                        onForget = {},
+                    )
+                    ChatTopBar(
+                        agent = online.copy(sessionName = null),
+                        sessionName = null,
+                        model = null,
+                        thinkingLevel = null,
+                        working = false,
+                        diffFileCount = 0,
+                        chatFontScale = 1f,
+                        chatMessageSpacing = "normal",
+                        muted = false,
+                        readOnly = false,
+                        onBack = {},
+                        onOpenDiff = {},
+                        onFontScaleChange = {},
+                        onMessageSpacingChange = {},
+                        onInfo = {},
+                        onToggleMute = {},
+                        onQuit = {},
+                        onForget = {},
+                    )
+                }
+            }
+        }
+        rule.onAllNodesWithText("project · refactor auth").assertCountEquals(1)
+        rule.onAllNodesWithText("project").assertCountEquals(1)
+    }
 }
 
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertExists() = assertExists()

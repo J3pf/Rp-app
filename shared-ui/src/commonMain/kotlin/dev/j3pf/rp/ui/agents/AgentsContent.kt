@@ -662,7 +662,7 @@ fun AgentsContent(
                         LazyColumn(
                             state = listState,
                             contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             filteredGroups.forEach { g ->
                                 if (showGroupHeaders) {

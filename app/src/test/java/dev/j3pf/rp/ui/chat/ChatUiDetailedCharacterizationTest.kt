@@ -232,15 +232,19 @@ class ChatUiDetailedCharacterizationTest {
 
     }
 
-    // ──────────────── CH43 header model · thinking label ────────────────
+    // ──────────────── CH43 header project · topic & subtitle model · thinking ────────────────
 
     @Test
 
-    fun `header subtitle joins folder model and thinking level`() {
+    fun `header title shows folder and topic while subtitle joins model and thinking level without duplicating folder`() {
 
         setChatContent(ChatUiState(agent = idle, chat = ChatState(model = "gpt", thinkingLevel = "medium")))
 
-        rule.onNodeWithText("project · gpt · medium").assertIsDisplayed()
+        rule.onNodeWithText("project · tarea").assertIsDisplayed()
+
+        rule.onNodeWithText("gpt · medium").assertIsDisplayed()
+
+        rule.onAllNodesWithText("project · gpt · medium").assertCountEquals(0)
 
     }
 

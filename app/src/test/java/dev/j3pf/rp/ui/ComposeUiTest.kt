@@ -17,6 +17,7 @@ import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
 import dev.j3pf.rp.protocol.Danger
 import dev.j3pf.rp.protocol.HerdrInfo
+import dev.j3pf.rp.protocol.ModelInfo
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.PromptKind
@@ -60,7 +61,7 @@ class ComposeUiTest {
         )
 
     @Test
-    fun `tarjetas de agentes muestran estado, lanzador, herdr y modo gentle`() {
+    fun `tarjetas de agentes muestran estado, modelo y lanzador no redundante sin herdr`() {
         var clicked: String? = null
         rule.setContent {
             RpTheme {
@@ -70,6 +71,8 @@ class ComposeUiTest {
                         working.copy(
                             agentId = "m:b",
                             sessionName = "docs",
+                            launcher = "agy",
+                            model = ModelInfo(provider = "google", id = "Gemini 4 Carbon (Medium)"),
                             status = "waiting_input",
                             openPromptCount = 2,
                             gentleMode = "normal",
@@ -81,6 +84,7 @@ class ComposeUiTest {
                         working.copy(
                             agentId = "m:c",
                             sessionName = "viejo",
+                            launcher = "pi",
                             online = false,
                             lastSeenAt =
                                 System.currentTimeMillis() - 3 * 3600_000L,
@@ -96,8 +100,11 @@ class ComposeUiTest {
         rule.onNodeWithText("Trabajando").assertIsDisplayed()
         rule.onNodeWithText("Esperando respuesta").assertIsDisplayed()
         rule.onNodeWithText("Desconectado hace 3 h").assertIsDisplayed()
-        rule.onAllNodesWithText("gentle-shell", substring = true).assertCountEquals(3)
-        rule.onAllNodesWithText("herdr ws w2·pane p3").assertCountEquals(3)
+        rule.onAllNodesWithText("gentle-shell", substring = true).assertCountEquals(1)
+        rule.onAllNodesWithText("✦ agy").assertCountEquals(0)
+        rule.onAllNodesWithText("pi").assertCountEquals(0)
+        rule.onNodeWithText("Gemini 4 Carbon (Medium)").assertIsDisplayed()
+        rule.onAllNodesWithText("herdr ws w2·pane p3").assertCountEquals(0)
         rule.onAllNodesWithText("AUTO").assertCountEquals(2)
         rule.onNodeWithText("contenido oculto").assertExists()
         rule.onNodeWithText("api-gateway").performClick()

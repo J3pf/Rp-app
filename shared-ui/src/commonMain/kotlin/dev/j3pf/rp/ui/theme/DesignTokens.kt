@@ -39,7 +39,8 @@ object RpShapes {
     val large = RoundedCornerShape(20.dp)
     val extraLarge = RoundedCornerShape(28.dp)
     val pill = RoundedCornerShape(999.dp)
-    val card = RoundedCornerShape(20.dp)
+    val cardCornerRadius: Dp = 14.dp
+    val card = RoundedCornerShape(cardCornerRadius)
     val sheet = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     val bubbleUser = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp)
     val bubbleAgent = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)

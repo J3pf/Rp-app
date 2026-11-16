@@ -239,7 +239,7 @@ fun AgentCard(
                     val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
                     val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
                     val radius = maxOf(size.width, size.height) * 0.58f
-                    val cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx())
+                    val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
 
                     drawRoundRect(
                         brush =
@@ -280,7 +280,7 @@ fun AgentCard(
                 Modifier.drawWithContent {
                     drawContent()
                     val pulse = pulseProgress.value
-                    val cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx())
+                    val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
                     val borderColor = lerp(Color(0xFFFF8F00).copy(alpha = 0.50f), Color(0xFFFFD54F), pulse)
 
                     drawRoundRect(
@@ -301,7 +301,7 @@ fun AgentCard(
                 Modifier.drawWithContent {
                     drawContent()
                     val breath = pulseProgress.value
-                    val cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx())
+                    val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
                     val borderColor = lerp(semantic.success.copy(alpha = 0.35f), Color(0xFF4ADE80).copy(alpha = 0.88f), breath)
 
                     drawRoundRect(
@@ -328,15 +328,15 @@ fun AgentCard(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp)
+                .padding(horizontal = 16.dp)
                 .then(animatedBorderModifier),
         shape = RpShapes.card,
         tonalElevation = if (isWorking || isWaiting) 2.dp else 1.dp,
         border = staticBorder,
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(start = 14.dp, end = 12.dp, top = 7.dp, bottom = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             // Fila 1: Badge de agente + Carpeta / Rama Git a la izquierda (sin repetir modelo), estado y acciones a la derecha
             Row(
@@ -345,14 +345,14 @@ fun AgentCard(
             ) {
                 val isAgy = a.launcher == "agy"
                 Surface(
-                    shape = RpShapes.small,
+                    shape = RpShapes.extraSmall,
                     color = statusColor.copy(alpha = 0.14f),
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(22.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = if (isAgy) "✦" else "π",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.ExtraBold,
                             color = statusColor,
                         )
@@ -455,6 +455,7 @@ fun AgentCard(
 
                 if (a.openPromptCount > 0) {
                     BadgedBox(
+                        modifier = Modifier.padding(top = 2.dp, end = 4.dp),
                         badge = {
                             Badge(containerColor = semantic.warning) {
                                 Text("${a.openPromptCount}", color = semantic.onWarning)
@@ -465,7 +466,7 @@ fun AgentCard(
                             imageVector = Icons.Filled.Notifications,
                             contentDescription = "Pendientes",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(19.dp),
+                            modifier = Modifier.size(17.dp),
                         )
                     }
                 }
@@ -473,17 +474,17 @@ fun AgentCard(
                 if (!a.online || !a.herdr?.paneId.isNullOrBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (!a.online && canResume) {
-                            IconButton(onClick = onResume, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
                                 Icon(
                                     Icons.Filled.PlayArrow,
                                     contentDescription = "Reanudar agente",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(17.dp),
                                 )
                             }
                         }
                         Box {
-                            IconButton(onClick = { setMenu(true) }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { setMenu(true) }, modifier = Modifier.size(28.dp)) {
                                 Icon(
                                     Icons.Filled.MoreVert,
                                     contentDescription = "Opciones",
@@ -528,10 +529,18 @@ fun AgentCard(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            // Fila 3: Señales primarias (estado vivo, presión de contexto y progreso de tareas)
+            // Fila 3: Señales primarias y metadata técnica compacta en la misma fila
+            val modelTag = a.model?.label?.takeIf { it.isNotBlank() && it != "default" && it != "antigravity" && it != a.launcher }
+            val launcherTag =
+                a.launcher?.takeIf {
+                    it.isNotBlank() && !it.equals("agy", ignoreCase = true) && !it.equals("pi", ignoreCase = true)
+                }
+            val modeTag = a.gentleMode?.takeIf { it != "unknown" }?.uppercase()
+
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 StatusChip(a)
@@ -561,6 +570,19 @@ fun AgentCard(
                     TagChip(
                         text = "Tareas: ${a.todoCompleted}/${a.todoTotal} ($percent%)",
                         color = if (a.todoCompleted == a.todoTotal) semantic.success else MaterialTheme.colorScheme.primary,
+                    )
+                }
+                modelTag?.let { MetaTag(text = it) }
+                launcherTag?.let { MetaTag(text = it) }
+                modeTag?.let {
+                    MetaTag(
+                        text = it,
+                        contentColor =
+                            if (a.gentleMode == "auto" || a.gentleMode == "yolo") {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                     )
                 }
             }
@@ -612,48 +634,11 @@ fun AgentCard(
                     ) {
                         Text(
                             text = preview,
-                            modifier = Modifier.padding(PaddingValues(start = 13.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)),
+                            modifier = Modifier.padding(PaddingValues(start = 13.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)),
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             color = if (a.redacted) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-
-            // Metadata técnica discreta (baja jerarquía visual para no competir con el estado vivo)
-            val modelTag = a.model?.label?.takeIf { it.isNotBlank() && it != "default" && it != "antigravity" && it != a.launcher }
-            val herdrTag =
-                a.herdr?.let { h ->
-                    val loc =
-                        listOfNotNull(
-                            h.workspaceId?.let { w -> "ws $w" },
-                            h.paneId?.let { p -> "pane $p" },
-                        ).joinToString("·")
-                    loc.takeIf { it.isNotEmpty() }?.let { "herdr $it" }
-                }
-            val modeTag = a.gentleMode?.takeIf { it != "unknown" }?.uppercase()
-            val launcherTag = a.launcher?.let { if (it == "agy") "✦ agy" else it }
-
-            if (launcherTag != null || modelTag != null || herdrTag != null || modeTag != null) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    launcherTag?.let { MetaTag(text = it) }
-                    modelTag?.let { MetaTag(text = it) }
-                    herdrTag?.let { MetaTag(text = it) }
-                    modeTag?.let {
-                        MetaTag(
-                            text = it,
-                            contentColor =
-                                if (a.gentleMode == "auto" || a.gentleMode == "yolo") {
-                                    MaterialTheme.colorScheme.tertiary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
                         )
                     }
                 }

@@ -1,5 +1,7 @@
 package dev.j3pf.rp.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MachineSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -9,7 +11,8 @@ class ThemeTest {
     @Test
     fun testDefaultTokensAreValid() {
         assertNotNull(RpSpacing.screenPadding)
-        assertNotNull(RpShapes.card)
+        assertEquals(14.dp, RpShapes.cardCornerRadius)
+        assertEquals(RoundedCornerShape(14.dp), RpShapes.card)
         assertNotNull(RpColors.danger)
     }
 
