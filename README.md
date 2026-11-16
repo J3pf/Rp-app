@@ -2,7 +2,8 @@
 
 A Kotlin Multiplatform + Compose Multiplatform (KMP/CMP) mobile app for **Android and iOS** (phones, tablets, foldables, and iPads) for viewing and controlling your [Pi](https://github.com/earendil-works/pi) agents through the **RP** relay: live chat, attachments, **question and authorization notifications with direct replies**, and **Agent Mesh** (animated topology and real-time communication flows).
 
-> Status: **implemented** (see [Build from source](#build-from-source)). Design documentation is in `docs/`.
+> Status: **implemented** (`v0.9.5`; see [Build from source](#build-from-source)). Design documentation is in `docs/`.
+> Sibling repositories: [`Rp-relay`](https://github.com/J3pf/Rp-relay) (server, push dispatcher, and canonical protocol) · [`Rp-plugin`](https://github.com/J3pf/Rp-plugin) (Pi extension and multi-backend `rp-host` daemon).
 
 | Document | Contents |
 |---|---|
@@ -11,11 +12,24 @@ A Kotlin Multiplatform + Compose Multiplatform (KMP/CMP) mobile app for **Androi
 | [docs/QA.md](docs/QA.md) | Manual E2E tests for notifications, offline mode, Agent Mesh, and more |
 | [docs/RESILIENCIA.md](docs/RESILIENCIA.md) | Scalability, resilience, and independence (Google-free push, interactive delivery without `herdr`, Linux/Windows) |
 | [docs/COMPATIBILIDAD.md](docs/COMPATIBILIDAD.md) | Verified facts and requirement/environment matrix for `herdr`, `gentle-ai`, `gentle-shell`/`gentle-pi`, and PC separation |
-| [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Global architecture overview (a copy; canonical in `rp-relay`) |
-| [`rp-relay/docs/PROTOCOLO.md`](https://github.com/j3pf/rp-relay/blob/main/docs/PROTOCOLO.md) | Network protocol contract |
+| [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Global architecture overview (a copy; canonical in `Rp-relay`) |
+| [`Rp-relay/docs/PROTOCOLO.md`](https://github.com/J3pf/Rp-relay/blob/main/docs/PROTOCOLO.md) | Network protocol contract |
 
 ## Main features
 
+- **Home Control Deck, Compact Cards & Chat Polish (`v0.9.4` – `v0.9.5`)**:
+  - **Compact Agent Cards & Quota Dynamic Island**: Refreshed Home layout with `14.dp` card corners (`RpShapes`), unified `FlowRow` status/context/model/mode tags, cleaner top bar, and bottom Quota Dynamic Island (`piquota` telemetry).
+  - **Chat Ergonomics & Mesh Subagent Sheets**: Prominent **`Project · Topic`** `ChatTopBar`, composer interrupt circle during active runs, overflow quick slash-command menu (`Comandos rápidos (/)`), pinned bottom-anchor chat scrolling with localized tool labels, and tappable synthetic `"sub:..."` child subagent detail sheets in Agent Mesh (`model`, `toolCalls`, `turns`, `result`, `error`).
+  - Requires **Rp-relay >= 0.8.0** (recommended **0.8.2**) and **Rp-plugin >= 0.4.0** (recommended **0.4.6**), both from GitHub Releases (neither package exists on npm).
+- **Agent State Visual Language, Context Telemetry & iOS Parity (`v0.9.0` – `v0.9.3`)**:
+  - **State-Driven Borders & Battery-Saver Motion**: Electric-cyan animated border with orbiting comet for `working`, emerald breathing glow for `done`, amber warning pulse for blocked/prompted agents, and static `idle`/`waiting`, preserved under Android battery saver (`Motion.android.kt`).
+  - **Model & Context Telemetry Strip**: Session context progress bar (`contextTokens`/`contextWindow`/`contextPercent`) with warning/error thresholds and tappable token breakdown in the chat header.
+  - **Stable Herdr Ordering & Terminal Theme**: Preserves Herdr visual tab order (pinning open prompts first), sanitizes raw JSON out of notifications, and adds the **Terminal** theme option.
+  - **Full iOS Security & Delivery Parity**: `LocalAuthentication` biometric `appLock`, wired `NotificationService` APNs decryption extension, multiplatform `Ulid`, and hardened retryable chat delivery.
+- **Android 16 Promoted Live Activity, Battery Waves & `/term` Peek (`v0.8.0`)**:
+  - **3-Line `ProgressStyle` Live Notifications**: Promoted ongoing Live Activity (`rp.working`) with unified multi-agent consolidation and mutual exclusion against settled alerts.
+  - **Battery & Thermal Hardening**: Smart Pocket Standby (`SCREEN_OFF` direct WS sleep), foreground single-socket multiplexing, no-op Room upsert elision, 1Hz status pulsing, and WS deflate.
+  - **In-Chat Productivity**: Launcher-aware slash command palette with descriptions, `/term` live terminal peek bar, in-chat search & tool filters, active agent quick-switcher, per-agent drafts, `activeTask`, and `gitDirty` (`*`) indicators.
 - **Unified KMP/CMP Architecture & Full iOS App (v0.7.0)**:
   - **Shared `:data-core` Module & 17 Domain Ports**: Room KMP database (`MIGRATION_2_3`), `SettingsStore` (`DataStoreSettingsStore` / `KeyValueSettingsStore`), `SecretStore` (`EncryptedKeyValueSecretStore` with pure-Kotlin AES-256-GCM and `SecretStoreIos`), `PushEnvelopeCrypto` (`CommonPushEnvelopeCrypto`), `HostGateway`, `AgentsGate`, `PromptSheetGate`, `AttachmentsGate`, `ChatSessionGate`, and `BiometricAuthorizer`.
   - **Full 5-Screen iOS & Multiplatform Shell**: `RemotePiApp()`, `SharedAppController`, and `IosAppScope` drive Onboarding/Pairing, QR Scanner (`QrScannerView` via AVFoundation on iOS and CameraX/MLKit on Android), Agents, Agent Mesh, Pending Prompts, Settings (Machines, Devices, Notifications, Security, About), Live Chat, New Agent creation, Prompt Bottom Sheet, and Git Diff Sheet from a single shared UI codebase.
@@ -75,7 +89,7 @@ A Kotlin Multiplatform + Compose Multiplatform (KMP/CMP) mobile app for **Androi
   - Agent ordering prioritizes open prompts and authorizations, then working agents, then recent activity.
   - Spring-based screen transitions, working-agent pulse, press-scale feedback, and list-item animations.
   - Accessibility and reduced-motion support, including 48dp minimum touch targets and static equivalents when `ANIMATOR_DURATION_SCALE=0`.
-  - Roborazzi 1.76.0 visual regression suite with 48 reference images covering eight screens across three themes in light and dark modes.
+  - Roborazzi 1.76.0 visual regression suite (138 reference images across screens, themes, and light/dark modes).
 - **Agent Inbox and Live Chat**: Message history, live streaming, tool tracking, diffs, and biometric interaction.
 - **Interactive Notifications**: Approve requests and answer questions directly from notifications, with offline retries through WorkManager and deduplication.
 - **Agent Mesh (Animated Topology)**:
@@ -86,24 +100,25 @@ A Kotlin Multiplatform + Compose Multiplatform (KMP/CMP) mobile app for **Androi
 
 ## Related projects and references
 
-- Pi (`earendil-works/pi`, v1.2.0): `packages/coding-agent/docs/{extensions,packages,rpc,rpc-extension-ui,json,security,sessions}.md`, `src/core/extensions/{types,runner}.ts`, `src/modes/{interactive/interactive-mode,rpc/rpc-mode}.ts`, and examples such as `permission-gate.ts`, `question.ts`, `notify.ts`, and `send-user-message.ts`.
+- **Sibling repositories**: [`J3pf/Rp-relay`](https://github.com/J3pf/Rp-relay) (central relay & canonical protocol) · [`J3pf/Rp-plugin`](https://github.com/J3pf/Rp-plugin) (Pi extension & `rp-host` daemon).
+- Pi (`earendil-works/pi`, base v1.2.0; verified against **v1.5.2**): `packages/coding-agent/docs/{extensions,packages,rpc,rpc-extension-ui,json,security,sessions}.md`, `src/core/extensions/{types,runner}.ts`, `src/modes/{interactive/interactive-mode,rpc/rpc-mode}.ts`, and examples such as `permission-gate.ts`, `question.ts`, `notify.ts`, and `send-user-message.ts`.
 - [Remote Pi](https://github.com/jacobaraujo7/remote_pi) (Flutter + Rust relay + Pi extension): QR pairing and approvals through `@eko24ive/pi-ask`; it has no real push, which is a key gap this project addresses.
 - [Happy](https://github.com/slopus/happy) / Happier (happier-dev): CLI wrapper and Fastify/Socket.IO server with end-to-end encryption.
 - [Moshi](https://getmoshi.app/docs): mobile terminal and host-side hook for approval inbox and push notifications.
-- [gentle-shell / gentle-pi](https://github.com/Gentleman-Programming/gentle-shell) 4.1.0, [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai), and [herdr](https://github.com/herdrdev/herdr) 0.9.3: user environment; see `docs/COMPATIBILIDAD.md`.
+- [gentle-shell / gentle-pi](https://github.com/Gentleman-Programming/gentle-shell) (tested up to **4.8.0**), [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai), and [herdr](https://github.com/herdrdev/herdr) 0.9.3: user environment; see `docs/COMPATIBILIDAD.md`.
 
 ## Download and install (official release)
 
 You can install the app directly on your device without building it:
 
 1. **Download the APK:**
-   - 📦 **[RP App v0.7.0 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.7.0)**
-   - Official direct-channel release (no Google services): **[rp-v0.7.0-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.7.0/rp-v0.7.0-direct.apk)**.
+   - 📦 **[RP App v0.9.5 — GitHub Releases](https://github.com/J3pf/Rp-app/releases/tag/v0.9.5)**
+   - Official direct-channel release (no Google services): **[rp-v0.9.5-direct.apk](https://github.com/J3pf/Rp-app/releases/download/v0.9.5/rp-v0.9.5-direct.apk)**.
 2. **Install on your phone:**
    - **On the phone:** Open the downloaded file and allow your browser or file manager to install unknown apps if prompted.
    - **Over USB with ADB:** Connect a phone with USB debugging enabled and run:
      ```bash
-     adb install -r rp-v0.7.0-direct.apk
+     adb install -r rp-v0.9.5-direct.apk
      ```
 3. **Pair with your relay:**
    - On the relay server, run:
@@ -138,7 +153,7 @@ Requirements: JDK 17, Android SDK 36 (`ANDROID_HOME`), and access to Google Mave
 - **Flavors**: `direct` uses the first-party `remoteMessaging` foreground service and websocket connection to the relay without Google services; `fcm` adds Firebase Cloud Messaging. Both channels can coexist and deduplicate by `promptId`.
 - `app/google-services.json` is **not versioned**. Add it manually or inject it in CI (`GOOGLE_SERVICES_JSON`, base64). Without it, the `fcm` flavor builds but FCM is inactive.
 - To sign a release, create `keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) or use `.github/workflows/release.yml` with `RELEASE_KEYSTORE_B64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` secrets. `versionCode` is the commit count; `versionName` is the semantic version (`app/build.gradle.kts`).
-- Network fixtures: `scripts/sync-fixtures.sh [../rp-relay]` copies fixtures from `rp-relay` into `protocol/src/test/resources/fixtures/relay/`; tests decode them using Kotlin types.
+- Network fixtures: `scripts/sync-fixtures.sh [../Rp-relay]` copies fixtures from `Rp-relay` into `protocol/src/test/resources/fixtures/relay/`; tests decode them using Kotlin types.
 
 ## Repository structure
 
