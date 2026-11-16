@@ -3,6 +3,19 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2026-11-15
+
+### Added
+- **Home Control Deck, Compact Agent Cards & Floating Quota Island**:
+  - Redesigned the Home header into a compact `AgentsControlDeck` with an elevated single-line machine selector/stats block and compact `QuotaDynamicIsland` pill bar.
+  - Refined `AgentCard` density and visual polish (`RpShapes.card` at `14.dp` with `20.dp` kept for the floating quota island, compacted Row 1 controls, unified single `FlowRow` with model/mode alongside status chips, and removed `herdr` card tags while keeping `herdr` details in `InfoDialog`).
+
+### Fixed
+- **Chat Header, Composer Ergonomics & Bottom-Anchor Scroll**:
+  - Displayed **`Proyecto · <topic>`** prominently in `ChatTopBar` without repeating the folder name in the secondary subtitle row.
+  - Moved the quick slash-command (`>_`) toggle into the chat overflow menu (`Comandos rápidos (/)`) and placed `Interrupt` directly in the composer action button while active (keeping mic access inline inside the input field).
+  - Kept bottom-anchor auto-scroll pinned reliably on incoming chat updates and localized tool labels.
+
 ## [0.9.4] - 2026-11-14
 
 ### Added

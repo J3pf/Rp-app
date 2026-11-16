@@ -1988,7 +1988,7 @@ class SharedAppController(
     }
 
     companion object {
-        const val APP_VERSION = "0.9.4"
+        const val APP_VERSION = "0.9.5"
         const val SOLO_GROUP_ID = "solo"
         private const val APP_LOCK_TIMEOUT_MS = 30_000L
         private const val MAX_MESH_LIVE_COMMS = 20

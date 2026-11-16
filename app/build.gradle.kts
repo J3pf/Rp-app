@@ -47,7 +47,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = gitCommitCount()
-        versionName = "0.9.4"
+        versionName = "0.9.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
