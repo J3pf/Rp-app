@@ -132,12 +132,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 private enum KeychainStoreHelper {
     private static let service = "dev.j3pf.rp.secrets"
     private static let missingEntitlementStatus: OSStatus = -34018
+    /// Must match `EncryptedKeyValueSecretStore.TRANSIENT_READ_ERROR_SENTINEL` so Kotlin aborts
+    /// `load()` without clearing Keychain entries on transient errors (e.g. `errSecInteractionNotAllowed`).
+    private static let transientReadErrorSentinel = "__RP_TRANSIENT_KEYCHAIN_ERROR__"
     private static let logger = Logger(subsystem: "dev.j3pf.rp.iosApp", category: "keychain")
-    private static let stateLock = NSLock()
-    /// Tracks whether the most recent Keychain read encountered a transient OS error (such as
-    /// `errSecInteractionNotAllowed` while the device is locked) so immediate fallback cleanup
-    /// cannot silently wipe paired credentials.
-    private static var hasTransientReadFailure = false
 
     static func installBridge() {
         SharedUi.IosKeychainStoreBridge.shared.configure(
@@ -151,18 +149,6 @@ private enum KeychainStoreHelper {
                 deleteItem(account: key, accessGroup: accessGroup)
             },
         )
-    }
-
-    private static func setTransientReadFailure(_ value: Bool) {
-        stateLock.lock()
-        hasTransientReadFailure = value
-        stateLock.unlock()
-    }
-
-    private static func isTransientReadFailureActive() -> Bool {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        return hasTransientReadFailure
     }
 
     private static func baseQuery(account: String, accessGroup: String?) -> [String: Any] {
@@ -188,20 +174,17 @@ private enum KeychainStoreHelper {
         }
         switch status {
         case errSecSuccess:
-            setTransientReadFailure(false)
             guard let data = item as? Data else {
                 return nil
             }
             return String(data: data, encoding: .utf8)
         case errSecItemNotFound:
-            setTransientReadFailure(false)
             return nil
         default:
-            // Preserve stored credentials on transient errors (e.g., errSecInteractionNotAllowed
-            // when Keychain is locked) instead of treating them as missing keys.
-            setTransientReadFailure(true)
+            // Return sentinel so EncryptedKeyValueSecretStore.load() treats this as a transient
+            // error (e.g. errSecInteractionNotAllowed while locked) instead of missing/corrupt data.
             logger.error("Keychain read failed with transient OSStatus=\(status, privacy: .public)")
-            return nil
+            return transientReadErrorSentinel
         }
     }
 
@@ -229,10 +212,6 @@ private enum KeychainStoreHelper {
     }
 
     private static func deleteItem(account: String, accessGroup: String?) {
-        if isTransientReadFailureActive() {
-            logger.warning("Skipping Keychain delete while transient read failure is active")
-            return
-        }
         let query = baseQuery(account: account, accessGroup: accessGroup)
         let status = SecItemDelete(query as CFDictionary)
         if status == missingEntitlementStatus, accessGroup != nil {

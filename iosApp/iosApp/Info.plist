@@ -32,7 +32,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Se necesita la cámara para escanear el código QR</string>
 	<key>RPKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp</string>
+	<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

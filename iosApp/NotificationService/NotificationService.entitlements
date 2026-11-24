@@ -4,7 +4,7 @@
 <dict>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp</string>
+		<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse</string>
 	</array>
 </dict>
 </plist>

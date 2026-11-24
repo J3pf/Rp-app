@@ -21,7 +21,7 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>RPKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp</string>
+	<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

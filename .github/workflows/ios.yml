@@ -70,18 +70,21 @@ jobs:
               errors.append("NotificationService/Info.plist CFBundleShortVersionString must be $(MARKETING_VERSION)")
           if nse_info.get("CFBundleVersion") != "$(CURRENT_PROJECT_VERSION)":
               errors.append("NotificationService/Info.plist CFBundleVersion must be $(CURRENT_PROJECT_VERSION)")
-          if nse_info.get("RPKeychainAccessGroup") != "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp":
+          if nse_info.get("RPKeychainAccessGroup") != "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse":
               errors.append("NotificationService/Info.plist missing RPKeychainAccessGroup")
 
           app_info = plistlib.loads((ios_dir / "iosApp/Info.plist").read_bytes())
-          if app_info.get("RPKeychainAccessGroup") != "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp":
+          if app_info.get("RPKeychainAccessGroup") != "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse":
               errors.append("iosApp/Info.plist missing RPKeychainAccessGroup")
 
           app_ent = plistlib.loads((ios_dir / "iosApp/iosApp.entitlements").read_bytes())
           if "aps-environment" not in app_ent:
               errors.append("iosApp/iosApp.entitlements missing aps-environment")
-          if "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp" not in app_ent.get("keychain-access-groups", []):
-              errors.append("iosApp/iosApp.entitlements missing $(AppIdentifierPrefix)dev.j3pf.rp.iosApp")
+          app_groups = app_ent.get("keychain-access-groups", [])
+          if app_groups[:1] != ["$(AppIdentifierPrefix)$(CFBundleIdentifier)"]:
+              errors.append("iosApp/iosApp.entitlements must list $(AppIdentifierPrefix)$(CFBundleIdentifier) first for app-private default Keychain isolation")
+          if "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse" not in app_groups:
+              errors.append("iosApp/iosApp.entitlements missing $(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse")
 
           nse_ent_path = ios_dir / "NotificationService/NotificationService.entitlements"
           if not nse_ent_path.exists():
@@ -90,8 +93,8 @@ jobs:
               nse_ent = plistlib.loads(nse_ent_path.read_bytes())
               if "aps-environment" in nse_ent:
                   errors.append("NotificationService.entitlements must not include aps-environment")
-              if "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp" not in nse_ent.get("keychain-access-groups", []):
-                  errors.append("NotificationService.entitlements missing $(AppIdentifierPrefix)dev.j3pf.rp.iosApp")
+              if nse_ent.get("keychain-access-groups") != ["$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse"]:
+                  errors.append("NotificationService.entitlements must only grant $(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse")
 
           if errors:
               for err in errors:

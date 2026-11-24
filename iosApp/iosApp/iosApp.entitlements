@@ -6,8 +6,8 @@
 	<string>development</string>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp</string>
 		<string>$(AppIdentifierPrefix)$(CFBundleIdentifier)</string>
+		<string>$(AppIdentifierPrefix)dev.j3pf.rp.iosApp.nse</string>
 	</array>
 </dict>
 </plist>
