@@ -144,6 +144,43 @@ private fun HeroStatCounter(
     }
 }
 
+internal data class AgentCardDisplayMetadata(
+    val folder: String?,
+    val displayTopic: String,
+    val projectContext: String,
+    val activeTask: String?,
+)
+
+internal fun resolveAgentCardDisplayMetadata(a: AgentSummary): AgentCardDisplayMetadata {
+    if (a.redacted) {
+        return AgentCardDisplayMetadata(
+            folder = null,
+            displayTopic = "Sesión oculta",
+            projectContext = "",
+            activeTask = null,
+        )
+    }
+    val folder = lastSegment(a.cwd).takeIf { it.isNotEmpty() }
+    val rawTitle = agentTitle(a.sessionName, a.cwd, a.agentId)
+    val displayTopic =
+        if (folder != null && rawTitle.startsWith("$folder · ")) {
+            rawTitle.removePrefix("$folder · ").trim().ifEmpty { rawTitle }
+        } else {
+            rawTitle
+        }
+    val projectContext =
+        listOfNotNull(
+            folder?.let { "📁 $it" },
+            a.gitBranch?.takeIf { it.isNotBlank() }?.let { "⎇ $it" },
+        ).joinToString(" · ")
+    return AgentCardDisplayMetadata(
+        folder = folder,
+        displayTopic = displayTopic,
+        projectContext = projectContext,
+        activeTask = a.activeTask,
+    )
+}
+
 @Composable
 fun AgentCard(
     a: AgentSummary,
@@ -171,14 +208,8 @@ fun AgentCard(
             else -> MaterialTheme.colorScheme.outline
         }
 
-    val folder = lastSegment(a.cwd).takeIf { it.isNotEmpty() }
-    val rawTitle = agentTitle(a.sessionName, a.cwd, a.agentId)
-    val displayTopic =
-        if (folder != null && rawTitle.startsWith("$folder · ")) {
-            rawTitle.removePrefix("$folder · ").trim().ifEmpty { rawTitle }
-        } else {
-            rawTitle
-        }
+    val displayMetadata = resolveAgentCardDisplayMetadata(a)
+    val displayTopic = displayMetadata.displayTopic
 
     val reducedMotion = LocalReducedMotion.current
     val needsAnim = (isWorking || isWaiting) && !reducedMotion
@@ -359,11 +390,7 @@ fun AgentCard(
                     }
                 }
 
-                val projectContext =
-                    listOfNotNull(
-                        folder?.let { "📁 $it" },
-                        a.gitBranch?.takeIf { it.isNotBlank() }?.let { "⎇ $it" },
-                    ).joinToString(" · ")
+                val projectContext = displayMetadata.projectContext
 
                 Text(
                     text = projectContext.ifEmpty { "Sesión" },
@@ -588,7 +615,7 @@ fun AgentCard(
             }
 
             // Tarea activa en curso si existe
-            val active = a.activeTask
+            val active = displayMetadata.activeTask
             if (!active.isNullOrBlank()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

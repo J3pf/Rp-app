@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -55,12 +58,75 @@ import dev.snipme.highlights.model.BoldHighlight
 import dev.snipme.highlights.model.ColorHighlight
 import dev.snipme.highlights.model.SyntaxLanguage
 import dev.snipme.highlights.model.SyntaxThemes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 val LocalHighlightDispatcher = compositionLocalOf<CoroutineDispatcher> { Dispatchers.Default }
+
+internal const val MAX_HIGHLIGHT_CODE_LENGTH = 32 * 1024
+
+internal fun isAllowedMarkdownUri(uri: String): Boolean {
+    val trimmed = uri.trim()
+    return trimmed.startsWith("https://", ignoreCase = true) ||
+        trimmed.startsWith("http://", ignoreCase = true)
+}
+
+internal fun buildHighlightedAnnotatedString(
+    code: String,
+    language: String?,
+    isDark: Boolean,
+): AnnotatedString {
+    if (code.length > MAX_HIGHLIGHT_CODE_LENGTH) {
+        return AnnotatedString(code)
+    }
+    return try {
+        val syntaxLanguage = language?.let { SyntaxLanguage.getByName(it) }
+        val highlights =
+            Highlights
+                .Builder()
+                .code(code)
+                .theme(SyntaxThemes.default(darkMode = isDark))
+                .apply { if (syntaxLanguage != null) language(syntaxLanguage) }
+                .build()
+                .getHighlights()
+
+        buildAnnotatedString {
+            append(code)
+            val len = code.length
+            highlights.forEach { highlight ->
+                val start = highlight.location.start.coerceIn(0, len)
+                val end = highlight.location.end.coerceIn(0, len)
+                if (start >= end) return@forEach
+                when (highlight) {
+                    is ColorHighlight -> {
+                        addStyle(
+                            SpanStyle(
+                                color = Color(0xFF000000.toInt() or (highlight.rgb and 0x00FFFFFF)),
+                            ),
+                            start,
+                            end,
+                        )
+                    }
+
+                    is BoldHighlight -> {
+                        addStyle(
+                            SpanStyle(fontWeight = FontWeight.Bold),
+                            start,
+                            end,
+                        )
+                    }
+                }
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        AnnotatedString(code)
+    }
+}
 
 @Composable
 fun HighlightedCode(
@@ -86,46 +152,21 @@ fun HighlightedCode(
             isDark,
             dispatcher,
         ) {
+            if (code.length > MAX_HIGHLIGHT_CODE_LENGTH) {
+                value = AnnotatedString(code)
+                return@produceState
+            }
             if (dispatcher === Dispatchers.Default && highlightPassCount.count > 0) {
                 delay(120L)
             }
             highlightPassCount.count++
             value =
                 withContext(dispatcher) {
-                    val syntaxLanguage = language?.let { SyntaxLanguage.getByName(it) }
-                    val highlights =
-                        Highlights
-                            .Builder()
-                            .code(code)
-                            .theme(SyntaxThemes.default(darkMode = isDark))
-                            .apply { if (syntaxLanguage != null) language(syntaxLanguage) }
-                            .build()
-                            .getHighlights()
-
-                    buildAnnotatedString {
-                        append(code)
-                        highlights.forEach { highlight ->
-                            when (highlight) {
-                                is ColorHighlight -> {
-                                    addStyle(
-                                        SpanStyle(
-                                            color = Color(0xFF000000.toInt() or (highlight.rgb and 0x00FFFFFF)),
-                                        ),
-                                        highlight.location.start,
-                                        highlight.location.end,
-                                    )
-                                }
-
-                                is BoldHighlight -> {
-                                    addStyle(
-                                        SpanStyle(fontWeight = FontWeight.Bold),
-                                        highlight.location.start,
-                                        highlight.location.end,
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    buildHighlightedAnnotatedString(
+                        code = code,
+                        language = language,
+                        isDark = isDark,
+                    )
                 }
         }
 
@@ -261,110 +302,124 @@ fun RpMarkdown(
             else -> 1.dp
         }
 
-    Markdown(
-        markdownState = markdownState,
-        modifier = modifier,
-        colors =
-            markdownColor(
-                text = baseBody.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface,
-                codeBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
-                inlineCodeBackground = inlineCodeBg,
-                dividerColor = MaterialTheme.colorScheme.outlineVariant,
-                tableBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
-        padding =
-            markdownPadding(
-                block = blockPadding,
-                list = listPadding,
-                listItemTop = listItemPadding,
-                listItemBottom = listItemPadding,
-            ),
-        typography =
-            markdownTypography(
-                h1 =
-                    MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize =
-                            when (spacingMode) {
-                                "compact" -> 15.sp
-                                "spacious" -> 18.sp
-                                else -> 17.sp
-                            },
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 18.sp
-                                "spacious" -> 22.sp
-                                else -> 21.sp
-                            },
-                    ),
-                h2 =
-                    MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize =
-                            when (spacingMode) {
-                                "compact" -> 14.sp
-                                "spacious" -> 16.sp
-                                else -> 15.5.sp
-                            },
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 17.sp
-                                "spacious" -> 20.sp
-                                else -> 19.sp
-                            },
-                    ),
-                h3 =
-                    MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize =
-                            when (spacingMode) {
-                                "compact" -> 13.5.sp
-                                "spacious" -> 15.sp
-                                else -> 14.5.sp
-                            },
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 16.sp
-                                "spacious" -> 19.sp
-                                else -> 18.sp
-                            },
-                    ),
-                h4 =
-                    MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        lineHeight =
-                            when (spacingMode) {
-                                "compact" -> 15.sp
-                                "spacious" -> 18.sp
-                                else -> 17.sp
-                            },
-                    ),
-                h5 =
-                    MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                    ),
-                h6 =
-                    MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                    ),
-                text = baseBody,
-                paragraph = baseBody,
-                bullet = baseBody,
-                ordered = baseBody,
-                list = baseBody,
-                inlineCode =
-                    baseBody.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = (baseBody.fontSize.value * 0.9f).sp,
-                        color = inlineCodeColor,
-                    ),
-                quote = baseBody.copy(fontStyle = FontStyle.Italic),
-            ),
-        components = rememberRpMarkdownComponents(),
-    )
+    val delegateUriHandler = LocalUriHandler.current
+    val safeUriHandler =
+        remember(delegateUriHandler) {
+            object : UriHandler {
+                override fun openUri(uri: String) {
+                    if (isAllowedMarkdownUri(uri)) {
+                        delegateUriHandler.openUri(uri.trim())
+                    }
+                }
+            }
+        }
+
+    CompositionLocalProvider(LocalUriHandler provides safeUriHandler) {
+        Markdown(
+            markdownState = markdownState,
+            modifier = modifier,
+            colors =
+                markdownColor(
+                    text = baseBody.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface,
+                    codeBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    inlineCodeBackground = inlineCodeBg,
+                    dividerColor = MaterialTheme.colorScheme.outlineVariant,
+                    tableBackground = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            padding =
+                markdownPadding(
+                    block = blockPadding,
+                    list = listPadding,
+                    listItemTop = listItemPadding,
+                    listItemBottom = listItemPadding,
+                ),
+            typography =
+                markdownTypography(
+                    h1 =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize =
+                                when (spacingMode) {
+                                    "compact" -> 15.sp
+                                    "spacious" -> 18.sp
+                                    else -> 17.sp
+                                },
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 18.sp
+                                    "spacious" -> 22.sp
+                                    else -> 21.sp
+                                },
+                        ),
+                    h2 =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize =
+                                when (spacingMode) {
+                                    "compact" -> 14.sp
+                                    "spacious" -> 16.sp
+                                    else -> 15.5.sp
+                                },
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 17.sp
+                                    "spacious" -> 20.sp
+                                    else -> 19.sp
+                                },
+                        ),
+                    h3 =
+                        MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize =
+                                when (spacingMode) {
+                                    "compact" -> 13.5.sp
+                                    "spacious" -> 15.sp
+                                    else -> 14.5.sp
+                                },
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 16.sp
+                                    "spacious" -> 19.sp
+                                    else -> 18.sp
+                                },
+                        ),
+                    h4 =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight =
+                                when (spacingMode) {
+                                    "compact" -> 15.sp
+                                    "spacious" -> 18.sp
+                                    else -> 17.sp
+                                },
+                        ),
+                    h5 =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                        ),
+                    h6 =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                        ),
+                    text = baseBody,
+                    paragraph = baseBody,
+                    bullet = baseBody,
+                    ordered = baseBody,
+                    list = baseBody,
+                    inlineCode =
+                        baseBody.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = (baseBody.fontSize.value * 0.9f).sp,
+                            color = inlineCodeColor,
+                        ),
+                    quote = baseBody.copy(fontStyle = FontStyle.Italic),
+                ),
+            components = rememberRpMarkdownComponents(),
+        )
+    }
 }

@@ -31,6 +31,7 @@ import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.ports.SecretStore
 import dev.j3pf.rp.data.ports.SettingsStore
 import dev.j3pf.rp.data.repo.AppSettings
+import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.data.repo.PairResult
 import dev.j3pf.rp.data.repo.SendResult
 import dev.j3pf.rp.data.secure.EncryptedKeyValueSecretStore
@@ -74,6 +75,7 @@ import dev.j3pf.rp.protocol.MeshCommEvent
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.protocol.MeshSubscribe
+import dev.j3pf.rp.protocol.MeshUnsubscribe
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptAnswerRequest
@@ -130,6 +132,7 @@ import dev.j3pf.rp.ui.settings.SettingsDest
 import dev.j3pf.rp.ui.settings.SettingsUiState
 import dev.j3pf.rp.ui.util.currentTimeMillis
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -168,6 +171,7 @@ class SharedAppController(
     private val startSocketConnection: () -> Unit = {},
     private val stopSocketConnection: () -> Unit = {},
     private val retrySocketConnection: () -> Unit = { startSocketConnection() },
+    private val forceRetrySocketConnection: () -> Unit = retrySocketConnection,
     private val isSocketConnected: () -> Boolean = { false },
     private val sendSocketText: (String) -> Boolean = { false },
     val connState: StateFlow<ConnState> = MutableStateFlow(ConnState.Disconnected),
@@ -234,13 +238,14 @@ class SharedAppController(
     private val _archivedError = MutableStateFlow<String?>(null)
     val archivedError: StateFlow<String?> = _archivedError.asStateFlow()
 
-    private val _isAppLocked = MutableStateFlow(false)
+    private val _isAppLocked = MutableStateFlow(true)
     val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
 
     private val _appLockMessage = MutableStateFlow<String?>(null)
     val appLockMessage: StateFlow<String?> = _appLockMessage.asStateFlow()
 
     private var backgroundedAtMs: Long = 0L
+    private var unlockJob: Job? = null
 
     private val _interactiveUnavailable = MutableStateFlow(false)
     val interactiveUnavailable: StateFlow<Boolean> = _interactiveUnavailable.asStateFlow()
@@ -277,6 +282,9 @@ class SharedAppController(
     private val _activePromptId = MutableStateFlow<String?>(null)
     val activePromptId: StateFlow<String?> = _activePromptId.asStateFlow()
 
+    private val _busyPromptIds = MutableStateFlow<Set<String>>(emptySet())
+    val busyPromptIds: StateFlow<Set<String>> = _busyPromptIds.asStateFlow()
+
     private val _busyPromptId = MutableStateFlow<String?>(null)
     val busyPromptId: StateFlow<String?> = _busyPromptId.asStateFlow()
 
@@ -292,6 +300,7 @@ class SharedAppController(
     private val meshLayoutEngine = MeshLayoutEngine()
     private var meshViewportWidth = DEFAULT_MESH_VIEWPORT_SIZE
     private var meshViewportHeight = DEFAULT_MESH_VIEWPORT_SIZE
+    private var meshRefreshJob: Job? = null
     private val _meshState = MutableStateFlow(MeshUiState(isLoading = false))
     val meshState: StateFlow<MeshUiState> = _meshState.asStateFlow()
 
@@ -310,8 +319,31 @@ class SharedAppController(
     private val _showDiffSheet = MutableStateFlow(false)
     val showDiffSheet: StateFlow<Boolean> = _showDiffSheet.asStateFlow()
 
-    private val chatHistoryStore = mutableMapOf<String, ChatState>()
+    private val chatHistoryStore = LinkedHashMap<String, ChatState>()
     private val outboxStore = mutableMapOf<String, UserMessage>()
+
+    internal val cachedChatHistoryCount: Int
+        get() = storeLock.withLock { chatHistoryStore.size }
+
+    internal fun cachedChatHistoryIds(): List<String> = storeLock.withLock { chatHistoryStore.keys.toList() }
+
+    private fun getChatHistoryLocked(agentId: String): ChatState? {
+        val existing = chatHistoryStore.remove(agentId) ?: return null
+        chatHistoryStore[agentId] = existing
+        return existing
+    }
+
+    private fun putChatHistoryLocked(
+        agentId: String,
+        state: ChatState,
+    ) {
+        chatHistoryStore.remove(agentId)
+        chatHistoryStore[agentId] = state
+        while (chatHistoryStore.size > MAX_CACHED_CHAT_HISTORIES) {
+            val eldestKey = chatHistoryStore.keys.firstOrNull() ?: break
+            chatHistoryStore.remove(eldestKey)
+        }
+    }
 
     private val chatPlatform =
         object : ChatPlatform {
@@ -352,7 +384,7 @@ class SharedAppController(
                 storeLock.withLock { outboxStore.clear() }
             }
 
-            override suspend fun loadInitialState(agentId: String): ChatState? = storeLock.withLock { chatHistoryStore[agentId] }
+            override suspend fun loadInitialState(agentId: String): ChatState? = storeLock.withLock { getChatHistoryLocked(agentId) }
 
             override suspend fun persistHistory(
                 agentId: String,
@@ -360,8 +392,8 @@ class SharedAppController(
                 epochChanged: Boolean,
             ) {
                 storeLock.withLock {
-                    val prev = if (epochChanged) ChatState() else (chatHistoryStore[agentId] ?: ChatState())
-                    chatHistoryStore[agentId] = ChatReducer.applyHistory(prev, history)
+                    val prev = if (epochChanged) ChatState() else (getChatHistoryLocked(agentId) ?: ChatState())
+                    putChatHistoryLocked(agentId, ChatReducer.applyHistory(prev, history))
                 }
             }
 
@@ -371,8 +403,8 @@ class SharedAppController(
             ) {
                 val now = currentTimeMillis()
                 storeLock.withLock {
-                    val prev = chatHistoryStore[agentId] ?: ChatState()
-                    chatHistoryStore[agentId] = ChatReducer.reduce(prev, event, now = now)
+                    val prev = getChatHistoryLocked(agentId) ?: ChatState()
+                    putChatHistoryLocked(agentId, ChatReducer.reduce(prev, event, now = now))
                 }
             }
 
@@ -547,6 +579,10 @@ class SharedAppController(
         scope.launch {
             settingsStore.settings.collectLatest { cfg ->
                 _settings.value = cfg
+                if (!cfg.appLock) {
+                    _isAppLocked.value = false
+                    _appLockMessage.value = null
+                }
             }
         }
         scope.launch {
@@ -559,6 +595,9 @@ class SharedAppController(
                     startSocketConnection()
                     refreshAll()
                 } else {
+                    if (_currentRoute.value is MeshRoute) {
+                        sendMeshUnsubscribe()
+                    }
                     stopSocketConnection()
                     storeLock.withLock { backStack.clear() }
                     _currentRoute.value = OnboardingRoute
@@ -781,11 +820,26 @@ class SharedAppController(
         }
     }
 
+    fun dispose() {
+        if (_currentRoute.value is MeshRoute) {
+            sendMeshUnsubscribe()
+        }
+        meshRefreshJob?.cancel()
+        meshRefreshJob = null
+        unlockJob?.cancel()
+        unlockJob = null
+        stopSocketConnection()
+        chatSessions.clear()
+    }
+
     // ───────────────────────────── Navigation ─────────────────────────────
 
     fun navigateTo(route: Any) {
         val current = _currentRoute.value
         if (current != route) {
+            if (current is MeshRoute && route !is MeshRoute) {
+                sendMeshUnsubscribe()
+            }
             if (current !is ChatRoute || route !is ChatRoute) {
                 storeLock.withLock { backStack.add(current) }
             }
@@ -803,65 +857,83 @@ class SharedAppController(
 
     fun onAppBackgrounded() {
         backgroundedAtMs = currentTimeMillis()
+        stopSocketConnection()
     }
 
     fun onAppForegrounded() {
         val bgAt = backgroundedAtMs
         backgroundedAtMs = 0L
-        if (_settings.value.appLock && secrets.current() != null && bgAt > 0L) {
+        val hasSession = secrets.current() != null
+        if (_settings.value.appLock && hasSession && bgAt > 0L) {
             if (currentTimeMillis() - bgAt > APP_LOCK_TIMEOUT_MS) {
                 _isAppLocked.value = true
                 _appLockMessage.value = null
             }
         }
+        if (hasSession) {
+            startSocketConnection()
+            forceRetrySocketConnection()
+            refreshAll()
+        }
     }
 
     fun unlockApp() {
-        scope.launch {
-            _appLockMessage.value = null
-            when (biometricAuthorizer.authenticate("Desbloquear RemotePi")) {
-                BiometricAuthResult.OK -> {
-                    _isAppLocked.value = false
-                }
-                BiometricAuthResult.FAILED -> {
-                    _appLockMessage.value = "Desbloqueo cancelado"
-                }
-                BiometricAuthResult.UNAVAILABLE -> {
-                    _isAppLocked.value = false
+        if (unlockJob?.isActive == true) return
+        unlockJob =
+            scope.launch {
+                _appLockMessage.value = null
+                when (biometricAuthorizer.authenticate("Desbloquear RemotePi")) {
+                    BiometricAuthResult.OK -> {
+                        _isAppLocked.value = false
+                    }
+                    BiometricAuthResult.FAILED -> {
+                        _appLockMessage.value = "Desbloqueo cancelado"
+                    }
+                    BiometricAuthResult.UNAVAILABLE -> {
+                        _isAppLocked.value = true
+                        _appLockMessage.value = "Configura Face ID, Touch ID o código para desbloquear"
+                    }
                 }
             }
-        }
     }
 
     fun loadArchived(before: Long? = null) {
+        if (before != null && _archivedLoading.value) return
+        _archivedLoading.value = true
         if (before == null) {
-            _archivedLoading.value = true
             _archivedError.value = null
         }
         scope.launch {
-            val req = AgentArchivedRequest(before = before, limit = 30)
-            val reply = wsClient.request(Envelope.of(MsgType.AGENT_ARCHIVED_LIST, req, id = newId()))
-            when (reply) {
-                is WsReply.Ok -> {
-                    val res = runCatching { reply.envelope.body<AgentArchivedList>() }.getOrNull()
-                    if (res != null) {
-                        _archivedAgents.update { prev ->
-                            if (before == null) res.agents else (prev + res.agents).distinctBy { it.agentId }
+            try {
+                val req = AgentArchivedRequest(before = before, limit = 30)
+                val reply = wsClient.request(Envelope.of(MsgType.AGENT_ARCHIVED, req, id = newId()))
+                when (reply) {
+                    is WsReply.Ok -> {
+                        val res = runCatching { reply.envelope.body<AgentArchivedList>() }.getOrNull()
+                        if (res != null) {
+                            _archivedAgents.update { prev ->
+                                if (before == null) {
+                                    res.agents.distinctBy { it.agentId }
+                                } else {
+                                    (prev + res.agents).distinctBy { it.agentId }
+                                }
+                            }
+                            _archivedNextBefore.value = res.nextBefore
                         }
-                        _archivedNextBefore.value = res.nextBefore
+                    }
+                    is WsReply.Error -> {
+                        _archivedError.value = reply.message.ifEmpty { reply.code }
+                    }
+                    WsReply.Timeout -> {
+                        _archivedError.value = "Tiempo de espera agotado"
+                    }
+                    WsReply.NotConnected -> {
+                        _archivedError.value = "Sin conexión con el relay"
                     }
                 }
-                is WsReply.Error -> {
-                    _archivedError.value = reply.message.ifEmpty { reply.code }
-                }
-                WsReply.Timeout -> {
-                    _archivedError.value = "Tiempo de espera agotado"
-                }
-                WsReply.NotConnected -> {
-                    _archivedError.value = "Sin conexión con el relay"
-                }
+            } finally {
+                _archivedLoading.value = false
             }
-            _archivedLoading.value = false
         }
     }
 
@@ -888,8 +960,12 @@ class SharedAppController(
     }
 
     fun selectTab(tab: AppTab) {
+        val leavingMesh = _currentRoute.value is MeshRoute && tab != AppTab.MESH
         storeLock.withLock { backStack.clear() }
         _currentRoute.value = tab.route
+        if (leavingMesh) {
+            sendMeshUnsubscribe()
+        }
         if (tab == AppTab.MESH) {
             refreshMesh()
         }
@@ -897,7 +973,11 @@ class SharedAppController(
 
     fun navigateBack(): Boolean {
         val previous = storeLock.withLock { backStack.removeLastOrNull() } ?: return false
+        val leavingMesh = _currentRoute.value is MeshRoute && previous !is MeshRoute
         _currentRoute.value = previous
+        if (leavingMesh) {
+            sendMeshUnsubscribe()
+        }
         return true
     }
 
@@ -917,6 +997,8 @@ class SharedAppController(
             when (val res = sessionPolicy.pair(url, code)) {
                 is PairResult.Success -> {
                     settingsStore.setOnboardingDone(true)
+                    _isAppLocked.value = false
+                    _appLockMessage.value = null
                     _pairState.value = PairUiState(done = true)
                     storeLock.withLock { backStack.clear() }
                     _currentRoute.value = AgentsRoute
@@ -934,7 +1016,9 @@ class SharedAppController(
         if (parsed != null) {
             val (u, c) = parsed
             _currentRoute.value = PairRoute(url = u, code = c)
-            pair(u, c)
+            if (secrets.current() == null) {
+                pair(u, c)
+            }
         } else {
             _pairState.value = PairUiState(error = "Código QR no reconocido")
             _currentRoute.value = PairRoute()
@@ -1146,105 +1230,145 @@ class SharedAppController(
         promptId: String,
         answer: Answer,
     ) {
-        if (_busyPromptId.value == promptId) return
+        val added =
+            storeLock.withLock {
+                if (promptId in _busyPromptIds.value) {
+                    false
+                } else {
+                    _busyPromptIds.value = _busyPromptIds.value + promptId
+                    _busyPromptId.value = promptId
+                    true
+                }
+            }
+        if (!added) return
         val prompt = _openPrompts.value.firstOrNull { it.promptId == promptId }
         _promptSheetError.value = null
         _promptSheetAuthMessage.value = null
         scope.launch {
-            if (prompt != null && requiresPromptAuth(prompt)) {
-                when (biometricAuthorizer.authenticate("Confirma tu identidad", prompt.title.take(80))) {
-                    BiometricAuthResult.OK -> {}
-                    BiometricAuthResult.FAILED -> {
-                        _promptSheetAuthMessage.value = "Desbloqueo cancelado"
-                        _actionMessage.value = "Desbloqueo cancelado"
-                        return@launch
-                    }
-
-                    BiometricAuthResult.UNAVAILABLE -> {
-                        _promptSheetAuthMessage.value = "Configura un bloqueo de pantalla para aprobar"
-                        _actionMessage.value = "Configura un bloqueo de pantalla para aprobar"
-                        return@launch
-                    }
-                }
-            }
-            _busyPromptId.value = promptId
-            val outcome =
-                if (isSocketConnected()) {
-                    when (
-                        val reply =
-                            wsClient.request(
-                                Envelope.of(MsgType.PROMPT_ANSWER, PromptAnswerRequest(promptId, answer), id = newId()),
-                            )
-                    ) {
-                        is WsReply.Ok -> {
-                            val res = runCatching { reply.envelope.body<PromptAnswerResult>() }.getOrNull()
-                            when {
-                                res?.alreadyResolved == true -> AnswerOutcome.AlreadyResolved
-                                res?.ok == false && res.reason == "agent_offline_queued" -> AnswerOutcome.Sent
-                                res?.ok == false -> AnswerOutcome.Failed(res.reason ?: "Error")
-                                else -> AnswerOutcome.Sent
-                            }
+            try {
+                if (prompt != null && requiresPromptAuth(prompt)) {
+                    when (biometricAuthorizer.authenticate("Confirma tu identidad", prompt.title.take(80))) {
+                        BiometricAuthResult.OK -> {}
+                        BiometricAuthResult.FAILED -> {
+                            _promptSheetAuthMessage.value = "Desbloqueo cancelado"
+                            _actionMessage.value = "Desbloqueo cancelado"
+                            return@launch
                         }
 
-                        is WsReply.Error -> {
-                            if (reply.code == ErrorCodes.CONFLICT) {
-                                AnswerOutcome.AlreadyResolved
-                            } else {
-                                httpClient.answerPrompt(promptId, answer)
-                            }
+                        BiometricAuthResult.UNAVAILABLE -> {
+                            _promptSheetAuthMessage.value = "Configura un bloqueo de pantalla para aprobar"
+                            _actionMessage.value = "Configura un bloqueo de pantalla para aprobar"
+                            return@launch
                         }
-
-                        else -> httpClient.answerPrompt(promptId, answer)
-                    }
-                } else {
-                    httpClient.answerPrompt(promptId, answer)
-                }
-            _busyPromptId.value = null
-            when (outcome) {
-                is AnswerOutcome.Sent -> {
-                    _openPrompts.update { list -> list.filterNot { it.promptId == promptId } }
-                    syncAgentPromptCounts()
-                    if (_activePromptId.value == promptId) {
-                        _activePromptId.value = null
-                    }
-                    bus.publish(
-                        Envelope.of(
-                            MsgType.PROMPT_RESOLVED,
-                            PromptResolved(promptId = promptId, by = ResolvedBy.REMOTE, answer = answer),
-                        ),
-                    )
-                }
-
-                is AnswerOutcome.AlreadyResolved -> {
-                    _openPrompts.update { list -> list.filterNot { it.promptId == promptId } }
-                    syncAgentPromptCounts()
-                    if (_activePromptId.value == promptId) {
-                        _promptSheetState.value = PromptSheetChromeState.AlreadyResolved
-                    }
-                    bus.publish(
-                        Envelope.of(
-                            MsgType.PROMPT_RESOLVED,
-                            PromptResolved(promptId = promptId, by = ResolvedBy.REMOTE),
-                        ),
-                    )
-                }
-
-                is AnswerOutcome.Queued -> {
-                    if (_activePromptId.value == promptId) {
-                        _promptSheetState.value =
-                            PromptSheetChromeState.Queued("Sin conexión — respuesta en cola")
                     }
                 }
+                val outcome =
+                    if (isSocketConnected()) {
+                        when (
+                            val reply =
+                                wsClient.request(
+                                    Envelope.of(MsgType.PROMPT_ANSWER, PromptAnswerRequest(promptId, answer), id = newId()),
+                                )
+                        ) {
+                            is WsReply.Ok -> {
+                                val res = runCatching { reply.envelope.body<PromptAnswerResult>() }.getOrNull()
+                                when {
+                                    res?.alreadyResolved == true -> AnswerOutcome.AlreadyResolved
+                                    res?.ok == false && res.reason == "agent_offline_queued" -> AnswerOutcome.Sent
+                                    res?.ok == false -> AnswerOutcome.Failed(res.reason ?: "Error")
+                                    else -> AnswerOutcome.Sent
+                                }
+                            }
 
-                is AnswerOutcome.Failed -> {
-                    _promptSheetError.value = outcome.message
-                    _actionMessage.value = outcome.message
+                            is WsReply.Error -> {
+                                if (reply.code == ErrorCodes.CONFLICT) {
+                                    AnswerOutcome.AlreadyResolved
+                                } else {
+                                    httpClient.answerPrompt(promptId, answer)
+                                }
+                            }
+
+                            else -> httpClient.answerPrompt(promptId, answer)
+                        }
+                    } else {
+                        httpClient.answerPrompt(promptId, answer)
+                    }
+                when (outcome) {
+                    is AnswerOutcome.Sent -> {
+                        _openPrompts.update { list -> list.filterNot { it.promptId == promptId } }
+                        syncAgentPromptCounts()
+                        if (_activePromptId.value == promptId) {
+                            _activePromptId.value = null
+                        }
+                        bus.publish(
+                            Envelope.of(
+                                MsgType.PROMPT_RESOLVED,
+                                PromptResolved(promptId = promptId, by = ResolvedBy.REMOTE, answer = answer),
+                            ),
+                        )
+                    }
+
+                    is AnswerOutcome.AlreadyResolved -> {
+                        _openPrompts.update { list -> list.filterNot { it.promptId == promptId } }
+                        syncAgentPromptCounts()
+                        if (_activePromptId.value == promptId) {
+                            _promptSheetState.value = PromptSheetChromeState.AlreadyResolved
+                        }
+                        bus.publish(
+                            Envelope.of(
+                                MsgType.PROMPT_RESOLVED,
+                                PromptResolved(promptId = promptId, by = ResolvedBy.REMOTE),
+                            ),
+                        )
+                    }
+
+                    is AnswerOutcome.Queued -> {
+                        if (_activePromptId.value == promptId) {
+                            _promptSheetState.value =
+                                PromptSheetChromeState.Queued("Sin conexión — respuesta en cola")
+                        }
+                    }
+
+                    is AnswerOutcome.Failed -> {
+                        _promptSheetError.value = outcome.message
+                        _actionMessage.value = outcome.message
+                    }
+                }
+            } finally {
+                storeLock.withLock {
+                    val remaining = _busyPromptIds.value - promptId
+                    _busyPromptIds.value = remaining
+                    _busyPromptId.value = remaining.firstOrNull()
                 }
             }
         }
     }
 
     // ───────────────────────────── Chat & Diff ─────────────────────────────
+
+    private fun handleSendErrorCode(errorCode: String) {
+        when (errorCode) {
+            "agent_blocked" -> {
+                _actionMessage.value = "El agente espera un diálogo en la terminal; el mensaje quedó en cola"
+            }
+
+            "interactive_unavailable" -> {
+                _interactiveUnavailable.value = true
+                _actionMessage.value = "No se pudo teclear en la terminal: el mensaje no autoriza acciones en Auto"
+            }
+
+            "herdr_unavailable" -> {
+                _interactiveUnavailable.value = true
+                _actionMessage.value = "herdr no está disponible en esa PC"
+            }
+
+            else -> {
+                if (errorCode.isNotBlank()) {
+                    _actionMessage.value = errorCode
+                }
+            }
+        }
+    }
 
     fun sendChatMessage(
         session: ChatSession,
@@ -1283,15 +1407,26 @@ class SharedAppController(
             }
             onSent()
             _interactiveUnavailable.value = false
-            val res =
-                session.send(
-                    text = trimmed,
-                    delivery = delivery,
-                    method = method,
-                    asCommand = asCommand,
-                )
-            if (res == SendResult.Failed("interactive_unavailable")) {
-                _interactiveUnavailable.value = true
+            when (
+                val res =
+                    session.send(
+                        text = trimmed,
+                        delivery = delivery,
+                        method = method,
+                        asCommand = asCommand,
+                    )
+            ) {
+                is SendResult.Failed -> handleSendErrorCode(res.reason)
+                is SendResult.Delivered -> {
+                    val err = res.ack?.error
+                    if (!err.isNullOrBlank()) {
+                        handleSendErrorCode(err)
+                    } else if (res.ack?.disposition == "typed_after_dialog") {
+                        _actionMessage.value = "Se enviará al cerrarse el diálogo"
+                    }
+                }
+
+                SendResult.Queued -> {}
             }
         }
     }
@@ -1301,14 +1436,17 @@ class SharedAppController(
             _interactiveUnavailable.value = false
             val res =
                 session.send(
-                    text = "/gentle-mode normal",
+                    text = "/gentle:mode normal",
                     delivery = Delivery.AUTO,
                     method = DeliveryMethod.API,
                     asCommand = true,
                 )
             when (res) {
                 is SendResult.Failed -> {
-                    _actionMessage.value = "No se pudo cambiar a modo Normal: ${res.reason}"
+                    when (res.reason) {
+                        "agent_blocked", "interactive_unavailable", "herdr_unavailable" -> handleSendErrorCode(res.reason)
+                        else -> _actionMessage.value = "No se pudo cambiar a modo Normal: ${res.reason}"
+                    }
                 }
                 else -> {}
             }
@@ -1350,13 +1488,32 @@ class SharedAppController(
         val target = agent ?: return
         val cwd = target.cwd ?: return
         scope.launch {
-            wsClient.request(
-                Envelope.of(
-                    MsgType.HOST_GIT_DISCARD,
-                    HostGitDiscard(machineId = target.machineId, cwd = cwd, path = path),
-                ),
-            )
-            openDiffSheet(target)
+            when (
+                val reply =
+                    wsClient.request(
+                        Envelope.of(
+                            MsgType.HOST_GIT_DISCARD,
+                            HostGitDiscard(machineId = target.machineId, cwd = cwd, path = path),
+                            id = newId(),
+                        ),
+                    )
+            ) {
+                is WsReply.Ok -> openDiffSheet(target)
+                is WsReply.Error -> {
+                    _actionMessage.value =
+                        if (reply.message.isNotBlank()) {
+                            "No se pudo descartar: ${reply.message}"
+                        } else {
+                            "No se pudo descartar: ${reply.code}"
+                        }
+                }
+                WsReply.Timeout -> {
+                    _actionMessage.value = "Tiempo de espera agotado al descartar cambios"
+                }
+                WsReply.NotConnected -> {
+                    _actionMessage.value = "Sin conexión con el relay"
+                }
+            }
         }
     }
 
@@ -1542,21 +1699,33 @@ class SharedAppController(
         wsClient.send(Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId), id = newId()))
     }
 
+    private fun sendMeshUnsubscribe() {
+        meshRefreshJob?.cancel()
+        meshRefreshJob = null
+        wsClient.send(Envelope.of(MsgType.MESH_UNSUBSCRIBE, MeshUnsubscribe(), id = newId()))
+    }
+
     fun refreshMesh(machineId: String? = _meshState.value.selectedMachineId) {
         if (secrets.current() == null) return
+        meshRefreshJob?.cancel()
         _meshState.update { it.copy(isLoading = it.snapshot == null, selectedMachineId = machineId, errorMessage = null) }
-        scope.launch {
-            sendMeshSubscribe(machineId)
-            when (val res = httpClient.getMesh(machineId)) {
-                is ApiResult.Ok -> applyMeshSnapshot(res.value)
-                is ApiResult.Http ->
-                    _meshState.update { it.copy(isLoading = false, errorMessage = "HTTP ${res.code}") }
-                is ApiResult.Network ->
-                    _meshState.update {
-                        it.copy(isLoading = false, errorMessage = res.error.message ?: "Error de red")
+        meshRefreshJob =
+            scope.launch {
+                sendMeshSubscribe(machineId)
+                when (val res = httpClient.getMesh(machineId)) {
+                    is ApiResult.Ok -> {
+                        if (_meshState.value.selectedMachineId == machineId) {
+                            applyMeshSnapshot(res.value)
+                        }
                     }
+                    is ApiResult.Http ->
+                        _meshState.update { it.copy(isLoading = false, errorMessage = "HTTP ${res.code}") }
+                    is ApiResult.Network ->
+                        _meshState.update {
+                            it.copy(isLoading = false, errorMessage = res.error.message ?: "Error de red")
+                        }
+                }
             }
-        }
     }
 
     private fun applyMeshSnapshot(snapshot: MeshSnapshot) {
@@ -1876,7 +2045,17 @@ class SharedAppController(
 
     private suspend fun pushNotifyPrefs() {
         val cfg = _settings.value
-        val prefs = cfg.notifyPrefs.copy(categories = cfg.notifyPrefs.categories + ("criticalAlways" to cfg.criticalAlways))
+        val s = cfg.notifyPrefs
+        val wireMachines =
+            s.machines.mapValues { (_, mp) ->
+                mp.copy(categories = NotifyCategory.toWireCategories(mp.categories))
+            }
+        val prefs =
+            s.copy(
+                categories = NotifyCategory.toWireCategories(s.categories),
+                machines = wireMachines,
+                criticalAlways = cfg.criticalAlways,
+            )
         httpClient.putPrefs(prefs)
     }
 
@@ -1981,6 +2160,9 @@ class SharedAppController(
 
     fun logout() {
         scope.launch {
+            if (_currentRoute.value is MeshRoute) {
+                sendMeshUnsubscribe()
+            }
             sessionPolicy.logout()
             storeLock.withLock { backStack.clear() }
             _currentRoute.value = OnboardingRoute
@@ -1990,6 +2172,7 @@ class SharedAppController(
     companion object {
         const val APP_VERSION = "0.9.5"
         const val SOLO_GROUP_ID = "solo"
+        internal const val MAX_CACHED_CHAT_HISTORIES = 20
         private const val APP_LOCK_TIMEOUT_MS = 30_000L
         private const val MAX_MESH_LIVE_COMMS = 20
         private const val MAX_MESH_ACTIVE_BUBBLES = 50
@@ -2030,14 +2213,11 @@ class SharedAppController(
                             )
                         }
             val sortedGroups =
-                groups.sortedByDescending { g ->
-                    val hasPrompts = g.agents.any { it.openPromptCount > 0 }
-                    val isWorking = g.agents.any { it.status == "working" && it.online }
-                    val maxLastSeen = g.agents.maxOfOrNull { it.lastSeenAt ?: 0L } ?: 0L
-                    (if (hasPrompts) 2_000_000_000_000L else 0L) +
-                        (if (isWorking) 1_000_000_000_000L else 0L) +
-                        maxLastSeen
-                }
+                groups.sortedWith(
+                    compareByDescending<MachineGroup> { g -> g.agents.any { it.openPromptCount > 0 } }
+                        .thenByDescending { g -> g.agents.any { it.status == "working" && it.online } }
+                        .thenByDescending { g -> g.agents.maxOfOrNull { it.lastSeenAt ?: 0L } ?: 0L },
+                )
             return AgentsUiState(
                 machines = machines,
                 allAgents = agents,
@@ -2203,18 +2383,50 @@ class SharedAppController(
         fun normalizeRelayUrl(raw: String): String? {
             val trimmed = raw.trim().trimEnd('/')
             if (trimmed.isEmpty()) return null
-            val withScheme =
-                when {
-                    trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-                    trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-                    else -> "https://$trimmed"
-                }
-            val afterScheme = withScheme.substringAfter("://", "")
-            val authority = afterScheme.substringBefore('/')
-            if (authority.isBlank() || authority.contains(' ') || authority.startsWith(':') || authority.startsWith('/')) {
+            if (trimmed.any { ch -> ch.code < 0x20 || ch.code == 0x7F || ch.isWhitespace() || ch == '?' || ch == '#' || ch == '\\' }) {
                 return null
             }
-            return withScheme
+            val (scheme, rest) =
+                if (trimmed.contains("://")) {
+                    val s = trimmed.substringBefore("://").lowercase()
+                    if (s != "https" && s != "http") return null
+                    s to trimmed.substringAfter("://")
+                } else {
+                    "https" to trimmed
+                }
+            if (rest.isEmpty() || rest.startsWith('/') || rest.startsWith(':')) return null
+            val authority = rest.substringBefore('/')
+            if (authority.isBlank() || authority.contains('@')) return null
+
+            val host: String
+            if (authority.startsWith('[')) {
+                val close = authority.indexOf(']')
+                if (close <= 1) return null
+                host = authority.substring(1, close).lowercase()
+                val suffix = authority.substring(close + 1)
+                if (suffix.isNotEmpty()) {
+                    if (!suffix.startsWith(':')) return null
+                    val port = suffix.substring(1).toIntOrNull() ?: return null
+                    if (port !in 1..65535) return null
+                }
+            } else {
+                val colonIdx = authority.indexOf(':')
+                if (colonIdx >= 0) {
+                    if (authority.indexOf(':', colonIdx + 1) >= 0) return null
+                    host = authority.substring(0, colonIdx).lowercase()
+                    val portStr = authority.substring(colonIdx + 1)
+                    if (portStr.isEmpty() || portStr.any { !it.isDigit() }) return null
+                    val port = portStr.toIntOrNull() ?: return null
+                    if (port !in 1..65535) return null
+                } else {
+                    host = authority.lowercase()
+                }
+            }
+            if (host.isBlank() || host.startsWith('.') || host.endsWith('.') || host.contains("..")) return null
+            if (scheme == "http" && host != "localhost" && host != "127.0.0.1") {
+                return null
+            }
+            return "$scheme://$rest"
         }
 
         fun parsePairingQr(raw: String): Pair<String, String>? {
@@ -2259,31 +2471,33 @@ class SharedAppController(
             return sb.toString()
         }
 
-        private fun percentDecodeComponent(value: String): String {
-            val out = ByteArray(value.length)
-            var outIdx = 0
+        internal fun percentDecodeComponent(value: String): String {
+            val bytes = ArrayList<Byte>(value.length)
             var i = 0
             while (i < value.length) {
                 val ch = value[i]
                 if (ch == '+') {
-                    out[outIdx++] = ' '.code.toByte()
+                    bytes.add(' '.code.toByte())
                     i++
                 } else if (ch == '%' && i + 2 < value.length) {
                     val hi = value[i + 1].digitToIntOrNull(16)
                     val lo = value[i + 2].digitToIntOrNull(16)
                     if (hi != null && lo != null) {
-                        out[outIdx++] = ((hi shl 4) or lo).toByte()
+                        bytes.add(((hi shl 4) or lo).toByte())
                         i += 3
                     } else {
-                        out[outIdx++] = ch.code.toByte()
+                        for (b in ch.toString().encodeToByteArray()) bytes.add(b)
                         i++
                     }
+                } else if (ch.isHighSurrogate() && i + 1 < value.length && value[i + 1].isLowSurrogate()) {
+                    for (b in value.substring(i, i + 2).encodeToByteArray()) bytes.add(b)
+                    i += 2
                 } else {
-                    out[outIdx++] = ch.code.toByte()
+                    for (b in ch.toString().encodeToByteArray()) bytes.add(b)
                     i++
                 }
             }
-            return out.decodeToString(0, outIdx)
+            return ByteArray(bytes.size) { bytes[it] }.decodeToString()
         }
 
         private fun newId(): String = Ulid.new()
@@ -2343,6 +2557,7 @@ internal fun createInMemorySocketController(
         startSocketConnection = { socketPolicy.start() },
         stopSocketConnection = { socketPolicy.stop() },
         retrySocketConnection = { socketPolicy.retryNow() },
+        forceRetrySocketConnection = { socketPolicy.retryNow(force = true) },
         isSocketConnected = { socketPolicy.isConnected },
         sendSocketText = { socketPolicy.send(it) },
         connState = socketPolicy.state,

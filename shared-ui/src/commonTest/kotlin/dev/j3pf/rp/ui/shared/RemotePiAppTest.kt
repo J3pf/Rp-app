@@ -349,18 +349,18 @@ class RemotePiAppTest {
         controller.onAppForegrounded()
         assertFalse(controller.isAppLocked.value)
 
-        // Failed unlock surfaces cancellation message; OK and UNAVAILABLE clear it and unlock.
+        // Failed unlock surfaces cancellation message; OK clears it and unlocks; UNAVAILABLE fails closed.
         controller.unlockApp()
         assertEquals(1, authCalls)
         assertEquals("Desbloqueo cancelado", controller.appLockMessage.value)
 
-        biometricResult = BiometricAuthResult.OK
+        biometricResult = BiometricAuthResult.UNAVAILABLE
         controller.unlockApp()
         assertEquals(2, authCalls)
-        assertNull(controller.appLockMessage.value)
-        assertFalse(controller.isAppLocked.value)
+        assertEquals("Configura Face ID, Touch ID o código para desbloquear", controller.appLockMessage.value)
+        assertTrue(controller.isAppLocked.value)
 
-        biometricResult = BiometricAuthResult.UNAVAILABLE
+        biometricResult = BiometricAuthResult.OK
         controller.unlockApp()
         assertEquals(3, authCalls)
         assertNull(controller.appLockMessage.value)

@@ -138,6 +138,25 @@ fun AttachmentChip(
     }
 }
 
+internal fun infoDialogRows(
+    agent: AgentSummary,
+    liveModel: String? = null,
+    liveThinking: String? = null,
+    contextSummary: String? = null,
+): List<Pair<String, String?>> =
+    listOf(
+        "PC" to agent.machineName,
+        "Carpeta" to if (agent.redacted) null else agent.cwd,
+        "Rama" to if (agent.redacted) null else agent.gitBranch,
+        "Modelo" to (liveModel ?: agent.model?.label),
+        "Razonamiento" to liveThinking,
+        "Contexto" to contextSummary,
+        "Lanzador" to agent.launcher,
+        "herdr" to agent.herdr?.let { listOfNotNull(it.workspaceId, cleanHerdrTabId(it.tabId), it.paneId).joinToString(" / ") },
+        "Modo gentle" to agent.gentleMode,
+        "Id" to agent.agentId,
+    )
+
 @Composable
 fun InfoDialog(
     agent: AgentSummary,
@@ -166,17 +185,11 @@ fun InfoDialog(
         title = { Text("Información del agente") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(
-                    "PC" to agent.machineName,
-                    "Carpeta" to agent.cwd,
-                    "Rama" to agent.gitBranch,
-                    "Modelo" to (liveModel ?: agent.model?.label),
-                    "Razonamiento" to liveThinking,
-                    "Contexto" to contextSummary,
-                    "Lanzador" to agent.launcher,
-                    "herdr" to agent.herdr?.let { listOfNotNull(it.workspaceId, cleanHerdrTabId(it.tabId), it.paneId).joinToString(" / ") },
-                    "Modo gentle" to agent.gentleMode,
-                    "Id" to agent.agentId,
+                infoDialogRows(
+                    agent = agent,
+                    liveModel = liveModel,
+                    liveThinking = liveThinking,
+                    contextSummary = contextSummary,
                 ).forEach { (k, v) ->
                     if (!v.isNullOrBlank()) Text("$k: $v", style = MaterialTheme.typography.bodySmall)
                 }
@@ -357,6 +370,13 @@ fun filterChatItems(
     }
 }
 
+internal fun shouldAutoPinOnLocalOrAck(
+    lastItemKey: String?,
+    settledLastKey: String?,
+): Boolean =
+    lastItemKey != settledLastKey &&
+        (lastItemKey?.startsWith("local:") == true || lastItemKey?.startsWith("ack:") == true)
+
 private fun isBottomScrolledUp(
     index: Int,
     offset: Int,
@@ -520,15 +540,13 @@ fun MessageList(
             if (!tracker.autoScrolling && !userScrolling) {
                 pinnedToBottom = !preLayoutScrolledUp
             }
-            val isLocalOrAck =
-                lastItemKey?.startsWith("local:") == true ||
-                    lastItemKey?.startsWith("ack:") == true
-            if (isLocalOrAck) {
+            val isNewLocalOrAck = shouldAutoPinOnLocalOrAck(lastItemKey, tracker.settledLastKey)
+            if (isNewLocalOrAck) {
                 pinnedToBottom = true
             }
             if (pinnedToBottom && !userScrolling) {
                 itemsCountWhenScrolledUp.intValue = items.size
-                val isNewItem = items.size != tracker.settledSize || isLocalOrAck
+                val isNewItem = items.size != tracker.settledSize || isNewLocalOrAck
                 val workingChanged = isWorking != tracker.settledIsWorking
                 tracker.scheduleScroll(
                     animate = isNewItem || workingChanged,

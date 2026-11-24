@@ -28,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -100,7 +101,9 @@ import dev.j3pf.rp.ui.settings.NotificationSettingsContent
 import dev.j3pf.rp.ui.settings.SecurityContent
 import dev.j3pf.rp.ui.settings.SettingsContent
 import dev.j3pf.rp.ui.settings.SettingsUiState
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpTheme
+import dev.j3pf.rp.ui.theme.rememberIsReducedMotion
 import dev.j3pf.rp.ui.theme.resolveThemeChoice
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.relativeTime
@@ -110,7 +113,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun RemotePiApp(controller: SharedAppController? = null) {
     val scope = rememberCoroutineScope()
+    val ownsController = controller == null
     val appController = controller ?: remember(scope) { createPlatformAppController(scope) }
+    if (ownsController) {
+        DisposableEffect(appController) {
+            onDispose { appController.dispose() }
+        }
+    }
 
     val settings by appController.settings.collectAsState()
     val machines by appController.machines.collectAsState()
@@ -151,24 +160,33 @@ fun RemotePiApp(controller: SharedAppController? = null) {
         remember(settings.appTheme, machines, agents) {
             resolveThemeChoice(settings.appTheme, machines, agents)
         }
+    val reducedMotion = rememberIsReducedMotion()
+    val locked = settings.appLock && isAppLocked && settingsState.session != null
 
-    RpTheme(themeChoice = themeChoice) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding(),
+    LaunchedEffect(settings.appLock, isAppLocked, settingsState.session) {
+        if (settings.appLock && isAppLocked && settingsState.session != null) {
+            appController.unlockApp()
+        }
+    }
+
+    CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
+        RpTheme(themeChoice = themeChoice) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background,
             ) {
-                if (settings.appLock && isAppLocked && settingsState.session != null) {
-                    LockScreen(
-                        onUnlock = appController::unlockApp,
-                        message = appLockMessage,
-                    )
-                } else {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding(),
+                ) {
+                    if (locked) {
+                        LockScreen(
+                            onUnlock = appController::unlockApp,
+                            message = appLockMessage,
+                        )
+                    } else {
                     when (val current = route) {
                         is OnboardingRoute -> {
                             OnboardingContent(
@@ -423,38 +441,38 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                             }
                         }
                     }
-                }
-
-                if (pendingForgetAgentId != null) {
-                    SharedAgentCloseConfirmationDialog(
-                        onConfirm = {
-                            val closingChatAgent = (route as? ChatRoute)?.agentId == pendingForgetAgentId
-                            appController.confirmForgetAgent {
-                                if (closingChatAgent) {
-                                    appController.navigateBack()
+                    if (pendingForgetAgentId != null) {
+                        SharedAgentCloseConfirmationDialog(
+                            onConfirm = {
+                                val closingChatAgent = (route as? ChatRoute)?.agentId == pendingForgetAgentId
+                                appController.confirmForgetAgent {
+                                    if (closingChatAgent) {
+                                        appController.navigateBack()
+                                    }
                                 }
-                            }
-                        },
-                        onDismiss = appController::cancelForgetAgent,
-                    )
-                }
+                            },
+                            onDismiss = appController::cancelForgetAgent,
+                        )
+                    }
 
-                val promptId = activePromptId
-                if (promptId != null) {
-                    val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
-                    PromptSheetChrome(
-                        state = promptSheetState,
-                        onDismissRequest = appController::dismissPromptSheet,
-                        errorMessage = promptSheetError,
-                        authMessage = promptSheetAuthMessage,
-                    ) {
-                        if (activePrompt != null) {
-                            PromptContent(
-                                prompt = activePrompt,
-                                busy = busyPromptId == activePrompt.promptId,
-                                onAnswer = { ans -> appController.answerPrompt(activePrompt.promptId, ans) },
-                            )
+                    val promptId = activePromptId
+                    if (promptId != null) {
+                        val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
+                        PromptSheetChrome(
+                            state = promptSheetState,
+                            onDismissRequest = appController::dismissPromptSheet,
+                            errorMessage = promptSheetError,
+                            authMessage = promptSheetAuthMessage,
+                        ) {
+                            if (activePrompt != null) {
+                                PromptContent(
+                                    prompt = activePrompt,
+                                    busy = busyPromptId == activePrompt.promptId,
+                                    onAnswer = { ans -> appController.answerPrompt(activePrompt.promptId, ans) },
+                                )
+                            }
                         }
+                    }
                     }
                 }
             }

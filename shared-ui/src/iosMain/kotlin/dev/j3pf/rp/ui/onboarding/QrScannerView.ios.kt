@@ -8,6 +8,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.readValue
+import platform.AVFoundation.AVAuthorizationStatusAuthorized
+import platform.AVFoundation.AVAuthorizationStatusNotDetermined
 import platform.AVFoundation.AVCaptureConnection
 import platform.AVFoundation.AVCaptureDevice
 import platform.AVFoundation.AVCaptureDeviceInput
@@ -21,12 +24,15 @@ import platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
 import platform.AVFoundation.AVMediaTypeVideo
 import platform.AVFoundation.AVMetadataMachineReadableCodeObject
 import platform.AVFoundation.AVMetadataObjectTypeQRCode
+import platform.AVFoundation.authorizationStatusForMediaType
+import platform.AVFoundation.requestAccessForMediaType
+import platform.CoreGraphics.CGRectZero
 import platform.UIKit.UIView
-import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
-import platform.darwin.dispatch_get_global_queue
 import platform.darwin.dispatch_get_main_queue
+import platform.darwin.dispatch_queue_create
+import kotlin.concurrent.Volatile
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -54,36 +60,59 @@ actual fun QrScannerView(
 }
 
 @OptIn(ExperimentalForeignApi::class)
+private class QrPreviewContainerView : UIView(frame = CGRectZero.readValue()) {
+    var previewLayer: AVCaptureVideoPreviewLayer? = null
+
+    override fun layoutSubviews() {
+        super.layoutSubviews()
+        previewLayer?.frame = bounds
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
 private class IosQrScanner(
     private val onResult: (String) -> Unit,
     private val onUnavailable: () -> Unit,
 ) {
     private val session = AVCaptureSession()
     private val output = AVCaptureMetadataOutput()
+    private val sessionQueue = dispatch_queue_create("dev.j3pf.rp.qr", null)
     private val delegate =
         QrMetadataDelegate { raw ->
+            if (disposed) return@QrMetadataDelegate
             stopSessionAsync()
             onResult(raw)
         }
     private var previewLayer: AVCaptureVideoPreviewLayer? = null
     private var configured = false
 
+    @Volatile
+    private var disposed = false
+
     fun createView(): UIView {
-        val view = UIView()
-        if (!configured) {
-            configured = configureSession()
-            if (!configured) {
-                onUnavailable()
-                return view
+        val view = QrPreviewContainerView()
+        when (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo)) {
+            AVAuthorizationStatusAuthorized -> {
+                attachPreviewAndStart(view)
+            }
+
+            AVAuthorizationStatusNotDetermined -> {
+                AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted ->
+                    dispatch_async(dispatch_get_main_queue()) {
+                        if (disposed) return@dispatch_async
+                        if (granted) {
+                            attachPreviewAndStart(view)
+                        } else {
+                            onUnavailable()
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                dispatchUnavailableAsync()
             }
         }
-
-        val layer = AVCaptureVideoPreviewLayer(session = session)
-        layer.videoGravity = AVLayerVideoGravityResizeAspectFill
-        view.layer.addSublayer(layer)
-        previewLayer = layer
-        layer.frame = view.bounds
-        startSessionAsync()
         return view
     }
 
@@ -92,24 +121,56 @@ private class IosQrScanner(
     }
 
     fun dispose() {
+        disposed = true
         output.setMetadataObjectsDelegate(null, null)
         stopSessionAsync()
         previewLayer?.removeFromSuperlayer()
         previewLayer = null
     }
 
-    private fun startSessionAsync() {
-        val queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)
-        dispatch_async(queue) {
+    private fun attachPreviewAndStart(view: QrPreviewContainerView) {
+        if (disposed) return
+        val layer =
+            previewLayer ?: AVCaptureVideoPreviewLayer(session = session).also {
+                it.videoGravity = AVLayerVideoGravityResizeAspectFill
+                view.layer.addSublayer(it)
+                view.previewLayer = it
+                previewLayer = it
+            }
+        layer.frame = view.bounds
+
+        dispatch_async(sessionQueue) {
+            if (disposed) return@dispatch_async
+            if (!configured) {
+                configured = configureSession()
+            }
+            if (!configured) {
+                dispatch_async(dispatch_get_main_queue()) {
+                    previewLayer?.removeFromSuperlayer()
+                    view.previewLayer = null
+                    previewLayer = null
+                    if (!disposed) {
+                        onUnavailable()
+                    }
+                }
+                return@dispatch_async
+            }
             if (!session.isRunning()) {
                 session.startRunning()
             }
         }
     }
 
+    private fun dispatchUnavailableAsync() {
+        dispatch_async(dispatch_get_main_queue()) {
+            if (!disposed) {
+                onUnavailable()
+            }
+        }
+    }
+
     private fun stopSessionAsync() {
-        val queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)
-        dispatch_async(queue) {
+        dispatch_async(sessionQueue) {
             if (session.isRunning()) {
                 session.stopRunning()
             }

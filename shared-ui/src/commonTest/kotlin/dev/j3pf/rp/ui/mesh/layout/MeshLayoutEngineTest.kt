@@ -727,6 +727,20 @@ class MeshLayoutEngineTest {
         assertTrue(result.edges.isEmpty(), "Sibling roots should not have tree connector edges")
     }
 
+    @Test
+    fun `group membership fallback does not create cycle when orchestrator parent points to same-group subordinate`() {
+        val orchestrator = node("orch", parent = "sub", role = "orchestrator", groupId = "g1")
+        val subordinate = node("sub", parent = null, role = "subordinate", groupId = "g1")
+
+        val result = engine.computeLayout(listOf(orchestrator, subordinate), emptyList(), width = 800f, height = 600f)
+
+        assertEquals(2, result.nodes.size)
+        assertTrue(result.nodes.values.all { it.x.isFinite() && it.y.isFinite() })
+        assertTrue(result.centerNodeId != null)
+        assertEquals(0, result.nodes.getValue("sub").level)
+        assertEquals(1, result.nodes.getValue("orch").level)
+    }
+
     private fun hierarchy(count: Int): List<MeshNode> =
         buildList {
             add(node("root", role = "orchestrator"))

@@ -18,6 +18,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import platform.Foundation.NSBundle
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
@@ -45,6 +46,9 @@ object IosKeychainStoreBridge {
     @Volatile
     private var removeHook: ((key: String, accessGroup: String?) -> Unit)? = null
 
+    @Volatile
+    internal var nseAccessGroup: String? = null
+
     fun configure(
         onGet: (key: String, accessGroup: String?) -> String?,
         onPut: (key: String, value: String, accessGroup: String?) -> Unit,
@@ -57,10 +61,11 @@ object IosKeychainStoreBridge {
             SwiftHookSecretBacking(group)
         }
         IosKeychainBridge.onPushKeyChanged = { pushKey, group ->
+            val targetGroup = group ?: nseAccessGroup ?: IosAppScope.resolveSharedKeychainAccessGroup()
             if (pushKey != null) {
-                putHook?.invoke(EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY, pushKey, group)
+                putHook?.invoke(EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY, pushKey, targetGroup)
             } else {
-                removeHook?.invoke(EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY, group)
+                removeHook?.invoke(EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY, targetGroup)
             }
         }
     }
@@ -91,9 +96,6 @@ object IosKeychainStoreBridge {
                 EncryptedKeyValueSecretStore.K_DEVICE_ID,
                 EncryptedKeyValueSecretStore.K_TOKEN,
                 EncryptedKeyValueSecretStore.K_PUSH_KEY,
-                EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY,
-                "rp_nse_muted_agents",
-                "rp_nse_critical_always",
             )
 
         override fun getString(key: String): String? = getHook?.invoke(key, accessGroup)
@@ -141,9 +143,14 @@ object IosBiometricAuthorizer : BiometricAuthorizer {
     override suspend fun authenticate(reason: String): BiometricAuthResult =
         suspendCancellableCoroutine { cont ->
             val context = LAContext()
+            cont.invokeOnCancellation {
+                context.invalidate()
+            }
             val canEval = context.canEvaluatePolicy(LAPolicyDeviceOwnerAuthentication, error = null)
             if (!canEval) {
-                cont.resume(BiometricAuthResult.UNAVAILABLE)
+                if (cont.isActive) {
+                    cont.resume(BiometricAuthResult.UNAVAILABLE)
+                }
                 return@suspendCancellableCoroutine
             }
             context.evaluatePolicy(
@@ -163,7 +170,10 @@ object IosBiometricAuthorizer : BiometricAuthorizer {
  * `SessionPolicy`, and `IosPushRegistrationBridge.registration`.
  */
 object IosAppScope {
-    const val DEFAULT_KEYCHAIN_ACCESS_GROUP = "19410625785.dev.j3pf.rp.iosApp"
+    fun resolveSharedKeychainAccessGroup(): String? {
+        val raw = NSBundle.mainBundle.objectForInfoDictionaryKey("RPKeychainAccessGroup") as? String
+        return raw?.trim()?.takeIf { it.isNotEmpty() && !it.contains("$(") }
+    }
 
     @Volatile
     var activeController: SharedAppController? = null
@@ -179,17 +189,22 @@ object IosAppScope {
 
     fun createController(
         scope: CoroutineScope,
-        accessGroup: String? = DEFAULT_KEYCHAIN_ACCESS_GROUP,
+        accessGroup: String? = resolveSharedKeychainAccessGroup(),
     ): SharedAppController {
-        val secrets = SecretStoreIos(accessGroup = accessGroup)
+        val sharedNseAccessGroup = accessGroup ?: resolveSharedKeychainAccessGroup()
+        IosKeychainStoreBridge.nseAccessGroup = sharedNseAccessGroup
+        // Main-app secrets stay in the app-private default Keychain group (accessGroup = null)
+        // so NotificationService cannot read rp_master_key or deviceToken; only rp_nse_push_key,
+        // rp_nse_muted_agents, and rp_nse_critical_always are mirrored to sharedNseAccessGroup.
+        val secrets = SecretStoreIos(accessGroup = null)
         val settingsStore =
             KeyValueSettingsStore(
                 backing = NsUserDefaultsSettingsBacking(),
                 onMutedAgentsChanged = { muted ->
-                    IosKeychainStoreBridge.putMutedAgents(muted.joinToString(","), accessGroup)
+                    IosKeychainStoreBridge.putMutedAgents(muted.joinToString(","), sharedNseAccessGroup)
                 },
                 onCriticalAlwaysChanged = { criticalAlways ->
-                    IosKeychainStoreBridge.putCriticalAlways(criticalAlways, accessGroup)
+                    IosKeychainStoreBridge.putCriticalAlways(criticalAlways, sharedNseAccessGroup)
                 },
             )
         val httpTransport = UrlSessionRelayTransport()
@@ -226,6 +241,7 @@ object IosAppScope {
                 startSocketConnection = { socketPolicy.start() },
                 stopSocketConnection = { socketPolicy.stop() },
                 retrySocketConnection = { socketPolicy.retryNow() },
+                forceRetrySocketConnection = { socketPolicy.retryNow(force = true) },
                 isSocketConnected = { socketPolicy.isConnected },
                 sendSocketText = { socketPolicy.send(it) },
                 connState = socketPolicy.state,

@@ -143,8 +143,14 @@ fun ChatTopBar(
                 androidx.compose.foundation.layout
                     .WindowInsets(0, 0, 0, 0),
             title = {
-                val rawTitle = agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: sessionName ?: "Agente"
-                val folder = agent?.cwd?.let { lastSegment(it) }.orEmpty()
+                val isRedacted = agent?.redacted == true
+                val rawTitle =
+                    if (isRedacted) {
+                        "[redacted]"
+                    } else {
+                        agent?.let { agentTitle(it.sessionName, it.cwd, it.agentId) } ?: sessionName ?: "Agente"
+                    }
+                val folder = if (isRedacted) "" else agent?.cwd?.let { lastSegment(it) }.orEmpty()
                 val headerParts = resolveChatHeaderTitle(rawTitle = rawTitle, folder = folder)
                 val headerText =
                     if (headerParts.project != null && headerParts.topic != null) {
@@ -186,7 +192,7 @@ fun ChatTopBar(
                             }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             StatusChip(effectiveAgent)
-                            val rawBranch = agent.gitBranch
+                            val rawBranch = if (isRedacted) null else agent.gitBranch
                             val hasChanges = diffFileCount > 0 || rawBranch?.endsWith(" *") == true
                             if (!rawBranch.isNullOrBlank()) {
                                 val cleanBranch = rawBranch.removeSuffix(" *").trim()
@@ -218,7 +224,7 @@ fun ChatTopBar(
                             val hasCtxTelemetry =
                                 (agent.contextPercent ?: tabMeta.contextPercent) != null ||
                                     (agent.contextTokens ?: tabMeta.contextTokens) != null
-                            val activeTaskText = if (working) agent.activeTask?.takeIf { it.isNotBlank() } else null
+                            val activeTaskText = if (working && !isRedacted) agent.activeTask?.takeIf { it.isNotBlank() } else null
                             val modelText = if (!hasCtxTelemetry) (model ?: agent.model?.label)?.takeIf { it.isNotBlank() } else null
                             val thinkingText = if (!hasCtxTelemetry) thinkingLevel?.takeIf { it.isNotBlank() } else null
                             val subtitle =
@@ -567,7 +573,12 @@ fun ChatTopBar(
                     )
                     otherActiveAgents.forEach { sibling ->
                         val isWaiting = sibling.status == AgentStatus.WAITING_INPUT
-                        val siblingTitle = agentTitle(sibling.sessionName, sibling.cwd, sibling.agentId)
+                        val siblingTitle =
+                            if (sibling.redacted) {
+                                "[redacted]"
+                            } else {
+                                agentTitle(sibling.sessionName, sibling.cwd, sibling.agentId)
+                            }
                         val badgePrefix = if (isWaiting) "⏳ " else "● "
                         Surface(
                             shape = RoundedCornerShape(999.dp),

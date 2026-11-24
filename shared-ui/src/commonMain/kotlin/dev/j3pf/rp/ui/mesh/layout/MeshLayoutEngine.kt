@@ -43,6 +43,21 @@ class MeshLayoutEngine(
 
         val nodesById = orderedNodes.associateBy { it.agentId }
 
+        fun createsCycle(
+            childId: String,
+            candidateParentId: String,
+            parents: Map<String, String>,
+        ): Boolean {
+            var cur: String? = candidateParentId
+            val visited = mutableSetOf(childId)
+            while (cur != null) {
+                if (cur in visited) return true
+                visited.add(cur)
+                cur = parents[cur]
+            }
+            return false
+        }
+
         // Defensive cycle detection: establish valid parent links
         val validParentId = mutableMapOf<String, String>()
         for (node in orderedNodes) {
@@ -59,7 +74,7 @@ class MeshLayoutEngine(
                     visited.add(cur)
                     cur = nodesById[cur]?.parentAgentId
                 }
-                if (!hasCycle) {
+                if (!hasCycle && !createsCycle(node.agentId, pid, validParentId)) {
                     validParentId[node.agentId] = pid
                 }
             }
@@ -74,11 +89,27 @@ class MeshLayoutEngine(
                     if (node.agentId !in validParentId &&
                         node.agentId != orch.agentId &&
                         node.groupId == gId &&
-                        node.role != "orchestrator"
+                        node.role != "orchestrator" &&
+                        !createsCycle(node.agentId, orch.agentId, validParentId)
                     ) {
                         validParentId[node.agentId] = orch.agentId
                     }
                 }
+            }
+        }
+
+        // Final defensive cycle-breaking pass across the combined parent map
+        for (node in orderedNodes) {
+            val pid = validParentId[node.agentId] ?: continue
+            var cur: String? = pid
+            val visited = mutableSetOf(node.agentId)
+            while (cur != null) {
+                if (cur in visited) {
+                    validParentId.remove(node.agentId)
+                    break
+                }
+                visited.add(cur)
+                cur = validParentId[cur]
             }
         }
 
@@ -439,7 +470,7 @@ class MeshLayoutEngine(
                 .sortedWith(compareBy<MeshEdge>({ it.edgeId }, { it.a }, { it.b }))
                 .mapNotNull { edge -> positionEdge(edge, positionedNodes, rowsByY, sortedRowCenters, minLeftBound) }
 
-        val primaryRoot = roots.firstOrNull { it.role == "orchestrator" } ?: roots.first()
+        val primaryRoot = roots.firstOrNull { it.role == "orchestrator" } ?: roots.firstOrNull() ?: orderedNodes.first()
         return MeshLayoutResult(
             nodes = positionedNodes,
             edges = positionedEdges,

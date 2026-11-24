@@ -54,6 +54,7 @@ import dev.j3pf.rp.chat.AssistantMsg
 import dev.j3pf.rp.chat.Block
 import dev.j3pf.rp.chat.ChatItem
 import dev.j3pf.rp.chat.DiffKind
+import dev.j3pf.rp.chat.DiffLine
 import dev.j3pf.rp.chat.PromptCard
 import dev.j3pf.rp.chat.SubagentCardItem
 import dev.j3pf.rp.chat.SystemNote
@@ -628,15 +629,30 @@ private fun Mono(
     }
 }
 
+internal const val MAX_DIFF_VIEW_LINES = 400
+
+internal data class CappedDiffLines(
+    val visible: List<DiffLine>,
+    val omittedCount: Int,
+)
+
+internal fun capDiffLines(
+    lines: List<DiffLine>,
+    maxLines: Int = MAX_DIFF_VIEW_LINES,
+): CappedDiffLines {
+    if (lines.size <= maxLines) return CappedDiffLines(lines, 0)
+    return CappedDiffLines(lines.take(maxLines), lines.size - maxLines)
+}
+
 @Composable
 private fun DiffView(
     old: String,
     new: String,
 ) {
-    val lines = remember(old, new) { simpleDiff(old, new) }
+    val capped = remember(old, new) { capDiffLines(simpleDiff(old, new)) }
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
         Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-            lines.forEach { l ->
+            capped.visible.forEach { l ->
                 val (bg, mark) =
                     when (l.kind) {
                         DiffKind.ADDED -> Color(0x3300C853) to "+ "
@@ -648,6 +664,14 @@ private fun DiffView(
                     Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
+                )
+            }
+            if (capped.omittedCount > 0) {
+                Text(
+                    text = "… (${capped.omittedCount} líneas adicionales omitidas)",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
                 )
             }
         }
