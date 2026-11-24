@@ -2,7 +2,9 @@ package dev.j3pf.rp.data.secure
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.util.Base64
+import android.util.Log
 import androidx.core.content.edit
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.RegistryConfiguration
@@ -13,8 +15,13 @@ import dev.j3pf.rp.data.ports.SecretStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.IOException
+import java.security.GeneralSecurityException
 import java.security.KeyStore
+import java.security.KeyStoreException
+import java.security.ProviderException
 import java.security.SecureRandom
+import javax.crypto.AEADBadTagException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,7 +42,7 @@ open class SecretStore
         @Volatile
         private var cachedAead: Aead? = null
 
-        private fun buildAead(): Aead {
+        protected open fun buildAead(): Aead {
             AeadConfig.register()
             return AndroidKeysetManager
                 .Builder()
@@ -68,9 +75,16 @@ open class SecretStore
             synchronized(aeadLock) {
                 cachedAead?.let { return it }
                 val created =
-                    runCatching { buildAead() }.getOrElse {
-                        resetCorruptedKeyset()
+                    try {
                         buildAead()
+                    } catch (t: Throwable) {
+                        if (isPermanentKeysetCorruption(t)) {
+                            Log.w(TAG, "Permanent keyset corruption detected; resetting keyset", t)
+                            resetCorruptedKeyset()
+                            buildAead()
+                        } else {
+                            throw t
+                        }
                     }
                 cachedAead = created
                 return created
@@ -87,11 +101,17 @@ open class SecretStore
         override fun current(): Session? = _session.value
 
         override fun save(session: Session) {
-            runCatching { writeEncryptedSession(session) }
-                .recoverCatching {
+            try {
+                writeEncryptedSession(session)
+            } catch (t: Throwable) {
+                if (isPermanentKeysetCorruption(t)) {
+                    Log.w(TAG, "Permanent keyset corruption during save; resetting keyset", t)
                     synchronized(aeadLock) { resetCorruptedKeyset() }
                     writeEncryptedSession(session)
-                }.getOrThrow()
+                } else {
+                    throw t
+                }
+            }
             _session.value = session
         }
 
@@ -117,28 +137,39 @@ open class SecretStore
                 .joinToString("") { "%02x".format(it) }
 
         private fun load(): Session? =
-            runCatching {
+            try {
                 val hasStoredSession = prefs.contains(K_RELAY_ID) || prefs.contains(K_TOKEN)
-                val relayId = get(K_RELAY_ID)
-                val relayUrl = get(K_URL)
-                val deviceId = get(K_DEVICE_ID)
-                val deviceToken = get(K_TOKEN)
-                val pushKey = get(K_PUSH_KEY)
-                if (relayId == null || relayUrl == null || deviceId == null || deviceToken == null || pushKey == null) {
-                    if (hasStoredSession) {
+                if (!hasStoredSession) {
+                    null
+                } else {
+                    val relayId = decryptField(K_RELAY_ID)
+                    val relayUrl = decryptField(K_URL)
+                    val deviceId = decryptField(K_DEVICE_ID)
+                    val deviceToken = decryptField(K_TOKEN)
+                    val pushKey = decryptField(K_PUSH_KEY)
+                    if (relayId == null || relayUrl == null || deviceId == null || deviceToken == null || pushKey == null) {
                         synchronized(aeadLock) { resetCorruptedKeyset() }
+                        null
+                    } else {
+                        Session(
+                            relayId = relayId,
+                            relayUrl = relayUrl,
+                            relayName = decryptField(K_NAME) ?: "",
+                            deviceId = deviceId,
+                            deviceToken = deviceToken,
+                            pushKey = pushKey,
+                        )
                     }
-                    return null
                 }
-                Session(
-                    relayId = relayId,
-                    relayUrl = relayUrl,
-                    relayName = get(K_NAME) ?: "",
-                    deviceId = deviceId,
-                    deviceToken = deviceToken,
-                    pushKey = pushKey,
-                )
-            }.getOrNull()
+            } catch (t: Throwable) {
+                if (isPermanentKeysetCorruption(t) || t is IllegalArgumentException) {
+                    Log.w(TAG, "Permanent stored secret corruption; resetting keyset", t)
+                    synchronized(aeadLock) { resetCorruptedKeyset() }
+                } else {
+                    Log.w(TAG, "Transient failure reading SecretStore; preserving stored credentials", t)
+                }
+                null
+            }
 
         private fun encryptField(
             key: String,
@@ -148,14 +179,14 @@ open class SecretStore
             return Base64.encodeToString(ct, Base64.NO_WRAP)
         }
 
-        private fun get(key: String): String? {
+        private fun decryptField(key: String): String? {
             val raw = prefs.getString(key, null) ?: return null
-            return runCatching {
-                String(getOrCreateAead().decrypt(Base64.decode(raw, Base64.NO_WRAP), key.toByteArray(Charsets.UTF_8)), Charsets.UTF_8)
-            }.getOrNull()
+            val decoded = Base64.decode(raw, Base64.NO_WRAP)
+            return String(getOrCreateAead().decrypt(decoded, key.toByteArray(Charsets.UTF_8)), Charsets.UTF_8)
         }
 
-        private companion object {
+        internal companion object {
+            private const val TAG = "SecretStore"
             const val PREFS = "rp_secrets"
             const val KEYSET_NAME = "rp_keyset"
             const val KEYSET_PREFS = "rp_keyset_prefs"
@@ -167,5 +198,25 @@ open class SecretStore
             const val K_DEVICE_ID = "deviceId"
             const val K_TOKEN = "deviceToken"
             const val K_PUSH_KEY = "pushKey"
+
+            /**
+             * Only permanent keyset/AEAD corruption should reset the Keystore master key and wipe credentials.
+             * Transient I/O, Keystore IPC, or generic runtime errors must preserve encrypted credentials on disk.
+             */
+            fun isPermanentKeysetCorruption(t: Throwable): Boolean {
+                val chain = generateSequence(t) { it.cause }.toList()
+                if (chain.any {
+                        it is KeyPermanentlyInvalidatedException ||
+                            it is AEADBadTagException ||
+                            it.javaClass.simpleName == "InvalidProtocolBufferException"
+                    }
+                ) {
+                    return true
+                }
+                if (chain.any { it is KeyStoreException || it is IOException || it is ProviderException }) {
+                    return false
+                }
+                return chain.any { it is GeneralSecurityException }
+            }
         }
     }

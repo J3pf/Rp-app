@@ -1,6 +1,7 @@
 package dev.j3pf.rp.data.repo
 
 import android.content.Context
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
@@ -36,6 +37,7 @@ import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.Ulid
 import dev.j3pf.rp.push.AnswerWorker
 import dev.j3pf.rp.push.NotificationFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -91,32 +93,38 @@ class PromptsRepository
         override fun start() {
             bus.messages
                 .onEach { env ->
-                    val relayId = secrets.current()?.relayId ?: return@onEach
-                    val now = System.currentTimeMillis()
-                    when (env.t) {
-                        MsgType.APP_WELCOME -> {
-                            val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
-                            dao.syncWelcome(
-                                relayId,
-                                w.openPrompts.map { it.toEntity(relayId, now) },
-                                w.openPrompts.map { it.promptId }.ifEmpty { listOf("") },
-                                now,
-                            )
-                        }
+                    try {
+                        val relayId = secrets.current()?.relayId ?: return@onEach
+                        val now = System.currentTimeMillis()
+                        when (env.t) {
+                            MsgType.APP_WELCOME -> {
+                                val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                                dao.syncWelcome(
+                                    relayId,
+                                    w.openPrompts.map { it.toEntity(relayId, now) },
+                                    w.openPrompts.map { it.promptId }.ifEmpty { listOf("") },
+                                    now,
+                                )
+                            }
 
-                        MsgType.PROMPT_OPENED -> {
-                            val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return@onEach
-                            // upsertOpen: un replay de prompt.opened no reabre un prompt ya respondido.
-                            dao.upsertOpen(relayId, listOf(p.toEntity(relayId, now)), now)
-                        }
+                            MsgType.PROMPT_OPENED -> {
+                                val p = runCatching { env.body<Prompt>() }.getOrNull() ?: return@onEach
+                                // upsertOpen: un replay de prompt.opened no reabre un prompt ya respondido.
+                                dao.upsertOpen(relayId, listOf(p.toEntity(relayId, now)), now)
+                            }
 
-                        MsgType.PROMPT_RESOLVED -> {
-                            val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return@onEach
-                            dao.markResolved(relayId, r.promptId, r.by, now)
-                            notifications.cancelPrompt(r.promptId)
+                            MsgType.PROMPT_RESOLVED -> {
+                                val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return@onEach
+                                dao.markResolved(relayId, r.promptId, r.by, now)
+                                notifications.cancelPrompt(r.promptId)
+                            }
                         }
+                        if (env.t == MsgType.APP_WELCOME) dao.purgeResolved(now - 24 * 3600_000L)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e("PromptsRepository", "Error handling envelope ${env.t}", e)
                     }
-                    if (env.t == MsgType.APP_WELCOME) dao.purgeResolved(now - 24 * 3600_000L)
                 }.launchIn(scope)
         }
 

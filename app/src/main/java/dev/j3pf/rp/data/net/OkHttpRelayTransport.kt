@@ -4,6 +4,8 @@ import dev.j3pf.rp.client.http.RelayHttpRequest
 import dev.j3pf.rp.client.http.RelayHttpResponse
 import dev.j3pf.rp.client.http.RelayHttpTimeout
 import dev.j3pf.rp.client.http.RelayHttpTransport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,12 +35,14 @@ class OkHttpRelayTransport(
                     .build()
             }.getOrElse { return ApiResult.Network(it) }
         val http = if (request.timeout == RelayHttpTimeout.QUICK) quick else client
-        val response =
+        return withContext(Dispatchers.IO) {
             try {
-                http.newCall(native).await()
+                http.newCall(native).await().use { response ->
+                    ApiResult.Ok(RelayHttpResponse(response.code, response.body.string()))
+                }
             } catch (e: IOException) {
-                return ApiResult.Network(e)
+                ApiResult.Network(e)
             }
-        return response.use { ApiResult.Ok(RelayHttpResponse(it.code, it.body.string())) }
+        }
     }
 }

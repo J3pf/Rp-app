@@ -29,12 +29,14 @@ import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HostGitDiffResult
 import dev.j3pf.rp.ui.nav.ChatRoute
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -87,6 +89,8 @@ class ChatViewModel
         private val session = chats.open(agentId)
 
         private val local = java.util.concurrent.ConcurrentHashMap<String, LocalAttachment>()
+        private val attachmentJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+        private val removedAttachments = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         private val extra = MutableStateFlow(ChatUiState())
         private var forgetOnDone: ((CloseOutcome) -> Unit)? = null
 
@@ -272,40 +276,53 @@ class ChatViewModel
         /** Reintenta la subida de un adjunto que falló. */
         fun retryAttachment(id: String) {
             val la = local[id] ?: return
+            removedAttachments.remove(id)
+            attachmentJobs.remove(id)?.cancel()
             replace(id) { it.copy(state = UploadState.UPLOADING, progress = 0f, error = null) }
-            viewModelScope.launch {
-                when (val r = attachmentsRepo.upload(la) { p -> replace(id) { it.copy(progress = p) } }) {
-                    is ApiResult.Ok -> {
-                        replace(id) { it.copy(state = UploadState.DONE, progress = 1f, blobId = r.value.blobId) }
-                    }
+            val job =
+                viewModelScope.launch {
+                    try {
+                        when (val r = attachmentsRepo.upload(la) { p -> replace(id) { it.copy(progress = p) } }) {
+                            is ApiResult.Ok -> {
+                                replace(id) { it.copy(state = UploadState.DONE, progress = 1f, blobId = r.value.blobId) }
+                            }
 
-                    is ApiResult.Http -> {
-                        replace(id) {
-                            it.copy(
-                                state = UploadState.ERROR,
-                                error =
-                                    if (r.code ==
-                                        413
-                                    ) {
-                                        "Supera 25 MB"
-                                    } else {
-                                        "HTTP ${r.code}"
-                                    },
-                            )
+                            is ApiResult.Http -> {
+                                replace(id) {
+                                    it.copy(
+                                        state = UploadState.ERROR,
+                                        error =
+                                            if (r.code ==
+                                                413
+                                            ) {
+                                                "Supera 25 MB"
+                                            } else {
+                                                "HTTP ${r.code}"
+                                            },
+                                    )
+                                }
+                            }
+
+                            is ApiResult.Network -> {
+                                replace(id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
+                            }
                         }
-                    }
-
-                    is ApiResult.Network -> {
-                        replace(id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
+                    } finally {
+                        attachmentJobs.remove(id)
                     }
                 }
-            }
+            attachmentJobs[id] = job
         }
 
         /** ¿Este envío cuenta como "tecleado" y por tanto debe pedir biometría? (válida 5 min) */
         fun needsAuth(): Boolean {
             val s = state.value
-            return s.choice == DeliveryChoice.TYPED || (s.requireUnlockToApprove && s.choice == DeliveryChoice.AUTO && s.isAuto)
+            return s.choice == DeliveryChoice.TYPED ||
+                (
+                    s.requireUnlockToApprove &&
+                        s.isAuto &&
+                        (s.choice == DeliveryChoice.AUTO || s.choice == DeliveryChoice.COMMAND)
+                )
         }
 
         // ───────────────────────────── Adjuntos ─────────────────────────────
@@ -320,55 +337,79 @@ class ChatViewModel
                                 AttachmentUi(tempId, uri.lastPathSegment ?: "archivo", "", 0, UploadState.PREPARING, previewUri = uri),
                     )
                 }
-                viewModelScope.launch {
-                    val prepared = attachmentsRepo.prepare(uri)
-                    val la =
-                        prepared.getOrElse { e ->
-                            replace(tempId) { it.copy(state = UploadState.ERROR, error = e.message ?: "No se pudo leer el archivo") }
-                            return@launch
-                        }
-                    local[la.id] = la
-                    replace(tempId) {
-                        it.copy(id = la.id, name = la.name, mime = la.mime, size = la.size, state = UploadState.UPLOADING)
-                    }
-                    when (val r = attachmentsRepo.upload(la) { p -> replace(la.id) { it.copy(progress = p) } }) {
-                        is ApiResult.Ok -> {
-                            replace(la.id) {
-                                it.copy(
-                                    state = UploadState.DONE,
-                                    progress = 1f,
-                                    blobId = r.value.blobId,
-                                    size =
-                                        r.value.size.takeIf { s -> s > 0 } ?: it.size,
-                                )
+                val job =
+                    viewModelScope.launch {
+                        var currentId = tempId
+                        try {
+                            val prepared = attachmentsRepo.prepare(uri)
+                            val la =
+                                prepared.getOrElse { e ->
+                                    if (tempId !in removedAttachments) {
+                                        replace(tempId) { it.copy(state = UploadState.ERROR, error = e.message ?: "No se pudo leer el archivo") }
+                                    }
+                                    return@launch
+                                }
+                            if (tempId in removedAttachments) {
+                                attachmentsRepo.discard(la)
+                                return@launch
                             }
-                        }
-
-                        is ApiResult.Http -> {
-                            replace(la.id) {
-                                it.copy(
-                                    state = UploadState.ERROR,
-                                    error =
-                                        if (r.code ==
-                                            413
-                                        ) {
-                                            "Supera 25 MB"
-                                        } else {
-                                            "HTTP ${r.code}"
-                                        },
-                                )
+                            currentId = la.id
+                            attachmentJobs.remove(tempId)?.let { attachmentJobs[la.id] = it }
+                            local[la.id] = la
+                            if (la.id in removedAttachments) {
+                                local.remove(la.id)?.let(attachmentsRepo::discard)
+                                return@launch
                             }
-                        }
+                            replace(tempId) {
+                                it.copy(id = la.id, name = la.name, mime = la.mime, size = la.size, state = UploadState.UPLOADING)
+                            }
+                            when (val r = attachmentsRepo.upload(la) { p -> replace(la.id) { it.copy(progress = p) } }) {
+                                is ApiResult.Ok -> {
+                                    replace(la.id) {
+                                        it.copy(
+                                            state = UploadState.DONE,
+                                            progress = 1f,
+                                            blobId = r.value.blobId,
+                                            size =
+                                                r.value.size.takeIf { s -> s > 0 } ?: it.size,
+                                        )
+                                    }
+                                }
 
-                        is ApiResult.Network -> {
-                            replace(la.id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
+                                is ApiResult.Http -> {
+                                    replace(la.id) {
+                                        it.copy(
+                                            state = UploadState.ERROR,
+                                            error =
+                                                if (r.code ==
+                                                    413
+                                                ) {
+                                                    "Supera 25 MB"
+                                                } else {
+                                                    "HTTP ${r.code}"
+                                                },
+                                        )
+                                    }
+                                }
+
+                                is ApiResult.Network -> {
+                                    replace(la.id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
+                                }
+                            }
+                        } finally {
+                            attachmentJobs.remove(tempId)
+                            attachmentJobs.remove(currentId)
+                            removedAttachments.remove(tempId)
+                            removedAttachments.remove(currentId)
                         }
                     }
-                }
+                attachmentJobs[tempId] = job
             }
         }
 
         fun removeAttachment(id: String) {
+            removedAttachments.add(id)
+            attachmentJobs.remove(id)?.cancel()
             local.remove(id)?.let(attachmentsRepo::discard)
             extra.update { it.copy(attachments = it.attachments.filterNot { a -> a.id == id }) }
         }
@@ -409,8 +450,12 @@ class ChatViewModel
             val isSlash = body.startsWith("/")
             val asCommand = isSlash && (s.choice == DeliveryChoice.COMMAND || s.choice == DeliveryChoice.AUTO)
             extra.update { it.copy(sending = true, interactiveUnavailable = false) }
+            val sendDeferred =
+                chats.runInRepositoryScope {
+                    session.send(body, refs, delivery, method, asCommand)
+                }
             viewModelScope.launch {
-                val res = session.send(body, refs, delivery, method, asCommand)
+                val res = sendDeferred.await()
                 extra.update { it.copy(sending = false) }
                 when (res) {
                     is SendResult.Delivered -> {
@@ -421,34 +466,17 @@ class ChatViewModel
                                 attachments = it.attachments.filterNot { a -> a.id in sentIds },
                                 interactiveUnavailable = unavailable,
                                 message =
-                                    when (err) {
-                                        "agent_blocked" -> {
-                                            "El agente espera un diálogo en la terminal; el mensaje quedó en cola"
-                                        }
-
-                                        "interactive_unavailable" -> {
-                                            "No se pudo teclear en la terminal: el mensaje no autoriza acciones en Auto"
-                                        }
-
-                                        "herdr_unavailable" -> {
-                                            "herdr no está disponible en esa PC"
-                                        }
-
-                                        else -> {
-                                            if (res.ack?.disposition ==
-                                                "typed_after_dialog"
-                                            ) {
-                                                "Se enviará al cerrarse el diálogo"
-                                            } else {
-                                                null
-                                            }
-                                        }
-                                    },
+                                    mapDeliveryErrorMessage(err)
+                                        ?: if (res.ack?.disposition == "typed_after_dialog") {
+                                            "Se enviará al cerrarse el diálogo"
+                                        } else {
+                                            null
+                                        },
                             )
                         }
                         sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
                         setDraft("")
-                        onSent()
+                        if (isActive) onSent()
                     }
 
                     SendResult.Queued -> {
@@ -460,15 +488,29 @@ class ChatViewModel
                         }
                         sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
                         setDraft("")
-                        onSent()
+                        if (isActive) onSent()
                     }
 
                     is SendResult.Failed -> {
-                        extra.update { it.copy(message = res.reason) }
+                        val unavailable = res.reason == "interactive_unavailable" || res.reason == "herdr_unavailable"
+                        extra.update {
+                            it.copy(
+                                interactiveUnavailable = unavailable,
+                                message = mapDeliveryErrorMessage(res.reason) ?: res.reason,
+                            )
+                        }
                     }
                 }
             }
         }
+
+        private fun mapDeliveryErrorMessage(code: String?): String? =
+            when (code) {
+                "agent_blocked" -> "El agente espera un diálogo en la terminal; el mensaje quedó en cola"
+                "interactive_unavailable" -> "No se pudo teclear en la terminal: el mensaje no autoriza acciones en Auto"
+                "herdr_unavailable" -> "herdr no está disponible en esa PC"
+                else -> null
+            }
 
         /** "Pasar a Normal": `/gentle:mode normal` como comando (último recurso si no hay entrega interactiva). */
         fun switchToNormal() {
@@ -484,6 +526,9 @@ class ChatViewModel
         }
 
         override fun onCleared() {
+            attachmentJobs.values.forEach { it.cancel() }
+            attachmentJobs.clear()
+            removedAttachments.clear()
             local.values.forEach(attachmentsRepo::discard)
             chats.release(agentId)
         }

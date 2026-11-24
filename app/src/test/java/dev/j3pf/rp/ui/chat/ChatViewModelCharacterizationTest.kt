@@ -281,7 +281,7 @@ class ChatViewModelCharacterizationTest {
         vm.setChoice(DeliveryChoice.AUTO)
         assertTrue(vm.needsAuth(), "AUTO en agente gentle:auto cuenta como tecleado")
         vm.setChoice(DeliveryChoice.COMMAND)
-        assertTrue(!vm.needsAuth(), "Comandos no piden autenticación")
+        assertTrue(vm.needsAuth(), "COMMAND en agente gentle:auto requiere autenticación")
         vm.setChoice(DeliveryChoice.EXTENSION)
         assertTrue(!vm.needsAuth(), "Mensajes de extensión no piden autenticación")
     }

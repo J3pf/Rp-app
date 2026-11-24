@@ -1,5 +1,6 @@
 package dev.j3pf.rp.data.repo
 
+import android.util.Log
 import dev.j3pf.rp.data.db.MachineDao
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.MessageBus
@@ -14,6 +15,7 @@ import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.MachinesUpdate
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.push.NotificationChannels
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -54,26 +56,32 @@ class MachinesRepository
         fun start() {
             bus.messages
                 .onEach { env ->
-                    val relayId = secrets.current()?.relayId ?: return@onEach
-                    when (env.t) {
-                        MsgType.APP_WELCOME -> {
-                            val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
-                            dao.syncWelcome(
-                                relayId,
-                                w.machines.map { it.toEntity(relayId) },
-                                w.machines.map { it.machineId }.ifEmpty { listOf("") },
-                            )
-                            channels.sync(w.machines)
-                        }
-                        MsgType.MACHINES_UPDATE -> {
-                            val u = runCatching { env.body<MachinesUpdate>() }.getOrNull() ?: return@onEach
-                            if (u.upsert.isNotEmpty()) dao.upsert(u.upsert.map { it.toEntity(relayId) })
-                            if (u.remove.isNotEmpty()) {
-                                dao.delete(relayId, u.remove)
-                                u.remove.forEach(channels::removeMachine)
+                    try {
+                        val relayId = secrets.current()?.relayId ?: return@onEach
+                        when (env.t) {
+                            MsgType.APP_WELCOME -> {
+                                val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                                dao.syncWelcome(
+                                    relayId,
+                                    w.machines.map { it.toEntity(relayId) },
+                                    w.machines.map { it.machineId }.ifEmpty { listOf("") },
+                                )
+                                channels.sync(w.machines)
                             }
-                            channels.sync(dao.all(relayId).map { it.toModel() })
+                            MsgType.MACHINES_UPDATE -> {
+                                val u = runCatching { env.body<MachinesUpdate>() }.getOrNull() ?: return@onEach
+                                if (u.upsert.isNotEmpty()) dao.upsert(u.upsert.map { it.toEntity(relayId) })
+                                if (u.remove.isNotEmpty()) {
+                                    dao.delete(relayId, u.remove)
+                                    u.remove.forEach(channels::removeMachine)
+                                }
+                                channels.sync(dao.all(relayId).map { it.toModel() })
+                            }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e("MachinesRepository", "Error handling envelope ${env.t}", e)
                     }
                 }.launchIn(scope)
         }

@@ -33,6 +33,8 @@ import dev.j3pf.rp.util.stableId
 import dev.j3pf.rp.util.truncate
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.inject.Inject
@@ -111,21 +113,32 @@ class NotificationFactory
 
             val open = openIntent(p.promptId, p.agentId, id)
             val contentTitle = "${contextEmoji(p.machineContext)} $machineName · ${p.agentLabel.ifEmpty { "agente" }}".trim()
+            val displayTitle =
+                if (p.redacted) {
+                    context.getString(if (isPermission) R.string.channel_approvals else R.string.channel_questions)
+                } else {
+                    p.title
+                }
+            val displayMessage = if (p.redacted) null else p.message
             val builder =
                 NotificationCompat
                     .Builder(context, channel)
                     .setSmallIcon(R.drawable.ic_stat_rp)
                     .setContentTitle(contentTitle)
-                    .setContentText(p.title)
+                    .setContentText(displayTitle)
                     .setStyle(
                         NotificationCompat
                             .BigTextStyle()
                             .bigText(
-                                listOfNotNull(p.title.takeIf { it.isNotBlank() }, p.message?.takeIf { it.isNotBlank() }).joinToString("\n"),
+                                listOfNotNull(
+                                    displayTitle.takeIf { it.isNotBlank() },
+                                    displayMessage?.takeIf { it.isNotBlank() },
+                                ).joinToString("\n"),
                             ),
                     ).setContentIntent(open)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
                     .setGroup(groupKey(p.agentId))
@@ -139,7 +152,6 @@ class NotificationFactory
                 if (p.danger == Danger.HIGH) {
                     builder.setColor(0xFFB3261E.toInt())
                 }
-                builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 val publicNotif =
                     NotificationCompat
                         .Builder(context, channel)
@@ -279,20 +291,36 @@ class NotificationFactory
                 }
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
             val replyPi = PendingIntent.getBroadcast(context, id, reply, flags)
-            val rawBody = s.preview ?: s.message ?: "Terminó"
-            val bodyText = cleanPreview(rawBody, maxLen = 140) ?: "Terminó"
+            val bodyText =
+                if (s.redacted) {
+                    context.getString(R.string.channel_finished)
+                } else {
+                    val rawBody = s.preview ?: s.message ?: "Terminó"
+                    cleanPreview(rawBody, maxLen = 140) ?: "Terminó"
+                }
+            val contentTitle =
+                "${contextEmoji(s.machineContext)} ${s.machineName.ifEmpty { "RP" }} · ${s.agentLabel.ifEmpty { "agente" }}".trim()
+            val publicVersion =
+                NotificationCompat
+                    .Builder(context, channel)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle(contentTitle)
+                    .setContentText(context.getString(R.string.channel_finished))
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .build()
             val n =
                 NotificationCompat
                     .Builder(context, channel)
                     .setSmallIcon(R.drawable.ic_stat_rp)
-                    .setContentTitle(
-                        "${contextEmoji(s.machineContext)} ${s.machineName.ifEmpty { "RP" }} · ${s.agentLabel.ifEmpty { "agente" }}".trim(),
-                    ).setContentText(bodyText)
+                    .setContentTitle(contentTitle)
+                    .setContentText(bodyText)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
                     .setContentIntent(openIntent(null, s.agentId, id))
                     .setAutoCancel(true)
                     .setGroup(SETTLED_GROUP_KEY)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                    .setPublicVersion(publicVersion)
                     .addAction(
                         NotificationCompat.Action
                             .Builder(0, context.getString(R.string.action_reply), replyPi)
@@ -316,23 +344,71 @@ class NotificationFactory
             val machineName = body.str("machineName") ?: "RP"
             channels.ensureMachine(machineId, machineName, body.str("machineContext") ?: "personal")
             val category = if (kind == PushKind.TERMINAL_WAIT) NotifyCategory.TERMINAL else NotifyCategory.ERRORS
+            val channelId = channels.channelId(machineId, category)
             val label = body.str("agentLabel") ?: "agente"
+            val redacted = (body["redacted"] as? JsonPrimitive)?.booleanOrNull == true
             val text =
                 if (kind == PushKind.TERMINAL_WAIT) {
-                    "Esperando tu respuesta en la terminal" + (body.str("title")?.let { ": $it" } ?: "")
+                    if (redacted) {
+                        "Esperando tu respuesta en la terminal"
+                    } else {
+                        "Esperando tu respuesta en la terminal" + (body.str("title")?.let { ": $it" } ?: "")
+                    }
                 } else {
-                    body.str("message") ?: body.str("title") ?: "El agente tuvo un error"
+                    if (redacted) {
+                        "El agente tuvo un error"
+                    } else {
+                        body.str("detail") ?: body.str("message") ?: body.str("title") ?: "El agente tuvo un error"
+                    }
                 }
             val id = stableId("$kind:$agentId")
+            val contentTitle = "${contextEmoji(body.str("machineContext") ?: "personal")} $machineName · $label".trim()
+            val publicText =
+                context.getString(if (kind == PushKind.TERMINAL_WAIT) R.string.channel_terminal else R.string.channel_errors)
+            val publicVersion =
+                NotificationCompat
+                    .Builder(context, channelId)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle(contentTitle)
+                    .setContentText(publicText)
+                    .build()
             val n =
                 NotificationCompat
-                    .Builder(context, channels.channelId(machineId, category))
+                    .Builder(context, channelId)
                     .setSmallIcon(R.drawable.ic_stat_rp)
-                    .setContentTitle("${contextEmoji(body.str("machineContext") ?: "personal")} $machineName · $label".trim())
+                    .setContentTitle(contentTitle)
                     .setContentText(truncate(text, 140))
                     .setStyle(NotificationCompat.BigTextStyle().bigText(text))
                     .setContentIntent(openIntent(null, agentId, id))
                     .setAutoCancel(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                    .setPublicVersion(publicVersion)
+                    .build()
+            nm.notify(SIMPLE_TAG, id, n)
+        }
+
+        /** `k=test`: notificación de diagnóstico enviada desde `POST /v1/devices/me/push-test`. */
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
+        fun showTest(body: JsonObject) {
+            if (!canNotify()) return
+            channels.ensureServiceChannel()
+            val title = body.str("title")?.takeIf { it.isNotBlank() } ?: context.getString(R.string.app_name)
+            val text =
+                body.str("message")?.takeIf { it.isNotBlank() }
+                    ?: body.str("detail")?.takeIf { it.isNotBlank() }
+                    ?: "Notificación de prueba"
+            val id = stableId("test")
+            val n =
+                NotificationCompat
+                    .Builder(context, NotificationChannels.SERVICE_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle(title)
+                    .setContentText(truncate(text, 140))
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setContentIntent(openIntent(null, null, id))
+                    .setAutoCancel(true)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                     .build()
             nm.notify(SIMPLE_TAG, id, n)
         }
@@ -584,8 +660,16 @@ class NotificationFactory
                         } else {
                             NotificationCompat.CATEGORY_PROGRESS
                         },
-                    ).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .addAction(
+                    ).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                    .setPublicVersion(
+                        NotificationCompat
+                            .Builder(context, channel)
+                            .setSmallIcon(R.drawable.ic_stat_rp)
+                            .setContentTitle(context.getString(R.string.app_name))
+                            .setContentText(context.getString(R.string.agent_working_desc))
+                            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                            .build(),
+                    ).addAction(
                         NotificationCompat.Action
                             .Builder(
                                 0,
@@ -741,6 +825,47 @@ class NotificationFactory
         }
 
         /**
+         * Retira la notificación de un prompt cuyo envío falló, SIN marcarlo como respondido en el deduper
+         * para no bloquear entregas futuras del mismo prompt.
+         */
+        suspend fun dismissPromptNotification(promptId: String) {
+            nm.cancel(PROMPT_TAG, notificationId(promptId))
+            deduper.forget(NotificationDeduper.promptKey(promptId))
+            pruneOrphanSummaries()
+        }
+
+        /**
+         * Reemplaza la notificación "Sin conexión · se reintentará" cuando el worker agota sus reintentos
+         * o recibe un fallo definitivo, evitando dejarla atascada en la bandeja.
+         */
+        @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
+        fun showAnswerFailed(promptId: String) {
+            val notifId = notificationId(promptId)
+            if (!canNotify()) {
+                nm.cancel(PROMPT_TAG, notifId)
+                pruneOrphanSummaries()
+                return
+            }
+            val existing = existingNotification(notifId)
+            val channelId = existing?.channelId ?: NotificationChannels.SERVICE_CHANNEL
+            val title = existing?.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.ifBlank { "RP" } ?: "RP"
+            val builder =
+                NotificationCompat
+                    .Builder(context, channelId)
+                    .setSmallIcon(R.drawable.ic_stat_rp)
+                    .setContentTitle(title)
+                    .setContentText("No se pudo enviar la respuesta")
+                    .setContentIntent(openIntent(promptId, null, notifId))
+                    .setOngoing(false)
+                    .setAutoCancel(true)
+                    .setOnlyAlertOnce(true)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            existing?.group?.let { builder.setGroup(it) }
+            nm.notify(PROMPT_TAG, notifId, builder.build())
+        }
+
+        /**
          * Retira los resúmenes de grupo que se quedaron sin hijos: respuesta desde la bandeja, respuesta en
          * otro dispositivo, prompt cancelado por el relay o un proceso que murió a medias.
          */
@@ -841,9 +966,7 @@ class NotificationFactory
 
         private fun isRawJsonOrCode(s: String): Boolean {
             val t = s.trim()
-            if (t.startsWith("{") || t.startsWith("[") || t.startsWith("```")) return true
-            if (t.startsWith("{\"") || t.startsWith("[\"")) return true
-            return false
+            return t.startsWith("{") || t.startsWith("[") || t.startsWith("```")
         }
 
         private fun cleanPreview(

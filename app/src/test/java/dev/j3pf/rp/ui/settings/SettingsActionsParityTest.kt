@@ -238,7 +238,8 @@ class SettingsActionsParityTest {
             assertEquals("PUT", req.method)
             assertEquals("/v1/devices/me/prefs", requestPathLast)
             var prefs = RpJson.decodeFromString(NotifyPrefs.serializer(), req.body.readUtf8())
-            assertEquals(false, prefs.categories["criticalAlways"])
+            assertEquals(false, prefs.criticalAlways)
+            assertFalse("criticalAlways" in prefs.categories)
             assertFalse(settingsRepo!!.current().criticalAlways)
 
             enqueue("{}")
@@ -251,7 +252,7 @@ class SettingsActionsParityTest {
             viewModel!!.setMachineCategory("m1", "approvals", false).join()
             req = request()
             prefs = RpJson.decodeFromString(NotifyPrefs.serializer(), req.body.readUtf8())
-            assertEquals(false, prefs.machines["m1"]?.categories?.get("approvals"))
+            assertEquals(false, prefs.machines["m1"]?.categories?.get("permission"))
 
             enqueue("{}")
             viewModel!!.setQuietHours("m1", "22:00", "08:00", "").join()
@@ -269,7 +270,7 @@ class SettingsActionsParityTest {
             viewModel!!.setCategory("terminal", true).join()
             req = request()
             prefs = RpJson.decodeFromString(NotifyPrefs.serializer(), req.body.readUtf8())
-            assertEquals(true, prefs.categories["terminal"])
+            assertEquals(true, prefs.categories["terminal_wait"])
         }
 
     @Test
@@ -299,8 +300,8 @@ class SettingsActionsParityTest {
             assertEquals("PUT", req.method)
             assertEquals("/v1/devices/me/prefs", requestPathLast)
             val prefs = RpJson.decodeFromString(NotifyPrefs.serializer(), req.body.readUtf8())
-            assertEquals(false, prefs.categories["approvals"])
-            assertEquals(true, prefs.categories["criticalAlways"])
+            assertEquals(false, prefs.categories["permission"])
+            assertEquals(true, prefs.criticalAlways)
         }
 
     @Test

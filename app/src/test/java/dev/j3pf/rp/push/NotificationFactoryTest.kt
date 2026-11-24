@@ -397,7 +397,7 @@ class NotificationFactoryTest {
             val id = stableId("working:m:redacted-1")
             val n = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
             assertNotNull(n)
-            assertEquals(Notification.VISIBILITY_PUBLIC, n.visibility)
+            assertEquals(Notification.VISIBILITY_PRIVATE, n.visibility)
 
             val title = n.extras.getString(Notification.EXTRA_TITLE).orEmpty()
             val subText = n.extras.getString(Notification.EXTRA_SUB_TEXT).orEmpty()

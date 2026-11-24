@@ -1,6 +1,7 @@
 package dev.j3pf.rp.di
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import dagger.Module
@@ -10,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.j3pf.rp.data.db.RpDatabase
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,7 +25,13 @@ object AppModule {
     @Provides
     @Singleton
     @AppScope
-    fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    fun appScope(): CoroutineScope {
+        val handler =
+            CoroutineExceptionHandler { _, throwable ->
+                Log.e("RpAppScope", "Uncaught coroutine exception", throwable)
+            }
+        return CoroutineScope(SupervisorJob() + Dispatchers.Default + handler)
+    }
 
     @Provides
     @Singleton

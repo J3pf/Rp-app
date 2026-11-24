@@ -12,6 +12,7 @@ import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
+import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.data.repo.SessionRepository
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
@@ -195,8 +196,16 @@ class SettingsViewModel
         /** `PUT /v1/devices/me/prefs`: el relay decide si manda el push. */
         private suspend fun pushPrefs() {
             val s = settingsRepo.current()
-            // "Autorizaciones críticas siempre" se guarda como categoría especial que ignora silencios/horas.
-            val prefs = s.notifyPrefs.copy(categories = s.notifyPrefs.categories + ("criticalAlways" to s.criticalAlways))
+            val wireMachines =
+                s.notifyPrefs.machines.mapValues { (_, mp) ->
+                    mp.copy(categories = NotifyCategory.toWireCategories(mp.categories))
+                }
+            val prefs =
+                NotifyPrefs(
+                    categories = NotifyCategory.toWireCategories(s.notifyPrefs.categories),
+                    machines = wireMachines,
+                    criticalAlways = s.criticalAlways,
+                )
             val r = api.putPrefs(prefs)
             if (r !is ApiResult.Ok) _message.value = "No se pudieron guardar las preferencias en el relay"
         }

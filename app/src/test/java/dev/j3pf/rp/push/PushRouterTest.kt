@@ -19,6 +19,7 @@ import dev.j3pf.rp.testSession
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,17 +28,18 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
  * Caracterización del filtro único de pushes [PushRouter] (canal directo y FCM se deduplican aquí).
- * Código de producción SIN cambios (Gate A, S5/S15): los tests describen lo que hace hoy.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PushRouterTest {
     private lateinit var ctx: Application
     private lateinit var nm: NotificationManager
+    private lateinit var server: okhttp3.mockwebserver.MockWebServer
     private lateinit var db: RpDatabase
     private lateinit var secrets: FakeSecretStore
     private lateinit var settings: SettingsRepository
@@ -57,7 +59,7 @@ class PushRouterTest {
             cleanSettings.setCriticalAlways(false)
             shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
             nm = ctx.getSystemService(NotificationManager::class.java)
-            val server = okhttp3.mockwebserver.MockWebServer().also { it.start() }
+            server = okhttp3.mockwebserver.MockWebServer().also { it.start() }
             db = inMemoryDb(ctx)
             secrets = FakeSecretStore(ctx, testSession(server.url("/").toString()))
             settings = SettingsRepository(ctx)
@@ -65,6 +67,12 @@ class PushRouterTest {
                 NotificationFactory(ctx, NotificationChannels(ctx), settings, NotificationDeduper(db.dedup()))
             router = PushRouter(factory, NotificationDeduper(db.dedup()), AndroidPushEnvelopeCrypto(), secrets, settings, db.prompts())
         }
+    }
+
+    @After
+    fun tearDown() {
+        if (::db.isInitialized) db.close()
+        if (::server.isInitialized) runCatching { server.shutdown() }
     }
 
     private fun promptBody(danger: String = Danger.LOW) =
@@ -217,5 +225,38 @@ class PushRouterTest {
         val bad = mapOf("k" to PushKind.PROMPT, "n" to "no-es-nonce", "c" to "no-es-ciphertext")
         val r = kotlinx.coroutines.runBlocking { router.handleFcm(bad) }
         assertFalse(r, "payload malformado -> false")
+    }
+
+    @Test
+    fun `two distinct FCM error detail payloads for same agent are not deduped under empty hash`() {
+        runBlocking {
+            val err1 = JsonObject(mapOf("agentId" to JsonPrimitive(agentId), "detail" to JsonPrimitive("OOM killed")))
+            val err2 = JsonObject(mapOf("agentId" to JsonPrimitive(agentId), "detail" to JsonPrimitive("Disk full")))
+            val notifId = dev.j3pf.rp.util.stableId("${PushKind.ERROR}:$agentId")
+
+            assertTrue(router.handleDirect(PushKind.ERROR, err1, pushId = null))
+            val n1 = shadowOf(nm).getNotification(NotificationFactory.SIMPLE_TAG, notifId)
+            assertNotNull(n1)
+            assertEquals("OOM killed", n1.extras.getString(android.app.Notification.EXTRA_TEXT))
+
+            assertTrue(router.handleDirect(PushKind.ERROR, err2, pushId = null))
+            val n2 = shadowOf(nm).getNotification(NotificationFactory.SIMPLE_TAG, notifId)
+            assertNotNull(n2)
+            assertEquals("Disk full", n2.extras.getString(android.app.Notification.EXTRA_TEXT))
+            assertTrue(db.dedup().seenAt("error:$agentId:" + "OOM killed".hashCode()) != null)
+            assertTrue(db.dedup().seenAt("error:$agentId:" + "Disk full".hashCode()) != null)
+        }
+    }
+
+    @Test
+    fun `PushKind TEST is handled and posts a notification`() {
+        runBlocking {
+            val body = JsonObject(mapOf("title" to JsonPrimitive("RemotePi"), "message" to JsonPrimitive("Test OK")))
+            assertTrue(router.handleDirect(PushKind.TEST, body, pushId = "test-1"))
+            val posted = shadowOf(nm).allNotifications.firstOrNull {
+                it.extras.getString(android.app.Notification.EXTRA_TEXT) == "Test OK"
+            }
+            assertNotNull(posted, "PushKind.TEST must post a notification")
+        }
     }
 }

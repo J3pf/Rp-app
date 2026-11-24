@@ -43,8 +43,18 @@ class AnswerWorker
                     notifications.cancelPrompt(promptId)
                     Result.success()
                 }
-                AnswerOutcome.Queued -> if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
-                is AnswerOutcome.Failed -> Result.failure()
+                AnswerOutcome.Queued -> {
+                    if (runAttemptCount < MAX_ATTEMPTS) {
+                        Result.retry()
+                    } else {
+                        notifications.showAnswerFailed(promptId)
+                        Result.failure()
+                    }
+                }
+                is AnswerOutcome.Failed -> {
+                    notifications.showAnswerFailed(promptId)
+                    Result.failure()
+                }
             }
         }
 

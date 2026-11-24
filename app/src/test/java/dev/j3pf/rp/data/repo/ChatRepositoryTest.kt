@@ -8,6 +8,7 @@ import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayApi
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.domain.model.toEntity
 import dev.j3pf.rp.inMemoryDb
 import dev.j3pf.rp.protocol.AgentHistory
 import dev.j3pf.rp.protocol.Envelope
@@ -339,5 +340,155 @@ class ChatRepositoryTest {
             assertEquals(1, server.requestCount)
             // The retry key stays available (outbox item not silently dropped):
             assertTrue(db.outbox().all("r1").any { it.clientMsgId == "01FLUSHFAIL" })
+        }
+
+    @Test
+    fun `repeated agent history resync does not duplicate Room event rows`() =
+        runBlocking {
+            acceptSocket(sendHistory = false)
+            connect()
+
+            val agentId = "dup-agent"
+            val session = repository.open(agentId)
+            withTimeout(5_000) {
+                while (true) {
+                    val sent = outgoing.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS) ?: continue
+                    if (runCatching { Envelope.parse(sent).t }.getOrNull() == MsgType.AGENT_SUBSCRIBE) break
+                }
+            }
+            val msgJson =
+                kotlinx.serialization.json.JsonObject(
+                    mapOf(
+                        "content" to
+                            kotlinx.serialization.json.JsonArray(
+                                listOf(
+                                    kotlinx.serialization.json.JsonObject(
+                                        mapOf(
+                                            "type" to kotlinx.serialization.json.JsonPrimitive("text"),
+                                            "text" to kotlinx.serialization.json.JsonPrimitive("hi"),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                    ),
+                )
+            val liveEvent =
+                dev.j3pf.rp.protocol.AgentEvent(
+                    agentId = agentId,
+                    epoch = "E1",
+                    seq = 10L,
+                    e =
+                        kotlinx.serialization.json.JsonObject(
+                            mapOf(
+                                "type" to kotlinx.serialization.json.JsonPrimitive("message_end"),
+                                "message" to
+                                    kotlinx.serialization.json.JsonObject(
+                                        mapOf(
+                                            "role" to kotlinx.serialization.json.JsonPrimitive("assistant"),
+                                            "content" to
+                                                kotlinx.serialization.json.JsonArray(
+                                                    listOf(
+                                                        kotlinx.serialization.json.JsonObject(
+                                                            mapOf(
+                                                                "type" to kotlinx.serialization.json.JsonPrimitive("text"),
+                                                                "text" to kotlinx.serialization.json.JsonPrimitive("reply"),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                ),
+                                        ),
+                                    ),
+                            ),
+                        ),
+                )
+            val history =
+                AgentHistory(
+                    agentId = agentId,
+                    epoch = "E1",
+                    entries =
+                        listOf(
+                            dev.j3pf.rp.protocol.Entry(eid = "1", kind = dev.j3pf.rp.protocol.EntryKind.USER, msg = msgJson),
+                        ),
+                    events = listOf(liveEvent),
+                    liveFromSeq = 10L,
+                )
+
+            bus.publish(Envelope.of(MsgType.AGENT_HISTORY, history))
+            withTimeout(5_000) { session.syncing.first { !it } }
+            withTimeout(5_000) {
+                while (db.chat().records("r1", agentId).isEmpty()) kotlinx.coroutines.delay(20)
+            }
+            val countAfterFirst = db.chat().records("r1", agentId).count { it.kind == dev.j3pf.rp.data.db.RecordKind.EVENT }
+            assertEquals(1, countAfterFirst)
+
+            // Re-deliver identical history on reconnect/resync
+            bus.publish(Envelope.of(MsgType.AGENT_HISTORY, history))
+            kotlinx.coroutines.delay(250)
+            val countAfterSecond = db.chat().records("r1", agentId).count { it.kind == dev.j3pf.rp.data.db.RecordKind.EVENT }
+            assertEquals(1, countAfterSecond, "Repeated history must not duplicate overlapping EVENT rows")
+        }
+
+    @Test
+    fun `opening chat does not wipe existing agent telemetry with initial empty ChatState`() =
+        runBlocking {
+            val agentId = "telemetry-agent"
+            db.agents().upsert(
+                listOf(
+                    dev.j3pf.rp.protocol.AgentSummary(
+                        agentId = agentId,
+                        machineId = "m1",
+                        machineName = "PC",
+                        machineContext = "personal",
+                        cwd = "/tmp",
+                        sessionName = "Work",
+                        status = "working",
+                        online = true,
+                        lastSeenAt = 1000L,
+                        todoCompleted = 3,
+                        todoTotal = 5,
+                        activeTask = "Building APK",
+                    ).toEntity("r1"),
+                ),
+            )
+
+            repository.open(agentId)
+            kotlinx.coroutines.delay(200)
+
+            val saved = db.agents().get("r1", agentId)!!
+            assertEquals(3, saved.todoCompleted, "Initial empty ChatState must not overwrite todoCompleted")
+            assertEquals(5, saved.todoTotal, "Initial empty ChatState must not overwrite todoTotal")
+            assertEquals("Building APK", saved.activeTask, "Initial empty ChatState must not overwrite activeTask")
+        }
+
+    @Test
+    fun `flushOutbox increments persisted attempts and prunes poisoned row after max attempts`() =
+        runBlocking {
+            val message =
+                dev.j3pf.rp.protocol.UserMessage(
+                    agentId = "test-agent",
+                    clientMsgId = "01POISON",
+                    text = "stuck",
+                )
+            db.outbox().put(
+                dev.j3pf.rp.data.db.OutboxEntity(
+                    clientMsgId = message.clientMsgId,
+                    relayId = "r1",
+                    agentId = message.agentId,
+                    json = dev.j3pf.rp.protocol.RpJson
+                        .encodeToString(dev.j3pf.rp.protocol.UserMessage.serializer(), message),
+                    attempts = 0,
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+
+            repeat(7) {
+                server.enqueue(MockResponse().setResponseCode(500))
+                assertFalse(repository.flushOutbox())
+            }
+            assertEquals(7, db.outbox().get("01POISON")?.attempts, "Persisted attempts must be incremented via OutboxDao.bump")
+
+            server.enqueue(MockResponse().setResponseCode(500))
+            assertTrue(repository.flushOutbox(), "8th attempt must prune poisoned row and return true")
+            assertEquals(null, db.outbox().get("01POISON"))
         }
 }

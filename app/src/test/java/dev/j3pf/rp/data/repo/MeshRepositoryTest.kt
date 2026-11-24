@@ -288,4 +288,27 @@ class MeshRepositoryTest {
             val envelope = awaitOutgoing(MsgType.MESH_SUBSCRIBE)
             assertEquals("machine-pre", envelope.body<dev.j3pf.rp.protocol.MeshSubscribe>().machineId)
         }
+
+    @Test
+    fun `subscribe assigns non-null ULID id and correlates relay ERROR with re`() =
+        runBlocking {
+            acceptSocket()
+            connect()
+
+            repository.subscribe("machine-err")
+            val subEnv = awaitOutgoing(MsgType.MESH_SUBSCRIBE)
+            assertTrue(!subEnv.id.isNullOrBlank(), "MESH_SUBSCRIBE must carry a non-null envelope id")
+
+            repository.meshErrors.test {
+                bus.publish(
+                    Envelope.of(
+                        MsgType.ERROR,
+                        dev.j3pf.rp.protocol.ErrorBody(code = "unsupported", message = "Mesh disabled"),
+                        re = subEnv.id,
+                    ),
+                )
+                assertEquals("Mesh disabled", withTimeout(2_000) { awaitItem() })
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
 }

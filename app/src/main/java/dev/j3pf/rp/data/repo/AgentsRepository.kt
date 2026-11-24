@@ -1,6 +1,8 @@
 package dev.j3pf.rp.data.repo
 
+import android.util.Log
 import dev.j3pf.rp.data.db.AgentDao
+import dev.j3pf.rp.data.db.AgentEntity
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
@@ -21,6 +23,7 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Ulid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -70,79 +73,100 @@ class AgentsRepository
         override fun start() {
             bus.messages
                 .onEach { env ->
-                    val relayId = secrets.current()?.relayId ?: return@onEach
-                    when (env.t) {
-                        MsgType.APP_WELCOME -> {
-                            val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
-                            val onlineHerdrMachines =
-                                w.agents
-                                    .filter { it.online && isHerdrManagedSession(it) }
-                                    .map { it.machineId }
-                                    .toSet()
-                            val (staleHerdr, liveAgents) =
-                                w.agents.partition { !it.online && it.machineId in onlineHerdrMachines && isHerdrManagedSession(it) }
-                            dao.syncWelcome(
-                                relayId,
-                                liveAgents.map { it.toEntity(relayId) },
-                                liveAgents.map { it.agentId }.ifEmpty { listOf("") },
-                            )
-                            if (staleHerdr.isNotEmpty()) {
-                                scope.launch {
-                                    staleHerdr.forEach { stale ->
-                                        connection.request(Envelope.of(MsgType.AGENT_FORGET, AgentRef(stale.agentId), id = Ulid.new()))
+                    try {
+                        val relayId = secrets.current()?.relayId ?: return@onEach
+                        when (env.t) {
+                            MsgType.APP_WELCOME -> {
+                                val w = runCatching { env.body<AppWelcome>() }.getOrNull() ?: return@onEach
+                                val onlineHerdrMachines =
+                                    w.agents
+                                        .filter { it.online && isHerdrManagedSession(it) }
+                                        .map { it.machineId }
+                                        .toSet()
+                                val (staleHerdr, liveAgents) =
+                                    w.agents.partition { !it.online && it.machineId in onlineHerdrMachines && isHerdrManagedSession(it) }
+                                val mergedLive = liveAgents.map { mergeTelemetryWithExisting(relayId, it).second }
+                                dao.syncWelcome(
+                                    relayId,
+                                    mergedLive,
+                                    liveAgents.map { it.agentId }.ifEmpty { listOf("") },
+                                )
+                                if (staleHerdr.isNotEmpty()) {
+                                    scope.launch {
+                                        staleHerdr.forEach { stale ->
+                                            connection.request(Envelope.of(MsgType.AGENT_FORGET, AgentRef(stale.agentId), id = Ulid.new()))
+                                        }
                                     }
                                 }
                             }
-                        }
-                        MsgType.AGENTS_UPDATE -> {
-                            val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@onEach
-                            if (u.upsert.isNotEmpty()) {
-                                val changed =
-                                    u.upsert.mapNotNull { s ->
-                                        val prev = dao.get(relayId, s.agentId)
-                                        val entity = s.toEntity(relayId)
-                                        val merged =
-                                            if (prev != null) {
-                                                entity.copy(
-                                                    todoCompleted =
-                                                        if (s.todoTotal > 0) {
-                                                            s.todoCompleted
-                                                        } else if (s.status == "working") {
-                                                            prev.todoCompleted
-                                                        } else {
-                                                            0
-                                                        },
-                                                    todoTotal =
-                                                        if (s.todoTotal > 0) {
-                                                            s.todoTotal
-                                                        } else if (s.status == "working") {
-                                                            prev.todoTotal
-                                                        } else {
-                                                            0
-                                                        },
-                                                    activeTask =
-                                                        when {
-                                                            s.activeTask != null -> s.activeTask
-                                                            s.status == "working" -> prev.activeTask
-                                                            else -> null
-                                                        },
-                                                )
-                                            } else {
-                                                entity
-                                            }
-                                        merged.takeIf { it != prev }
-                                    }
-                                if (changed.isNotEmpty()) {
-                                    dao.upsert(changed)
-                                }
+                            MsgType.AGENTS_UPDATE -> {
+                                val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@onEach
+                                applyAgentsUpdate(u)
                             }
-                            if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
+                            // `agent.closed` no se escucha a propósito: es un frame del puente hacia el relay
+                            // (rp-relay registry.ts, dirección plugin→relay) y no lleva agentId propio, así que
+                            // la app nunca lo recibe. La retirada llega como `agents.update.remove`.
                         }
-                        // `agent.closed` no se escucha a propósito: es un frame del puente hacia el relay
-                        // (rp-relay registry.ts, dirección plugin→relay) y no lleva agentId propio, así que
-                        // la app nunca lo recibe. La retirada llega como `agents.update.remove`.
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e("AgentsRepository", "Error handling envelope ${env.t}", e)
                     }
                 }.launchIn(scope)
+        }
+
+        /** Persists an `agents.update` frame into Room (used by both foreground bus and `DirectPushService`). */
+        internal suspend fun applyAgentsUpdate(u: AgentsUpdate) {
+            val relayId = secrets.current()?.relayId ?: return
+            if (u.upsert.isNotEmpty()) {
+                val changed =
+                    u.upsert.mapNotNull { s ->
+                        val (prev, merged) = mergeTelemetryWithExisting(relayId, s)
+                        merged.takeIf { it != prev }
+                    }
+                if (changed.isNotEmpty()) {
+                    dao.upsert(changed)
+                }
+            }
+            if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
+        }
+
+        private suspend fun mergeTelemetryWithExisting(
+            relayId: String,
+            s: AgentSummary,
+        ): Pair<AgentEntity?, AgentEntity> {
+            val prev = dao.get(relayId, s.agentId)
+            val entity = s.toEntity(relayId)
+            val merged =
+                if (prev != null) {
+                    entity.copy(
+                        todoCompleted =
+                            if (s.todoTotal > 0) {
+                                s.todoCompleted
+                            } else if (s.status == "working") {
+                                prev.todoCompleted
+                            } else {
+                                0
+                            },
+                        todoTotal =
+                            if (s.todoTotal > 0) {
+                                s.todoTotal
+                            } else if (s.status == "working") {
+                                prev.todoTotal
+                            } else {
+                                0
+                            },
+                        activeTask =
+                            when {
+                                s.activeTask != null -> s.activeTask
+                                s.status == "working" -> prev.activeTask
+                                else -> null
+                            },
+                    )
+                } else {
+                    entity
+                }
+            return prev to merged
         }
 
         /** Cierra el pane de Herdr; cuando no hay pane vinculado (o cuando otro agente activo ocupa el mismo pane), archiva el historial con `agent.forget`. */

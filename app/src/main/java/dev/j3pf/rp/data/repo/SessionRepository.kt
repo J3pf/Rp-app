@@ -5,6 +5,8 @@ import android.os.Build
 import androidx.core.net.toUri
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.j3pf.rp.BuildConfig
+import dev.j3pf.rp.client.session.PushRegistrationResult
 import dev.j3pf.rp.client.session.SessionPlatform
 import dev.j3pf.rp.client.session.SessionPolicy
 import dev.j3pf.rp.data.db.DedupDao
@@ -97,6 +99,9 @@ class SessionRepository
         /** `onNewToken` de FCM → `PUT /v1/devices/me/push`. */
         suspend fun registerFcmToken(token: String?): Boolean = shared.registerFcmToken(token)
 
+        /** `onNewToken` de FCM con distinción entre fallo permanente y reintentable. */
+        suspend fun registerFcmTokenResult(token: String?): PushRegistrationResult = shared.registerFcmTokenResult(token)
+
         /** Cerrar sesión: revoca (best-effort) el dispositivo, borra credenciales, base de datos y canales. */
         suspend fun logout() = shared.logout()
 
@@ -114,7 +119,10 @@ class SessionRepository
 
         companion object {
             /** Acepta `rp://pair?u=…&c=…`, URL con/sin esquema; fuerza https salvo emulador de depuración. */
-            fun normalizeUrl(raw: String): String? {
+            fun normalizeUrl(
+                raw: String,
+                allowCleartextLocalhost: Boolean = BuildConfig.DEBUG,
+            ): String? {
                 var u = raw.trim().trimEnd('/')
                 if (u.isEmpty()) return null
                 if (!u.contains("://")) u = "https://$u"
@@ -127,7 +135,9 @@ class SessionRepository
                 val ok =
                     when (parsed.scheme.lowercase()) {
                         "https" -> true
-                        "http" -> host == "localhost" || host == "10.0.2.2" || host == "127.0.0.1"
+                        "http" ->
+                            allowCleartextLocalhost &&
+                                (host == "localhost" || host == "10.0.2.2" || host == "127.0.0.1")
                         else -> false
                     }
                 return if (ok) parsed.toString().trimEnd('/') else null

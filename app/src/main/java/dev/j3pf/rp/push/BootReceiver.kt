@@ -3,10 +3,12 @@ package dev.j3pf.rp.push
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import dagger.hilt.android.AndroidEntryPoint
 import dev.j3pf.rp.data.repo.SettingsRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -31,6 +33,10 @@ class BootReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 if (secrets.current() != null && settings.current().directPush) DirectPushService.start(app)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("BootReceiver", "Unhandled error handling boot broadcast", e)
             } finally {
                 pending.finish()
             }

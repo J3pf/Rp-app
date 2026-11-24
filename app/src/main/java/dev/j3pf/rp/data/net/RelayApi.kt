@@ -19,7 +19,10 @@ import dev.j3pf.rp.protocol.PairCodeResponse
 import dev.j3pf.rp.protocol.PairDeviceResponse
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.UserMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
@@ -55,9 +58,13 @@ class RelayApi
                 invalidResponse = { IOException(it) },
             )
 
-        /** Cliente sin callTimeout global para subidas de blobs grandes. */
+        /** Cliente sin callTimeout global para subidas de blobs grandes, con readTimeout acotado. */
         private val uploadClient: OkHttpClient by lazy {
-            client.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
+            client
+                .newBuilder()
+                .callTimeout(0, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build()
         }
 
         suspend fun healthz(baseUrl: String): ApiResult<HealthResponse> = shared.healthz(baseUrl)
@@ -142,17 +149,20 @@ class RelayApi
                         .post(part)
                         .build()
                 }.getOrElse { return ApiResult.Network(it) }
-            val response =
+            return withContext(Dispatchers.IO) {
                 try {
-                    uploadClient.newCall(request).await()
+                    uploadClient.newCall(request).await().use { response ->
+                        shared.decodeResponse(RelayHttpResponse(response.code, response.body.string()), BlobInfo.serializer())
+                    }
                 } catch (e: IOException) {
-                    return ApiResult.Network(e)
+                    ApiResult.Network(e)
                 }
-            return response.use { shared.decodeResponse(RelayHttpResponse(it.code, it.body.string()), BlobInfo.serializer()) }
+            }
         }
     }
 
-/** `Call.await()` cancelable. */
+/** `Call.await()` cancelable; cierra la respuesta si la corrutina se cancela al resumir. */
+@OptIn(ExperimentalCoroutinesApi::class)
 suspend fun Call.await(): Response =
     suspendCancellableCoroutine { cont ->
         enqueue(
@@ -168,7 +178,13 @@ suspend fun Call.await(): Response =
                     call: Call,
                     response: Response,
                 ) {
-                    cont.resume(response)
+                    if (cont.isActive) {
+                        cont.resume(response) { _, _, _ ->
+                            runCatching { response.close() }
+                        }
+                    } else {
+                        runCatching { response.close() }
+                    }
                 }
             },
         )

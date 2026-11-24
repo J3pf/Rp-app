@@ -46,6 +46,10 @@ class MeshViewModel
         private var measuredCardHeights: Map<String, Float> = emptyMap()
         private var nodeCommsJob: Job? = null
         private var conversationJob: Job? = null
+        private var bubbleCleanupJob: Job? = null
+
+        @Volatile
+        internal var clockMs: () -> Long = System::currentTimeMillis
 
         init {
             combine(
@@ -427,7 +431,8 @@ class MeshViewModel
         }
 
         private fun onIncomingComm(comm: MeshComm) {
-            val expiresAt = System.currentTimeMillis() + BUBBLE_LIFETIME_MS
+            val now = clockMs()
+            val expiresAt = now + BUBBLE_LIFETIME_MS
             _uiState.update { state ->
                 state.copy(
                     liveComms = (listOf(comm) + state.liveComms.filterNot { it.commKey == comm.commKey }).take(MAX_LIVE_COMMS),
@@ -435,15 +440,32 @@ class MeshViewModel
                         (
                             listOf(LiveCommBubble(comm, expiresAt)) +
                                 state.activeBubbles.filterNot { it.comm.commKey == comm.commKey }
-                        ).filter { it.expiresAtMs > System.currentTimeMillis() }
+                        ).filter { it.expiresAtMs > now }
                             .take(MAX_ACTIVE_BUBBLES),
                 )
             }
-            viewModelScope.launch {
-                delay(BUBBLE_LIFETIME_MS)
-                val now = System.currentTimeMillis()
-                _uiState.update { state -> state.copy(activeBubbles = state.activeBubbles.filter { it.expiresAtMs > now }) }
-            }
+            scheduleBubbleCleanup()
+        }
+
+        private fun scheduleBubbleCleanup() {
+            bubbleCleanupJob?.cancel()
+            val earliest =
+                _uiState.value.activeBubbles.minOfOrNull { it.expiresAtMs } ?: run {
+                    bubbleCleanupJob = null
+                    return
+                }
+            val waitMs = (earliest - clockMs()).coerceAtLeast(0L)
+            bubbleCleanupJob =
+                viewModelScope.launch {
+                    if (waitMs > 0L) delay(waitMs)
+                    val now = clockMs()
+                    _uiState.update { state -> state.copy(activeBubbles = state.activeBubbles.filter { it.expiresAtMs > now }) }
+                    if (_uiState.value.activeBubbles.isNotEmpty()) {
+                        scheduleBubbleCleanup()
+                    } else {
+                        bubbleCleanupJob = null
+                    }
+                }
         }
 
         private suspend fun loadConversationPage(

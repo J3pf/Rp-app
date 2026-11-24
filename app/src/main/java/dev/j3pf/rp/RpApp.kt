@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.j3pf.rp.data.net.RelayConnection
+import dev.j3pf.rp.data.ports.BiometricAuthorizer
 import dev.j3pf.rp.data.repo.AgentsRepository
 import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.HostRepository
@@ -32,6 +33,8 @@ class RpApp :
     @Inject lateinit var attachments: AttachmentsRepository
 
     @Inject lateinit var channels: NotificationChannels
+
+    @Inject lateinit var biometricAuthorizer: BiometricAuthorizer
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()

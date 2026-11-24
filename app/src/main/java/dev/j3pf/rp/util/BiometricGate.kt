@@ -3,6 +3,7 @@ package dev.j3pf.rp.util
 import android.os.Build
 import android.os.SystemClock
 import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
@@ -39,8 +40,8 @@ class BiometricGate
             hasAuthenticated = true
         }
 
-        private val authenticators: Int
-            get() = if (Build.VERSION.SDK_INT >= 30) BIOMETRIC_WEAK or DEVICE_CREDENTIAL else BIOMETRIC_WEAK
+        internal val authenticators: Int
+            get() = if (Build.VERSION.SDK_INT >= 30) BIOMETRIC_STRONG or DEVICE_CREDENTIAL else BIOMETRIC_WEAK
 
         fun isAvailable(activity: FragmentActivity): Boolean {
             val bm = BiometricManager.from(activity)

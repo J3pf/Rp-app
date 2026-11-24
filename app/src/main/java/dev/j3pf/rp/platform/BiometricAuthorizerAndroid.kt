@@ -80,6 +80,7 @@ class BiometricAuthorizerAndroid
         }
 
         override fun onActivityDestroyed(activity: Activity) {
+            if (activity === foreground) foreground = null
         }
 
         override fun onActivityCreated(

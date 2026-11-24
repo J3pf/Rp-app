@@ -74,14 +74,17 @@ class AgentsViewModel
                             )
                         }
                 val sortedGroups =
-                    groups.sortedByDescending { g ->
-                        val hasPrompts = g.agents.any { it.openPromptCount > 0 }
-                        val isWorking = g.agents.any { it.status == "working" && it.online }
-                        val maxLastSeen = g.agents.maxOfOrNull { it.lastSeenAt ?: 0L } ?: 0L
-                        (if (hasPrompts) 2_000_000_000_000L else 0L) +
-                            (if (isWorking) 1_000_000_000_000L else 0L) +
-                            maxLastSeen
-                    }
+                    groups.sortedWith(
+                        compareByDescending<MachineGroup> { g ->
+                            when {
+                                g.agents.any { it.openPromptCount > 0 } -> 2
+                                g.agents.any { it.status == "working" && it.online } -> 1
+                                else -> 0
+                            }
+                        }.thenByDescending { g ->
+                            g.agents.maxOfOrNull { it.lastSeenAt ?: Long.MIN_VALUE } ?: Long.MIN_VALUE
+                        },
+                    )
                 AgentsUiState(ms, all, sortedGroups, sel, canSpawn = visibleMachines.any { it.hostOnline }, refreshing = refreshing)
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AgentsUiState())
 
@@ -122,13 +125,15 @@ class AgentsViewModel
         }
 
         fun loadArchived(before: Long? = null) {
+            if (before != null && _lifecycleState.value.archivedLoading) return
             _lifecycleState.update { it.copy(archivedLoading = true, archivedError = null) }
             viewModelScope.launch {
                 when (val result = agentsRepo.archived(before = before)) {
                     is ArchivedAgentsResult.Ok ->
                         _lifecycleState.update {
+                            val combined = if (before == null) result.agents else it.archivedAgents + result.agents
                             it.copy(
-                                archivedAgents = if (before == null) result.agents else it.archivedAgents + result.agents,
+                                archivedAgents = combined.distinctBy { a -> a.agentId },
                                 archivedNextBefore = result.nextBefore,
                                 archivedLoading = false,
                                 archivedError = null,
@@ -141,7 +146,9 @@ class AgentsViewModel
         }
 
         fun loadMoreArchived() {
-            lifecycleState.value.archivedNextBefore?.let(::loadArchived)
+            val current = _lifecycleState.value
+            if (current.archivedLoading) return
+            current.archivedNextBefore?.let(::loadArchived)
         }
 
         fun purgeArchived(agentId: String) {

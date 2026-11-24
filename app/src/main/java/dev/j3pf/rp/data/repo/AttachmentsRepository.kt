@@ -20,6 +20,7 @@ import dev.j3pf.rp.data.ports.StagedAttachment
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.BlobInfo
 import dev.j3pf.rp.protocol.Ulid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -98,46 +99,71 @@ class AttachmentsRepository
             compressImages: Boolean = true,
         ): Result<LocalAttachment> =
             withContext(Dispatchers.IO) {
-                runCatching {
+                var out: File? = null
+                var file: File? = null
+                try {
                     val (rawName, rawMime) = describe(uri)
                     val id = Ulid.new()
                     var name = sanitize(rawName)
                     var mime = rawMime
-                    val out = File(dir, "$id-$name")
-                    var file = out
-                    try {
-                        val streamLimit = if (compressImages && mime in COMPRESSIBLE) MAX_ATTACHMENT_BYTES * 2 else MAX_ATTACHMENT_BYTES
-                        val inputStream = checkNotNull(context.contentResolver.openInputStream(uri)) { "No se pudo abrir el archivo" }
-                        inputStream.use { input ->
-                            out.outputStream().use { output ->
-                                val buf = ByteArray(DEFAULT_BUFFER_SIZE)
-                                var total = 0L
-                                while (true) {
-                                    val read = input.read(buf)
-                                    if (read < 0) break
-                                    total += read
-                                    require(total <= streamLimit) { "El archivo supera 25 MB" }
-                                    output.write(buf, 0, read)
-                                }
+                    val initialOut = File(dir, "$id-$name")
+                    out = initialOut
+                    file = initialOut
+                    val streamLimit = if (compressImages && mime in COMPRESSIBLE) MAX_ATTACHMENT_BYTES * 2 else MAX_ATTACHMENT_BYTES
+                    val inputStream = checkNotNull(context.contentResolver.openInputStream(uri)) { "No se pudo abrir el archivo" }
+                    inputStream.use { input ->
+                        initialOut.outputStream().use { output ->
+                            val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var total = 0L
+                            while (true) {
+                                val read = input.read(buf)
+                                if (read < 0) break
+                                total += read
+                                require(total <= streamLimit) { "El archivo supera 25 MB" }
+                                output.write(buf, 0, read)
                             }
                         }
-                        if (compressImages && mime in COMPRESSIBLE) {
-                            compressSemaphore.withPermit { compress(out) }?.let { jpg ->
-                                out.delete()
-                                file = jpg
-                                mime = "image/jpeg"
-                                name = name.substringBeforeLast('.') + ".jpg"
-                            }
-                        }
-                        require(file.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
-                        LocalAttachment(id, name, mime, file.length(), file, uri)
-                    } catch (t: Throwable) {
-                        out.delete()
-                        if (file != out) file.delete()
-                        throw t
                     }
+                    if (compressImages && mime in COMPRESSIBLE) {
+                        compressSemaphore.withPermit { compress(initialOut) }?.let { jpg ->
+                            initialOut.delete()
+                            file = jpg
+                            mime = "image/jpeg"
+                            name = name.substringBeforeLast('.') + ".jpg"
+                        }
+                    }
+                    val finalFile = checkNotNull(file)
+                    require(finalFile.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
+                    Result.success(LocalAttachment(id, name, mime, finalFile.length(), finalFile, uri))
+                } catch (e: CancellationException) {
+                    out?.delete()
+                    if (file != out) file?.delete()
+                    throw e
+                } catch (t: Throwable) {
+                    out?.delete()
+                    if (file != out) file?.delete()
+                    Result.failure(t)
+                } finally {
+                    deleteTempCameraFileIfOwned(uri)
                 }
             }
+
+        /** Deletes raw temporary camera captures under `cacheDir/camera/` (which may contain EXIF/GPS) immediately after staging. */
+        private fun deleteTempCameraFileIfOwned(uri: Uri) {
+            runCatching {
+                val canonicalCameraDir = cameraDir.canonicalFile
+                val candidate =
+                    when {
+                        uri.scheme == "file" -> uri.path?.let(::File)
+                        uri.scheme == "content" && uri.authority == "${context.packageName}.fileprovider" ->
+                            uri.lastPathSegment?.let { File(cameraDir, it) }
+                        else -> null
+                    } ?: return
+                if (candidate.canonicalFile.parentFile == canonicalCameraDir && candidate.exists()) {
+                    candidate.delete()
+                }
+            }
+        }
 
         suspend fun upload(
             local: LocalAttachment,
@@ -212,44 +238,48 @@ class AttachmentsRepository
                 while (max(bounds.outWidth, bounds.outHeight) / sample > MAX_DIM) sample *= 2
                 val opts = BitmapFactory.Options().apply { inSampleSize = sample }
                 val raw = BitmapFactory.decodeFile(src.path, opts) ?: return null
-                val longest = max(raw.width, raw.height)
-                val rotation =
-                    when (ExifInterface(src.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)) {
-                        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                        else -> 0f
-                    }
-                val m = Matrix()
-                if (longest > MAX_DIM) {
-                    val sc = MAX_DIM.toFloat() / longest
-                    m.postScale(sc, sc)
-                }
-                if (rotation != 0f) m.postRotate(rotation)
-                val rotated =
-                    if (!m.isIdentity) {
-                        Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true).also {
-                            if (it !== raw) raw.recycle()
-                        }
-                    } else {
-                        raw
-                    }
-                val out =
-                    File(src.parentFile, src.nameWithoutExtension + ".jpg").let {
-                        if (it ==
-                            src
-                        ) {
-                            File(src.parentFile, "c-${it.name}")
-                        } else {
-                            it
-                        }
-                    }
+                var rotated: Bitmap? = null
                 try {
+                    val longest = max(raw.width, raw.height)
+                    val rotation =
+                        when (ExifInterface(src.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)) {
+                            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                            else -> 0f
+                        }
+                    val m = Matrix()
+                    if (longest > MAX_DIM) {
+                        val sc = MAX_DIM.toFloat() / longest
+                        m.postScale(sc, sc)
+                    }
+                    if (rotation != 0f) m.postRotate(rotation)
+                    rotated =
+                        if (!m.isIdentity) {
+                            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
+                        } else {
+                            raw
+                        }
+                    val out =
+                        File(src.parentFile, src.nameWithoutExtension + ".jpg").let {
+                            if (it ==
+                                src
+                            ) {
+                                File(src.parentFile, "c-${it.name}")
+                            } else {
+                                it
+                            }
+                        }
                     out.outputStream().use { rotated.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+                    out
                 } finally {
-                    rotated.recycle()
+                    if (rotated != null && rotated !== raw && !rotated.isRecycled) {
+                        rotated.recycle()
+                    }
+                    if (!raw.isRecycled) {
+                        raw.recycle()
+                    }
                 }
-                out
             }.getOrNull()
 
         companion object {

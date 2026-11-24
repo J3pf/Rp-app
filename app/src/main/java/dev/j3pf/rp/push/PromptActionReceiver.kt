@@ -3,6 +3,7 @@ package dev.j3pf.rp.push
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.app.RemoteInput
 import dagger.hilt.android.AndroidEntryPoint
 import dev.j3pf.rp.data.db.OutboxDao
@@ -15,11 +16,15 @@ import dev.j3pf.rp.data.repo.ChatRepository
 import dev.j3pf.rp.data.repo.PromptsRepository
 import dev.j3pf.rp.data.secure.SecretStore
 import dev.j3pf.rp.di.AppScope
+import dev.j3pf.rp.domain.model.toModel
 import dev.j3pf.rp.protocol.Answer
+import dev.j3pf.rp.protocol.Danger
+import dev.j3pf.rp.protocol.PromptCategory
 import dev.j3pf.rp.protocol.ResolvedBy
 import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.Ulid
 import dev.j3pf.rp.protocol.UserMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,6 +49,10 @@ class PromptActionReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 handler.handle(app, intent)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("PromptActionReceiver", "Unhandled error handling notification action=${intent.action}", e)
             } finally {
                 pending.finish()
             }
@@ -100,7 +109,7 @@ class PromptActionHandler
             intent: Intent,
         ) {
             val promptId = intent.getStringExtra(PromptActionReceiver.EXTRA_PROMPT_ID) ?: return
-            if (isLockedAndAuthRequired(context, intent)) return
+            if (isLockedAndAuthRequired(context, promptId = promptId)) return
             val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, NotificationFactory.notificationId(promptId))
             val label = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_LABEL).orEmpty()
             val answer =
@@ -146,7 +155,7 @@ class PromptActionHandler
                 }
 
                 is AnswerOutcome.Failed -> {
-                    factory.cancelPrompt(promptId)
+                    factory.dismissPromptNotification(promptId)
                 }
             }
         }
@@ -157,7 +166,7 @@ class PromptActionHandler
             intent: Intent,
         ) {
             val agentId = intent.getStringExtra(PromptActionReceiver.EXTRA_AGENT_ID) ?: return
-            if (isLockedAndAuthRequired(context, intent, defaultToSetting = true)) return
+            if (isLockedAndAuthRequired(context, alwaysRequireWhenSettingEnabled = true)) return
             val notifId = intent.getIntExtra(PromptActionReceiver.EXTRA_NOTIF_ID, 0)
             val text =
                 RemoteInput
@@ -201,17 +210,16 @@ class PromptActionHandler
 
         private suspend fun isLockedAndAuthRequired(
             context: Context,
-            intent: Intent,
-            defaultToSetting: Boolean = false,
+            promptId: String? = null,
+            alwaysRequireWhenSettingEnabled: Boolean = false,
         ): Boolean {
-            val authRequired =
-                if (intent.hasExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED)) {
-                    intent.getBooleanExtra(PromptActionReceiver.EXTRA_AUTH_REQUIRED, false)
-                } else {
-                    defaultToSetting && factory.requireUnlockToApprove()
-                }
-            if (!authRequired) return false
             val km = runCatching { context.getSystemService(android.app.KeyguardManager::class.java) }.getOrNull()
-            return km?.isDeviceLocked == true
+            if (km?.isDeviceLocked != true) return false
+            if (!factory.requireUnlockToApprove()) return false
+            if (alwaysRequireWhenSettingEnabled) return true
+            if (promptId == null) return true
+            val relayId = secrets.current()?.relayId ?: return true
+            val prompt = promptDao.get(relayId, promptId)?.toModel() ?: return true
+            return prompt.category == PromptCategory.PERMISSION || prompt.danger == Danger.HIGH
         }
     }

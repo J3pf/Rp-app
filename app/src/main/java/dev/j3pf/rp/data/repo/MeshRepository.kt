@@ -16,6 +16,8 @@ import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.protocol.MeshSubscribe
 import dev.j3pf.rp.protocol.MeshUnsubscribe
 import dev.j3pf.rp.protocol.MsgType
+import dev.j3pf.rp.protocol.Ulid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -100,29 +102,35 @@ open class MeshRepository
         init {
             bus.messages
                 .onEach { envelope ->
-                    when (envelope.t) {
-                        MsgType.MESH_SNAPSHOT, MsgType.MESH_UPDATE -> {
-                            try {
-                                _snapshot.value = envelope.body<MeshSnapshot>()
-                            } catch (e: Exception) {
-                                android.util.Log.e("MeshRepository", "Fallo al decodificar MESH_SNAPSHOT", e)
-                                _meshErrors.tryEmit("Error al decodificar la red de agentes: ${e.message ?: "formato inválido"}")
+                    try {
+                        when (envelope.t) {
+                            MsgType.MESH_SNAPSHOT, MsgType.MESH_UPDATE -> {
+                                try {
+                                    _snapshot.value = envelope.body<MeshSnapshot>()
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MeshRepository", "Fallo al decodificar MESH_SNAPSHOT", e)
+                                    _meshErrors.tryEmit("Error al decodificar la red de agentes: ${e.message ?: "formato inválido"}")
+                                }
+                            }
+
+                            MsgType.MESH_COMM -> {
+                                runCatching { envelope.body<MeshCommEvent>() }.getOrNull()?.let { _commEvents.tryEmit(it.comm) }
+                            }
+
+                            MsgType.ERROR -> {
+                                val subId = synchronized(subscriptionLock) { lastSubscribeEnvelopeId }
+                                if (subId != null && envelope.re == subId) {
+                                    val msg =
+                                        runCatching { envelope.body<ErrorBody>().message }.getOrNull()
+                                            ?: "Error al suscribir a la red de agentes"
+                                    _meshErrors.tryEmit(msg)
+                                }
                             }
                         }
-
-                        MsgType.MESH_COMM -> {
-                            runCatching { envelope.body<MeshCommEvent>() }.getOrNull()?.let { _commEvents.tryEmit(it.comm) }
-                        }
-
-                        MsgType.ERROR -> {
-                            val subId = synchronized(subscriptionLock) { lastSubscribeEnvelopeId }
-                            if (subId != null && envelope.re == subId) {
-                                val msg =
-                                    runCatching { envelope.body<ErrorBody>().message }.getOrNull()
-                                        ?: "Error al suscribir a la red de agentes"
-                                _meshErrors.tryEmit(msg)
-                            }
-                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("MeshRepository", "Error handling mesh envelope ${envelope.t}", e)
                     }
                 }.launchIn(scope)
 
@@ -207,7 +215,7 @@ open class MeshRepository
         }
 
         private fun createSubscribeEnvelope(machineId: String?): Envelope {
-            val env = Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId))
+            val env = Envelope.of(MsgType.MESH_SUBSCRIBE, MeshSubscribe(machineId), id = Ulid.new())
             if (connection.state.value == ConnState.Connected) {
                 lastSubscribeEnvelopeId = env.id
                 lastSubscribedMachineId = machineId

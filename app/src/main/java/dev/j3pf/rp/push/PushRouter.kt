@@ -1,5 +1,6 @@
 package dev.j3pf.rp.push
 
+import android.util.Log
 import dev.j3pf.rp.data.db.PromptDao
 import dev.j3pf.rp.data.ports.PushEnvelopeCrypto
 import dev.j3pf.rp.data.repo.SettingsRepository
@@ -34,8 +35,17 @@ class PushRouter
         suspend fun handleFcm(data: Map<String, String>): Boolean {
             val k = data["k"] ?: return false
             val key = secrets.current()?.pushKey ?: return false
-            val plain = pushEnvelopeCrypto.decrypt(key, data["n"] ?: return false, data["c"] ?: return false) ?: return false
-            val body = runCatching { RpJson.parseToJsonElement(plain) as JsonObject }.getOrNull() ?: return false
+            val nonce = data["n"] ?: return false
+            val cipher = data["c"] ?: return false
+            val plain = pushEnvelopeCrypto.decrypt(key, nonce, cipher)
+            if (plain == null) {
+                Log.w(TAG, "FCM decrypt failed for kind=$k")
+                return false
+            }
+            val body =
+                runCatching { RpJson.parseToJsonElement(plain) as JsonObject }
+                    .onFailure { Log.w(TAG, "FCM payload JSON parse failed for kind=$k", it) }
+                    .getOrNull() ?: return false
             return handle(k, body, pushId = null)
         }
 
@@ -90,14 +100,23 @@ class PushRouter
                     if (k == PushKind.ERROR) {
                         factory.cancelWorking(agentId)
                     }
-                    val key = "$k:${pushId ?: (agentId + ":" + (body.str("title") ?: body.str("message") ?: "").hashCode())}"
+                    val detailOrText = body.str("detail") ?: body.str("message") ?: body.str("title") ?: ""
+                    val key = "$k:${pushId ?: (agentId + ":" + detailOrText.hashCode())}"
                     if (!deduper.firstSeen(key)) return true
                     if (agentId in settings.current().mutedAgents) return true
                     factory.showSimple(k, body)
                     true
                 }
 
+                PushKind.TEST -> {
+                    val dedupId = pushId ?: body.str("pushId") ?: body.str("id")
+                    if (dedupId != null && !deduper.firstSeen("test:$dedupId")) return true
+                    factory.showTest(body)
+                    true
+                }
+
                 else -> {
+                    Log.w(TAG, "Ignoring unknown push kind=$k")
                     false
                 }
             }
@@ -106,5 +125,12 @@ class PushRouter
         private fun <T> decode(
             s: kotlinx.serialization.KSerializer<T>,
             body: JsonObject,
-        ): T? = runCatching { RpJson.decodeFromJsonElement(s, body) }.getOrNull()
+        ): T? =
+            runCatching { RpJson.decodeFromJsonElement(s, body) }
+                .onFailure { Log.w(TAG, "Push body decode failed for ${s.descriptor.serialName}", it) }
+                .getOrNull()
+
+        private companion object {
+            const val TAG = "PushRouter"
+        }
     }

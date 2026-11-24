@@ -79,11 +79,14 @@ class DirectPushService : LifecycleService() {
 
     @Inject lateinit var lifecycleMonitor: AppLifecycleMonitor
 
+    @Inject lateinit var pushTokenProvider: PushTokenProvider
+
     private lateinit var socket: ReconnectingSocket
 
     private val screenInteractive = MutableStateFlow(true)
     private val deviceIdleOrSaver = MutableStateFlow(false)
     private val idleStandby = MutableStateFlow(false)
+    private val hasAlternatePushChannel = MutableStateFlow(false)
     private var powerReceiver: BroadcastReceiver? = null
 
     @Volatile
@@ -176,6 +179,13 @@ class DirectPushService : LifecycleService() {
             }
         }
 
+        lifecycleScope.launch {
+            hasAlternatePushChannel.value =
+                BuildConfig.FLAVOR == "fcm" &&
+                    ::pushTokenProvider.isInitialized &&
+                    !runCatching { pushTokenProvider.currentToken() }.getOrNull().isNullOrBlank()
+        }
+
         val hasActiveWork =
             agents.agents
                 .map { list ->
@@ -187,8 +197,13 @@ class DirectPushService : LifecycleService() {
                 }.distinctUntilChanged()
 
         lifecycleScope.launch {
-            combine(lifecycleMonitor.isForeground, screenInteractive, hasActiveWork) { fg, interactive, active ->
-                !fg && !interactive && !active
+            combine(
+                lifecycleMonitor.isForeground,
+                screenInteractive,
+                hasActiveWork,
+                hasAlternatePushChannel,
+            ) { fg, interactive, active, hasAlt ->
+                hasAlt && !fg && !interactive && !active
             }.distinctUntilChanged()
                 .collectLatest { canSleep ->
                     if (canSleep) {
@@ -206,12 +221,18 @@ class DirectPushService : LifecycleService() {
                 deviceIdleOrSaver,
                 idleStandby,
                 hasActiveWork,
-            ) { inForeground, constrained, standby, active ->
-                val sleeping = (constrained && !active) || standby
-                !inForeground && !sleeping
+                hasAlternatePushChannel,
+            ) { inForeground, constrained, standby, active, hasAlt ->
+                shouldRunDirectSocket(
+                    inForeground = inForeground,
+                    deviceIdleOrSaver = constrained,
+                    idleStandby = standby,
+                    hasActiveWork = active,
+                    hasAlternatePushChannel = hasAlt,
+                )
             }.distinctUntilChanged()
-                .collect { shouldRunDirectSocket ->
-                    if (!shouldRunDirectSocket) {
+                .collect { shouldRun ->
+                    if (!shouldRun) {
                         socket.stop()
                     } else if (secrets.current() != null) {
                         socket.start()
@@ -249,16 +270,20 @@ class DirectPushService : LifecycleService() {
                     )
                 }.distinctUntilChanged()
 
+        val powerSleepEligible =
+            combine(deviceIdleOrSaver, idleStandby, hasAlternatePushChannel) { constrained, standby, hasAlt ->
+                hasAlt && (constrained || standby)
+            }.distinctUntilChanged()
+
         val connAndPower =
             combine(
                 socket.state,
                 lifecycleMonitor.isForeground,
                 machines.machinesState,
-                deviceIdleOrSaver,
-                idleStandby,
-            ) { st, fg, ms, constrained, standby ->
+                powerSleepEligible,
+            ) { st, fg, ms, canSleep ->
                 val connected = (st == ConnState.Connected) || fg
-                val sleeping = !fg && !connected && (constrained || standby)
+                val sleeping = !fg && !connected && canSleep
                 Triple(connected, ms.size, sleeping)
             }.distinctUntilChanged()
 
@@ -313,7 +338,14 @@ class DirectPushService : LifecycleService() {
             return START_NOT_STICKY
         }
         idleStandby.value = false
-        if (!lifecycleMonitor.isForeground.value && !deviceIdleOrSaver.value) {
+        if (shouldRunDirectSocket(
+                inForeground = lifecycleMonitor.isForeground.value,
+                deviceIdleOrSaver = deviceIdleOrSaver.value,
+                idleStandby = idleStandby.value,
+                hasActiveWork = false,
+                hasAlternatePushChannel = hasAlternatePushChannel.value,
+            )
+        ) {
             socket.start()
             socket.retryNow()
         }
@@ -353,6 +385,7 @@ class DirectPushService : LifecycleService() {
             MsgType.AGENTS_UPDATE ->
                 lifecycleScope.launch {
                     val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@launch
+                    runCatching { agents.applyAgentsUpdate(u) }
                     for (a in u.upsert) {
                         if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
                             idleStandby.value = false
@@ -468,6 +501,25 @@ class DirectPushService : LifecycleService() {
     companion object {
         private const val NOTIF_ID = 4200
         private const val IDLE_STANDBY_TIMEOUT_MS = 10 * 60_000L
+
+        /**
+         * Determines whether the background direct WebSocket must remain active.
+         * Without an alternate push channel (e.g., Google-free `direct` flavor), the low-frequency
+         * 270 s ping socket stays alive across idle standby and Doze/Power Save so prompts and errors
+         * are never silently missed.
+         */
+        internal fun shouldRunDirectSocket(
+            inForeground: Boolean,
+            deviceIdleOrSaver: Boolean,
+            idleStandby: Boolean,
+            hasActiveWork: Boolean,
+            hasAlternatePushChannel: Boolean,
+        ): Boolean {
+            if (inForeground) return false
+            if (!hasAlternatePushChannel) return true
+            val sleeping = (deviceIdleOrSaver && !hasActiveWork) || idleStandby
+            return !sleeping
+        }
 
         fun start(context: Context) {
             runCatching {

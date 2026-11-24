@@ -143,9 +143,9 @@ class SendMessageWorkerTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("{}"))
 
         assertEquals(ListenableWorker.Result.retry(), worker(attempt = 0).doWork())
-        assertEquals(outboxRow, db.outbox().get(clientMsgId))
+        assertEquals(outboxRow.copy(attempts = 1), db.outbox().get(clientMsgId))
         assertEquals(ListenableWorker.Result.failure(), worker(attempt = 8).doWork())
-        assertEquals(outboxRow, db.outbox().get(clientMsgId))
+        assertEquals(outboxRow.copy(attempts = 2), db.outbox().get(clientMsgId))
         assertEquals(listOf("01MSG", "01MSG"), listOf(takeMessageId(), takeMessageId()))
         assertEquals(2, server.requestCount)
     }

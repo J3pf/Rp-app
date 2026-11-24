@@ -1,5 +1,6 @@
 package dev.j3pf.rp.data.repo
 
+import android.util.Log
 import dev.j3pf.rp.data.net.MessageBus
 import dev.j3pf.rp.data.net.RelayConnection
 import dev.j3pf.rp.data.net.WsReply
@@ -23,6 +24,7 @@ import dev.j3pf.rp.protocol.HostSpawned
 import dev.j3pf.rp.protocol.HostsUpdate
 import dev.j3pf.rp.protocol.MsgType
 import dev.j3pf.rp.protocol.Ulid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,9 +50,15 @@ class HostRepository
         override fun start() {
             bus.messages
                 .onEach { env ->
-                    if (env.t == MsgType.HOSTS_UPDATE) {
-                        val u = runCatching { env.body<HostsUpdate>() }.getOrNull() ?: return@onEach
-                        _hosts.update { cur -> cur - u.remove.toSet() + u.upsert.associateBy { it.machineId } }
+                    try {
+                        if (env.t == MsgType.HOSTS_UPDATE) {
+                            val u = runCatching { env.body<HostsUpdate>() }.getOrNull() ?: return@onEach
+                            _hosts.update { cur -> cur - u.remove.toSet() + u.upsert.associateBy { it.machineId } }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e("HostRepository", "Error handling envelope ${env.t}", e)
                     }
                 }.launchIn(scope)
         }

@@ -231,6 +231,44 @@ interface ChatDao {
         beforeSeq: Long,
     )
 
+    @Query(
+        "DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId AND kind = 'event' AND epoch IS :epoch AND seq >= :fromSeq",
+    )
+    suspend fun deleteEventsFrom(
+        relayId: String,
+        agentId: String,
+        epoch: String?,
+        fromSeq: Long,
+    )
+
+    @Transaction
+    suspend fun replaceHistory(
+        relayId: String,
+        agentId: String,
+        epoch: String?,
+        epochChanged: Boolean,
+        entryRows: List<ChatRecordEntity>,
+        liveFromSeq: Long?,
+        eventRows: List<ChatRecordEntity>,
+        keep: Int = 5000,
+    ) {
+        if (epochChanged) clearAgent(relayId, agentId)
+        if (entryRows.isNotEmpty()) {
+            deleteKind(relayId, agentId, RecordKind.ENTRY)
+            insert(entryRows)
+            deleteEventsBefore(relayId, agentId, epoch, liveFromSeq ?: Long.MAX_VALUE)
+        }
+        val overlapFrom =
+            listOfNotNull(liveFromSeq, eventRows.minOfOrNull { it.seq }).minOrNull()
+        if (overlapFrom != null) {
+            deleteEventsFrom(relayId, agentId, epoch, overlapFrom)
+        }
+        if (eventRows.isNotEmpty()) {
+            insert(eventRows)
+            trim(relayId, agentId, keep)
+        }
+    }
+
     @Query("DELETE FROM chat_records WHERE relayId = :relayId AND agentId = :agentId")
     suspend fun clearAgent(
         relayId: String,

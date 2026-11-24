@@ -43,10 +43,13 @@ import dev.j3pf.rp.protocol.UserMessage
 import dev.j3pf.rp.protocol.str
 import dev.j3pf.rp.push.SendMessageWorker
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -160,24 +163,18 @@ class ChatRepository
                     epochChanged: Boolean,
                 ) {
                     val relayId = secrets.current()?.relayId ?: return
-                    if (epochChanged) chatDao.clearAgent(relayId, agentId)
-                    if (history.entries.isNotEmpty()) {
-                        val snapshotSeq = ((history.liveFromSeq ?: 0L) - 1L).coerceAtLeast(0L)
-                        chatDao.deleteKind(relayId, agentId, RecordKind.ENTRY)
-                        chatDao.insert(
-                            history.entries.map {
-                                ChatRecordEntity(
-                                    relayId = relayId,
-                                    agentId = agentId,
-                                    kind = RecordKind.ENTRY,
-                                    epoch = history.epoch,
-                                    seq = snapshotSeq,
-                                    json = RpJson.encodeToString(Entry.serializer(), it),
-                                )
-                            },
-                        )
-                        chatDao.deleteEventsBefore(relayId, agentId, history.epoch, history.liveFromSeq ?: Long.MAX_VALUE)
-                    }
+                    val snapshotSeq = ((history.liveFromSeq ?: 0L) - 1L).coerceAtLeast(0L)
+                    val entryRows =
+                        history.entries.map {
+                            ChatRecordEntity(
+                                relayId = relayId,
+                                agentId = agentId,
+                                kind = RecordKind.ENTRY,
+                                epoch = history.epoch,
+                                seq = snapshotSeq,
+                                json = RpJson.encodeToString(Entry.serializer(), it),
+                            )
+                        }
                     val eventRows =
                         history.events
                             .filter { it.e.str("type") in PERSISTED_EVENTS }
@@ -192,10 +189,16 @@ class ChatRepository
                                     json = RpJson.encodeToString(AgentEvent.serializer(), normalized),
                                 )
                             }
-                    if (eventRows.isNotEmpty()) {
-                        chatDao.insert(eventRows)
-                        chatDao.trim(relayId, agentId, 5000)
-                    }
+                    chatDao.replaceHistory(
+                        relayId = relayId,
+                        agentId = agentId,
+                        epoch = history.epoch,
+                        epochChanged = epochChanged,
+                        entryRows = entryRows,
+                        liveFromSeq = history.liveFromSeq,
+                        eventRows = eventRows,
+                        keep = 5000,
+                    )
                 }
 
                 override suspend fun persistEvent(
@@ -250,7 +253,14 @@ class ChatRepository
                 httpSendMessage = { api.sendMessage(it) },
                 newId = { Ulid.new() },
                 now = { System.currentTimeMillis() },
+                bumpOutboxAttempt = { clientMsgId ->
+                    outboxDao.bump(clientMsgId)
+                    outboxDao.get(clientMsgId)?.attempts
+                },
             )
+
+        /** Runs an operation on the repository scope so navigating back mid-send does not strand the outbox. */
+        internal fun <T> runInRepositoryScope(block: suspend () -> T): Deferred<T> = scope.async { block() }
 
         private val registry =
             ChatSessionRegistry<ChatSession>(
@@ -291,6 +301,7 @@ class ChatRepository
                 if (telemetryJob == null) {
                     telemetryJob =
                         core.state
+                            .filter { st -> !(st.epoch == null && st.items.isEmpty() && st.todos.isEmpty() && st.tools.isEmpty()) }
                             .distinctUntilChanged { a, b -> a.todos === b.todos && a.tools === b.tools && a.working == b.working }
                             .map { st -> Triple(st.todoCompletedCount, st.todoTotalCount, st.activeTaskLabel()) }
                             .distinctUntilChanged()
