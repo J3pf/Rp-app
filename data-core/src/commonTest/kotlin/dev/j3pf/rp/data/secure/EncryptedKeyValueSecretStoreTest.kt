@@ -102,4 +102,64 @@ class EncryptedKeyValueSecretStoreTest {
         assertTrue(id1.all { it in '0'..'9' || it in 'a'..'f' })
         assertNotEquals(id1, id2)
     }
+
+    @Test
+    fun transientBackingReadErrorDoesNotWipePersistedSession() {
+        val delegate = InMemorySecretKeyValueBacking()
+        var failReadsWithException = false
+        var failReadsWithSentinel = false
+        var removeCount = 0
+        var clearCount = 0
+        val backing =
+            object : SecretKeyValueBacking {
+                override fun getString(key: String): String? {
+                    if (failReadsWithException) {
+                        throw IllegalStateException("errSecInteractionNotAllowed")
+                    }
+                    if (failReadsWithSentinel) {
+                        return EncryptedKeyValueSecretStore.TRANSIENT_READ_ERROR_SENTINEL
+                    }
+                    return delegate.getString(key)
+                }
+
+                override fun putString(
+                    key: String,
+                    value: String,
+                ) = delegate.putString(key, value)
+
+                override fun remove(key: String) {
+                    removeCount++
+                    delegate.remove(key)
+                }
+
+                override fun clear() {
+                    clearCount++
+                    delegate.clear()
+                }
+            }
+
+        val initial = EncryptedKeyValueSecretStore(backing = backing)
+        initial.save(sampleSession)
+        assertEquals(sampleSession, initial.current())
+
+        // Simulate transient Keychain lock throwing an exception
+        failReadsWithException = true
+        val lockedExceptionStore = EncryptedKeyValueSecretStore(backing = backing)
+        assertNull(lockedExceptionStore.current())
+        assertEquals(0, removeCount, "Transient exception must not remove encrypted entries")
+        assertEquals(0, clearCount, "Transient exception must not clear backing")
+
+        // Simulate transient Keychain lock returning sentinel
+        failReadsWithException = false
+        failReadsWithSentinel = true
+        val lockedSentinelStore = EncryptedKeyValueSecretStore(backing = backing)
+        assertNull(lockedSentinelStore.current())
+        assertEquals(0, removeCount, "Transient sentinel must not remove encrypted entries")
+        assertEquals(0, clearCount, "Transient sentinel must not clear backing")
+
+        // Once unlocked, stored credentials remain intact and load cleanly
+        failReadsWithSentinel = false
+        val recovered = EncryptedKeyValueSecretStore(backing = backing)
+        assertEquals(sampleSession, recovered.current())
+    }
 }

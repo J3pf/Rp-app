@@ -692,4 +692,31 @@ class ChatReducerTest {
         assertEquals("local:m-ola", pending.key)
         assertFalse(pc.fromMobile)
     }
+
+    @Test
+    fun `consecutive aborted streaming turns followed by new delta produce distinct display keys`() {
+        var s = ChatState()
+        // Turn 1: stream then abort
+        s = ChatReducer.reduce(s, ev(1, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"first partial"}""", epoch = "E1"))
+        s = ChatReducer.reduce(s, ev(2, """{"type":"agent_settled","aborted":true}""", epoch = "E1"))
+        // Turn 2: stream then abort
+        s = ChatReducer.reduce(s, ev(3, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"second partial"}""", epoch = "E1"))
+        s = ChatReducer.reduce(s, ev(4, """{"type":"agent_settled","aborted":true}""", epoch = "E1"))
+        // Turn 3: epoch reset with same seq=2 & at=0 to exercise key collision disambiguation
+        s = ChatReducer.reduce(s, ev(1, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"third partial"}""", epoch = "E2"))
+        s = ChatReducer.reduce(s, ev(2, """{"type":"agent_settled","aborted":true}""", epoch = "E2"))
+        // Turn 4: new live streaming delta
+        s = ChatReducer.reduce(s, ev(3, """{"type":"message_delta","contentIndex":0,"kind":"text","delta":"live now"}""", epoch = "E2"))
+
+        assertEquals(3, s.items.size)
+        assertTrue(s.items.none { it.key == "stream" }, "Settled streaming items must not retain key \"stream\"")
+        val allItems = s.display
+        assertEquals(4, allItems.size)
+        assertEquals(
+            allItems.size,
+            allItems.map { it.key }.distinct().size,
+            "All display keys must be distinct to prevent LazyColumn duplicate-key crash: ${allItems.map { it.key }}",
+        )
+        assertEquals("stream", s.streaming?.key)
+    }
 }

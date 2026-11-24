@@ -7,6 +7,12 @@ import dev.j3pf.rp.protocol.HealthResponse
 import dev.j3pf.rp.protocol.OkResponse
 import dev.j3pf.rp.protocol.PairDeviceResponse
 
+enum class PushRegistrationResult {
+    OK,
+    RETRYABLE_FAILURE,
+    PERMANENT_FAILURE,
+}
+
 /** Pairing handshake and session transitions; URL parsing and native side effects stay injected. */
 class SessionPolicy(
     private val normalizeUrl: (String) -> String?,
@@ -77,35 +83,50 @@ class SessionPolicy(
         if (direct) platform.startDirectPush() else platform.stopDirectPush()
     }
 
-    suspend fun registerFcmToken(token: String?): Boolean {
-        if (platform.currentSession() == null) return true
-        return when (updatePush(token, platform.directPush())) {
-            is ApiResult.Ok -> true
-            else -> false
-        }
+    suspend fun registerFcmTokenResult(token: String?): PushRegistrationResult {
+        if (platform.currentSession() == null) return PushRegistrationResult.OK
+        return classifyPushRegistration(updatePush(token, platform.directPush()))
     }
 
-    suspend fun registerApnsToken(
+    suspend fun registerFcmToken(token: String?): Boolean =
+        registerFcmTokenResult(token) == PushRegistrationResult.OK
+
+    suspend fun registerApnsTokenResult(
         token: String?,
         environment: String?,
-    ): Boolean {
+    ): PushRegistrationResult {
         val validEnvironment = validApnsEnvironment(environment)
-        if (platform.currentSession() == null) return true
-        if (platform.pushPlatform() != SessionPushPlatform.IOS) return false
-        if (environment != null && validEnvironment == null) return false
-        return when (
+        if (platform.currentSession() == null) return PushRegistrationResult.OK
+        if (platform.pushPlatform() != SessionPushPlatform.IOS) return PushRegistrationResult.PERMANENT_FAILURE
+        if (environment != null && validEnvironment == null) return PushRegistrationResult.PERMANENT_FAILURE
+        return classifyPushRegistration(
             putPush(
                 platform.currentToken(),
                 platform.directPush(),
                 SessionPushPlatform.IOS.wireValue,
                 token,
                 validEnvironment,
-            )
-        ) {
-            is ApiResult.Ok -> true
-            else -> false
-        }
+            ),
+        )
     }
+
+    suspend fun registerApnsToken(
+        token: String?,
+        environment: String?,
+    ): Boolean = registerApnsTokenResult(token, environment) == PushRegistrationResult.OK
+
+    private fun classifyPushRegistration(result: ApiResult<OkResponse>): PushRegistrationResult =
+        when (result) {
+            is ApiResult.Ok -> PushRegistrationResult.OK
+            is ApiResult.Http -> {
+                if (result.code in 400..499 && result.code != 429) {
+                    PushRegistrationResult.PERMANENT_FAILURE
+                } else {
+                    PushRegistrationResult.RETRYABLE_FAILURE
+                }
+            }
+            is ApiResult.Network -> PushRegistrationResult.RETRYABLE_FAILURE
+        }
 
     private suspend fun updatePush(
         fcmToken: String?,

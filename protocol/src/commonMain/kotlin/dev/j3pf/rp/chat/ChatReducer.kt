@@ -437,7 +437,8 @@ object ChatReducer {
         val st = s.streaming
         val baseItems =
             if (st != null && st.blocks.isNotEmpty()) {
-                s.items + st.copy(streaming = false, stopReason = if (aborted) "aborted" else st.stopReason)
+                val settledKey = uniqueSettledKey(s.items, "settled:${s.lastSeq}:${st.at}")
+                s.items + st.copy(key = settledKey, streaming = false, stopReason = if (aborted) "aborted" else st.stopReason)
             } else {
                 s.items
             }
@@ -473,6 +474,18 @@ object ChatReducer {
                 if (sub.status == "running") sub.copy(status = settledSubStatus) else sub
             }
         return s.copy(working = false, streaming = null, items = items, tools = tools, subagents = subagents, terminalWait = null)
+    }
+
+    private fun uniqueSettledKey(
+        items: List<ChatItem>,
+        baseKey: String,
+    ): String {
+        if (items.none { it.key == baseKey }) return baseKey
+        var suffix = 1
+        while (items.any { it.key == "$baseKey:$suffix" }) {
+            suffix++
+        }
+        return "$baseKey:$suffix"
     }
 
     private fun messageStart(

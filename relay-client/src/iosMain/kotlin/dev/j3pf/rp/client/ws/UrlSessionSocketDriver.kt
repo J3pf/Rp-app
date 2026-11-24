@@ -41,7 +41,14 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
         if (state.open.load() != OPEN || state.terminal.load() != ACTIVE) return false
 
         socket.sendMessage(NSURLSessionWebSocketMessage(string = text)) { error ->
-            if (error != null) state.fail(socket, error, this::removeState)
+            if (error != null) {
+                val closeCode = socket.closeCode.toInt()
+                if (closeCode != 0) {
+                    state.close(socket, closeCode, socket.closeReason.toUtf8String(), this::removeState)
+                } else {
+                    state.fail(socket, error, this::removeState)
+                }
+            }
         }
         return true
     }
@@ -93,11 +100,7 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
             didCloseWithCode: Long,
             reason: NSData?,
         ) {
-            if (!state.terminal.compareAndSet(ACTIVE, TERMINAL)) return
-            state.open.store(CLOSED)
-            state.listener.onClosed(didCloseWithCode.toInt(), reason.toUtf8String())
-            removeState(webSocketTask)
-            state.session?.finishTasksAndInvalidate()
+            state.close(webSocketTask, didCloseWithCode.toInt(), reason.toUtf8String(), this@UrlSessionSocketDriver::removeState)
         }
 
         override fun URLSession(
@@ -107,22 +110,43 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
         ) {
             val webSocketTask = task as? NSURLSessionWebSocketTask ?: return
             if (didCompleteWithError != null) {
-                state.fail(webSocketTask, didCompleteWithError, this@UrlSessionSocketDriver::removeState)
-            } else if (state.terminal.compareAndSet(ACTIVE, TERMINAL)) {
-                state.open.store(CLOSED)
-                state.listener.onClosed(1000, "")
-                removeState(webSocketTask)
-                state.session?.finishTasksAndInvalidate()
+                handleSocketError(webSocketTask, didCompleteWithError)
+            } else {
+                val closeCode = webSocketTask.closeCode.toInt().takeIf { it != 0 } ?: 1000
+                state.close(webSocketTask, closeCode, webSocketTask.closeReason.toUtf8String(), this@UrlSessionSocketDriver::removeState)
+            }
+        }
+
+        private fun handleSocketError(
+            socket: NSURLSessionWebSocketTask,
+            error: NSError,
+        ) {
+            val closeCode = socket.closeCode.toInt()
+            if (closeCode != 0) {
+                state.close(socket, closeCode, socket.closeReason.toUtf8String(), this@UrlSessionSocketDriver::removeState)
+            } else {
+                state.fail(socket, error, this@UrlSessionSocketDriver::removeState)
             }
         }
 
         private fun schedulePing(socket: NSURLSessionWebSocketTask) {
             val delayNs = PING_INTERVAL_SECONDS * NSEC_PER_SEC.toLong()
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
+            val queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs), queue) {
                 if (state.open.load() != OPEN || state.terminal.load() != ACTIVE) return@dispatch_after
+                val pongReceived = AtomicInt(0)
+                val pongDeadlineNs = PONG_TIMEOUT_SECONDS * NSEC_PER_SEC.toLong()
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, pongDeadlineNs), queue) {
+                    if (pongReceived.compareAndSet(0, 1)) {
+                        if (state.open.load() == OPEN && state.terminal.load() == ACTIVE) {
+                            state.failMessage(socket, "WebSocket ping timeout", this@UrlSessionSocketDriver::removeState)
+                        }
+                    }
+                }
                 socket.sendPingWithPongReceiveHandler { error ->
+                    if (!pongReceived.compareAndSet(0, 1)) return@sendPingWithPongReceiveHandler
                     if (error != null) {
-                        state.fail(socket, error, this@UrlSessionSocketDriver::removeState)
+                        handleSocketError(socket, error)
                     } else {
                         schedulePing(socket)
                     }
@@ -134,7 +158,7 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
             if (state.terminal.load() != ACTIVE) return
             socket.receiveMessageWithCompletionHandler { message, error ->
                 when {
-                    error != null -> state.fail(socket, error, this@UrlSessionSocketDriver::removeState)
+                    error != null -> handleSocketError(socket, error)
                     message != null -> {
                         message.string?.let(state.listener::onText)
                         receiveNext(socket)
@@ -156,15 +180,36 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
             this.session = session
         }
 
+        fun close(
+            socket: NSURLSessionWebSocketTask,
+            code: Int,
+            reason: String,
+            remove: (NSURLSessionWebSocketTask) -> SocketState?,
+        ) {
+            if (!terminal.compareAndSet(ACTIVE, TERMINAL)) return
+            open.store(CLOSED)
+            listener.onClosed(code, reason)
+            remove(socket)
+            session?.finishTasksAndInvalidate()
+        }
+
         fun fail(
             socket: NSURLSessionWebSocketTask,
             error: NSError,
             remove: (NSURLSessionWebSocketTask) -> SocketState?,
         ) {
+            failMessage(socket, error.localizedDescription, remove)
+        }
+
+        fun failMessage(
+            socket: NSURLSessionWebSocketTask,
+            message: String,
+            remove: (NSURLSessionWebSocketTask) -> SocketState?,
+        ) {
             if (!terminal.compareAndSet(ACTIVE, TERMINAL)) return
             open.store(CLOSED)
             val response = socket.response as? NSHTTPURLResponse
-            listener.onFailure(response?.statusCode?.toInt(), error.localizedDescription)
+            listener.onFailure(response?.statusCode?.toInt(), message)
             remove(socket)
             session?.invalidateAndCancel()
         }
@@ -176,6 +221,7 @@ class UrlSessionSocketDriver : RelaySocketDriver<NSURLRequest, NSURLSessionWebSo
         const val CLOSED = 0
         const val TERMINAL = 1
         const val PING_INTERVAL_SECONDS = 20L
+        const val PONG_TIMEOUT_SECONDS = 15L
     }
 }
 

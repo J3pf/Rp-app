@@ -13,9 +13,16 @@ import dev.j3pf.rp.protocol.PromptResolved
 import dev.j3pf.rp.protocol.ResolvedBy
 import dev.j3pf.rp.protocol.TerminalWait
 import dev.j3pf.rp.protocol.UserMessageAck
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
@@ -329,5 +336,165 @@ class ChatMessageDispatcherTest {
             dispatcher.dispatch(Envelope.of(MsgType.AGENT_EVENT, endEvent))
             assertNull(state.value.streaming)
             assertEquals(4L, state.value.lastSeq)
+        }
+
+    @Test
+    fun concurrentFlushPendingAndMessageEndDoNotRaceOrTriggerFalseResync() =
+        runTest {
+            withContext(Dispatchers.Default) {
+                repeat(40) { iteration ->
+                    val state = MutableStateFlow(ChatState(epoch = "E1"))
+                    var resyncCount = 0
+                    var clockMs = 1_000L
+
+                    val dispatcher =
+                        ChatMessageDispatcher(
+                            agentId = "my-agent",
+                            getState = { state.value },
+                            updateState = { transform -> state.update(transform) },
+                            onHistory = { _, _ -> },
+                            onPersistEvent = {},
+                            onResyncNeeded = { resyncCount++ },
+                            onHistoryApplied = {},
+                            onSyncingResolved = {},
+                            now = { clockMs },
+                            scope = this,
+                            frameBatchMs = 1_000L,
+                        )
+
+                    fun deltaEnv(seq: Long, delta: String) =
+                        Envelope.of(
+                            MsgType.AGENT_EVENT,
+                            AgentEvent(
+                                seq = seq,
+                                epoch = "E1",
+                                agentId = "my-agent",
+                                e =
+                                    JsonObject(
+                                        mapOf(
+                                            "type" to JsonPrimitive("message_delta"),
+                                            "contentIndex" to JsonPrimitive(0),
+                                            "kind" to JsonPrimitive("text"),
+                                            "delta" to JsonPrimitive(delta),
+                                        ),
+                                    ),
+                            ),
+                        )
+
+                    // Leading edge seq 1 emits immediately, seq 2..4 buffer
+                    dispatcher.dispatch(deltaEnv(1L, "A"))
+                    clockMs = 1_005L
+                    dispatcher.dispatch(deltaEnv(2L, "B"))
+                    dispatcher.dispatch(deltaEnv(3L, "C"))
+                    dispatcher.dispatch(deltaEnv(4L, "D"))
+
+                    val endEnv =
+                        Envelope.of(
+                            MsgType.AGENT_EVENT,
+                            AgentEvent(
+                                seq = 5L,
+                                epoch = "E1",
+                                agentId = "my-agent",
+                                e =
+                                    JsonObject(
+                                        mapOf(
+                                            "type" to JsonPrimitive("message_end"),
+                                            "message" to
+                                                JsonObject(
+                                                    mapOf(
+                                                        "role" to JsonPrimitive("assistant"),
+                                                        "timestamp" to JsonPrimitive(2_000L + iteration),
+                                                        "content" to JsonPrimitive("ABCD"),
+                                                    ),
+                                                ),
+                                        ),
+                                    ),
+                            ),
+                        )
+
+                    // Race flushPending() against dispatch(message_end) on concurrent worker threads
+                    val flushTask = async { dispatcher.flushPending() }
+                    val endTask = async { dispatcher.dispatch(endEnv) }
+                    awaitAll(flushTask, endTask)
+
+                    assertEquals(0, resyncCount, "Concurrent flushPending + message_end must never cause false resync (iter $iteration)")
+                    assertFalse(state.value.needsResync, "needsResync must remain false (iter $iteration)")
+                    assertEquals(5L, state.value.lastSeq, "lastSeq must advance to 5 (iter $iteration)")
+                    assertNull(state.value.streaming, "streaming must be cleared after message_end (iter $iteration)")
+                }
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun burstDeltasTrackSeqGapAndDuplicatesInO1WithoutQuadraticReplay() =
+        runTest {
+            val state = MutableStateFlow(ChatState(epoch = "E1"))
+            var uiUpdateCalls = 0
+            var resyncCount = 0
+            var clockMs = 1_000L
+
+            val dispatcher =
+                ChatMessageDispatcher(
+                    agentId = "my-agent",
+                    getState = { state.value },
+                    updateState = { transform ->
+                        uiUpdateCalls++
+                        state.update(transform)
+                    },
+                    onHistory = { _, _ -> },
+                    onPersistEvent = {},
+                    onResyncNeeded = { resyncCount++ },
+                    onHistoryApplied = {},
+                    onSyncingResolved = {},
+                    now = { clockMs },
+                    scope = this,
+                    frameBatchMs = 32L,
+                )
+
+            fun deltaEnv(seq: Long, delta: String, epoch: String = "E1") =
+                Envelope.of(
+                    MsgType.AGENT_EVENT,
+                    AgentEvent(
+                        seq = seq,
+                        epoch = epoch,
+                        agentId = "my-agent",
+                        e =
+                            JsonObject(
+                                mapOf(
+                                    "type" to JsonPrimitive("message_delta"),
+                                    "contentIndex" to JsonPrimitive(0),
+                                    "kind" to JsonPrimitive("text"),
+                                    "delta" to JsonPrimitive(delta),
+                                ),
+                            ),
+                    ),
+                )
+
+            // Leading delta
+            dispatcher.dispatch(deltaEnv(1L, "0"))
+            assertEquals(1, uiUpdateCalls)
+
+            // 500 contiguous deltas inside window + duplicate seq 50
+            clockMs = 1_005L
+            for (seq in 2L..500L) {
+                dispatcher.dispatch(deltaEnv(seq, "x"))
+            }
+            dispatcher.dispatch(deltaEnv(50L, "DUP"))
+            assertEquals(1, uiUpdateCalls, "All 500 buffered deltas must coalesce into a single future flush")
+            assertEquals(0, resyncCount, "Contiguous deltas + duplicate must not trigger resync")
+
+            // Gap delta (seq 505 instead of 501) immediately flushes and triggers resync once
+            dispatcher.dispatch(deltaEnv(505L, "!"))
+            assertEquals(1, resyncCount, "Seq gap inside burst window must immediately trigger resync")
+            assertEquals(2, uiUpdateCalls)
+            assertEquals(505L, state.value.lastSeq)
+            assertTrue(state.value.needsResync)
+            assertEquals(501, state.value.streaming?.plainText?.length)
+
+            // Let scheduled timer settle cleanly without extra updates
+            advanceTimeBy(50L)
+            runCurrent()
+            assertEquals(2, uiUpdateCalls)
         }
 }

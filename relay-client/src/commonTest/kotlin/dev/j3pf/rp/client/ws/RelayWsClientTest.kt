@@ -119,10 +119,15 @@ class RelayWsClientTest {
             assertEquals(WsReply.Timeout, first.await())
             val cancelled = launch { client.request(Envelope(t = "request", id = "cancelled")) }
             runCurrent()
+            assertEquals(1, client.pendingCount)
             cancelled.cancelAndJoin()
-            // Cancellation still propagates; pending cleanup remains on disconnect, not a migration fix.
-            client.failPending(WsReply.NotConnected)
             assertTrue(cancelled.isCancelled)
+            assertEquals(0, client.pendingCount, "Cancelled request must clean up pending map immediately without waiting for disconnect")
+            val reused = async { client.request(Envelope(t = "request", id = "cancelled")) }
+            runCurrent()
+            client.onText(Envelope(t = "reply", re = "cancelled").encode())
+            assertIs<WsReply.Ok>(reused.await())
+            assertEquals(0, client.pendingCount)
         }
 
     @Test

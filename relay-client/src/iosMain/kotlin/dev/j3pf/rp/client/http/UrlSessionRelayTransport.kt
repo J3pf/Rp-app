@@ -1,16 +1,32 @@
 package dev.j3pf.rp.client.http
 
+import dev.j3pf.rp.client.ws.RelayLock
+import dev.j3pf.rp.data.net.ApiResult
 import kotlinx.cinterop.*
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.*
 import platform.darwin.*
 import kotlin.coroutines.resume
-import dev.j3pf.rp.data.net.ApiResult
 
-/** JSON HTTP adapter backed by Foundation URLSession. */
+/** JSON HTTP adapter backed by a reused Foundation URLSession with resource timeout and body size cap. */
 
 class UrlSessionRelayTransport : RelayHttpTransport {
+    private val delegate = SharedHttpDelegate()
+    private val session: NSURLSession =
+        NSURLSession.sessionWithConfiguration(
+            NSURLSessionConfiguration.defaultSessionConfiguration.apply {
+                timeoutIntervalForRequest = DEFAULT_TIMEOUT_SECONDS
+                timeoutIntervalForResource = RESOURCE_TIMEOUT_SECONDS
+            },
+            delegate,
+            null,
+        )
+
+    fun close() {
+        session.finishTasksAndInvalidate()
+    }
+
     override suspend fun execute(request: RelayHttpRequest): ApiResult<RelayHttpResponse> {
         val url = NSURL.URLWithString(request.url)
             ?: return ApiResult.Network(IllegalArgumentException("Invalid relay URL"))
@@ -27,34 +43,65 @@ class UrlSessionRelayTransport : RelayHttpTransport {
         }
 
         return suspendCancellableCoroutine { continuation ->
-            val delegate = HttpDelegate(continuation)
-            val session = NSURLSession.sessionWithConfiguration(
-                NSURLSessionConfiguration.defaultSessionConfiguration,
-                delegate,
-                null,
-            )
-            delegate.session = session
             val task = session.dataTaskWithRequest(nativeRequest)
+            delegate.register(task, continuation)
             continuation.invokeOnCancellation {
+                delegate.remove(task)
                 task.cancel()
-                session.invalidateAndCancel()
             }
             task.resume()
         }
     }
 
-    private class HttpDelegate(
-        private val continuation: CancellableContinuation<ApiResult<RelayHttpResponse>>,
-    ) : NSObject(), NSURLSessionDataDelegateProtocol {
-        private val responseChunks = mutableListOf<ByteArray>()
-        lateinit var session: NSURLSession
+    private class TaskState(
+        val continuation: CancellableContinuation<ApiResult<RelayHttpResponse>>,
+    ) {
+        val responseChunks = mutableListOf<ByteArray>()
+        var totalBytes: Int = 0
+        var exceededLimit: Boolean = false
+    }
+
+    private class SharedHttpDelegate : NSObject(), NSURLSessionDataDelegateProtocol {
+        private val lock = RelayLock()
+        private val tasks = mutableMapOf<NSURLSessionTask, TaskState>()
+
+        fun register(
+            task: NSURLSessionTask,
+            continuation: CancellableContinuation<ApiResult<RelayHttpResponse>>,
+        ) {
+            lock.withLock {
+                tasks[task] = TaskState(continuation)
+            }
+        }
+
+        fun remove(task: NSURLSessionTask): TaskState? =
+            lock.withLock {
+                tasks.remove(task)
+            }
 
         override fun URLSession(
             session: NSURLSession,
             dataTask: NSURLSessionDataTask,
             didReceiveData: NSData,
         ) {
-            responseChunks += didReceiveData.toByteArray()
+            val chunk = didReceiveData.toByteArray()
+            var cancelForSize = false
+            lock.withLock {
+                val state = tasks[dataTask] ?: return@withLock
+                if (state.exceededLimit) return@withLock
+                val nextSize = state.totalBytes.toLong() + chunk.size.toLong()
+                if (nextSize > MAX_RESPONSE_BYTES.toLong()) {
+                    state.exceededLimit = true
+                    state.responseChunks.clear()
+                    cancelForSize = true
+                } else {
+                    state.responseChunks += chunk
+                    state.totalBytes = nextSize.toInt()
+                }
+            }
+            if (cancelForSize) {
+                dataTask.cancel()
+            }
         }
 
         override fun URLSession(
@@ -62,22 +109,34 @@ class UrlSessionRelayTransport : RelayHttpTransport {
             task: NSURLSessionTask,
             didCompleteWithError: NSError?,
         ) {
-            val result = when {
-                didCompleteWithError != null -> ApiResult.Network(IllegalStateException(didCompleteWithError.localizedDescription))
-                task.response !is NSHTTPURLResponse -> ApiResult.Network(IllegalStateException("URLSession returned no HTTP response"))
-                else -> {
-                    val response = task.response as NSHTTPURLResponse
-                    ApiResult.Ok(RelayHttpResponse(response.statusCode.toInt(), responseChunks.toUtf8String()))
+            val state = remove(task) ?: return
+            val result =
+                when {
+                    state.exceededLimit -> {
+                        ApiResult.Network(IllegalStateException("Response body exceeded $MAX_RESPONSE_BYTES bytes limit"))
+                    }
+                    didCompleteWithError != null -> {
+                        ApiResult.Network(IllegalStateException(didCompleteWithError.localizedDescription))
+                    }
+                    task.response !is NSHTTPURLResponse -> {
+                        ApiResult.Network(IllegalStateException("URLSession returned no HTTP response"))
+                    }
+                    else -> {
+                        val response = task.response as NSHTTPURLResponse
+                        ApiResult.Ok(RelayHttpResponse(response.statusCode.toInt(), state.responseChunks.toUtf8String()))
+                    }
                 }
+            if (state.continuation.isActive) {
+                state.continuation.resume(result)
             }
-            if (continuation.isActive) continuation.resume(result)
-            session.finishTasksAndInvalidate()
         }
     }
 
     private companion object {
         const val DEFAULT_TIMEOUT_SECONDS = 60.0
+        const val RESOURCE_TIMEOUT_SECONDS = 60.0
         const val QUICK_TIMEOUT_SECONDS = 8.0
+        const val MAX_RESPONSE_BYTES = 16 * 1024 * 1024
         const val AUTHORIZATION_HEADER = "Authorization"
         const val CONTENT_TYPE_HEADER = "Content-Type"
         const val JSON_CONTENT_TYPE = "application/json; charset=utf-8"

@@ -15,13 +15,19 @@ import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.UserMessage
 import dev.j3pf.rp.protocol.UserMessageAck
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -691,5 +697,170 @@ class ChatDeliveryPolicyTest {
             advanceTimeBy(21_000L)
             advanceUntilIdle()
             assertTrue(state.value.items.filterIsInstance<UserMsg>().single().failed)
+        }
+
+    @Test
+    fun httpOkWithRejectedAckDeletesOutboxMarksLocalFailedAndReturnsFailed() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = { msg ->
+                        ApiResult.Ok(
+                            JsonObject(
+                                mapOf(
+                                    "clientMsgId" to JsonPrimitive(msg.clientMsgId),
+                                    "disposition" to JsonPrimitive("rejected"),
+                                    "error" to JsonPrimitive("agent_blocked"),
+                                ),
+                            ),
+                        )
+                    },
+                    newId = { "msg-http-rej" },
+                    now = { 1_000L },
+                )
+
+            val result =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "hello",
+                )
+
+            assertTrue(result is SendResult.Failed, "HTTP 200 rejected ack must return SendResult.Failed, got $result")
+            assertEquals("agent_blocked", result.reason)
+            assertFalse(platform.outbox.containsKey("msg-http-rej"), "Outbox must be deleted on HTTP rejected ack")
+            val bubble = state.value.items.filterIsInstance<UserMsg>().single()
+            assertTrue(bubble.failed, "Local bubble must be marked failed on HTTP rejected ack")
+            assertFalse(state.value.working)
+        }
+
+    @Test
+    fun httpOkWithAcceptedAckReturnsDecodedAck() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = { msg ->
+                        ApiResult.Ok(
+                            JsonObject(
+                                mapOf(
+                                    "clientMsgId" to JsonPrimitive(msg.clientMsgId),
+                                    "disposition" to JsonPrimitive("queued"),
+                                    "method" to JsonPrimitive("api"),
+                                ),
+                            ),
+                        )
+                    },
+                    newId = { "msg-http-ack" },
+                    now = { 1_000L },
+                )
+
+            val result =
+                policy.send(
+                    agentId = "agent-1",
+                    getState = { state.value },
+                    updateState = { transform -> state.update(transform) },
+                    text = "hello",
+                )
+
+            assertTrue(result is SendResult.Delivered)
+            assertEquals("queued", result.ack?.disposition)
+            assertEquals("api", result.ack?.method)
+            assertFalse(platform.outbox.containsKey("msg-http-ack"))
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun sendCancellationAfterPutOutboxEnqueuesBackgroundSendAndRethrows() =
+        runTest {
+            val platform = TestChatPlatform()
+            val state = MutableStateFlow(ChatState())
+            val httpStarted = CompletableDeferred<Unit>()
+            val neverCompletes = CompletableDeferred<ApiResult<JsonObject>>()
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = backgroundScope,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = {
+                        httpStarted.complete(Unit)
+                        neverCompletes.await()
+                    },
+                    newId = { "msg-cancelled" },
+                    now = { 1_000L },
+                )
+
+            var caughtCancellation = false
+            val sendJob =
+                launch {
+                    try {
+                        policy.send(
+                            agentId = "agent-1",
+                            getState = { state.value },
+                            updateState = { transform -> state.update(transform) },
+                            text = "leaving mid-send",
+                        )
+                    } catch (e: CancellationException) {
+                        caughtCancellation = true
+                        throw e
+                    }
+                }
+
+            httpStarted.await()
+            runCurrent()
+            sendJob.cancelAndJoin()
+
+            assertTrue(caughtCancellation, "CancellationException must propagate")
+            assertTrue(platform.outbox.containsKey("msg-cancelled"), "Outbox item must still exist")
+            assertTrue(platform.backgroundEnqueued, "Leaving mid-send must enqueue background send so outbox is not stranded")
+        }
+
+    @Test
+    fun flushOutboxPrunesPoisonedItemAfterMaxAttempts() =
+        runTest {
+            val platform = TestChatPlatform()
+            val msg = UserMessage(agentId = "agent-1", clientMsgId = "poison-1", text = "stuck")
+            platform.putOutbox("relay-1", msg, 1_000L)
+            var bumpCalls = 0
+
+            val policy =
+                ChatDeliveryPolicy(
+                    scope = this,
+                    platform = platform,
+                    isWsConnected = { false },
+                    requestWs = { WsReply.NotConnected },
+                    httpSendMessage = { ApiResult.Http(500, "permanent server blowup") },
+                    newId = { "id" },
+                    now = { 1_000L },
+                    bumpOutboxAttempt = {
+                        bumpCalls++
+                        bumpCalls
+                    },
+                )
+
+            repeat(7) { attempt ->
+                assertFalse(policy.flushOutbox("relay-1"), "Attempt ${attempt + 1} should remain pending")
+                assertTrue(platform.outbox.containsKey("poison-1"))
+            }
+            // 8th attempt reaches cap and prunes the poisoned outbox row
+            assertTrue(policy.flushOutbox("relay-1"), "8th attempt must prune poisoned item and return allDone=true")
+            assertFalse(platform.outbox.containsKey("poison-1"), "Poisoned item must be pruned after 8 attempts")
+            assertEquals(8, bumpCalls)
         }
 }

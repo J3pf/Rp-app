@@ -10,6 +10,36 @@ object NotifyCategory {
     const val FINISHED = "finished"
     const val ERRORS = "errors"
     val all = listOf(APPROVALS, QUESTIONS, TERMINAL, FINISHED, ERRORS)
+
+    const val WIRE_PERMISSION = "permission"
+    const val WIRE_QUESTION = "question"
+    const val WIRE_TERMINAL_WAIT = "terminal_wait"
+    const val WIRE_SETTLED = "settled"
+    const val WIRE_ERROR = "error"
+
+    private val localToWire =
+        mapOf(
+            APPROVALS to WIRE_PERMISSION,
+            QUESTIONS to WIRE_QUESTION,
+            TERMINAL to WIRE_TERMINAL_WAIT,
+            FINISHED to WIRE_SETTLED,
+            ERRORS to WIRE_ERROR,
+        )
+
+    /**
+     * Maps persisted local category keys (Android channel names) to canonical `Rp-relay` wire keys,
+     * passes through already-canonical keys, and strips stray `"criticalAlways"` entries.
+     */
+    fun toWireCategories(local: Map<String, Boolean>): Map<String, Boolean> {
+        if (local.isEmpty()) return emptyMap()
+        val out = linkedMapOf<String, Boolean>()
+        for ((key, enabled) in local) {
+            if (key == "criticalAlways") continue
+            val wireKey = localToWire[key] ?: key
+            out[wireKey] = enabled
+        }
+        return out
+    }
 }
 
 data class AppSettings(

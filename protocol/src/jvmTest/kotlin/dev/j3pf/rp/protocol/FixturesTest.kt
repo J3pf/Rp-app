@@ -43,8 +43,13 @@ class FixturesTest {
      */
     @Test
     fun `fixtures sincronizados desde rp-relay se decodifican`() {
-        val url = javaClass.getResource("/fixtures/relay") ?: return
+        val url =
+            assertNotNull(
+                javaClass.getResource("/fixtures/relay"),
+                "Missing /fixtures/relay test resources; run scripts/sync-fixtures.sh",
+            )
         val files = File(url.toURI()).listFiles { f -> f.name.endsWith(".valid.json") }.orEmpty()
+        assertTrue(files.isNotEmpty(), "Expected at least one .valid.json fixture in /fixtures/relay")
         for (f in files) {
             val el = RpJson.parseToJsonElement(f.readText())
             val envs =
@@ -76,7 +81,11 @@ class FixturesTest {
 
     @Test
     fun `todos los fixtures appUp validos se decodifican y re-codifican exactamente iguales al fixture JSON`() {
-        val url = javaClass.getResource("/fixtures/relay") ?: return
+        val url =
+            assertNotNull(
+                javaClass.getResource("/fixtures/relay"),
+                "Missing /fixtures/relay test resources; run scripts/sync-fixtures.sh",
+            )
         val files =
             File(url.toURI())
                 .listFiles { f -> f.name.startsWith("appUp__") && f.name.endsWith(".valid.json") }
@@ -324,5 +333,66 @@ class FixturesTest {
         assertEquals(100L, history.entries.single().at)
         assertEquals(1, history.events.size)
         assertEquals(11L, history.events.single().seq)
+    }
+
+    @Test
+    fun `NotifyPrefs serializa criticalAlways en nivel superior`() {
+        val prefs =
+            NotifyPrefs(
+                categories = mapOf("permission" to true, "error" to false),
+                criticalAlways = true,
+            )
+        val encoded = RpJson.encodeToString(NotifyPrefs.serializer(), prefs)
+        assertTrue(""""criticalAlways":true""" in encoded, "Expected top-level criticalAlways in $encoded")
+        val decoded = RpJson.decodeFromString(NotifyPrefs.serializer(), encoded)
+        assertEquals(prefs, decoded)
+    }
+
+    @Test
+    fun `PushErrorBody PushKind TEST y flag redacted decodifican correctamente`() {
+        assertEquals("test", PushKind.TEST)
+
+        val err =
+            RpJson.decodeFromString(
+                PushErrorBody.serializer(),
+                """{"agentId":"m1:a1","agentLabel":"api","detail":"rate limit exceeded","redacted":true}""",
+            )
+        assertEquals("m1:a1", err.agentId)
+        assertEquals("rate limit exceeded", err.detail)
+        assertTrue(err.redacted)
+
+        val prompt =
+            RpJson.decodeFromString(
+                PushPromptBody.serializer(),
+                """{"promptId":"p1","agentId":"m1:a1","redacted":true}""",
+            )
+        assertTrue(prompt.redacted)
+
+        val settled =
+            RpJson.decodeFromString(
+                PushSettledBody.serializer(),
+                """{"agentId":"m1:a1","redacted":true}""",
+            )
+        assertTrue(settled.redacted)
+    }
+
+    @Test
+    fun `Prompt decodifica createdAt y openedAt en openedAt`() {
+        val fromCreatedAt =
+            RpJson.decodeFromString(
+                Prompt.serializer(),
+                """{"promptId":"p1","agentId":"a1","createdAt":1760342400000}""",
+            )
+        assertEquals(1760342400000L, fromCreatedAt.openedAt)
+
+        val fromOpenedAt =
+            RpJson.decodeFromString(
+                Prompt.serializer(),
+                """{"promptId":"p2","agentId":"a1","openedAt":1760342500000}""",
+            )
+        assertEquals(1760342500000L, fromOpenedAt.openedAt)
+
+        val relayFixture = Envelope.parse(fixture("relay/appDown__prompt.opened__basico.valid.json")).body<Prompt>()
+        assertEquals(1760342400000L, relayFixture.openedAt)
     }
 }

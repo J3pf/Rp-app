@@ -62,6 +62,7 @@ data class MachinePrefs(
 data class NotifyPrefs(
     val categories: Map<String, Boolean> = emptyMap(),
     val machines: Map<String, MachinePrefs> = emptyMap(),
+    val criticalAlways: Boolean? = null,
 )
 
 @Serializable

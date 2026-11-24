@@ -1,5 +1,6 @@
 package dev.j3pf.rp.protocol
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.nullable
@@ -15,6 +16,7 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -112,13 +114,8 @@ object ModelInfoSerializer : KSerializer<ModelInfo> {
         encoder: Encoder,
         value: ModelInfo,
     ) {
-        val jsonEncoder = encoder as? JsonEncoder
         val str = if (value.provider != null && value.id != null) "${value.provider}/${value.id}" else value.label
-        if (jsonEncoder != null) {
-            encoder.encodeString(str)
-        } else {
-            encoder.encodeString(str)
-        }
+        encoder.encodeString(str)
     }
 }
 
@@ -325,6 +322,8 @@ data class Prompt(
     val danger: String = Danger.LOW,
     @Serializable(with = LenientLongSerializer::class)
     val expiresAt: Long? = null,
+    @OptIn(ExperimentalSerializationApi::class)
+    @JsonNames("createdAt")
     @Serializable(with = LenientLongSerializer::class)
     val openedAt: Long? = null,
 )
@@ -692,6 +691,7 @@ object PushKind {
     const val SETTLED = "settled"
     const val ERROR = "error"
     const val TERMINAL_WAIT = "terminal_wait"
+    const val TEST = "test"
 }
 
 /** Cuerpo descifrado de un push `k=prompt` (PROTOCOLO §8.1). */
@@ -712,6 +712,7 @@ data class PushPromptBody(
     val danger: String = Danger.LOW,
     @Serializable(with = LenientLongSerializer::class)
     val expiresAt: Long? = null,
+    val redacted: Boolean = false,
 )
 
 @Serializable
@@ -728,6 +729,20 @@ data class PushSettledBody(
     val machineName: String = "",
     val machineContext: String = "personal",
     val message: String? = null,
+    val redacted: Boolean = false,
+)
+
+@Serializable
+data class PushErrorBody(
+    val agentId: String? = null,
+    val agentLabel: String? = null,
+    val machineId: String? = null,
+    val machineName: String? = null,
+    val machineContext: String? = null,
+    val detail: String? = null,
+    val message: String? = null,
+    val title: String? = null,
+    val redacted: Boolean = false,
 )
 
 // ───────────────────────────── TODOs y Subagentes ─────────────────────────────

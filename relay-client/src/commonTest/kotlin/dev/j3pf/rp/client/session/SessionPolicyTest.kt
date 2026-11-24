@@ -1,6 +1,7 @@
 package dev.j3pf.rp.client.session
 
 import dev.j3pf.rp.data.net.ApiResult
+import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.data.repo.PairResult
 import dev.j3pf.rp.data.secure.Session
 import dev.j3pf.rp.protocol.HealthResponse
@@ -497,5 +498,80 @@ class SessionPolicyTest {
         assertEquals("wss://relay/path", s.copy(relayUrl = "https://relay/path///").wsBase)
         assertEquals("ws://localhost", s.copy(relayUrl = "http://localhost/").wsBase)
         assertEquals("HTTPS://relay", s.copy(relayUrl = "HTTPS://relay/").wsBase)
+    }
+
+    @Test
+    fun registerFcmTokenResultDistinguishesPermanent4xxFromRetryableErrors() =
+        runTest {
+            val bare = Fixture(initialSession = false)
+            assertEquals(PushRegistrationResult.OK, bare.policy.registerFcmTokenResult("tok"))
+
+            val f = Fixture().apply { direct = false }
+            f.push = ApiResult.Ok(OkResponse())
+            assertEquals(PushRegistrationResult.OK, f.policy.registerFcmTokenResult("tok"))
+
+            for (permanentCode in listOf(400, 401, 403, 404, 422)) {
+                f.push = ApiResult.Http(permanentCode, "client error")
+                assertEquals(
+                    PushRegistrationResult.PERMANENT_FAILURE,
+                    f.policy.registerFcmTokenResult("tok"),
+                    "HTTP $permanentCode must be classified as PERMANENT_FAILURE",
+                )
+            }
+
+            for (retryableCode in listOf(429, 500, 502, 503)) {
+                f.push = ApiResult.Http(retryableCode, "transient")
+                assertEquals(
+                    PushRegistrationResult.RETRYABLE_FAILURE,
+                    f.policy.registerFcmTokenResult("tok"),
+                    "HTTP $retryableCode must be classified as RETRYABLE_FAILURE",
+                )
+            }
+
+            f.push = ApiResult.Network(IllegalStateException("offline"))
+            assertEquals(PushRegistrationResult.RETRYABLE_FAILURE, f.policy.registerFcmTokenResult("tok"))
+        }
+
+    @Test
+    fun notifyCategoryToWireCategoriesMapsLocalKeysPassesCanonicalAndDropsCriticalAlways() {
+        val local =
+            mapOf(
+                NotifyCategory.APPROVALS to true,
+                NotifyCategory.QUESTIONS to false,
+                NotifyCategory.FINISHED to true,
+                NotifyCategory.ERRORS to true,
+                NotifyCategory.TERMINAL to false,
+                "criticalAlways" to true,
+            )
+        assertEquals(
+            mapOf(
+                "permission" to true,
+                "question" to false,
+                "settled" to true,
+                "error" to true,
+                "terminal_wait" to false,
+            ),
+            NotifyCategory.toWireCategories(local),
+        )
+
+        val alreadyCanonical =
+            mapOf(
+                "permission" to false,
+                "question" to true,
+                "settled" to false,
+                "error" to true,
+                "terminal_wait" to true,
+                "criticalAlways" to false,
+            )
+        assertEquals(
+            mapOf(
+                "permission" to false,
+                "question" to true,
+                "settled" to false,
+                "error" to true,
+                "terminal_wait" to true,
+            ),
+            NotifyCategory.toWireCategories(alreadyCanonical),
+        )
     }
 }

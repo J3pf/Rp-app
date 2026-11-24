@@ -19,6 +19,7 @@ class RelayWsClient(
     private val lock = RelayLock()
     private val pending = mutableMapOf<String, CompletableDeferred<WsReply>>()
     val messages: SharedFlow<Envelope> get() = bus.messages
+    internal val pendingCount: Int get() = lock.withLock { pending.size }
 
     fun send(env: Envelope): Boolean = sendText(env.encode())
 
@@ -31,16 +32,12 @@ class RelayWsClient(
         val withId = if (env.id == null) env.copy(id = id) else env
         val deferred = CompletableDeferred<WsReply>()
         lock.withLock { pending[id] = deferred }
-        if (!sendText(withId.encode())) {
-            lock.withLock {
-                if (pending[id] === deferred) {
-                    pending.remove(id)
-                }
-            }
-            return WsReply.NotConnected
-        }
         return try {
-            withTimeoutOrNull(timeoutMs) { deferred.await() } ?: WsReply.Timeout
+            if (!sendText(withId.encode())) {
+                WsReply.NotConnected
+            } else {
+                withTimeoutOrNull(timeoutMs) { deferred.await() } ?: WsReply.Timeout
+            }
         } finally {
             lock.withLock {
                 if (pending[id] === deferred) {

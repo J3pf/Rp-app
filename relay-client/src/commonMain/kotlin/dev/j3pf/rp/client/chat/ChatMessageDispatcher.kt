@@ -58,6 +58,10 @@ class ChatMessageDispatcher(
     private val pendingStreamEvents = mutableListOf<Pair<AgentEvent, Long>>()
     private var flushJob: Job? = null
     private var lastUiEmitMs: Long = Long.MIN_VALUE / 2
+    private var bufferedEpoch: String? = null
+    private var bufferedLastSeq: Long = 0L
+    private var bufferedNeedsResync: Boolean = false
+    private var hasBufferedTracking: Boolean = false
 
     private fun applyBatchEvents(events: List<Pair<AgentEvent, Long>>): ChatState {
         var latest = getState()
@@ -72,23 +76,22 @@ class ChatMessageDispatcher(
         return latest
     }
 
+    /** Must be called while holding [batchLock]. */
+    private fun flushPendingLocked(): ChatState? {
+        flushJob?.cancel()
+        flushJob = null
+        hasBufferedTracking = false
+        if (pendingStreamEvents.isEmpty()) return null
+        val copy = pendingStreamEvents.toList()
+        pendingStreamEvents.clear()
+        lastUiEmitMs = now()
+        return applyBatchEvents(copy)
+    }
+
     fun flushPending() {
-        val eventsToFlush =
-            batchLock.withLock {
-                flushJob?.cancel()
-                flushJob = null
-                if (pendingStreamEvents.isEmpty()) {
-                    emptyList()
-                } else {
-                    val copy = pendingStreamEvents.toList()
-                    pendingStreamEvents.clear()
-                    lastUiEmitMs = now()
-                    copy
-                }
-            }
-        if (eventsToFlush.isNotEmpty()) {
-            val applied = applyBatchEvents(eventsToFlush)
-            if (applied.items.isNotEmpty() || applied.streaming != null) onSyncingResolved()
+        val applied = batchLock.withLock { flushPendingLocked() }
+        if (applied != null && (applied.items.isNotEmpty() || applied.streaming != null)) {
+            onSyncingResolved()
         }
     }
 
@@ -97,9 +100,14 @@ class ChatMessageDispatcher(
             MsgType.AGENT_HISTORY -> {
                 if (env.d.obj()?.str("agentId") != agentId) return
                 val h = runCatching { env.body<AgentHistory>() }.getOrNull() ?: return
-                flushPending()
-                val epochChanged = h.epoch != null && h.epoch != getState().epoch
-                updateState { ChatReducer.applyHistory(it, h, now()) }
+                val currentNow = now()
+                val epochChanged =
+                    batchLock.withLock {
+                        flushPendingLocked()
+                        val changed = h.epoch != null && h.epoch != getState().epoch
+                        updateState { ChatReducer.applyHistory(it, h, currentNow) }
+                        changed
+                    }
                 onHistoryApplied()
                 onHistory(h, epochChanged)
             }
@@ -111,59 +119,80 @@ class ChatMessageDispatcher(
                 val batchScope = scope
                 if (batchScope != null && frameBatchMs > 0L && evType in BATCHABLE_STREAM_EVENTS) {
                     val currentNow = now()
-                    var emitImmediately: List<Pair<AgentEvent, Long>>? = null
+                    var appliedState: ChatState? = null
                     var triggerResync = false
                     batchLock.withLock {
-                        var preview = getState()
-                        for ((bufferedEv, ts) in pendingStreamEvents) {
-                            preview = ChatReducer.reduce(preview, bufferedEv, ts)
+                        val base = getState()
+                        var epoch = if (hasBufferedTracking) bufferedEpoch else base.epoch
+                        var lastSeq = if (hasBufferedTracking) bufferedLastSeq else base.lastSeq
+                        var needsResync = if (hasBufferedTracking) bufferedNeedsResync else base.needsResync
+
+                        val prevNeedsResync = needsResync
+                        if (ev.epoch != null && ev.epoch != epoch) {
+                            epoch = ev.epoch
+                            lastSeq = 0L
+                            needsResync = false
                         }
-                        val before = preview
-                        val after = ChatReducer.reduce(before, ev, currentNow)
-                        if (after.needsResync && !before.needsResync) {
+                        val isDuplicate = ev.seq in 1..lastSeq
+                        if (!isDuplicate) {
+                            if (ev.seq > lastSeq + 1 && lastSeq > 0) {
+                                needsResync = true
+                            }
+                            if (ev.seq > 0) {
+                                lastSeq = ev.seq
+                            }
+                        }
+                        val resyncNow = needsResync && !prevNeedsResync
+                        val elapsed = currentNow - lastUiEmitMs
+
+                        if (resyncNow || (elapsed >= frameBatchMs && flushJob == null)) {
                             flushJob?.cancel()
                             flushJob = null
-                            emitImmediately = pendingStreamEvents.toList() + (ev to currentNow)
+                            val events = pendingStreamEvents.toList() + (ev to currentNow)
                             pendingStreamEvents.clear()
+                            hasBufferedTracking = false
                             lastUiEmitMs = currentNow
-                            triggerResync = true
+                            appliedState = applyBatchEvents(events)
+                            triggerResync = resyncNow
                         } else {
-                            val elapsed = currentNow - lastUiEmitMs
-                            if (elapsed >= frameBatchMs && flushJob == null) {
-                                emitImmediately = pendingStreamEvents.toList() + (ev to currentNow)
-                                pendingStreamEvents.clear()
-                                lastUiEmitMs = currentNow
-                            } else {
-                                pendingStreamEvents.add(ev to currentNow)
-                                if (flushJob == null) {
-                                    val waitMs = (frameBatchMs - elapsed).coerceIn(1L, frameBatchMs)
-                                    flushJob =
-                                        batchScope.launch {
-                                            delayMs(waitMs)
-                                            flushPending()
-                                        }
-                                }
+                            pendingStreamEvents.add(ev to currentNow)
+                            bufferedEpoch = epoch
+                            bufferedLastSeq = lastSeq
+                            bufferedNeedsResync = needsResync
+                            hasBufferedTracking = true
+                            if (flushJob == null) {
+                                val waitMs = (frameBatchMs - elapsed).coerceIn(1L, frameBatchMs)
+                                flushJob =
+                                    batchScope.launch {
+                                        delayMs(waitMs)
+                                        flushPending()
+                                    }
                             }
                         }
                     }
-                    emitImmediately?.let { events ->
-                        val s = applyBatchEvents(events)
+                    appliedState?.let { s ->
                         if (s.items.isNotEmpty() || s.streaming != null) onSyncingResolved()
                         if (triggerResync) onResyncNeeded()
                     }
                     return
                 }
 
-                flushPending()
                 val currentNow = now()
-                var before = getState()
+                var flushedState: ChatState? = null
+                var before = ChatState()
                 var after = before
-                updateState { current ->
-                    before = current
-                    after = ChatReducer.reduce(current, ev, currentNow)
-                    after
+                batchLock.withLock {
+                    flushedState = flushPendingLocked()
+                    before = getState()
+                    after = before
+                    updateState { current ->
+                        before = current
+                        after = ChatReducer.reduce(current, ev, currentNow)
+                        after
+                    }
                 }
-                if (after.items.isNotEmpty()) onSyncingResolved()
+                val flushedResolved = flushedState?.let { it.items.isNotEmpty() || it.streaming != null } == true
+                if (flushedResolved || after.items.isNotEmpty()) onSyncingResolved()
                 if (after.lastSeq != before.lastSeq && evType in PERSISTED_EVENTS) {
                     onPersistEvent(ev)
                 }
@@ -180,27 +209,47 @@ class ChatMessageDispatcher(
 
             MsgType.PROMPT_RESOLVED -> {
                 val r = runCatching { env.body<PromptResolved>() }.getOrNull() ?: return
-                flushPending()
-                updateState { ChatReducer.applyPromptResolved(it, r) }
+                val flushed =
+                    batchLock.withLock {
+                        val applied = flushPendingLocked()
+                        updateState { ChatReducer.applyPromptResolved(it, r) }
+                        applied
+                    }
+                if (flushed != null && (flushed.items.isNotEmpty() || flushed.streaming != null)) onSyncingResolved()
             }
 
             MsgType.USER_MESSAGE_ACK -> {
                 val ack = runCatching { env.body<UserMessageAck>() }.getOrNull() ?: return
-                flushPending()
-                updateState { ChatReducer.applyUserMessageAck(it, ack) }
+                val flushed =
+                    batchLock.withLock {
+                        val applied = flushPendingLocked()
+                        updateState { ChatReducer.applyUserMessageAck(it, ack) }
+                        applied
+                    }
+                if (flushed != null && (flushed.items.isNotEmpty() || flushed.streaming != null)) onSyncingResolved()
             }
 
             MsgType.TERMINAL_WAIT -> {
                 if (env.d.obj()?.str("agentId") != agentId) return
                 val w = runCatching { env.body<TerminalWait>() }.getOrNull() ?: return
-                flushPending()
-                updateState { it.copy(terminalWait = if (w.active) TerminalWaitInfo(w.kind, w.title) else null) }
+                val flushed =
+                    batchLock.withLock {
+                        val applied = flushPendingLocked()
+                        updateState { it.copy(terminalWait = if (w.active) TerminalWaitInfo(w.kind, w.title) else null) }
+                        applied
+                    }
+                if (flushed != null && (flushed.items.isNotEmpty() || flushed.streaming != null)) onSyncingResolved()
             }
         }
     }
 
     fun dispatchPrompt(p: Prompt) {
-        flushPending()
-        updateState { ChatReducer.applyPromptOpened(it, p) }
+        val flushed =
+            batchLock.withLock {
+                val applied = flushPendingLocked()
+                updateState { ChatReducer.applyPromptOpened(it, p) }
+                applied
+            }
+        if (flushed != null && (flushed.items.isNotEmpty() || flushed.streaming != null)) onSyncingResolved()
     }
 }

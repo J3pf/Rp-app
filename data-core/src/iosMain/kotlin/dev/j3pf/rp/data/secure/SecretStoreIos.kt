@@ -24,8 +24,13 @@ object IosKeychainBridge {
 /**
  * iOS implementation of [SecretStore] (O1 Move 3, ADR 0003 §3).
  *
- * Receives [accessGroup] as a constructor parameter (e.g. `"19410625785.dev.j3pf.rp.iosApp"`)
- * and delegates field-scoped AES-256-GCM encryption to [EncryptedKeyValueSecretStore].
+ * Receives [accessGroup] as a constructor parameter (e.g. resolved from `RPKeychainAccessGroup`
+ * in Info.plist) and delegates field-scoped AES-256-GCM encryption to
+ * [EncryptedKeyValueSecretStore]. Backing implementations should signal transient Keychain errors
+ * (such as `errSecInteractionNotAllowed` while locked) by returning
+ * [SecretReadResult.TransientError], returning
+ * [EncryptedKeyValueSecretStore.TRANSIENT_READ_ERROR_SENTINEL], or throwing so persisted sessions
+ * are never wiped on transient read failures.
  */
 class SecretStoreIos(
     val accessGroup: String? = null,

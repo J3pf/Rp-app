@@ -3,6 +3,7 @@ package dev.j3pf.rp.client.chat
 import dev.j3pf.rp.chat.ChatReducer
 import dev.j3pf.rp.chat.ChatState
 import dev.j3pf.rp.chat.UserMsg
+import dev.j3pf.rp.client.ws.RelayLock
 import dev.j3pf.rp.data.net.ApiResult
 import dev.j3pf.rp.data.net.WsReply
 import dev.j3pf.rp.data.repo.SendResult
@@ -13,11 +14,14 @@ import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.ErrorCodes
 import dev.j3pf.rp.protocol.MsgType
+import dev.j3pf.rp.protocol.RpJson
 import dev.j3pf.rp.protocol.UserMessage
 import dev.j3pf.rp.protocol.UserMessageAck
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 
 class ChatDeliveryPolicy(
     private val scope: CoroutineScope,
@@ -28,7 +32,11 @@ class ChatDeliveryPolicy(
     private val newId: () -> String,
     private val now: () -> Long,
     private val delayMs: suspend (Long) -> Unit = { delay(it) },
+    private val bumpOutboxAttempt: (suspend (String) -> Int?)? = null,
+    private val maxOutboxAttempts: Int = MAX_OUTBOX_ATTEMPTS,
 ) {
+    private val attemptLock = RelayLock()
+    private val outboxAttempts = mutableMapOf<String, Int>()
     suspend fun send(
         agentId: String,
         getState: () -> ChatState,
@@ -99,7 +107,12 @@ class ChatDeliveryPolicy(
             delayMs(30_000L)
             updateState { ChatReducer.expireOptimisticSends(it, now = now()) }
         }
-        return deliver(msg, updateState)
+        return try {
+            deliver(msg, updateState)
+        } catch (e: CancellationException) {
+            platform.enqueueBackgroundSend()
+            throw e
+        }
     }
 
     suspend fun deliver(
@@ -147,14 +160,25 @@ class ChatDeliveryPolicy(
         // Fallback HTTP (también cubre WS caído).
         return when (val r = httpSendMessage(msg)) {
             is ApiResult.Ok -> {
+                val ack = decodeHttpAck(r.value)
                 platform.deleteOutbox(msg.clientMsgId)
-                updateState {
-                    ChatReducer.applyUserMessageAck(
-                        it,
-                        UserMessageAck(clientMsgId = msg.clientMsgId, disposition = "delivered"),
-                    )
+                clearOutboxAttempt(msg.clientMsgId)
+                if (ack != null) {
+                    updateState { ChatReducer.applyUserMessageAck(it, ack) }
+                    if (ack.isFailure) {
+                        SendResult.Failed(ack.error ?: "rejected")
+                    } else {
+                        SendResult.Delivered(ack)
+                    }
+                } else {
+                    updateState {
+                        ChatReducer.applyUserMessageAck(
+                            it,
+                            UserMessageAck(clientMsgId = msg.clientMsgId, disposition = "delivered"),
+                        )
+                    }
+                    SendResult.Delivered(null)
                 }
-                SendResult.Delivered(null)
             }
 
             is ApiResult.Http -> {
@@ -212,7 +236,12 @@ class ChatDeliveryPolicy(
                 delayMs(30_000L)
                 updateState { ChatReducer.expireOptimisticSends(it, now = now()) }
             }
-            return deliver(msg, updateState)
+            return try {
+                deliver(msg, updateState)
+            } catch (e: CancellationException) {
+                platform.enqueueBackgroundSend()
+                throw e
+            }
         }
         val localMsg =
             getState().items.filterIsInstance<UserMsg>().firstOrNull {
@@ -255,11 +284,13 @@ class ChatDeliveryPolicy(
             val msg = item.message
             if (msg == null) {
                 platform.deleteOutbox(item.clientMsgId)
+                clearOutboxAttempt(item.clientMsgId)
                 continue
             }
             when (val r = httpSendMessage(msg)) {
                 is ApiResult.Ok -> {
                     platform.deleteOutbox(item.clientMsgId)
+                    clearOutboxAttempt(item.clientMsgId)
                 }
 
                 is ApiResult.Http -> {
@@ -269,16 +300,69 @@ class ChatDeliveryPolicy(
                         r.code != 403
                     ) {
                         platform.deleteOutbox(item.clientMsgId)
-                    } else {
+                        clearOutboxAttempt(item.clientMsgId)
+                    } else if (!recordRetryableFailure(item.clientMsgId)) {
                         allDone = false
                     }
                 }
 
                 is ApiResult.Network -> {
-                    allDone = false
+                    if (!recordRetryableFailure(item.clientMsgId)) {
+                        allDone = false
+                    }
                 }
             }
         }
         return allDone
+    }
+
+    /**
+     * Records a retryable outbox delivery failure. Returns `true` if the item reached
+     * [maxOutboxAttempts] and was pruned from the outbox, or `false` if it remains pending.
+     */
+    private suspend fun recordRetryableFailure(clientMsgId: String): Boolean {
+        val persistedAttempts = bumpOutboxAttempt?.invoke(clientMsgId)
+        val attempts =
+            persistedAttempts ?: attemptLock.withLock {
+                val next = (outboxAttempts[clientMsgId] ?: 0) + 1
+                outboxAttempts[clientMsgId] = next
+                next
+            }
+        if (attempts >= maxOutboxAttempts) {
+            platform.deleteOutbox(clientMsgId)
+            clearOutboxAttempt(clientMsgId)
+            return true
+        }
+        return false
+    }
+
+    private fun clearOutboxAttempt(clientMsgId: String) {
+        attemptLock.withLock {
+            outboxAttempts.remove(clientMsgId)
+        }
+    }
+
+    private fun decodeHttpAck(value: Any?): UserMessageAck? =
+        when (value) {
+            is UserMessageAck -> value
+            is JsonObject -> {
+                if (value.isEmpty()) {
+                    null
+                } else {
+                    runCatching { RpJson.decodeFromJsonElement(UserMessageAck.serializer(), value) }.getOrNull()
+                }
+            }
+            is String -> {
+                if (value.isBlank()) {
+                    null
+                } else {
+                    runCatching { RpJson.decodeFromString(UserMessageAck.serializer(), value) }.getOrNull()
+                }
+            }
+            else -> null
+        }
+
+    companion object {
+        const val MAX_OUTBOX_ATTEMPTS = 8
     }
 }
