@@ -14,6 +14,8 @@
 	<dict>
 		<key>dev.j3pf.rp.iosApp</key>
 		<string>__PROFILE_UUID__</string>
+		<key>dev.j3pf.rp.iosApp.NotificationService</key>
+		<string>__NSE_PROFILE_UUID__</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>

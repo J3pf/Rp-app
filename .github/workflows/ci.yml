@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -34,10 +37,10 @@ jobs:
           else
             echo "::warning::Sin acceso a rp-relay: se usan los fixtures versionados sin comprobar drift."
           fi
-      - run: ./gradlew :protocol:test
+      - run: ./gradlew :protocol:test --no-daemon
 
   app:
-    name: App Android (lint, tests, APK)
+    name: KMP y App Android (tests, lint, APK)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,12 +51,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - name: Tests unitarios y de Robolectric
-        run: ./gradlew :app:testDirectDebugUnitTest
-      - name: Lint
-        run: ./gradlew :app:lintDirectDebug
+      - name: Matriz KMP, tests unitarios y lint
+        run: ./gradlew :protocol:test :data-core:jvmTest :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest :shared-ui:jvmTest :app:testDirectDebugUnitTest :app:lintDirectDebug --no-daemon
       - name: APK de depuración
-        run: ./gradlew :app:assembleDirectDebug
+        run: ./gradlew :app:assembleDirectDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: apk-debug
@@ -66,4 +67,7 @@ jobs:
           path: |
             app/build/reports/tests
             protocol/build/reports/tests
+            data-core/build/reports/tests
+            relay-client/build/reports/tests
+            shared-ui/build/reports/tests
           retention-days: 1

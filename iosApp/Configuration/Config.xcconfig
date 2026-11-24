@@ -1,4 +1,4 @@
-TEAM_ID = 19410625785
+TEAM_ID = 9LQBT792F9
 BUNDLE_ID = dev.j3pf.rp.iosApp
 APP_NAME = RemotePi
 CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements

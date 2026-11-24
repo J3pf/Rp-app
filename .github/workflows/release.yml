@@ -8,10 +8,11 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
+    name: Verificar y construir APK firmado
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,31 +23,84 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - name: Secretos de firma
+      - name: Verificar secretos de firma Android
         env:
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > release.jks
-            {
-              echo "storeFile=release.jks"
-              echo "storePassword=$KEYSTORE_PASSWORD"
-              echo "keyAlias=$KEY_ALIAS"
-              echo "keyPassword=$KEY_PASSWORD"
-            } > keystore.properties
-          fi
-      - name: Tests
-        run: ./gradlew :protocol:test :app:testDirectDebugUnitTest
-      - name: APK firmado (sabor direct)
-        run: ./gradlew :app:assembleDirectRelease
-      - name: Renombrar
+          set -euo pipefail
+          missing=0
+          for var in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Falta el secret de firma Android ($var). No se publica un APK sin firmar."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+      - name: Tests y lint (antes de escribir secretos de firma)
+        run: ./gradlew :protocol:test :data-core:jvmTest :relay-client:compileCommonMainKotlinMetadata :relay-client:jvmTest :shared-ui:jvmTest :app:testDirectDebugUnitTest :app:lintDirectDebug --no-daemon
+      - name: Escribir secretos de firma y construir APK firmado (sabor direct)
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          cleanup() {
+            for f in release.jks keystore.properties; do
+              if [ -f "$f" ]; then
+                shred -u "$f" 2>/dev/null || rm -f "$f"
+              fi
+            done
+          }
+          trap cleanup EXIT
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > release.jks
+          {
+            printf 'storeFile=release.jks\n'
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
+          chmod 600 release.jks keystore.properties
+          ./gradlew :app:assembleDirectRelease --no-daemon
+          cleanup
+          trap - EXIT
+      - name: Limpiar secretos de firma
+        if: always()
+        run: |
+          for f in release.jks keystore.properties; do
+            if [ -f "$f" ]; then
+              shred -u "$f" 2>/dev/null || rm -f "$f"
+            fi
+          done
+      - name: Renombrar APK
+        run: |
+          set -euo pipefail
           mkdir -p dist
           cp app/build/outputs/apk/direct/release/*.apk \
             "dist/rp-${GITHUB_REF_NAME}-direct.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: dist/*.apk
+          retention-days: 1
+
+  release:
+    name: Publicar GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: dist
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.apk

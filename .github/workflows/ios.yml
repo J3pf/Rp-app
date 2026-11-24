@@ -30,6 +30,9 @@ env:
   XCODE_MIN_VERSION: "26.0"
   IOS_BUNDLE_ID: dev.j3pf.rp.iosApp
 
+permissions:
+  contents: read
+
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
@@ -40,6 +43,62 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verificación estática de firma, entitlements y plists de iOS
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import plistlib
+          import sys
+
+          errors = []
+          ios_dir = pathlib.Path("iosApp")
+
+          for path in ios_dir.rglob("*"):
+              if not path.is_file():
+                  continue
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except UnicodeDecodeError:
+                  continue
+              if "19410625785" in text:
+                  errors.append(f"Hardcoded legacy Team ID 19410625785 found in {path}")
+
+          nse_info = plistlib.loads((ios_dir / "NotificationService/Info.plist").read_bytes())
+          if nse_info.get("CFBundleShortVersionString") != "$(MARKETING_VERSION)":
+              errors.append("NotificationService/Info.plist CFBundleShortVersionString must be $(MARKETING_VERSION)")
+          if nse_info.get("CFBundleVersion") != "$(CURRENT_PROJECT_VERSION)":
+              errors.append("NotificationService/Info.plist CFBundleVersion must be $(CURRENT_PROJECT_VERSION)")
+          if nse_info.get("RPKeychainAccessGroup") != "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp":
+              errors.append("NotificationService/Info.plist missing RPKeychainAccessGroup")
+
+          app_info = plistlib.loads((ios_dir / "iosApp/Info.plist").read_bytes())
+          if app_info.get("RPKeychainAccessGroup") != "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp":
+              errors.append("iosApp/Info.plist missing RPKeychainAccessGroup")
+
+          app_ent = plistlib.loads((ios_dir / "iosApp/iosApp.entitlements").read_bytes())
+          if "aps-environment" not in app_ent:
+              errors.append("iosApp/iosApp.entitlements missing aps-environment")
+          if "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp" not in app_ent.get("keychain-access-groups", []):
+              errors.append("iosApp/iosApp.entitlements missing $(AppIdentifierPrefix)dev.j3pf.rp.iosApp")
+
+          nse_ent_path = ios_dir / "NotificationService/NotificationService.entitlements"
+          if not nse_ent_path.exists():
+              errors.append("NotificationService/NotificationService.entitlements missing")
+          else:
+              nse_ent = plistlib.loads(nse_ent_path.read_bytes())
+              if "aps-environment" in nse_ent:
+                  errors.append("NotificationService.entitlements must not include aps-environment")
+              if "$(AppIdentifierPrefix)dev.j3pf.rp.iosApp" not in nse_ent.get("keychain-access-groups", []):
+                  errors.append("NotificationService.entitlements missing $(AppIdentifierPrefix)dev.j3pf.rp.iosApp")
+
+          if errors:
+              for err in errors:
+                  print(f"::error::{err}")
+              sys.exit(1)
+          print("iOS static plist/entitlements/Team ID check passed.")
+          PY
 
       - name: Elegir Xcode (mínimo fijado) y fallar si no hay ninguno
         run: |

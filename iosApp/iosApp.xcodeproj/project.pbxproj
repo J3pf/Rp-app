@@ -294,9 +294,11 @@
 			baseConfigurationReference = D3000001000000000000001A /* Config.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NotificationService/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -305,7 +307,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.9.1;
+				MARKETING_VERSION = 0.9.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).NotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PRODUCT_MODULE_NAME = NotificationService;
@@ -321,9 +323,11 @@
 			baseConfigurationReference = D3000001000000000000001A /* Config.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NotificationService/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -332,7 +336,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.9.1;
+				MARKETING_VERSION = 0.9.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).NotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PRODUCT_MODULE_NAME = NotificationService;
@@ -483,7 +487,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.1;
+				MARKETING_VERSION = 0.9.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -512,7 +516,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.1;
+				MARKETING_VERSION = 0.9.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

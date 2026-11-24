@@ -1,7 +1,9 @@
+import os
 import Security
 import SharedUi
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @main
 struct iOSApp: App {
@@ -19,7 +21,13 @@ struct iOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ZStack {
+                ContentView()
+                if scenePhase != .active && Self.isFlagSecureEnabled() {
+                    PrivacyCoverView()
+                        .zIndex(1)
+                }
+            }
         }
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
@@ -32,20 +40,67 @@ struct iOSApp: App {
             }
         }
     }
+
+    /// Reads the `flagSecure` preference written by `KeyValueSettingsStore` (`SettingsKeys.K_FLAG_SECURE`).
+    private static func isFlagSecureEnabled() -> Bool {
+        if let raw = UserDefaults.standard.string(forKey: "flagSecure") {
+            return raw.caseInsensitiveCompare("true") == .orderedSame
+        }
+        return UserDefaults.standard.bool(forKey: "flagSecure")
+    }
 }
 
-/// Remote-notification token hand-off. The ONLY push wiring this app side owns: relay the device
-/// token to the Kotlin bridge verbatim as NSData. Token conversion, environment and relay PUT live
-/// in `SharedUi.IosPushRegistrationBridge` (O2's registered boundary). Never log the token.
+private struct PrivacyCoverView: View {
+    var body: some View {
+        ZStack {
+            Color(uiColor: .systemBackground)
+                .ignoresSafeArea()
+            VStack(spacing: 12) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 40, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text("RemotePi")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Remote-notification authorization and token hand-off. Relays the device token to the Kotlin
+/// bridge verbatim as NSData; token conversion, environment, and relay PUT live in
+/// `SharedUi.IosPushRegistrationBridge`. Never log the token or credentials.
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    private static let pushLogger = Logger(subsystem: "dev.j3pf.rp.iosApp", category: "push")
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil,
     ) -> Bool {
         KeychainStoreHelper.installBridge()
-        // Token never arrives until iOS is asked to register; do NOT request notification
-        // authorization here (product/UX decision pending).
-        UIApplication.shared.registerForRemoteNotifications()
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                    if let error {
+                        let nsError = error as NSError
+                        Self.pushLogger.error(
+                            "Notification authorization failed (domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public))"
+                        )
+                    } else {
+                        Self.pushLogger.info("Notification authorization completed (granted=\(granted, privacy: .public))")
+                    }
+                    DispatchQueue.main.async {
+                        application.registerForRemoteNotifications()
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    application.registerForRemoteNotifications()
+                }
+            }
+        }
         return true
     }
 
@@ -53,13 +108,36 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data,
     ) {
-        SharedUi.IosPushRegistrationBridge.shared.register(apnsToken: deviceToken) { _, _ in }
+        SharedUi.IosPushRegistrationBridge.shared.register(apnsToken: deviceToken) { _, error in
+            if let error {
+                let nsError = error as NSError
+                Self.pushLogger.error(
+                    "APNs token hand-off failed (domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public))"
+                )
+            }
+        }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error,
+    ) {
+        let nsError = error as NSError
+        Self.pushLogger.error(
+            "APNs remote notification registration failed (domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public))"
+        )
     }
 }
 
 private enum KeychainStoreHelper {
     private static let service = "dev.j3pf.rp.secrets"
     private static let missingEntitlementStatus: OSStatus = -34018
+    private static let logger = Logger(subsystem: "dev.j3pf.rp.iosApp", category: "keychain")
+    private static let stateLock = NSLock()
+    /// Tracks whether the most recent Keychain read encountered a transient OS error (such as
+    /// `errSecInteractionNotAllowed` while the device is locked) so immediate fallback cleanup
+    /// cannot silently wipe paired credentials.
+    private static var hasTransientReadFailure = false
 
     static func installBridge() {
         SharedUi.IosKeychainStoreBridge.shared.configure(
@@ -73,6 +151,18 @@ private enum KeychainStoreHelper {
                 deleteItem(account: key, accessGroup: accessGroup)
             },
         )
+    }
+
+    private static func setTransientReadFailure(_ value: Bool) {
+        stateLock.lock()
+        hasTransientReadFailure = value
+        stateLock.unlock()
+    }
+
+    private static func isTransientReadFailureActive() -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return hasTransientReadFailure
     }
 
     private static func baseQuery(account: String, accessGroup: String?) -> [String: Any] {
@@ -92,14 +182,27 @@ private enum KeychainStoreHelper {
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        var status = SecItemCopyMatching(query as CFDictionary, &item)
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == missingEntitlementStatus, accessGroup != nil {
             return readString(account: account, accessGroup: nil)
         }
-        guard status == errSecSuccess, let data = item as? Data else {
+        switch status {
+        case errSecSuccess:
+            setTransientReadFailure(false)
+            guard let data = item as? Data else {
+                return nil
+            }
+            return String(data: data, encoding: .utf8)
+        case errSecItemNotFound:
+            setTransientReadFailure(false)
+            return nil
+        default:
+            // Preserve stored credentials on transient errors (e.g., errSecInteractionNotAllowed
+            // when Keychain is locked) instead of treating them as missing keys.
+            setTransientReadFailure(true)
+            logger.error("Keychain read failed with transient OSStatus=\(status, privacy: .public)")
             return nil
         }
-        return String(data: data, encoding: .utf8)
     }
 
     private static func writeString(account: String, value: String, accessGroup: String?) {
@@ -118,14 +221,26 @@ private enum KeychainStoreHelper {
         }
         if status == missingEntitlementStatus, accessGroup != nil {
             writeString(account: account, value: value, accessGroup: nil)
+            return
+        }
+        if status != errSecSuccess {
+            logger.error("Keychain write failed with OSStatus=\(status, privacy: .public)")
         }
     }
 
     private static func deleteItem(account: String, accessGroup: String?) {
+        if isTransientReadFailureActive() {
+            logger.warning("Skipping Keychain delete while transient read failure is active")
+            return
+        }
         let query = baseQuery(account: account, accessGroup: accessGroup)
         let status = SecItemDelete(query as CFDictionary)
         if status == missingEntitlementStatus, accessGroup != nil {
             deleteItem(account: account, accessGroup: nil)
+            return
+        }
+        if status != errSecSuccess && status != errSecItemNotFound {
+            logger.error("Keychain delete failed with OSStatus=\(status, privacy: .public)")
         }
     }
 }

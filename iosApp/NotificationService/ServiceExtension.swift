@@ -18,12 +18,23 @@ import UserNotifications
 final class NotificationService: UNNotificationServiceExtension {
     private static let aad = Data("rp1".utf8)
     private static let keychainService = "dev.j3pf.rp.secrets"
-    private static let sharedAccessGroup = "19410625785.dev.j3pf.rp.iosApp"
+    private static let sharedAccessGroup: String? = {
+        guard
+            let raw = Bundle.main.object(forInfoDictionaryKey: "RPKeychainAccessGroup") as? String,
+            !raw.isEmpty,
+            !raw.contains("$(")
+        else {
+            return nil
+        }
+        return raw
+    }()
     private static let pushKeyAccount = "rp_nse_push_key"
     private static let mutedAgentsAccount = "rp_nse_muted_agents"
     private static let criticalAlwaysAccount = "rp_nse_critical_always"
+    private static let maxSeenPromptIds = 256
     private static let dedupeLock = NSLock()
     private static var seenPromptIds = Set<String>()
+    private static var seenPromptOrder = [String]()
 
     private let handlerLock = NSLock()
     private var contentHandler: ((UNNotificationContent) -> Void)?
@@ -35,6 +46,15 @@ final class NotificationService: UNNotificationServiceExtension {
         contentHandler = nil
         handlerLock.unlock()
         handler?(content)
+    }
+
+    private static func silence(_ content: UNMutableNotificationContent) {
+        content.title = ""
+        content.subtitle = ""
+        content.body = ""
+        content.sound = nil
+        content.badge = nil
+        content.interruptionLevel = .passive
     }
 
     override func didReceive(
@@ -61,19 +81,23 @@ final class NotificationService: UNNotificationServiceExtension {
         }
 
         let promptId = (json["promptId"] as? String) ?? (request.content.userInfo["aps-collapse-id"] as? String)
-        if let promptId, !promptId.isEmpty {
-            // Register promptId dedupe BEFORE the mute filter (Android-pinned order).
-            if !Self.markFirstSeen(promptId: promptId) {
+        let agentId = json["agentId"] as? String
+        if k != "cancel" {
+            if let promptId, !promptId.isEmpty {
+                // Register promptId dedupe BEFORE the mute filter (Android-pinned order).
+                if !Self.markFirstSeen(promptId: promptId) {
+                    Self.silence(best)
+                    deliver(best)
+                    return
+                }
+            }
+
+            let danger = json["danger"] as? String
+            if let agentId, Self.isMuted(agentId: agentId, isCritical: danger == "high") {
+                Self.silence(best)
                 deliver(best)
                 return
             }
-        }
-
-        let agentId = json["agentId"] as? String
-        let danger = json["danger"] as? String
-        if let agentId, Self.isMuted(agentId: agentId, isCritical: danger == "high") {
-            deliver(best)
-            return
         }
 
         let machineName = ((json["machineName"] as? String)?.isEmpty == false ? (json["machineName"] as? String) : nil) ?? "RP"
@@ -84,6 +108,7 @@ final class NotificationService: UNNotificationServiceExtension {
         let titleText = redacted ? nil : Self.cleanPreview((json["title"] as? String))
         let previewText = redacted ? nil : Self.cleanPreview((json["preview"] as? String))
         let messageText = redacted ? nil : Self.cleanPreview((json["message"] as? String))
+        let detailText = redacted ? nil : Self.cleanPreview((json["detail"] as? String))
 
         switch k {
         case "prompt":
@@ -101,7 +126,32 @@ final class NotificationService: UNNotificationServiceExtension {
                 best.body = "Esperando en la terminal"
             }
         case "error":
-            best.body = messageText ?? titleText ?? "Error en el agente"
+            best.body = detailText ?? messageText ?? titleText ?? "Error en el agente"
+        case "test":
+            best.title = titleText ?? "RemotePi"
+            best.body = messageText ?? previewText ?? "Notificación de prueba"
+        case "cancel":
+            Self.silence(best)
+            if let promptId, !promptId.isEmpty {
+                let center = UNUserNotificationCenter.current()
+                center.removeDeliveredNotifications(withIdentifiers: [promptId])
+                center.removePendingNotificationRequests(withIdentifiers: [promptId])
+                center.getDeliveredNotifications { notifications in
+                    let matchingIds = notifications
+                        .filter { notification in
+                            let collapseId = notification.request.content.userInfo["aps-collapse-id"] as? String
+                            return notification.request.identifier == promptId || collapseId == promptId
+                        }
+                        .map(\.request.identifier)
+                    if !matchingIds.isEmpty {
+                        center.removeDeliveredNotifications(withIdentifiers: matchingIds)
+                    }
+                    self.deliver(best)
+                }
+                return
+            }
+            deliver(best)
+            return
         default:
             best.body = titleText ?? previewText ?? messageText ?? best.body
         }
@@ -125,7 +175,15 @@ final class NotificationService: UNNotificationServiceExtension {
     private static func markFirstSeen(promptId: String) -> Bool {
         dedupeLock.lock()
         defer { dedupeLock.unlock() }
-        return seenPromptIds.insert(promptId).inserted
+        guard seenPromptIds.insert(promptId).inserted else {
+            return false
+        }
+        seenPromptOrder.append(promptId)
+        while seenPromptOrder.count > maxSeenPromptIds {
+            let evicted = seenPromptOrder.removeFirst()
+            seenPromptIds.remove(evicted)
+        }
+        return true
     }
 
     private static func isMuted(agentId: String, isCritical: Bool) -> Bool {
@@ -195,8 +253,12 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private static func readKeychainString(account: String) -> String? {
-        readKeychainString(account: account, accessGroup: sharedAccessGroup)
-            ?? readKeychainString(account: account, accessGroup: nil)
+        if let group = sharedAccessGroup,
+           let value = readKeychainString(account: account, accessGroup: group)
+        {
+            return value
+        }
+        return readKeychainString(account: account, accessGroup: nil)
     }
 
     private static func readKeychainString(account: String, accessGroup: String?) -> String? {
