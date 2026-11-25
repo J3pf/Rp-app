@@ -46,6 +46,7 @@ fun MeshScreen(
         onNodeClick = viewModel::onNodeClick,
         onEdgeClick = viewModel::onEdgeClick,
         onViewportSizeChanged = viewModel::onViewportSizeChanged,
+        onCardHeightsChanged = viewModel::onCardHeightsChanged,
         onDismissNodeDetail = viewModel::dismissNodeDetail,
         onViewConversation = { peerId ->
             state.nodeDetail?.node?.agentId?.let { nodeId ->

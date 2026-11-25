@@ -6,6 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.MachineSummary
@@ -382,12 +384,15 @@ fun RpTheme(
                 dynamicScheme ?: if (darkTheme) DefaultDarkColors else DefaultLightColors
             }
         }
-    MaterialTheme(
-        colorScheme = scheme,
-        typography = RpTypography,
-        shapes = RpMaterialShapes,
-        content = content,
-    )
+    val surfaces = remember(scheme) { computeRpSurfaceTokens(scheme) }
+    CompositionLocalProvider(LocalRpSurfaces provides surfaces) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = RpTypography,
+            shapes = RpMaterialShapes,
+            content = content,
+        )
+    }
 }
 
 /** Colores semánticos que no existen en Material (peligro, éxito, herramientas, inline code). */

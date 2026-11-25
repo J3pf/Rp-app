@@ -6,6 +6,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -132,15 +133,22 @@ data class RpSurfaceTokens(
     val hairline: Color,
 )
 
+internal fun computeRpSurfaceTokens(
+    scheme: ColorScheme,
+    isDark: Boolean = scheme.background.luminance() < 0.5f,
+): RpSurfaceTokens =
+    RpSurfaceTokens(
+        elevatedDeck = lerp(scheme.surface, scheme.surfaceVariant, if (isDark) 0.30f else 0.24f),
+        insetBlock = lerp(scheme.surface, scheme.background, if (isDark) 0.42f else 0.35f),
+        hairline = scheme.outlineVariant.copy(alpha = if (isDark) 0.45f else 0.38f),
+    )
+
+val LocalRpSurfaces = staticCompositionLocalOf<RpSurfaceTokens?> { null }
+
 val ColorScheme.rpSurfaces: RpSurfaceTokens
-    get() {
-        val isDark = background.luminance() < 0.5f
-        return RpSurfaceTokens(
-            elevatedDeck = lerp(surface, surfaceVariant, if (isDark) 0.30f else 0.24f),
-            insetBlock = lerp(surface, background, if (isDark) 0.42f else 0.35f),
-            hairline = outlineVariant.copy(alpha = if (isDark) 0.45f else 0.38f),
-        )
-    }
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalRpSurfaces.current ?: computeRpSurfaceTokens(this)
 
 /** Tokens de resplandor / glow derivados del colorScheme. */
 data class RpGlowTokens(

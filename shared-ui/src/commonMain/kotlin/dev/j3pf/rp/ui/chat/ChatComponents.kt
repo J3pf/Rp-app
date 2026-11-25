@@ -51,6 +51,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -433,13 +434,43 @@ fun MessageList(
     onRetryUserMessage: (UserMsg) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
+    streaming: AssistantMsg? = null,
 ) {
-    val items =
-        remember(displayItems, tools, searchQuery, hideToolCalls) {
+    val searchToolsKey = if (searchQuery.isNotBlank()) tools else null
+    val committedItems =
+        remember(displayItems, searchToolsKey, searchQuery, hideToolCalls) {
             filterChatItems(displayItems, tools, searchQuery, hideToolCalls)
         }
+    val filteredStreaming =
+        remember(streaming, searchToolsKey, searchQuery, hideToolCalls) {
+            streaming?.let { streamItem ->
+                filterChatItems(listOf(streamItem), tools, searchQuery, hideToolCalls).firstOrNull() as? AssistantMsg
+            }
+        }
+    val streamingToolCallIds =
+        remember(filteredStreaming) {
+            filteredStreaming
+                ?.blocks
+                ?.asSequence()
+                ?.filterIsInstance<Block.ToolCall>()
+                ?.mapNotNull { it.toolCallId }
+                ?.toSet()
+                .orEmpty()
+        }
+    val items =
+        remember(committedItems, streamingToolCallIds) {
+            if (streamingToolCallIds.isEmpty() ||
+                committedItems.none { it is SubagentCardItem && it.info.taskId in streamingToolCallIds }
+            ) {
+                committedItems
+            } else {
+                committedItems.filterNot { it is SubagentCardItem && it.info.taskId in streamingToolCallIds }
+            }
+        }
+    val totalFilteredCount = items.size + if (filteredStreaming != null) 1 else 0
+    val hasRawItems = displayItems.isNotEmpty() || streaming != null
 
-    if (items.isEmpty()) {
+    if (totalFilteredCount == 0) {
         Column(
             modifier =
                 modifier
@@ -450,17 +481,25 @@ fun MessageList(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (syncingHistory || refreshing || conn is ConnState.Connecting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(32.dp),
-                    strokeWidth = 3.dp,
-                )
+                if (LocalReducedMotion.current) {
+                    CircularProgressIndicator(
+                        progress = { 0.75f },
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 3.dp,
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 3.dp,
+                    )
+                }
                 Text("Sincronizando historial…", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Descargando los mensajes recientes de la sesión.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
-            } else if (displayItems.isNotEmpty() && (searchQuery.isNotBlank() || hideToolCalls)) {
+            } else if (hasRawItems && (searchQuery.isNotBlank() || hideToolCalls)) {
                 Text("Sin coincidencias", style = MaterialTheme.typography.titleMedium)
                 Text(
                     if (searchQuery.isNotBlank()) {
@@ -481,6 +520,8 @@ fun MessageList(
 
     val reversedItems = remember(items) { items.asReversed() }
     val currentIsWorking by rememberUpdatedState(isWorking)
+    val currentToolsState = rememberUpdatedState(tools)
+    val toolLookup: (String) -> ToolRun? = remember(currentToolsState) { { id -> currentToolsState.value[id] } }
 
     val isScrolledUp by remember {
         derivedStateOf {
@@ -492,50 +533,48 @@ fun MessageList(
         }
     }
 
-    val lastItem = items.lastOrNull()
+    val lastItem: ChatItem? = filteredStreaming ?: items.lastOrNull()
     val lastItemKey = lastItem?.key
     val streamingTextLength = (lastItem as? AssistantMsg)?.plainTextLength ?: 0
 
     var pinnedToBottom by remember(listState) {
-        mutableStateOf(
-            !isBottomScrolledUp(
-                index = listState.firstVisibleItemIndex,
-                offset = listState.firstVisibleItemScrollOffset,
-                working = isWorking,
-            ),
-        )
+        val initiallyScrolledUp =
+            Snapshot.withoutReadObservation {
+                isBottomScrolledUp(
+                    index = listState.firstVisibleItemIndex,
+                    offset = listState.firstVisibleItemScrollOffset,
+                    working = isWorking,
+                )
+            }
+        mutableStateOf(!initiallyScrolledUp)
     }
-    val itemsCountWhenScrolledUp = remember(listState) { mutableIntStateOf(items.size) }
+    val itemsCountWhenScrolledUp = remember(listState) { mutableIntStateOf(totalFilteredCount) }
     val tracker =
         remember(listState) {
             ScrollAnchorTracker(
-                initialSize = items.size,
+                initialSize = totalFilteredCount,
                 initialLastKey = lastItemKey,
                 initialStreamingLength = streamingTextLength,
                 initialIsWorking = isWorking,
             )
         }
 
-    // Read pre-layout scroll position during composition before LazyColumn measures
-    // newly prepended items or a toggled working indicator, which shift item indices.
     val contentChanged =
-        items.size != tracker.settledSize ||
+        totalFilteredCount != tracker.settledSize ||
             lastItemKey != tracker.settledLastKey ||
             streamingTextLength != tracker.settledStreamingLength ||
             isWorking != tracker.settledIsWorking
-    val preLayoutScrolledUp =
-        if (contentChanged) {
-            isBottomScrolledUp(
-                index = listState.firstVisibleItemIndex,
-                offset = listState.firstVisibleItemScrollOffset,
-                working = tracker.settledIsWorking,
-            )
-        } else {
-            false
-        }
 
     SideEffect {
         if (contentChanged) {
+            // Read pre-layout scroll position outside composition snapshot observation before
+            // LazyColumn measures newly prepended items or a toggled working indicator.
+            val preLayoutScrolledUp =
+                isBottomScrolledUp(
+                    index = listState.firstVisibleItemIndex,
+                    offset = listState.firstVisibleItemScrollOffset,
+                    working = tracker.settledIsWorking,
+                )
             val userScrolling = !tracker.autoScrolling && listState.isScrollInProgress
             if (!tracker.autoScrolling && !userScrolling) {
                 pinnedToBottom = !preLayoutScrolledUp
@@ -545,15 +584,15 @@ fun MessageList(
                 pinnedToBottom = true
             }
             if (pinnedToBottom && !userScrolling) {
-                itemsCountWhenScrolledUp.intValue = items.size
-                val isNewItem = items.size != tracker.settledSize || isNewLocalOrAck
+                itemsCountWhenScrolledUp.intValue = totalFilteredCount
+                val isNewItem = totalFilteredCount != tracker.settledSize || isNewLocalOrAck
                 val workingChanged = isWorking != tracker.settledIsWorking
                 tracker.scheduleScroll(
                     animate = isNewItem || workingChanged,
                     force = false,
                 )
             }
-            tracker.settledSize = items.size
+            tracker.settledSize = totalFilteredCount
             tracker.settledLastKey = lastItemKey
             tracker.settledStreamingLength = streamingTextLength
             tracker.settledIsWorking = isWorking
@@ -613,7 +652,7 @@ fun MessageList(
             if (unreadCount > 0) {
                 unreadCount
             } else {
-                (items.size - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
+                (totalFilteredCount - itemsCountWhenScrolledUp.intValue).coerceAtLeast(0)
             }
         } else {
             0
@@ -695,7 +734,7 @@ fun MessageList(
                                                 color = MaterialTheme.colorScheme.primary,
                                             )
                                         }
-                                        val runningTool = tools.values.lastOrNull { it.status == ToolStatus.RUNNING }
+                                        val runningTool = currentToolsState.value.values.lastOrNull { it.status == ToolStatus.RUNNING }
                                         val statusText =
                                             when {
                                                 sending -> "Enviando mensaje…"
@@ -710,6 +749,20 @@ fun MessageList(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+                    if (filteredStreaming != null) {
+                        item(key = filteredStreaming.key, contentType = "AssistantMsg") {
+                            Box {
+                                ChatItemView(
+                                    item = filteredStreaming,
+                                    toolLookup = toolLookup,
+                                    busyPromptId = busyPromptId,
+                                    onAnswerPrompt = onAnswerPrompt,
+                                    spacingMode = chatMessageSpacing,
+                                    onRetryUserMessage = onRetryUserMessage,
+                                )
                             }
                         }
                     }
@@ -732,7 +785,7 @@ fun MessageList(
                         Box(modifier = itemModifier) {
                             ChatItemView(
                                 item = item,
-                                tools = tools,
+                                toolLookup = toolLookup,
                                 busyPromptId = busyPromptId,
                                 onAnswerPrompt = onAnswerPrompt,
                                 spacingMode = chatMessageSpacing,

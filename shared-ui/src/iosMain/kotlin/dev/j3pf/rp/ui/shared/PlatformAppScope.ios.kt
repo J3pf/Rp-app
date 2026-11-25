@@ -101,6 +101,7 @@ object IosKeychainStoreBridge {
         private val knownKeys =
             listOf(
                 EncryptedKeyValueSecretStore.K_MASTER_KEY,
+                EncryptedKeyValueSecretStore.K_SESSION_V2,
                 EncryptedKeyValueSecretStore.K_RELAY_ID,
                 EncryptedKeyValueSecretStore.K_URL,
                 EncryptedKeyValueSecretStore.K_NAME,
@@ -339,6 +340,10 @@ object IosAppScope {
 
     fun onAppForegrounded() {
         activeController?.onAppForegrounded()
+    }
+
+    fun onMemoryWarning() {
+        activeController?.onMemoryWarning()
     }
 
     fun createController(

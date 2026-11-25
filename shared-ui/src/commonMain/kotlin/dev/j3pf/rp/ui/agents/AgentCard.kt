@@ -39,14 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -210,11 +210,11 @@ fun AgentCard(
     val displayTopic = displayMetadata.displayTopic
 
     val reducedMotion = LocalReducedMotion.current
-    val needsAnim = (isWorking || isWaiting) && !reducedMotion
+    val needsAnim = isWorking && !reducedMotion
     val infiniteTransition = if (needsAnim) rememberInfiniteTransition(label = "cardStateAnim") else null
 
     val orbitProgress =
-        if (isWorking) {
+        if (needsAnim) {
             infiniteTransition?.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
@@ -229,23 +229,25 @@ fun AgentCard(
             null
         }
 
-    val pulseDuration = if (isWorking) 900 else 850
-
     val pulseProgress =
-        infiniteTransition?.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = pulseDuration, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-            label = "statePulseProgress",
-        )
+        if (needsAnim) {
+            infiniteTransition?.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "statePulseProgress",
+            )
+        } else {
+            null
+        }
 
     val staticBorder =
         when {
-            needsAnim && pulseProgress != null -> null
+            needsAnim && orbitProgress != null -> null
             isWorking -> BorderStroke(width = 1.6.dp, color = semantic.working.copy(alpha = 0.80f))
             isWaiting -> BorderStroke(width = 1.5.dp, color = semantic.warning.copy(alpha = 0.78f))
             isDone -> BorderStroke(width = 1.dp, color = semantic.success.copy(alpha = 0.55f))
@@ -253,77 +255,64 @@ fun AgentCard(
         }
 
     val animatedBorderModifier =
-        when {
-            isWorking && orbitProgress != null -> {
-                Modifier.drawWithContent {
+        if (isWorking && orbitProgress != null) {
+            Modifier.drawWithCache {
+                val radius = maxOf(size.width, size.height) * 0.58f
+                val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
+                val glowStroke = Stroke(width = 5.dp.toPx())
+                val coreStroke = Stroke(width = 2.2.dp.toPx())
+                val glowBrush =
+                    Brush.radialGradient(
+                        colors =
+                            listOf(
+                                Color(0xFF00E5FF).copy(alpha = 0.45f),
+                                Color(0xFF7C4DFF).copy(alpha = 0.24f),
+                                Color.Transparent,
+                            ),
+                        center = Offset.Zero,
+                        radius = radius * 1.15f,
+                    )
+                val coreBrush =
+                    Brush.radialGradient(
+                        colors =
+                            listOf(
+                                Color(0xFFFFFFFF),
+                                Color(0xFF00E5FF),
+                                Color(0xFF818CF8),
+                                Color(0xFF00B0FF).copy(alpha = 0.20f),
+                            ),
+                        center = Offset.Zero,
+                        radius = radius,
+                    )
+                onDrawWithContent {
                     drawContent()
                     val orbit = orbitProgress.value
                     val pulse = pulseProgress?.value ?: 0.5f
                     val angle = orbit * 2.0 * PI
                     val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
                     val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
-                    val radius = maxOf(size.width, size.height) * 0.58f
-                    val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
-
-                    drawRoundRect(
-                        brush =
-                            Brush.radialGradient(
-                                colors =
-                                    listOf(
-                                        Color(0xFF00E5FF).copy(alpha = 0.25f + 0.20f * pulse),
-                                        Color(0xFF7C4DFF).copy(alpha = 0.14f + 0.10f * pulse),
-                                        Color.Transparent,
-                                    ),
-                                center = Offset(hx, hy),
-                                radius = radius * 1.15f,
-                            ),
-                        cornerRadius = cornerRadius,
-                        style = Stroke(width = 5.dp.toPx()),
-                    )
-
-                    drawRoundRect(
-                        brush =
-                            Brush.radialGradient(
-                                colors =
-                                    listOf(
-                                        Color(0xFFFFFFFF),
-                                        Color(0xFF00E5FF),
-                                        Color(0xFF818CF8),
-                                        Color(0xFF00B0FF).copy(alpha = 0.20f),
-                                    ),
-                                center = Offset(hx, hy),
-                                radius = radius,
-                            ),
-                        cornerRadius = cornerRadius,
-                        style = Stroke(width = 2.2.dp.toPx()),
-                    )
+                    val rectTopLeft = Offset(-hx, -hy)
+                    translate(left = hx, top = hy) {
+                        drawRoundRect(
+                            brush = glowBrush,
+                            topLeft = rectTopLeft,
+                            size = size,
+                            cornerRadius = cornerRadius,
+                            alpha = 0.55f + 0.45f * pulse,
+                            style = glowStroke,
+                        )
+                        drawRoundRect(
+                            brush = coreBrush,
+                            topLeft = rectTopLeft,
+                            size = size,
+                            cornerRadius = cornerRadius,
+                            style = coreStroke,
+                        )
+                    }
                 }
             }
-
-            isWaiting && pulseProgress != null -> {
-                Modifier.drawWithContent {
-                    drawContent()
-                    val pulse = pulseProgress.value
-                    val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
-                    val borderColor = lerp(Color(0xFFFF8F00).copy(alpha = 0.50f), Color(0xFFFFD54F), pulse)
-
-                    drawRoundRect(
-                        color = Color(0xFFFFB300).copy(alpha = 0.08f + 0.24f * pulse),
-                        cornerRadius = cornerRadius,
-                        style = Stroke(width = 4.5.dp.toPx()),
-                    )
-
-                    drawRoundRect(
-                        color = borderColor,
-                        cornerRadius = cornerRadius,
-                        style = Stroke(width = (1.6f + 0.5f * pulse).dp.toPx()),
-                    )
-                }
-            }
-
-            else -> {
-                Modifier
-            }
+        } else {
+            Modifier
         }
 
     SurfaceCard(

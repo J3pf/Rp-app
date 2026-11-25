@@ -78,17 +78,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     private static let pushLogger = Logger(subsystem: "dev.j3pf.rp.iosApp", category: "push")
     private var networkMonitor: NWPathMonitor?
     private let networkQueue = DispatchQueue(label: "dev.j3pf.rp.network")
+    private var memoryWarningObserver: NSObjectProtocol?
 
     deinit {
         networkMonitor?.cancel()
+        if let observer = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil,
     ) -> Bool {
-        KeychainStoreHelper.installBridge()
-        CryptoKitAeadHelper.installBridge()
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainViewControllerKt.notifyIosMemoryWarning()
+        }
         startNetworkMonitor()
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in

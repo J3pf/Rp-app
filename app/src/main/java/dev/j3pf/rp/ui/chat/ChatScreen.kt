@@ -439,7 +439,7 @@ internal fun MessageList(
             .rememberLazyListState(),
 ) {
     dev.j3pf.rp.ui.chat.MessageList(
-        displayItems = ui.chat.display,
+        displayItems = ui.chat.items,
         tools = ui.chat.tools,
         sending = ui.sending,
         isWorking =
@@ -463,6 +463,7 @@ internal fun MessageList(
         onRetryUserMessage = onRetryUserMessage,
         listState = listState,
         modifier = modifier,
+        streaming = ui.chat.streaming,
     )
 }
 

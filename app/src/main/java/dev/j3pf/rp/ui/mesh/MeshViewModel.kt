@@ -13,16 +13,20 @@ import dev.j3pf.rp.protocol.MeshComm
 import dev.j3pf.rp.protocol.MeshNode
 import dev.j3pf.rp.protocol.MeshSnapshot
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
+import dev.j3pf.rp.ui.mesh.layout.MeshTopologyFingerprint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -44,6 +48,8 @@ class MeshViewModel
         private var viewportWidth = DEFAULT_VIEWPORT_SIZE
         private var viewportHeight = DEFAULT_VIEWPORT_SIZE
         private var measuredCardHeights: Map<String, Float> = emptyMap()
+        private var lastLayoutFingerprint: MeshTopologyFingerprint? = null
+        private var selectionGeneration = 0L
         private var nodeCommsJob: Job? = null
         private var conversationJob: Job? = null
         private var bubbleCleanupJob: Job? = null
@@ -52,14 +58,16 @@ class MeshViewModel
         internal var clockMs: () -> Long = System::currentTimeMillis
 
         init {
-            combine(
-                repository.snapshot,
-                machines.machinesState,
-                settings.settings,
-                repository.connState,
-            ) { snapshot, machineList, appSettings, connectionState ->
-                Inputs(snapshot, machineList, appSettings.selectedMeshMachine, appSettings.selectedMeshGroup, connectionState)
-            }.onEach(::applyInputs).launchIn(viewModelScope)
+            viewModelScope.launch {
+                combine(
+                    repository.snapshot,
+                    machines.machinesState,
+                    settings.settings,
+                    repository.connState,
+                ) { snapshot, machineList, appSettings, connectionState ->
+                    Inputs(snapshot, machineList, appSettings.selectedMeshMachine, appSettings.selectedMeshGroup, connectionState)
+                }.collectLatest(::applyInputs)
+            }
 
             repository.commEvents
                 .onEach(::onIncomingComm)
@@ -93,6 +101,7 @@ class MeshViewModel
         }
 
         fun selectMachine(machineId: String?) {
+            selectionGeneration++
             val state = _uiState.value
             val selected = machineId?.takeIf { id -> state.machineChips.any { it.machineId == id } }
             var updatedGroupId = state.selectedGroupId
@@ -124,6 +133,7 @@ class MeshViewModel
         }
 
         fun selectGroup(groupId: String?) {
+            selectionGeneration++
             val state = _uiState.value
             val selected = groupId?.takeIf { id -> state.groupChips.any { it.groupId == id } }
             _uiState.update { current ->
@@ -260,6 +270,7 @@ class MeshViewModel
             viewportWidth = newWidth
             viewportHeight = newHeight
             measuredCardHeights = newCardHeights
+            selectionGeneration++
             _uiState.update { it.withLayout(layoutEngine, viewportWidth, viewportHeight, measuredCardHeights) }
         }
 
@@ -267,28 +278,32 @@ class MeshViewModel
             onViewportSizeChanged(viewportWidth, viewportHeight, heights)
         }
 
-        private fun applyInputs(inputs: Inputs) {
-            val previous = _uiState.value
-            val machineChips = buildMachineChips(inputs.machineList, inputs.snapshot)
-            var machineId = if (selectionsInitialized) previous.selectedMachineId else inputs.selectedMachineId
-            if (inputs.snapshot != null && machineId != null && machineChips.none { it.machineId == machineId }) {
-                machineId = null
-            }
-            val groupChips = buildGroupChips(inputs.snapshot, machineId)
-            var groupId = if (selectionsInitialized) previous.selectedGroupId else inputs.selectedGroupId
-
-            if (inputs.snapshot != null) {
-                if (groupId != null && groupChips.none { it.groupId == groupId }) groupId = null
-                if (groupId == null && groupChips.isNotEmpty()) groupId = mostActiveGroup(inputs.snapshot, groupChips, machineId)
-            }
-            selectionsInitialized = true
-
+        private suspend fun applyInputs(inputs: Inputs) {
             if (inputs.snapshot != null) {
                 snapshotTimeoutJob?.cancel()
             }
-            val updated =
-                previous
-                    .copy(
+            var machineId: String?
+            var groupId: String?
+            var updated: MeshUiState
+            var nextFingerprint: MeshTopologyFingerprint?
+            while (true) {
+                val gen = selectionGeneration
+                val previous = _uiState.value
+                val machineChips = buildMachineChips(inputs.machineList, inputs.snapshot)
+                machineId = if (selectionsInitialized) previous.selectedMachineId else inputs.selectedMachineId
+                if (inputs.snapshot != null && machineId != null && machineChips.none { it.machineId == machineId }) {
+                    machineId = null
+                }
+                val groupChips = buildGroupChips(inputs.snapshot, machineId)
+                groupId = if (selectionsInitialized) previous.selectedGroupId else inputs.selectedGroupId
+
+                if (inputs.snapshot != null) {
+                    if (groupId != null && groupChips.none { it.groupId == groupId }) groupId = null
+                    if (groupId == null && groupChips.isNotEmpty()) groupId = mostActiveGroup(inputs.snapshot, groupChips, machineId)
+                }
+
+                val baseState =
+                    previous.copy(
                         isLoading =
                             previous.errorMessage == null && inputs.snapshot == null && inputs.connectionState == ConnState.Connected,
                         isConnected = inputs.connectionState == ConnState.Connected,
@@ -298,8 +313,42 @@ class MeshViewModel
                         selectedGroupId = groupId,
                         machineChips = machineChips,
                         groupChips = groupChips,
-                    ).withLayout(layoutEngine, viewportWidth, viewportHeight)
-            _uiState.value = updated
+                    )
+                val currentWidth = viewportWidth
+                val currentHeight = viewportHeight
+                val currentCardHeights = measuredCardHeights
+                val prevFingerprint = lastLayoutFingerprint
+                val (computed, computedFingerprint) =
+                    withContext(Dispatchers.Default) {
+                        baseState.computeLayoutWithFingerprint(
+                            layoutEngine = layoutEngine,
+                            width = currentWidth,
+                            height = currentHeight,
+                            cardHeights = currentCardHeights,
+                            previousFingerprint = prevFingerprint,
+                        )
+                    }
+                if (gen == selectionGeneration) {
+                    updated = computed
+                    nextFingerprint = computedFingerprint
+                    break
+                }
+            }
+            selectionsInitialized = true
+            lastLayoutFingerprint = nextFingerprint
+            _uiState.update { latest ->
+                latest.copy(
+                    isLoading = updated.isLoading,
+                    isConnected = updated.isConnected,
+                    snapshot = updated.snapshot,
+                    errorMessage = updated.errorMessage,
+                    selectedMachineId = updated.selectedMachineId,
+                    selectedGroupId = updated.selectedGroupId,
+                    machineChips = updated.machineChips,
+                    groupChips = updated.groupChips,
+                    layoutResult = updated.layoutResult,
+                )
+            }
 
             if (inputs.selectedMachineId != machineId) {
                 viewModelScope.launch { settings.setMeshSelectedMachine(machineId) }
@@ -521,7 +570,26 @@ class MeshViewModel
             height: Float,
             cardHeights: Map<String, Float> = measuredCardHeights,
         ): MeshUiState {
-            val mesh = snapshot ?: return copy(layoutResult = null)
+            val (nextState, nextFingerprint) =
+                computeLayoutWithFingerprint(
+                    layoutEngine = layoutEngine,
+                    width = width,
+                    height = height,
+                    cardHeights = cardHeights,
+                    previousFingerprint = lastLayoutFingerprint,
+                )
+            lastLayoutFingerprint = nextFingerprint
+            return nextState
+        }
+
+        private fun MeshUiState.computeLayoutWithFingerprint(
+            layoutEngine: MeshLayoutEngine,
+            width: Float,
+            height: Float,
+            cardHeights: Map<String, Float>,
+            previousFingerprint: MeshTopologyFingerprint?,
+        ): Pair<MeshUiState, MeshTopologyFingerprint?> {
+            val mesh = snapshot ?: return copy(layoutResult = null) to null
             val selectedGroupMembers =
                 if (selectedGroupId != null && selectedGroupId != SOLO_GROUP_ID) {
                     mesh.groups
@@ -545,16 +613,17 @@ class MeshViewModel
                 }
             val visibleIds = filteredNodes.mapTo(mutableSetOf()) { it.agentId }
             val filteredEdges = mesh.edges.filter { it.a in visibleIds && it.b in visibleIds }
-            val layout =
-                layoutEngine.computeLayout(
-                    filteredNodes,
-                    filteredEdges,
-                    width,
-                    height,
-                    layoutResult,
-                    cardHeights,
+            val (layout, fingerprint) =
+                layoutEngine.computeOrUpdateLayout(
+                    nodes = filteredNodes,
+                    edges = filteredEdges,
+                    width = width,
+                    height = height,
+                    previousLayout = layoutResult,
+                    previousFingerprint = previousFingerprint,
+                    cardHeights = cardHeights,
                 )
-            return copy(layoutResult = layout)
+            return copy(layoutResult = layout) to fingerprint
         }
 
         private var snapshotTimeoutJob: Job? = null

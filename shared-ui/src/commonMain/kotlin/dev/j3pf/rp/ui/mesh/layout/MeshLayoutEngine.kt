@@ -217,16 +217,31 @@ class MeshLayoutEngine(
                 .flatten()
                 .map { it.agentId }
                 .toSet()
+        val cardMaxHeightByDepth = mutableMapOf<Int, Float>()
+        for (node in orderedNodes) {
+            if (node.agentId in allLeavesSet) continue
+            val depth = levels[node.agentId] ?: continue
+            val h = nodeHeights.getValue(node.agentId)
+            val prev = cardMaxHeightByDepth[depth]
+            if (prev == null || h > prev) {
+                cardMaxHeightByDepth[depth] = h
+            }
+        }
+        val leafGroupMaxHeightByDepth = mutableMapOf<Int, Float>()
+        for ((parentId, leaves) in leafGroupChildren) {
+            if (leaves.isEmpty()) continue
+            val parentDepth = levels[parentId] ?: continue
+            val targetDepth = parentDepth + 1
+            val groupHeight = leaves.size * leafHeight + (leaves.size - 1).coerceAtLeast(0) * leafSpacingY
+            val prev = leafGroupMaxHeightByDepth[targetDepth]
+            if (prev == null || groupHeight > prev) {
+                leafGroupMaxHeightByDepth[targetDepth] = groupHeight
+            }
+        }
         val rowHeights = mutableMapOf<Int, Float>()
         for (d in 0..maxDepth) {
-            val cardsAtLevel = orderedNodes.filter { levels[it.agentId] == d && it.agentId !in allLeavesSet }
-            val cardMaxHeight = cardsAtLevel.maxOfOrNull { nodeHeights.getValue(it.agentId) } ?: baseCardHeight
-            // C3: reserve row height for leaf groups hanging from parent at d - 1
-            val leafGroupsAtLevel = leafGroupChildren.filter { (pId, leaves) -> levels[pId] == d - 1 && leaves.isNotEmpty() }
-            val leafGroupMaxHeight =
-                leafGroupsAtLevel.values.maxOfOrNull { leaves ->
-                    leaves.size * leafHeight + (leaves.size - 1).coerceAtLeast(0) * leafSpacingY
-                } ?: 0f
+            val cardMaxHeight = cardMaxHeightByDepth[d] ?: baseCardHeight
+            val leafGroupMaxHeight = leafGroupMaxHeightByDepth[d] ?: 0f
             rowHeights[d] = max(baseCardHeight, max(cardMaxHeight, leafGroupMaxHeight))
         }
 
@@ -458,17 +473,38 @@ class MeshLayoutEngine(
             emitNodes(rootTree, globalOffsetX)
         }
 
-        // Precompute layout row maps for O(1) orthogonal edge routing (C8 W3)
+        // Precompute layout row and leaf maps for O(1) orthogonal edge routing (C8 W3)
         val rawRows = positionedNodes.values.groupBy { it.y }
         val sortedRowCenters = rawRows.keys.sorted()
+        val rowIndexByCenter = sortedRowCenters.withIndex().associate { it.value to it.index }
         val rowsByY = sortedRowCenters.associateWith { rawRows.getValue(it) }
         val minLeftBound = positionedNodes.values.minOfOrNull { it.left } ?: 0f
+        val firstLeafTopByParent = mutableMapOf<String, Float>()
+        for (positioned in positionedNodes.values) {
+            if (positioned.displayMode == NodeDisplayMode.LEAF_ITEM) {
+                val pid = positioned.parentId ?: continue
+                val prevTop = firstLeafTopByParent[pid]
+                if (prevTop == null || positioned.top < prevTop) {
+                    firstLeafTopByParent[pid] = positioned.top
+                }
+            }
+        }
 
         // Position orthogonal bus edges
         val positionedEdges =
             edges
                 .sortedWith(compareBy<MeshEdge>({ it.edgeId }, { it.a }, { it.b }))
-                .mapNotNull { edge -> positionEdge(edge, positionedNodes, rowsByY, sortedRowCenters, minLeftBound) }
+                .mapNotNull { edge ->
+                    positionEdge(
+                        edge = edge,
+                        nodes = positionedNodes,
+                        rowsByY = rowsByY,
+                        rowCenters = sortedRowCenters,
+                        rowIndexByCenter = rowIndexByCenter,
+                        minLeft = minLeftBound,
+                        firstLeafTopByParent = firstLeafTopByParent,
+                    )
+                }
 
         val primaryRoot = roots.firstOrNull { it.role == "orchestrator" } ?: roots.firstOrNull() ?: orderedNodes.first()
         return MeshLayoutResult(
@@ -484,7 +520,9 @@ class MeshLayoutEngine(
         nodes: Map<String, PositionedNode>,
         rowsByY: Map<Float, List<PositionedNode>>,
         rowCenters: List<Float>,
+        rowIndexByCenter: Map<Float, Int>,
         minLeft: Float,
+        firstLeafTopByParent: Map<String, Float>,
     ): PositionedEdge? {
         val a = nodes[edge.a] ?: return null
         val b = nodes[edge.b] ?: return null
@@ -505,7 +543,7 @@ class MeshLayoutEngine(
 
         val routePoints =
             parentAndChild?.let { (p, c) ->
-                orthogonalBusRoute(p, c, rowsByY, rowCenters, minLeft, nodes)
+                orthogonalBusRoute(p, c, rowsByY, rowCenters, rowIndexByCenter, minLeft, firstLeafTopByParent)
             } ?: emptyList()
 
         val endpoints =
@@ -559,15 +597,12 @@ class MeshLayoutEngine(
         child: PositionedNode,
         rowsByY: Map<Float, List<PositionedNode>>,
         rowCenters: List<Float>,
+        rowIndexByCenter: Map<Float, Int>,
         minLeft: Float,
-        nodes: Map<String, PositionedNode>,
+        firstLeafTopByParent: Map<String, Float>,
     ): List<EdgePoint> {
         if (child.displayMode == NodeDisplayMode.LEAF_ITEM) {
-            val siblingLeaves =
-                nodes.values.filter {
-                    it.displayMode == NodeDisplayMode.LEAF_ITEM && it.parentId == parent.node.agentId
-                }
-            val firstLeafTop = siblingLeaves.minOfOrNull { it.top } ?: child.top
+            val firstLeafTop = firstLeafTopByParent[parent.node.agentId] ?: child.top
             val busY = (parent.bottom + firstLeafTop) / 2f
             // D1: One vertical spine at the LEFT of the rows, short horizontal tick into bullet
             val spineX = child.left - 16f
@@ -584,8 +619,8 @@ class MeshLayoutEngine(
 
         // Multi-level hierarchy edges (skipping intermediate rows)
         if (child.level > parent.level + 1) {
-            val parentRowIndex = rowCenters.indexOf(parent.y)
-            val childRowIndex = rowCenters.indexOf(child.y)
+            val parentRowIndex = rowIndexByCenter[parent.y] ?: -1
+            val childRowIndex = rowIndexByCenter[child.y] ?: -1
             if (parentRowIndex >= 0 && childRowIndex > parentRowIndex + 1) {
                 val parentRow = rowsByY.getValue(parent.y)
                 val childRow = rowsByY.getValue(child.y)
@@ -649,6 +684,101 @@ class MeshLayoutEngine(
         return LayoutBounds(minX, minY, maxX, maxY)
     }
 
+    fun computeTopologyFingerprint(
+        nodes: List<MeshNode>,
+        edges: List<MeshEdge>,
+        width: Float,
+        height: Float,
+        cardHeights: Map<String, Float> = emptyMap(),
+    ): MeshTopologyFingerprint {
+        val nodeKeys =
+            nodes
+                .sortedBy { it.agentId }
+                .distinctBy { it.agentId }
+                .map { node ->
+                    val (running, finished) = SubagentPlacement.split(node.subagents)
+                    MeshNodeTopologyKey(
+                        agentId = node.agentId,
+                        parentAgentId = node.parentAgentId,
+                        groupId = node.groupId,
+                        role = node.role,
+                        name = node.name,
+                        hasTodos = node.todos?.total?.let { it > 0 } == true,
+                        hasFinishedSubagentPills = finished.isNotEmpty(),
+                        runningSubagentIds = running.map { it.taskId },
+                    )
+                }
+        val edgeKeys =
+            edges
+                .sortedWith(compareBy<MeshEdge>({ it.edgeId }, { it.a }, { it.b }))
+                .map { MeshEdgeTopologyKey(edgeId = it.edgeId, a = it.a, b = it.b) }
+        return MeshTopologyFingerprint(
+            width = width,
+            height = height,
+            cardHeights = cardHeights.toMap(),
+            nodes = nodeKeys,
+            edges = edgeKeys,
+        )
+    }
+
+    /**
+     * Updates [previousLayout] in-place in O(N + E) when only cosmetic node/edge fields changed
+     * (e.g. activity, status, lastCommAt, pendingAsk), returning null if any key is missing.
+     */
+    fun updateLayoutCosmeticsInPlace(
+        previousLayout: MeshLayoutResult,
+        nodes: List<MeshNode>,
+        edges: List<MeshEdge>,
+    ): MeshLayoutResult? {
+        val freshNodesById = HashMap<String, MeshNode>(nodes.size * 2)
+        for (node in nodes) {
+            freshNodesById[node.agentId] = node
+            for (subNode in subagentNodes(node)) {
+                freshNodesById[subNode.agentId] = subNode
+            }
+        }
+        if (freshNodesById.size != previousLayout.nodes.size) return null
+        val updatedNodes = LinkedHashMap<String, PositionedNode>(previousLayout.nodes.size)
+        for ((id, positioned) in previousLayout.nodes) {
+            val fresh = freshNodesById[id] ?: return null
+            updatedNodes[id] = positioned.copy(node = fresh)
+        }
+        val freshEdgesById = edges.associateBy { it.edgeId }
+        val updatedEdges =
+            previousLayout.edges.map { positionedEdge ->
+                val freshEdge = freshEdgesById[positionedEdge.edge.edgeId] ?: return null
+                positionedEdge.copy(edge = freshEdge)
+            }
+        return previousLayout.copy(
+            nodes = updatedNodes,
+            edges = updatedEdges,
+        )
+    }
+
+    /**
+     * Runs O(N + E) cosmetic update when [previousFingerprint] matches the new topology;
+     * otherwise runs a full Reingold-Tilford [computeLayout] pass.
+     */
+    fun computeOrUpdateLayout(
+        nodes: List<MeshNode>,
+        edges: List<MeshEdge>,
+        width: Float = 800f,
+        height: Float = 800f,
+        previousLayout: MeshLayoutResult? = null,
+        previousFingerprint: MeshTopologyFingerprint? = null,
+        cardHeights: Map<String, Float> = emptyMap(),
+    ): Pair<MeshLayoutResult, MeshTopologyFingerprint> {
+        val fingerprint = computeTopologyFingerprint(nodes, edges, width, height, cardHeights)
+        if (previousLayout != null && previousFingerprint == fingerprint) {
+            val updated = updateLayoutCosmeticsInPlace(previousLayout, nodes, edges)
+            if (updated != null) {
+                return updated to fingerprint
+            }
+        }
+        val computed = computeLayout(nodes, edges, width, height, previousLayout, cardHeights)
+        return computed to fingerprint
+    }
+
     /**
      * A **running** subagent enters the diagram as a real node one level below its parent agent
      * (the tree places it via `parentAgentId`). Finished subagents do not generate nodes and remain
@@ -674,3 +804,28 @@ class MeshLayoutEngine(
                 )
             }
 }
+
+data class MeshNodeTopologyKey(
+    val agentId: String,
+    val parentAgentId: String?,
+    val groupId: String?,
+    val role: String,
+    val name: String,
+    val hasTodos: Boolean,
+    val hasFinishedSubagentPills: Boolean,
+    val runningSubagentIds: List<String>,
+)
+
+data class MeshEdgeTopologyKey(
+    val edgeId: String,
+    val a: String,
+    val b: String,
+)
+
+data class MeshTopologyFingerprint(
+    val width: Float,
+    val height: Float,
+    val cardHeights: Map<String, Float>,
+    val nodes: List<MeshNodeTopologyKey>,
+    val edges: List<MeshEdgeTopologyKey>,
+)

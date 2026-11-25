@@ -27,10 +27,17 @@ import dev.j3pf.rp.ui.NavTarget
 import dev.j3pf.rp.ui.nav.LockScreen
 import dev.j3pf.rp.ui.nav.RpRoot
 import dev.j3pf.rp.ui.theme.RpTheme
+import dev.j3pf.rp.ui.theme.RpThemeChoice
 import dev.j3pf.rp.ui.theme.resolveThemeChoice
 import dev.j3pf.rp.util.AuthResult
 import dev.j3pf.rp.util.BiometricGate
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -45,6 +52,28 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var settings: SettingsRepository
 
     @Inject lateinit var connection: RelayConnection
+
+    private val activeThemeFlow: StateFlow<RpThemeChoice> by lazy {
+        combine(vm.settings, vm.machines, vm.agents) { s, machines, agents ->
+            resolveThemeChoice(s?.appTheme ?: "auto", machines, agents)
+        }.distinctUntilChanged()
+            .stateIn(
+                scope = lifecycleScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = resolveThemeChoice(vm.settings.value?.appTheme ?: "auto", vm.machines.value, vm.agents.value),
+            )
+    }
+
+    private val appLockEnabledFlow: StateFlow<Boolean> by lazy {
+        vm.settings
+            .map { it?.appLock == true }
+            .distinctUntilChanged()
+            .stateIn(
+                scope = lifecycleScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = vm.settings.value?.appLock == true,
+            )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,16 +94,14 @@ class MainActivity : FragmentActivity() {
         }
 
         setContent {
-            val s by vm.settings.collectAsStateWithLifecycle()
-            val machines by vm.machines.collectAsStateWithLifecycle()
-            val agents by vm.agents.collectAsStateWithLifecycle()
-            val activeTheme = resolveThemeChoice(s?.appTheme ?: "auto", machines, agents)
+            val activeTheme by activeThemeFlow.collectAsStateWithLifecycle()
 
             RpTheme(themeChoice = activeTheme) {
+                val appLockEnabled by appLockEnabledFlow.collectAsStateWithLifecycle()
                 val locked by vm.locked.collectAsStateWithLifecycle()
                 val scope = rememberCoroutineScope()
                 var lockMessage by remember { mutableStateOf<String?>(null) }
-                val mustLock = s?.appLock == true && locked && secrets.current() != null
+                val mustLock = appLockEnabled && locked && secrets.current() != null
 
                 fun unlock() {
                     scope.launch {

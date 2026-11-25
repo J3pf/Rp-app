@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -350,10 +350,47 @@ fun DiffSheet(
     }
 }
 
+internal enum class DiffRowKind {
+    ADDITION,
+    DELETION,
+    HUNK,
+    CONTEXT,
+}
+
+internal data class DiffRow(
+    val index: Int,
+    val kind: DiffRowKind,
+    val text: String,
+)
+
+internal fun parseDiffRows(patch: String): List<DiffRow> =
+    patch.split("\n").mapIndexed { index, line ->
+        val kind =
+            when {
+                line.startsWith("+") && !line.startsWith("+++") -> DiffRowKind.ADDITION
+                line.startsWith("-") && !line.startsWith("---") -> DiffRowKind.DELETION
+                line.startsWith("@@") -> DiffRowKind.HUNK
+                else -> DiffRowKind.CONTEXT
+            }
+        DiffRow(index = index, kind = kind, text = line)
+    }
+
 @Composable
 private fun DiffFileContent(file: HostGitDiffFile) {
-    val lines = remember(file.patch) { file.patch.split("\n") }
+    val rows = remember(file.patch) { parseDiffRows(file.patch) }
     val horizontalScroll = rememberScrollState()
+    val bodySmall = MaterialTheme.typography.bodySmall
+    val diffLineStyle =
+        remember(bodySmall) {
+            bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+            )
+        }
+    val hunkBgColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
+    val hunkTextColor = MaterialTheme.colorScheme.onTertiaryContainer
+    val contextTextColor = MaterialTheme.colorScheme.onSurface
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -371,20 +408,24 @@ private fun DiffFileContent(file: HostGitDiffFile) {
                     .horizontalScroll(horizontalScroll)
                     .padding(vertical = 4.dp),
         ) {
-            items(lines) { line ->
+            itemsIndexed(
+                items = rows,
+                key = { _, row -> row.index },
+                contentType = { _, row -> row.kind },
+            ) { _, row ->
                 val bg =
-                    when {
-                        line.startsWith("+") && !line.startsWith("+++") -> DiffAdditionBgColor
-                        line.startsWith("-") && !line.startsWith("---") -> DiffDeletionBgColor
-                        line.startsWith("@@") -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
-                        else -> Color.Transparent
+                    when (row.kind) {
+                        DiffRowKind.ADDITION -> DiffAdditionBgColor
+                        DiffRowKind.DELETION -> DiffDeletionBgColor
+                        DiffRowKind.HUNK -> hunkBgColor
+                        DiffRowKind.CONTEXT -> Color.Transparent
                     }
                 val textColor =
-                    when {
-                        line.startsWith("+") && !line.startsWith("+++") -> DiffAdditionTextColor
-                        line.startsWith("-") && !line.startsWith("---") -> DiffDeletionTextColor
-                        line.startsWith("@@") -> MaterialTheme.colorScheme.onTertiaryContainer
-                        else -> MaterialTheme.colorScheme.onSurface
+                    when (row.kind) {
+                        DiffRowKind.ADDITION -> DiffAdditionTextColor
+                        DiffRowKind.DELETION -> DiffDeletionTextColor
+                        DiffRowKind.HUNK -> hunkTextColor
+                        DiffRowKind.CONTEXT -> contextTextColor
                     }
 
                 Row(
@@ -395,13 +436,8 @@ private fun DiffFileContent(file: HostGitDiffFile) {
                             .padding(horizontal = 8.dp, vertical = 1.dp),
                 ) {
                     Text(
-                        text = line,
-                        style =
-                            MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                            ),
+                        text = row.text,
+                        style = diffLineStyle,
                         color = textColor,
                     )
                 }

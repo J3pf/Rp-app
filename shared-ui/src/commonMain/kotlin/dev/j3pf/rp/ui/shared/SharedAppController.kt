@@ -101,6 +101,7 @@ import dev.j3pf.rp.ui.mesh.MeshUiState
 import dev.j3pf.rp.ui.mesh.formatMeshDisplayName
 import dev.j3pf.rp.ui.mesh.isIdLooking
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
+import dev.j3pf.rp.ui.mesh.layout.MeshTopologyFingerprint
 import dev.j3pf.rp.ui.mesh.resolveMeshNodeDetailTarget
 import dev.j3pf.rp.ui.nav.AboutRoute
 import dev.j3pf.rp.ui.nav.AddMachineRoute
@@ -300,7 +301,10 @@ class SharedAppController(
     private val meshLayoutEngine = MeshLayoutEngine()
     private var meshViewportWidth = DEFAULT_MESH_VIEWPORT_SIZE
     private var meshViewportHeight = DEFAULT_MESH_VIEWPORT_SIZE
+    private var meshCardHeights: Map<String, Float> = emptyMap()
+    private var lastMeshTopologyFingerprint: MeshTopologyFingerprint? = null
     private var meshRefreshJob: Job? = null
+    private var meshBubbleCleanupJob: Job? = null
     private val _meshState = MutableStateFlow(MeshUiState(isLoading = false))
     val meshState: StateFlow<MeshUiState> = _meshState.asStateFlow()
 
@@ -320,12 +324,29 @@ class SharedAppController(
     val showDiffSheet: StateFlow<Boolean> = _showDiffSheet.asStateFlow()
 
     private val chatHistoryStore = LinkedHashMap<String, ChatState>()
+    private val activeChatSessions = mutableMapOf<String, ChatSession>()
     private val outboxStore = mutableMapOf<String, UserMessage>()
 
     internal val cachedChatHistoryCount: Int
         get() = storeLock.withLock { chatHistoryStore.size }
 
     internal fun cachedChatHistoryIds(): List<String> = storeLock.withLock { chatHistoryStore.keys.toList() }
+
+    internal fun cachedChatState(agentId: String): ChatState? = storeLock.withLock { chatHistoryStore[agentId] }
+
+    internal val hasPendingMeshBubbleCleanupJob: Boolean
+        get() = meshBubbleCleanupJob?.isActive == true
+
+    /** Evicts inactive cached chat histories under OS memory pressure (e.g. iOS memory warning). */
+    fun onMemoryWarning() {
+        storeLock.withLock {
+            if (activeChatSessions.isEmpty()) {
+                chatHistoryStore.clear()
+            } else {
+                chatHistoryStore.keys.retainAll(activeChatSessions.keys)
+            }
+        }
+    }
 
     private fun getChatHistoryLocked(agentId: String): ChatState? {
         val existing = chatHistoryStore.remove(agentId) ?: return null
@@ -392,8 +413,13 @@ class SharedAppController(
                 epochChanged: Boolean,
             ) {
                 storeLock.withLock {
-                    val prev = if (epochChanged) ChatState() else (getChatHistoryLocked(agentId) ?: ChatState())
-                    putChatHistoryLocked(agentId, ChatReducer.applyHistory(prev, history))
+                    val alreadyReduced = activeChatSessions[agentId]?.state?.value
+                    if (alreadyReduced != null) {
+                        putChatHistoryLocked(agentId, alreadyReduced)
+                    } else {
+                        val prev = if (epochChanged) ChatState() else (getChatHistoryLocked(agentId) ?: ChatState())
+                        putChatHistoryLocked(agentId, ChatReducer.applyHistory(prev, history))
+                    }
                 }
             }
 
@@ -401,10 +427,14 @@ class SharedAppController(
                 agentId: String,
                 event: AgentEvent,
             ) {
-                val now = currentTimeMillis()
                 storeLock.withLock {
-                    val prev = getChatHistoryLocked(agentId) ?: ChatState()
-                    putChatHistoryLocked(agentId, ChatReducer.reduce(prev, event, now = now))
+                    val alreadyReduced = activeChatSessions[agentId]?.state?.value
+                    if (alreadyReduced != null) {
+                        putChatHistoryLocked(agentId, alreadyReduced)
+                    } else {
+                        val prev = getChatHistoryLocked(agentId) ?: ChatState()
+                        putChatHistoryLocked(agentId, ChatReducer.reduce(prev, event, now = currentTimeMillis()))
+                    }
                 }
             }
 
@@ -454,10 +484,21 @@ class SharedAppController(
                     },
                     newId = ::newId,
                     now = ::currentTimeMillis,
-                )
+                ).also { session ->
+                    storeLock.withLock { activeChatSessions[agentId] = session }
+                }
             },
             onStart = { it.start() },
-            onStop = { it.stop() },
+            onStop = { session ->
+                session.stop()
+                val finalState = session.state.value
+                storeLock.withLock {
+                    activeChatSessions.remove(session.agentId)
+                    if (finalState.items.isNotEmpty() || finalState.epoch != null) {
+                        putChatHistoryLocked(session.agentId, finalState)
+                    }
+                }
+            },
         )
 
     val sessionPolicy =
@@ -826,10 +867,13 @@ class SharedAppController(
         }
         meshRefreshJob?.cancel()
         meshRefreshJob = null
+        meshBubbleCleanupJob?.cancel()
+        meshBubbleCleanupJob = null
         unlockJob?.cancel()
         unlockJob = null
         stopSocketConnection()
         chatSessions.clear()
+        storeLock.withLock { activeChatSessions.clear() }
     }
 
     // ───────────────────────────── Navigation ─────────────────────────────
@@ -1740,15 +1784,24 @@ class SharedAppController(
             if (nextGroupId == null && groupChips.isNotEmpty()) {
                 nextGroupId = mostActiveMeshGroup(snapshot, groupChips, machineId)
             }
-            current
-                .copy(
-                    isLoading = false,
-                    snapshot = snapshot,
-                    selectedGroupId = nextGroupId,
-                    machineChips = machineChips,
-                    groupChips = groupChips,
-                    errorMessage = null,
-                ).withComputedLayout(meshLayoutEngine, meshViewportWidth, meshViewportHeight)
+            val (nextState, nextFingerprint) =
+                current
+                    .copy(
+                        isLoading = false,
+                        snapshot = snapshot,
+                        selectedGroupId = nextGroupId,
+                        machineChips = machineChips,
+                        groupChips = groupChips,
+                        errorMessage = null,
+                    ).withComputedLayout(
+                        meshLayoutEngine,
+                        meshViewportWidth,
+                        meshViewportHeight,
+                        lastMeshTopologyFingerprint,
+                        meshCardHeights,
+                    )
+            lastMeshTopologyFingerprint = nextFingerprint
+            nextState
         }
     }
 
@@ -1766,13 +1819,30 @@ class SharedAppController(
                         .take(MAX_MESH_ACTIVE_BUBBLES),
             )
         }
-        scope.launch {
-            delay(MESH_BUBBLE_LIFETIME_MS)
-            val pruneNow = currentTimeMillis()
-            _meshState.update { st ->
-                st.copy(activeBubbles = st.activeBubbles.filter { it.expiresAtMs > pruneNow })
+        scheduleMeshBubbleCleanup()
+    }
+
+    private fun scheduleMeshBubbleCleanup() {
+        meshBubbleCleanupJob?.cancel()
+        val earliest =
+            _meshState.value.activeBubbles.minOfOrNull { it.expiresAtMs } ?: run {
+                meshBubbleCleanupJob = null
+                return
             }
-        }
+        val waitMs = (earliest - currentTimeMillis()).coerceAtLeast(0L)
+        meshBubbleCleanupJob =
+            scope.launch {
+                if (waitMs > 0L) delay(waitMs)
+                val pruneNow = currentTimeMillis()
+                _meshState.update { st ->
+                    st.copy(activeBubbles = st.activeBubbles.filter { it.expiresAtMs > pruneNow })
+                }
+                if (_meshState.value.activeBubbles.isNotEmpty()) {
+                    scheduleMeshBubbleCleanup()
+                } else {
+                    meshBubbleCleanupJob = null
+                }
+            }
     }
 
     fun toggleMeshListView() {
@@ -1791,12 +1861,21 @@ class SharedAppController(
                     nextGroup = mostActiveMeshGroup(snapshot, groupChips, machineId)
                 }
             }
-            current
-                .copy(
-                    selectedMachineId = machineId,
-                    selectedGroupId = nextGroup,
-                    groupChips = groupChips,
-                ).withComputedLayout(meshLayoutEngine, meshViewportWidth, meshViewportHeight)
+            val (nextState, nextFingerprint) =
+                current
+                    .copy(
+                        selectedMachineId = machineId,
+                        selectedGroupId = nextGroup,
+                        groupChips = groupChips,
+                    ).withComputedLayout(
+                        meshLayoutEngine,
+                        meshViewportWidth,
+                        meshViewportHeight,
+                        lastMeshTopologyFingerprint,
+                        meshCardHeights,
+                    )
+            lastMeshTopologyFingerprint = nextFingerprint
+            nextState
         }
         refreshMesh(machineId)
     }
@@ -1804,9 +1883,18 @@ class SharedAppController(
     fun selectMeshGroup(groupId: String?) {
         scope.launch { settingsStore.setMeshSelectedGroup(groupId) }
         _meshState.update { current ->
-            current
-                .copy(selectedGroupId = groupId)
-                .withComputedLayout(meshLayoutEngine, meshViewportWidth, meshViewportHeight)
+            val (nextState, nextFingerprint) =
+                current
+                    .copy(selectedGroupId = groupId)
+                    .withComputedLayout(
+                        meshLayoutEngine,
+                        meshViewportWidth,
+                        meshViewportHeight,
+                        lastMeshTopologyFingerprint,
+                        meshCardHeights,
+                    )
+            lastMeshTopologyFingerprint = nextFingerprint
+            nextState
         }
     }
 
@@ -1819,7 +1907,36 @@ class SharedAppController(
         if (w == meshViewportWidth && h == meshViewportHeight && _meshState.value.layoutResult != null) return
         meshViewportWidth = w
         meshViewportHeight = h
-        _meshState.update { it.withComputedLayout(meshLayoutEngine, meshViewportWidth, meshViewportHeight) }
+        _meshState.update { current ->
+            val (nextState, nextFingerprint) =
+                current.withComputedLayout(
+                    meshLayoutEngine,
+                    meshViewportWidth,
+                    meshViewportHeight,
+                    lastMeshTopologyFingerprint,
+                    meshCardHeights,
+                )
+            lastMeshTopologyFingerprint = nextFingerprint
+            nextState
+        }
+    }
+
+    fun onMeshCardHeightsChanged(heights: Map<String, Float>) {
+        val next = heights.toMap()
+        if (next == meshCardHeights && _meshState.value.layoutResult != null) return
+        meshCardHeights = next
+        _meshState.update { current ->
+            val (nextState, nextFingerprint) =
+                current.withComputedLayout(
+                    meshLayoutEngine,
+                    meshViewportWidth,
+                    meshViewportHeight,
+                    lastMeshTopologyFingerprint,
+                    meshCardHeights,
+                )
+            lastMeshTopologyFingerprint = nextFingerprint
+            nextState
+        }
     }
 
     fun selectMeshNode(agentId: String) {
@@ -2172,7 +2289,7 @@ class SharedAppController(
     companion object {
         const val APP_VERSION = "0.9.5"
         const val SOLO_GROUP_ID = "solo"
-        internal const val MAX_CACHED_CHAT_HISTORIES = 20
+        internal const val MAX_CACHED_CHAT_HISTORIES = 8
         private const val APP_LOCK_TIMEOUT_MS = 30_000L
         private const val MAX_MESH_LIVE_COMMS = 20
         private const val MAX_MESH_ACTIVE_BUBBLES = 50
@@ -2344,8 +2461,10 @@ class SharedAppController(
             layoutEngine: MeshLayoutEngine,
             width: Float,
             height: Float,
-        ): MeshUiState {
-            val mesh = snapshot ?: return copy(layoutResult = null)
+            previousFingerprint: MeshTopologyFingerprint?,
+            cardHeights: Map<String, Float> = emptyMap(),
+        ): Pair<MeshUiState, MeshTopologyFingerprint?> {
+            val mesh = snapshot ?: return copy(layoutResult = null) to null
             val selectedGroupMembers =
                 if (selectedGroupId != null && selectedGroupId != SOLO_GROUP_ID) {
                     mesh.groups
@@ -2369,15 +2488,17 @@ class SharedAppController(
                 }
             val visibleIds = filteredNodes.mapTo(mutableSetOf()) { it.agentId }
             val filteredEdges = mesh.edges.filter { it.a in visibleIds && it.b in visibleIds }
-            val layout =
-                layoutEngine.computeLayout(
-                    filteredNodes,
-                    filteredEdges,
-                    width,
-                    height,
-                    layoutResult,
+            val (layout, fingerprint) =
+                layoutEngine.computeOrUpdateLayout(
+                    nodes = filteredNodes,
+                    edges = filteredEdges,
+                    width = width,
+                    height = height,
+                    previousLayout = layoutResult,
+                    previousFingerprint = previousFingerprint,
+                    cardHeights = cardHeights,
                 )
-            return copy(layoutResult = layout)
+            return copy(layoutResult = layout) to fingerprint
         }
 
         fun normalizeRelayUrl(raw: String): String? {

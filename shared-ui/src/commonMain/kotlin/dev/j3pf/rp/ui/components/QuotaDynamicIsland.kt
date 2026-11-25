@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import dev.j3pf.rp.protocol.MachineQuota
 import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.QuotaWindow
+import dev.j3pf.rp.ui.theme.LocalReducedMotion
+import dev.j3pf.rp.ui.theme.RpMotion
 import dev.j3pf.rp.ui.theme.RpShapes
 import dev.j3pf.rp.ui.theme.rpSemantic
 import dev.j3pf.rp.ui.theme.rpSurfaces
@@ -70,7 +72,7 @@ fun QuotaDynamicIsland(
         }
     if (machinesWithQuotas.isEmpty()) return
 
-    val machineIds = machinesWithQuotas.map { it.first.machineId }
+    val machineIds = remember(machinesWithQuotas) { machinesWithQuotas.map { it.first.machineId } }
     val selectedPage = machineIds.indexOf(selectedMachineId).takeIf { it >= 0 } ?: 0
     val pagerState = rememberPagerState(initialPage = selectedPage, pageCount = { machinesWithQuotas.size })
     var selectedQuota by remember { mutableStateOf<SelectedQuota?>(null) }
@@ -199,9 +201,10 @@ private fun QuotaProviderPill(
     val primaryWindow = quota.primaryWindow()
     val statusColor = quota.statusColor(primaryWindow?.usedPercent)
     val targetProgress = ((primaryWindow?.usedPercent ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
+    val reducedMotion = LocalReducedMotion.current
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 350),
+        animationSpec = RpMotion.adaptiveSpec(reducedMotion, tween(durationMillis = 350)),
         label = "quotaProgress",
     )
 

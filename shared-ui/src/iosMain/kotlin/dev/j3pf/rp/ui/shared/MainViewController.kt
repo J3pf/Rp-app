@@ -8,3 +8,7 @@ fun MainViewController(): UIViewController =
     ComposeUIViewController {
         RemotePiApp()
     }
+
+fun notifyIosMemoryWarning() {
+    IosAppScope.onMemoryWarning()
+}

@@ -34,11 +34,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.abs
 
 data class ChatUiState(
     val agent: AgentSummary? = null,
@@ -94,15 +97,9 @@ class ChatViewModel
         private val extra = MutableStateFlow(ChatUiState())
         private var forgetOnDone: ((CloseOutcome) -> Unit)? = null
 
-        val state: StateFlow<ChatUiState> =
-            combine(
-                combine(session.state, session.syncing, ::Pair),
-                combine(agentsRepo.observe(agentId), agentsRepo.agents, ::Pair),
-                connection.state,
-                extra,
-                settingsRepo.settings,
-            ) { (chat, syncing), (agent, allAgents), conn, e, st ->
-                val siblings =
+        private val otherActiveAgentsFlow: StateFlow<List<AgentSummary>> =
+            agentsRepo.agents
+                .map { allAgents ->
                     allAgents
                         .filter {
                             it.agentId != agentId &&
@@ -113,6 +110,17 @@ class ChatViewModel
                                         it.status == AgentStatus.COMPACTING
                                 )
                         }.sortedBy { if (it.status == AgentStatus.WAITING_INPUT) 0 else 1 }
+                }.distinctUntilChanged()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        val state: StateFlow<ChatUiState> =
+            combine(
+                combine(session.state, session.syncing, ::Pair),
+                combine(agentsRepo.observe(agentId), otherActiveAgentsFlow, ::Pair),
+                connection.state,
+                extra,
+                settingsRepo.settings,
+            ) { (chat, syncing), (agent, siblings), conn, e, st ->
                 val hasHistoryEpoch = chat.epoch != null
                 val enrichedAgent =
                     agent?.copy(
@@ -282,7 +290,8 @@ class ChatViewModel
             val job =
                 viewModelScope.launch {
                     try {
-                        when (val r = attachmentsRepo.upload(la) { p -> replace(id) { it.copy(progress = p) } }) {
+                        val onProgress = throttledProgressUpdater(id)
+                        when (val r = attachmentsRepo.upload(la, onProgress)) {
                             is ApiResult.Ok -> {
                                 replace(id) { it.copy(state = UploadState.DONE, progress = 1f, blobId = r.value.blobId) }
                             }
@@ -363,7 +372,8 @@ class ChatViewModel
                             replace(tempId) {
                                 it.copy(id = la.id, name = la.name, mime = la.mime, size = la.size, state = UploadState.UPLOADING)
                             }
-                            when (val r = attachmentsRepo.upload(la) { p -> replace(la.id) { it.copy(progress = p) } }) {
+                            val onProgress = throttledProgressUpdater(la.id)
+                            when (val r = attachmentsRepo.upload(la, onProgress)) {
                                 is ApiResult.Ok -> {
                                     replace(la.id) {
                                         it.copy(
@@ -420,6 +430,24 @@ class ChatViewModel
             id: String,
             f: (AttachmentUi) -> AttachmentUi,
         ) = extra.update { s -> s.copy(attachments = s.attachments.map { if (it.id == id) f(it) else it }) }
+
+        private fun throttledProgressUpdater(id: String): (Float) -> Unit {
+            var lastProgress = -1f
+            var lastUpdateMs = 0L
+            return { progress ->
+                val nowMs = System.nanoTime() / 1_000_000L
+                val delta = abs(progress - lastProgress)
+                if (progress >= 1f ||
+                    lastProgress < 0f ||
+                    delta >= UPLOAD_PROGRESS_MIN_DELTA ||
+                    nowMs - lastUpdateMs >= UPLOAD_PROGRESS_MIN_INTERVAL_MS
+                ) {
+                    lastProgress = progress
+                    lastUpdateMs = nowMs
+                    replace(id) { it.copy(progress = progress) }
+                }
+            }
+        }
 
         // ───────────────────────────── Envío ─────────────────────────────
 
@@ -534,6 +562,8 @@ class ChatViewModel
         }
 
         companion object {
+            private const val UPLOAD_PROGRESS_MIN_DELTA = 0.05f
+            private const val UPLOAD_PROGRESS_MIN_INTERVAL_MS = 100L
             private val drafts = java.util.concurrent.ConcurrentHashMap<String, String>()
 
             fun clearDrafts() {

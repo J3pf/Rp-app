@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -47,14 +48,15 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.ui.mesh.layout.LayoutBounds
-import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.NodeDisplayMode
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
 import dev.j3pf.rp.ui.mesh.layout.PositionedNode
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.util.currentTimeMillis
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.hypot
@@ -67,6 +69,7 @@ import kotlin.math.sin
  * interactive Agent Cards, orthogonal bus connectors routed through row gaps,
  * and particles that travel along the connector.
  */
+@OptIn(FlowPreview::class)
 @Composable
 fun MeshCanvas(
     layout: MeshLayoutResult?,
@@ -76,6 +79,7 @@ fun MeshCanvas(
     onNodeClick: (String) -> Unit,
     onEdgeClick: (String) -> Unit,
     onViewportSizeChanged: (Float, Float) -> Unit = { _, _ -> },
+    onCardHeightsChanged: (Map<String, Float>) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val scheme = MaterialTheme.colorScheme
@@ -138,6 +142,17 @@ fun MeshCanvas(
             val intervals = floatArrayOf(15f, 15f)
             Array(30) { phase -> PathEffect.dashPathEffect(intervals, phase.toFloat()) }
         }
+    val activeGlowStroke = remember { Stroke(width = 3.5f, cap = StrokeCap.Round) }
+    val activeEdgeStroke = remember { Stroke(width = 2f, cap = StrokeCap.Round) }
+    val idleEdgeStroke = remember { Stroke(width = 1.2f, cap = StrokeCap.Round) }
+    val activePendingAskStrokes =
+        remember(dashEffects) {
+            Array(dashEffects.size) { idx -> Stroke(width = 2f, cap = StrokeCap.Round, pathEffect = dashEffects[idx]) }
+        }
+    val idlePendingAskStrokes =
+        remember(dashEffects) {
+            Array(dashEffects.size) { idx -> Stroke(width = 1.2f, cap = StrokeCap.Round, pathEffect = dashEffects[idx]) }
+        }
     val bubblesByEdge =
         remember(activeBubbles, layout) {
             val nodes = layout?.nodes.orEmpty()
@@ -155,10 +170,38 @@ fun MeshCanvas(
 
     val cardHeights = remember { mutableStateMapOf<String, Float>() }
     val textMeasurer = rememberTextMeasurer()
+    val bubbleTextStyle =
+        remember(scheme.onSurfaceVariant) {
+            TextStyle(
+                fontSize = 10.sp,
+                color = scheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    val measuredBubblesByEdge =
+        remember(bubblesByEdge, textMeasurer, bubbleTextStyle) {
+            bubblesByEdge.values.mapNotNull { edgeBubbles ->
+                val topBubble = edgeBubbles.maxByOrNull { it.expiresAtMs } ?: return@mapNotNull null
+                val bubbleText = formatMeshCommText(topBubble.comm.text)
+                val display = if (bubbleText.length > 25) bubbleText.take(24) + "…" else bubbleText
+                val textLayout = textMeasurer.measure(text = display, style = bubbleTextStyle)
+                topBubble to textLayout
+            }
+        }
 
     LaunchedEffect(layout) {
         val currentIds = layout?.nodes?.keys ?: emptySet()
         cardHeights.keys.retainAll(currentIds)
+    }
+
+    LaunchedEffect(onCardHeightsChanged) {
+        snapshotFlow { cardHeights.toMap() }
+            .debounce(CARD_HEIGHTS_DEBOUNCE_MS)
+            .collect { heights ->
+                if (heights.isNotEmpty()) {
+                    onCardHeightsChanged(heights)
+                }
+            }
     }
 
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
@@ -171,25 +214,15 @@ fun MeshCanvas(
             onViewportSizeChanged(widthDp, heightDp)
         }
 
-        // Single batched layout pass when measured card heights differ (C7 W1/W2)
-        val currentLayout =
-            remember(layout, widthDp, cardHeights.toMap()) {
-                layout?.let { inputLayout ->
-                    if (cardHeights.isEmpty()) {
-                        inputLayout
-                    } else {
-                        MeshLayoutEngine().computeLayout(
-                            nodes = inputLayout.nodes.values.map { it.node },
-                            edges = inputLayout.edges.map { it.edge },
-                            width = widthDp,
-                            previousLayout = inputLayout,
-                            cardHeights = cardHeights.toMap(),
-                        )
-                    }
-                }
+        val activeLayout = layout
+        val nodesById =
+            remember(activeLayout) {
+                activeLayout
+                    ?.nodes
+                    ?.values
+                    ?.associate { it.node.agentId to it.node }
+                    .orEmpty()
             }
-
-        val activeLayout = currentLayout ?: layout
         val bounds = activeLayout?.bounds ?: LayoutBounds(0f, 0f, 0f, 0f)
         val canvasCardBounds =
             remember(activeLayout) {
@@ -339,46 +372,36 @@ fun MeshCanvas(
                             drawPath(
                                 path = path,
                                 color = scheme.primary.copy(alpha = 0.28f),
-                                style =
-                                    Stroke(
-                                        width = 3.5f,
-                                        cap = StrokeCap.Round,
-                                    ),
+                                style = activeGlowStroke,
                             )
                         }
 
                         val edgePulse = if (reducedMotion) 0f else pulse(currentTimeMs)
                         val edgeColor = edgeTint.copy(alpha = if (edge.pendingAsk) 0.55f + 0.4f * edgePulse else 0.75f)
-                        val edgePathEffect =
+                        val edgeStroke =
                             if (edge.pendingAsk) {
                                 val phaseIdx = if (reducedMotion) 0 else ((currentTimeMs / 55L) % 30L).toInt().coerceIn(0, 29)
-                                dashEffects[phaseIdx]
+                                if (active) activePendingAskStrokes[phaseIdx] else idlePendingAskStrokes[phaseIdx]
                             } else {
-                                null
+                                if (active) activeEdgeStroke else idleEdgeStroke
                             }
 
                         drawPath(
                             path = path,
                             color = edgeColor,
-                            style =
-                                Stroke(
-                                    width = if (active) 2f else 1.2f,
-                                    cap = StrokeCap.Round,
-                                    pathEffect = edgePathEffect,
-                                ),
+                            style = edgeStroke,
                         )
                     }
 
-                    // In-flight comms and speech bubbles
-                    bubblesByEdge.values.forEach { edgeBubbles ->
-                        val visibleBubbles = edgeBubbles.sortedByDescending { it.expiresAtMs }.take(1)
-                        val firstComm = visibleBubbles.first().comm
-                        val firstSender = firstComm.fromAgentId?.let(curLayout.nodes::get) ?: return@forEach
-                        val firstReceiver = firstComm.toAgentId?.let(curLayout.nodes::get) ?: return@forEach
+                    // In-flight comms and speech bubbles (TextLayoutResult pre-measured outside DrawScope)
+                    measuredBubblesByEdge.forEach { (bubble, textLayoutResult) ->
+                        val comm = bubble.comm
+                        val firstSender = comm.fromAgentId?.let(curLayout.nodes::get) ?: return@forEach
+                        val firstReceiver = comm.toAgentId?.let(curLayout.nodes::get) ?: return@forEach
                         val firstEdge =
                             curLayout.edges.firstOrNull {
-                                (it.edge.a == firstComm.fromAgentId && it.edge.b == firstComm.toAgentId) ||
-                                    (it.edge.a == firstComm.toAgentId && it.edge.b == firstComm.fromAgentId)
+                                (it.edge.a == comm.fromAgentId && it.edge.b == comm.toAgentId) ||
+                                    (it.edge.a == comm.toAgentId && it.edge.b == comm.fromAgentId)
                             }
 
                         val edgeFromX = firstEdge?.fromX ?: firstSender.x
@@ -397,63 +420,48 @@ fun MeshCanvas(
                         val midpointX = if (firstEdge?.routePoints?.isNotEmpty() == true) dropLineMidpointX else (edgeFromX + edgeToX) / 2f
                         val midpointY = if (firstEdge?.routePoints?.isNotEmpty() == true) dropLineMidpointY else (edgeFromY + edgeToY) / 2f
 
-                        visibleBubbles.forEach bubbleLoop@{ bubble ->
-                            val comm = bubble.comm
-                            val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
-                            val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
+                        val startAt = bubble.expiresAtMs - BUBBLE_LIFETIME_MS
+                        val progress = ((currentTimeMs - startAt).toFloat() / BUBBLE_LIFETIME_MS).coerceIn(0f, 1f)
 
-                            // Travelling comm particle
-                            if (!reducedMotion) {
-                                val point =
-                                    firstEdge?.let { pointAlongEdge(it, progress) }
-                                        ?: Offset(
-                                            edgeFromX + (edgeToX - edgeFromX) * progress,
-                                            edgeFromY + (edgeToY - edgeFromY) * progress,
-                                        )
-                                drawCircle(
-                                    color = scheme.primary.copy(alpha = 0.25f),
-                                    radius = 5f,
-                                    center = point,
-                                )
-                                drawCircle(
-                                    color = scheme.primary,
-                                    radius = 2.5f,
-                                    center = point,
-                                )
-                            }
-
-                            // Speech bubble with message preview positioned clear of every card.
-                            val bubbleText = formatMeshCommText(comm.text)
-                            val display = if (bubbleText.length > 25) bubbleText.take(24) + "…" else bubbleText
-                            val textLayoutResult =
-                                textMeasurer.measure(
-                                    text = display,
-                                    style =
-                                        TextStyle(
-                                            fontSize = 10.sp,
-                                            color = scheme.onSurfaceVariant,
-                                            textAlign = TextAlign.Center,
-                                        ),
-                                )
-                            val bubbleHalfWidth = (textLayoutResult.size.width / density.density + 16f) / 2f
-                            val safeMidpointY =
-                                safeCommBubbleCenterY(
-                                    midpointY = midpointY,
-                                    senderBottom = upperNode.bottom,
-                                    receiverTop = lowerNode.top,
-                                    otherCards = canvasCardBounds,
-                                    bubbleCenterX = midpointX,
-                                    bubbleHalfWidth = bubbleHalfWidth,
-                                )
-                            drawSpeechBubble(
-                                textLayoutResult = textLayoutResult,
-                                density = density,
-                                centerX = midpointX,
-                                centerY = safeMidpointY,
-                                width = bubbleHalfWidth * 2f,
-                                background = scheme.surfaceVariant,
+                        // Travelling comm particle
+                        if (!reducedMotion) {
+                            val point =
+                                firstEdge?.let { pointAlongEdge(it, progress) }
+                                    ?: Offset(
+                                        edgeFromX + (edgeToX - edgeFromX) * progress,
+                                        edgeFromY + (edgeToY - edgeFromY) * progress,
+                                    )
+                            drawCircle(
+                                color = scheme.primary.copy(alpha = 0.25f),
+                                radius = 5f,
+                                center = point,
+                            )
+                            drawCircle(
+                                color = scheme.primary,
+                                radius = 2.5f,
+                                center = point,
                             )
                         }
+
+                        // Speech bubble with message preview positioned clear of every card.
+                        val bubbleHalfWidth = (textLayoutResult.size.width / density.density + 16f) / 2f
+                        val safeMidpointY =
+                            safeCommBubbleCenterY(
+                                midpointY = midpointY,
+                                senderBottom = upperNode.bottom,
+                                receiverTop = lowerNode.top,
+                                otherCards = canvasCardBounds,
+                                bubbleCenterX = midpointX,
+                                bubbleHalfWidth = bubbleHalfWidth,
+                            )
+                        drawSpeechBubble(
+                            textLayoutResult = textLayoutResult,
+                            density = density,
+                            centerX = midpointX,
+                            centerY = safeMidpointY,
+                            width = bubbleHalfWidth * 2f,
+                            background = scheme.surfaceVariant,
+                        )
                     }
                 }
             }
@@ -461,7 +469,7 @@ fun MeshCanvas(
             // Render interactive Agent Cards and Leaf Items in DP space with full legibility
             activeLayout?.nodes?.values?.forEach { positioned ->
                 val node = positioned.node
-                val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
+                val parentNode = positioned.parentId?.let(nodesById::get)
                 val nodeModifier =
                     Modifier.meshNodePlacement(
                         positioned = positioned,
@@ -659,3 +667,4 @@ private const val MAX_ZOOM = 2.5f
 private const val ACTIVE_EDGE_MS = 20_000L
 private const val BUBBLE_LIFETIME_MS = 6_000L
 private const val MESH_ANIMATION_INTERVAL_NANOS = 33_000_000L
+private const val CARD_HEIGHTS_DEBOUNCE_MS = 32L

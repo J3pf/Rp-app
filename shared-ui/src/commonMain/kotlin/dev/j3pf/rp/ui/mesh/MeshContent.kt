@@ -62,6 +62,7 @@ fun MeshScreenContent(
     onNodeClick: (String) -> Unit = {},
     onEdgeClick: (String) -> Unit = {},
     onViewportSizeChanged: (Float, Float) -> Unit = { _, _ -> },
+    onCardHeightsChanged: (Map<String, Float>) -> Unit = {},
     onDismissNodeDetail: () -> Unit = {},
     onViewConversation: (String) -> Unit = {},
     onDismissConversation: () -> Unit = {},
@@ -198,6 +199,7 @@ fun MeshScreenContent(
                         onNodeClick = onNodeClick,
                         onEdgeClick = onEdgeClick,
                         onViewportSizeChanged = onViewportSizeChanged,
+                        onCardHeightsChanged = onCardHeightsChanged,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                 }

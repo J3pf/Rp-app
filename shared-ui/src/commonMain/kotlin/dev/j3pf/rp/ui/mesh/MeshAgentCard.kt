@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -38,7 +37,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -372,20 +373,21 @@ fun meshStatusColor(
 @Composable
 private fun WorkingActivityDots() {
     val transition = rememberInfiniteTransition(label = "workingDots")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 800, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "dotsPulse",
-    )
+    val alphaState =
+        transition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 800, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "dotsPulse",
+        )
     Row(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.graphicsLayer { this.alpha = alpha },
+        modifier = Modifier.graphicsLayer { this.alpha = alphaState.value },
     ) {
         repeat(3) {
             Box(
@@ -412,33 +414,39 @@ private fun Modifier.workingCardBorder(
         return this.border(1.5.dp, primaryColor, RpShapes.medium)
     }
     val transition = rememberInfiniteTransition(label = "workingCardBorder")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 2000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-        label = "workingBorderProgress",
-    )
+    val progressState =
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 2000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+            label = "workingBorderProgress",
+        )
     return this.drawWithCache {
-        val strokePx = 1.5.dp.toPx()
+        val stroke = Stroke(width = 1.5.dp.toPx())
         val cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())
+        val brush =
+            Brush.linearGradient(
+                colors = listOf(primaryColor, secondaryColor, primaryColor),
+                start = Offset.Zero,
+                end = Offset(size.width.coerceAtLeast(1f), size.height.coerceAtLeast(1f)),
+                tileMode = TileMode.Repeated,
+            )
         onDrawWithContent {
             drawContent()
-            val offset = progress * (size.width + size.height)
-            val brush =
-                Brush.linearGradient(
-                    colors = listOf(primaryColor, secondaryColor, primaryColor),
-                    start = Offset(offset, offset),
-                    end = Offset(offset + size.width, offset + size.height),
+            val offset = progressState.value * (size.width + size.height)
+            translate(left = offset, top = offset) {
+                drawRoundRect(
+                    brush = brush,
+                    topLeft = Offset(-offset, -offset),
+                    size = size,
+                    style = stroke,
+                    cornerRadius = cornerRadius,
                 )
-            drawRoundRect(
-                brush = brush,
-                style = Stroke(width = strokePx),
-                cornerRadius = cornerRadius,
-            )
+            }
         }
     }
 }

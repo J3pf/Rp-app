@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,9 +86,28 @@ fun ChatItemView(
     spacingMode: String = "normal",
     onRetryUserMessage: ((UserMsg) -> Unit)? = null,
 ) {
+    ChatItemView(
+        item = item,
+        toolLookup = { id -> tools[id] },
+        busyPromptId = busyPromptId,
+        onAnswerPrompt = onAnswerPrompt,
+        spacingMode = spacingMode,
+        onRetryUserMessage = onRetryUserMessage,
+    )
+}
+
+@Composable
+fun ChatItemView(
+    item: ChatItem,
+    toolLookup: (String) -> ToolRun?,
+    busyPromptId: String?,
+    onAnswerPrompt: (Prompt, Answer) -> Unit,
+    spacingMode: String = "normal",
+    onRetryUserMessage: ((UserMsg) -> Unit)? = null,
+) {
     when (item) {
         is UserMsg -> UserBubble(item, spacingMode, onRetryUserMessage)
-        is AssistantMsg -> AssistantBubble(item, tools, spacingMode)
+        is AssistantMsg -> AssistantBubble(item, toolLookup, spacingMode)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item, spacingMode)
         is SubagentCardItem -> SubagentCard(item.info, spacingMode = spacingMode)
@@ -226,7 +246,7 @@ private fun UserBubble(
 @Composable
 private fun AssistantBubble(
     m: AssistantMsg,
-    tools: Map<String, ToolRun>,
+    toolLookup: (String) -> ToolRun?,
     spacingMode: String = "normal",
 ) {
     val blockSpacing =
@@ -284,30 +304,30 @@ private fun AssistantBubble(
                 is Block.Text -> {
                     if (b.text.isNotBlank()) {
                         Box(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = vPad)) {
-                            RpMarkdown(b.text, spacingMode = spacingMode)
+                            RpMarkdown(b.text, spacingMode = spacingMode, isStreaming = m.streaming)
                         }
                     }
                 }
 
                 is Block.Thinking -> {
-                    if (b.text.isNotBlank()) ThinkingBlock(b.text, key = "${m.key}-$i", spacingMode = spacingMode)
+                    if (b.text.isNotBlank()) {
+                        ThinkingBlock(
+                            text = b.text,
+                            key = "${m.key}-$i",
+                            spacingMode = spacingMode,
+                            isStreaming = m.streaming,
+                        )
+                    }
                 }
 
                 is Block.ToolCall -> {
-                    val run =
-                        b.toolCallId?.let { tools[it] }
-                            ?: ToolRun(
-                                b.toolCallId ?: "${m.key}-$i",
-                                b.name ?: "…",
-                                b.args,
-                                if (m.streaming) ToolStatus.RUNNING else ToolStatus.OK,
-                            )
-                    val sub = run.subagent
-                    if (sub != null) {
-                        SubagentCard(sub, spacingMode = spacingMode)
-                    } else {
-                        ToolCard(run, spacingMode = spacingMode)
-                    }
+                    ToolCallSlot(
+                        block = b,
+                        fallbackId = "${m.key}-$i",
+                        streaming = m.streaming,
+                        toolLookup = toolLookup,
+                        spacingMode = spacingMode,
+                    )
                 }
             }
         }
@@ -363,7 +383,11 @@ private fun AssistantBubble(
             }
         }
         if (m.streaming && m.blocks.isEmpty()) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            if (LocalReducedMotion.current) {
+                CircularProgressIndicator(progress = { 0.75f }, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
         }
         m.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         if (m.stopReason ==
@@ -375,10 +399,38 @@ private fun AssistantBubble(
 }
 
 @Composable
+private fun ToolCallSlot(
+    block: Block.ToolCall,
+    fallbackId: String,
+    streaming: Boolean,
+    toolLookup: (String) -> ToolRun?,
+    spacingMode: String,
+) {
+    val lookedUpRun by remember(block.toolCallId, toolLookup) {
+        derivedStateOf { block.toolCallId?.let(toolLookup) }
+    }
+    val run =
+        lookedUpRun
+            ?: ToolRun(
+                block.toolCallId ?: fallbackId,
+                block.name ?: "…",
+                block.args,
+                if (streaming) ToolStatus.RUNNING else ToolStatus.OK,
+            )
+    val sub = run.subagent
+    if (sub != null) {
+        SubagentCard(sub, spacingMode = spacingMode)
+    } else {
+        ToolCard(run, spacingMode = spacingMode)
+    }
+}
+
+@Composable
 private fun ThinkingBlock(
     text: String,
     key: String,
     spacingMode: String = "normal",
+    isStreaming: Boolean = false,
 ) {
     var open by rememberSaveable(key) { mutableStateOf(true) }
     val vPad =
@@ -438,6 +490,7 @@ private fun ThinkingBlock(
                         text = text,
                         spacingMode = spacingMode,
                         textStyleOverride = bodyStyle,
+                        isStreaming = isStreaming,
                     )
                 } else {
                     Text(
@@ -567,7 +620,12 @@ fun ToolCard(
                     )
                 }
                 when (run.status) {
-                    ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
+                    ToolStatus.RUNNING ->
+                        if (LocalReducedMotion.current) {
+                            CircularProgressIndicator(progress = { 0.75f }, modifier = Modifier.size(13.dp), strokeWidth = 1.8.dp)
+                        } else {
+                            CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.8.dp)
+                        }
                     ToolStatus.OK -> Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     ToolStatus.ERROR -> Text("✕", color = RpColors.danger, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
@@ -841,7 +899,11 @@ fun SubagentCard(
                 ) {
                     when (info.status) {
                         "running" -> {
-                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            if (LocalReducedMotion.current) {
+                                CircularProgressIndicator(progress = { 0.75f }, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            } else {
+                                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            }
                             Text(
                                 "en ejecución",
                                 style = MaterialTheme.typography.labelSmall,

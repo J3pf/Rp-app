@@ -112,6 +112,9 @@ import dev.j3pf.rp.ui.theme.resolveThemeChoice
 import dev.j3pf.rp.ui.util.agentTitle
 import dev.j3pf.rp.ui.util.relativeTime
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Composable
@@ -125,50 +128,44 @@ fun RemotePiApp(controller: SharedAppController? = null) {
         }
     }
 
-    val settings by appController.settings.collectAsState()
-    val machines by appController.machines.collectAsState()
-    val agents by appController.agents.collectAsState()
-    val conn by appController.connState.collectAsState()
     val route by appController.currentRoute.collectAsState()
-    val pairState by appController.pairState.collectAsState()
-    val agentsState by appController.agentsUiState.collectAsState(initial = AgentsUiState())
-    val pendingState by appController.pendingUiState.collectAsState(initial = PendingUiState())
-    val meshState by appController.meshState.collectAsState()
-    val settingsState by appController.settingsUiState.collectAsState(initial = SettingsUiState())
-    val newAgentUi by appController.newAgentUiState.collectAsState(initial = NewAgentUi())
-    val devices by appController.devices.collectAsState()
-    val pairCode by appController.pairCode.collectAsState()
-    val openPrompts by appController.openPrompts.collectAsState()
-    val activePromptId by appController.activePromptId.collectAsState()
-    val busyPromptId by appController.busyPromptId.collectAsState()
-    val promptSheetState by appController.promptSheetState.collectAsState()
-    val promptSheetError by appController.promptSheetError.collectAsState()
-    val promptSheetAuthMessage by appController.promptSheetAuthMessage.collectAsState()
-    val pendingForgetAgentId by appController.pendingForgetAgentId.collectAsState()
-    val actionMessage by appController.actionMessage.collectAsState()
-    val isAppLocked by appController.isAppLocked.collectAsState()
-    val appLockMessage by appController.appLockMessage.collectAsState()
-    val archivedAgents by appController.archivedAgents.collectAsState()
-    val archivedLoading by appController.archivedLoading.collectAsState()
-    val archivedError by appController.archivedError.collectAsState()
-    val archivedNextBefore by appController.archivedNextBefore.collectAsState()
+    val themeChoiceFlow =
+        remember(appController) {
+            combine(
+                appController.settings,
+                appController.machines,
+                appController.agents,
+            ) { s, machines, agents ->
+                resolveThemeChoice(s.appTheme, machines, agents)
+            }.distinctUntilChanged()
+        }
+    val themeChoice by themeChoiceFlow.collectAsState(
+        initial =
+            resolveThemeChoice(
+                appController.settings.value.appTheme,
+                appController.machines.value,
+                appController.agents.value,
+            ),
+    )
+    val lockedFlow =
+        remember(appController) {
+            combine(
+                appController.settings,
+                appController.isAppLocked,
+                appController.settingsUiState,
+            ) { s, isLocked, st ->
+                s.appLock && isLocked && st.session != null
+            }.distinctUntilChanged()
+        }
+    val locked by lockedFlow.collectAsState(initial = false)
 
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(actionMessage) {
-        val msg = actionMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(msg)
-        appController.consumeActionMessage()
-    }
+    ActionSnackbarEffect(appController = appController, snackbarHostState = snackbarHostState)
 
-    val themeChoice =
-        remember(settings.appTheme, machines, agents) {
-            resolveThemeChoice(settings.appTheme, machines, agents)
-        }
     val reducedMotion = rememberIsReducedMotion()
-    val locked = settings.appLock && isAppLocked && settingsState.session != null
 
-    LaunchedEffect(settings.appLock, isAppLocked, settingsState.session) {
-        if (settings.appLock && isAppLocked && settingsState.session != null) {
+    LaunchedEffect(locked) {
+        if (locked) {
             appController.unlockApp()
         }
     }
@@ -186,299 +183,363 @@ fun RemotePiApp(controller: SharedAppController? = null) {
                             .statusBarsPadding(),
                 ) {
                     if (locked) {
+                        val appLockMessage by appController.appLockMessage.collectAsState()
                         LockScreen(
                             onUnlock = appController::unlockApp,
                             message = appLockMessage,
                         )
                     } else {
-                    when (val current = route) {
-                        is OnboardingRoute -> {
-                            OnboardingContent(
-                                onStart = { appController.navigateTo(PairRoute()) },
-                            )
-                        }
-
-                        is PairRoute -> {
-                            PairContent(
-                                state = pairState,
-                                initialUrl = current.url,
-                                initialCode = current.code,
-                                onScan = { appController.navigateTo(ScanRoute) },
-                                onPair = appController::pair,
-                                onClearError = appController::clearPairError,
-                            )
-                        }
-
-                        is ScanRoute -> {
-                            QrScannerView(
-                                onResult = appController::onQrScanned,
-                                onCancel = { appController.navigateBack() },
-                            )
-                        }
-
-                        is ChatRoute -> {
-                            SharedChatScreen(
-                                agentId = current.agentId,
-                                readOnly = current.readOnly,
-                                appController = appController,
-                                snackbarHostState = snackbarHostState,
-                            )
-                        }
-
-                        is ArchivedAgentsRoute -> {
-                            SharedArchivedScreen(
-                                agents = archivedAgents,
-                                loading = archivedLoading,
-                                error = archivedError,
-                                nextBefore = archivedNextBefore,
-                                onBack = { appController.navigateBack() },
-                                onOpenChat = { id -> appController.navigateTo(ChatRoute(id, readOnly = true)) },
-                                onPurge = appController::purgeArchived,
-                                onRetry = { appController.loadArchived() },
-                                onLoadMore = appController::loadMoreArchived,
-                            )
-                        }
-
-                        is NewAgentRoute -> {
-                            val canGoUp =
-                                remember(newAgentUi.form.path, newAgentUi.host) {
-                                    val p = newAgentUi.form.path.trimEnd('/', '\\')
-                                    val roots = newAgentUi.host?.roots.orEmpty()
-                                    p.isNotBlank() &&
-                                        roots.none { it.trimEnd('/', '\\') == p } &&
-                                        (p.contains('/') || p.contains('\\'))
-                                }
-                            NewAgentContent(
-                                ui = newAgentUi,
-                                onBack = { appController.navigateBack() },
-                                onPickMachine = appController::pickNewAgentMachine,
-                                onOpenDir = appController::openNewAgentDir,
-                                onEnterDir = appController::enterNewAgentSubDir,
-                                onUpDir = appController::upNewAgentDir,
-                                canGoUp = canGoUp,
-                                onSetLauncher = { l -> appController.updateNewAgentForm { it.copy(launcher = l) } },
-                                onSetBackend = { b -> appController.updateNewAgentForm { it.copy(backend = b) } },
-                                onSetName = { n -> appController.updateNewAgentForm { it.copy(name = n) } },
-                                onSetPrompt = { p -> appController.updateNewAgentForm { it.copy(initialPrompt = p) } },
-                                onCreate = appController::createNewAgent,
-                                herdrSection = {
-                                    HerdrPlacementSection(
-                                        ui = newAgentUi,
-                                        onSetPlacement = appController::setNewAgentPlacement,
-                                        onSetWorkspace = { id -> appController.updateNewAgentForm { it.copy(workspaceId = id) } },
-                                        onSetPane = { id -> appController.updateNewAgentForm { it.copy(paneId = id) } },
-                                        onSetDirection = { d -> appController.updateNewAgentForm { it.copy(direction = d) } },
-                                        onRefreshLayout = appController::loadNewAgentHerdrLayout,
-                                    )
-                                },
-                                snackbarHostState = snackbarHostState,
-                            )
-                        }
-
-                        is DevicesRoute -> {
-                            DevicesContent(
-                                devices = devices,
-                                onBack = { appController.navigateBack() },
-                                onRevoke = appController::revokeDevice,
-                            )
-                        }
-
-                        is MachinesRoute -> {
-                            MachinesContent(
-                                machines = machines,
-                                onBack = { appController.navigateBack() },
-                                onEditMachine = appController::editMachine,
-                                onRevokeMachine = appController::revokeMachine,
-                            )
-                        }
-
-                        is AddMachineRoute -> {
-                            val clipboard = LocalClipboardManager.current
-                            AddMachineContent(
-                                relayUrl = settingsState.session?.relayUrl.orEmpty(),
-                                pairCode = pairCode,
-                                onBack = { appController.navigateBack() },
-                                onCopyCommand = { cmd -> clipboard.setText(AnnotatedString(cmd)) },
-                                onNewCode = appController::generatePairCode,
-                            )
-                        }
-
-                        is NotificationSettingsRoute -> {
-                            NotificationSettingsContent(
-                                health = HealthState(),
-                                settings = settings,
-                                machines = machines,
-                                agents = agents,
-                                onBack = { appController.navigateBack() },
-                                onOpenSystemSettings = {},
-                                onSendTestNotification = appController::sendTestNotification,
-                                onSetDirectPush = appController::setDirectPush,
-                                onSetCategory = appController::setCategoryEnabled,
-                                onSetCriticalAlways = appController::setCriticalAlways,
-                                onUnmuteAgent = { id -> appController.setAgentMuted(id, false) },
-                                onSetMachineMute = appController::setMachineMute,
-                                onSetQuietHours = appController::setMachineQuietHours,
-                                onSetMachineCategory = appController::setMachineCategory,
-                            )
-                        }
-
-                        is SecuritySettingsRoute -> {
-                            SecurityContent(
-                                settings = settings,
-                                onBack = { appController.navigateBack() },
-                                onSetRequireUnlock = appController::setRequireUnlock,
-                                onSetAppLock = appController::setAppLock,
-                                onSetFlagSecure = appController::setFlagSecure,
-                            )
-                        }
-
-                        is BatteryRoute -> {
-                            BatteryContent(
-                                batteryExcluded = true,
-                                onBack = { appController.navigateBack() },
-                                onRequestIgnoreBatteryOptimizations = {},
-                                onOpenBatterySettings = {},
-                            )
-                        }
-
-                        is AboutRoute -> {
-                            AboutContent(
-                                versionName = appController.appVersion,
-                                versionCode = "1",
-                                flavor = "APNs",
-                                onBack = { appController.navigateBack() },
-                            )
-                        }
-
-                        else -> {
-                            val selectedTab =
-                                when (current) {
-                                    is MeshRoute -> AppTab.MESH
-                                    is PendingRoute -> AppTab.PENDING
-                                    is SettingsRoute -> AppTab.SETTINGS
-                                    else -> AppTab.AGENTS
-                                }
-                            Scaffold(
-                                contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                                snackbarHost = { SnackbarHost(snackbarHostState) },
-                                bottomBar = {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        if (selectedTab == AppTab.AGENTS) {
-                                            QuotaDynamicIsland(
-                                                machines = agentsState.machines,
-                                                selectedMachineId =
-                                                    if (agentsState.selected == "all") null else agentsState.selected,
-                                            )
-                                        }
-                                        AppBottomBar(
-                                            selectedTab = selectedTab,
-                                            pending = openPrompts.size,
-                                            onSelectTab = appController::selectTab,
-                                        )
-                                    }
-                                },
-                            ) { innerPadding ->
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .padding(innerPadding),
-                                ) {
-                                    when (selectedTab) {
-                                        AppTab.AGENTS -> {
-                                            AgentsContent(
-                                                state = agentsState,
-                                                conn = conn,
-                                                snackbarHostState = snackbarHostState,
-                                                bottomBar = {},
-                                                onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
-                                                onNewAgent = { appController.navigateTo(NewAgentRoute) },
-                                                onSelect = appController::selectContext,
-                                                onRefresh = appController::refreshAll,
-                                                onResume = { agent, _ -> appController.resumeAgent(agent) },
-                                                onForget = appController::requestForgetAgent,
-                                                onOpenArchived = { appController.navigateTo(ArchivedAgentsRoute) },
-                                            )
-                                        }
-
-                                        AppTab.MESH -> {
-                                            MeshScreenContent(
-                                                uiState = meshState.copy(isConnected = conn == ConnState.Connected),
-                                                onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
-                                                onToggleListView = appController::toggleMeshListView,
-                                                onSelectMachine = appController::selectMeshMachine,
-                                                onSelectGroup = appController::selectMeshGroup,
-                                                onNodeClick = appController::selectMeshNode,
-                                                onEdgeClick = appController::onMeshEdgeClick,
-                                                onViewportSizeChanged = appController::onMeshViewportSizeChanged,
-                                                onDismissNodeDetail = appController::dismissMeshNodeDetail,
-                                                onViewConversation = appController::openMeshConversation,
-                                                onDismissConversation = appController::dismissMeshConversation,
-                                                onLoadMoreConversation = appController::loadMoreMeshConversation,
-                                                onRetry = { appController.refreshMesh() },
-                                            )
-                                        }
-
-                                        AppTab.PENDING -> {
-                                            PendingContent(
-                                                state = pendingState,
-                                                onOpenPrompt = appController::openPromptSheet,
-                                                onSelect = appController::selectContext,
-                                                busyPromptId = busyPromptId,
-                                                onQuickAnswer = { p, ans -> appController.answerPrompt(p.promptId, ans) },
-                                            )
-                                        }
-
-                                        AppTab.SETTINGS -> {
-                                            SettingsContent(
-                                                state = settingsState,
-                                                onNav = appController::navigateSettingsDest,
-                                                onSelectTheme = appController::setTheme,
-                                                onLogout = appController::logout,
-                                                onSelectFontScale = appController::setChatFontScale,
-                                                onSelectMessageSpacing = appController::setChatMessageSpacing,
-                                                versionName = appController.appVersion,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (pendingForgetAgentId != null) {
-                        SharedAgentCloseConfirmationDialog(
-                            onConfirm = {
-                                val closingChatAgent = (route as? ChatRoute)?.agentId == pendingForgetAgentId
-                                appController.confirmForgetAgent {
-                                    if (closingChatAgent) {
-                                        appController.navigateBack()
-                                    }
-                                }
-                            },
-                            onDismiss = appController::cancelForgetAgent,
-                        )
-                    }
-
-                    val promptId = activePromptId
-                    if (promptId != null) {
-                        val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
-                        PromptSheetChrome(
-                            state = promptSheetState,
-                            onDismissRequest = appController::dismissPromptSheet,
-                            errorMessage = promptSheetError,
-                            authMessage = promptSheetAuthMessage,
-                        ) {
-                            if (activePrompt != null) {
-                                PromptContent(
-                                    prompt = activePrompt,
-                                    busy = busyPromptId == activePrompt.promptId,
-                                    onAnswer = { ans -> appController.answerPrompt(activePrompt.promptId, ans) },
+                        when (val current = route) {
+                            is OnboardingRoute -> {
+                                OnboardingContent(
+                                    onStart = { appController.navigateTo(PairRoute()) },
                                 )
                             }
+
+                            is PairRoute -> {
+                                val pairState by appController.pairState.collectAsState()
+                                PairContent(
+                                    state = pairState,
+                                    initialUrl = current.url,
+                                    initialCode = current.code,
+                                    onScan = { appController.navigateTo(ScanRoute) },
+                                    onPair = appController::pair,
+                                    onClearError = appController::clearPairError,
+                                )
+                            }
+
+                            is ScanRoute -> {
+                                QrScannerView(
+                                    onResult = appController::onQrScanned,
+                                    onCancel = { appController.navigateBack() },
+                                )
+                            }
+
+                            is ChatRoute -> {
+                                SharedChatScreen(
+                                    agentId = current.agentId,
+                                    readOnly = current.readOnly,
+                                    appController = appController,
+                                    snackbarHostState = snackbarHostState,
+                                )
+                            }
+
+                            is ArchivedAgentsRoute -> {
+                                val archivedAgents by appController.archivedAgents.collectAsState()
+                                val archivedLoading by appController.archivedLoading.collectAsState()
+                                val archivedError by appController.archivedError.collectAsState()
+                                val archivedNextBefore by appController.archivedNextBefore.collectAsState()
+                                SharedArchivedScreen(
+                                    agents = archivedAgents,
+                                    loading = archivedLoading,
+                                    error = archivedError,
+                                    nextBefore = archivedNextBefore,
+                                    onBack = { appController.navigateBack() },
+                                    onOpenChat = { id -> appController.navigateTo(ChatRoute(id, readOnly = true)) },
+                                    onPurge = appController::purgeArchived,
+                                    onRetry = { appController.loadArchived() },
+                                    onLoadMore = appController::loadMoreArchived,
+                                )
+                            }
+
+                            is NewAgentRoute -> {
+                                val newAgentUi by appController.newAgentUiState.collectAsState(initial = NewAgentUi())
+                                val canGoUp =
+                                    remember(newAgentUi.form.path, newAgentUi.host) {
+                                        val p = newAgentUi.form.path.trimEnd('/', '\\')
+                                        val roots = newAgentUi.host?.roots.orEmpty()
+                                        p.isNotBlank() &&
+                                            roots.none { it.trimEnd('/', '\\') == p } &&
+                                            (p.contains('/') || p.contains('\\'))
+                                    }
+                                NewAgentContent(
+                                    ui = newAgentUi,
+                                    onBack = { appController.navigateBack() },
+                                    onPickMachine = appController::pickNewAgentMachine,
+                                    onOpenDir = appController::openNewAgentDir,
+                                    onEnterDir = appController::enterNewAgentSubDir,
+                                    onUpDir = appController::upNewAgentDir,
+                                    canGoUp = canGoUp,
+                                    onSetLauncher = { l -> appController.updateNewAgentForm { it.copy(launcher = l) } },
+                                    onSetBackend = { b -> appController.updateNewAgentForm { it.copy(backend = b) } },
+                                    onSetName = { n -> appController.updateNewAgentForm { it.copy(name = n) } },
+                                    onSetPrompt = { p -> appController.updateNewAgentForm { it.copy(initialPrompt = p) } },
+                                    onCreate = appController::createNewAgent,
+                                    herdrSection = {
+                                        HerdrPlacementSection(
+                                            ui = newAgentUi,
+                                            onSetPlacement = appController::setNewAgentPlacement,
+                                            onSetWorkspace = { id -> appController.updateNewAgentForm { it.copy(workspaceId = id) } },
+                                            onSetPane = { id -> appController.updateNewAgentForm { it.copy(paneId = id) } },
+                                            onSetDirection = { d -> appController.updateNewAgentForm { it.copy(direction = d) } },
+                                            onRefreshLayout = appController::loadNewAgentHerdrLayout,
+                                        )
+                                    },
+                                    snackbarHostState = snackbarHostState,
+                                )
+                            }
+
+                            is DevicesRoute -> {
+                                val devices by appController.devices.collectAsState()
+                                DevicesContent(
+                                    devices = devices,
+                                    onBack = { appController.navigateBack() },
+                                    onRevoke = appController::revokeDevice,
+                                )
+                            }
+
+                            is MachinesRoute -> {
+                                val machines by appController.machines.collectAsState()
+                                MachinesContent(
+                                    machines = machines,
+                                    onBack = { appController.navigateBack() },
+                                    onEditMachine = appController::editMachine,
+                                    onRevokeMachine = appController::revokeMachine,
+                                )
+                            }
+
+                            is AddMachineRoute -> {
+                                val settingsState by appController.settingsUiState.collectAsState(initial = SettingsUiState())
+                                val pairCode by appController.pairCode.collectAsState()
+                                val clipboard = LocalClipboardManager.current
+                                AddMachineContent(
+                                    relayUrl = settingsState.session?.relayUrl.orEmpty(),
+                                    pairCode = pairCode,
+                                    onBack = { appController.navigateBack() },
+                                    onCopyCommand = { cmd -> clipboard.setText(AnnotatedString(cmd)) },
+                                    onNewCode = appController::generatePairCode,
+                                )
+                            }
+
+                            is NotificationSettingsRoute -> {
+                                val settings by appController.settings.collectAsState()
+                                val machines by appController.machines.collectAsState()
+                                val agents by appController.agents.collectAsState()
+                                NotificationSettingsContent(
+                                    health = HealthState(),
+                                    settings = settings,
+                                    machines = machines,
+                                    agents = agents,
+                                    onBack = { appController.navigateBack() },
+                                    onOpenSystemSettings = {},
+                                    onSendTestNotification = appController::sendTestNotification,
+                                    onSetDirectPush = appController::setDirectPush,
+                                    onSetCategory = appController::setCategoryEnabled,
+                                    onSetCriticalAlways = appController::setCriticalAlways,
+                                    onUnmuteAgent = { id -> appController.setAgentMuted(id, false) },
+                                    onSetMachineMute = appController::setMachineMute,
+                                    onSetQuietHours = appController::setMachineQuietHours,
+                                    onSetMachineCategory = appController::setMachineCategory,
+                                )
+                            }
+
+                            is SecuritySettingsRoute -> {
+                                val settings by appController.settings.collectAsState()
+                                SecurityContent(
+                                    settings = settings,
+                                    onBack = { appController.navigateBack() },
+                                    onSetRequireUnlock = appController::setRequireUnlock,
+                                    onSetAppLock = appController::setAppLock,
+                                    onSetFlagSecure = appController::setFlagSecure,
+                                )
+                            }
+
+                            is BatteryRoute -> {
+                                BatteryContent(
+                                    batteryExcluded = true,
+                                    onBack = { appController.navigateBack() },
+                                    onRequestIgnoreBatteryOptimizations = {},
+                                    onOpenBatterySettings = {},
+                                )
+                            }
+
+                            is AboutRoute -> {
+                                AboutContent(
+                                    versionName = appController.appVersion,
+                                    versionCode = "1",
+                                    flavor = "APNs",
+                                    onBack = { appController.navigateBack() },
+                                )
+                            }
+
+                            else -> {
+                                val selectedTab =
+                                    when (current) {
+                                        is MeshRoute -> AppTab.MESH
+                                        is PendingRoute -> AppTab.PENDING
+                                        is SettingsRoute -> AppTab.SETTINGS
+                                        else -> AppTab.AGENTS
+                                    }
+                                val pendingCountFlow =
+                                    remember(appController) {
+                                        appController.openPrompts.map { it.size }.distinctUntilChanged()
+                                    }
+                                val pendingCount by pendingCountFlow.collectAsState(initial = appController.openPrompts.value.size)
+                                Scaffold(
+                                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                                    bottomBar = {
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            if (selectedTab == AppTab.AGENTS) {
+                                                AgentsQuotaIslandBar(appController = appController)
+                                            }
+                                            AppBottomBar(
+                                                selectedTab = selectedTab,
+                                                pending = pendingCount,
+                                                onSelectTab = appController::selectTab,
+                                            )
+                                        }
+                                    },
+                                ) { innerPadding ->
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .padding(innerPadding),
+                                    ) {
+                                        when (selectedTab) {
+                                            AppTab.AGENTS -> {
+                                                val agentsState by appController.agentsUiState.collectAsState(initial = AgentsUiState())
+                                                val conn by appController.connState.collectAsState()
+                                                AgentsContent(
+                                                    state = agentsState,
+                                                    conn = conn,
+                                                    snackbarHostState = snackbarHostState,
+                                                    bottomBar = {},
+                                                    onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
+                                                    onNewAgent = { appController.navigateTo(NewAgentRoute) },
+                                                    onSelect = appController::selectContext,
+                                                    onRefresh = appController::refreshAll,
+                                                    onResume = { agent, _ -> appController.resumeAgent(agent) },
+                                                    onForget = appController::requestForgetAgent,
+                                                    onOpenArchived = { appController.navigateTo(ArchivedAgentsRoute) },
+                                                )
+                                            }
+
+                                            AppTab.MESH -> {
+                                                val meshState by appController.meshState.collectAsState()
+                                                val conn by appController.connState.collectAsState()
+                                                MeshScreenContent(
+                                                    uiState = meshState.copy(isConnected = conn == ConnState.Connected),
+                                                    onOpenChat = { id -> appController.navigateTo(ChatRoute(id)) },
+                                                    onToggleListView = appController::toggleMeshListView,
+                                                    onSelectMachine = appController::selectMeshMachine,
+                                                    onSelectGroup = appController::selectMeshGroup,
+                                                    onNodeClick = appController::selectMeshNode,
+                                                    onEdgeClick = appController::onMeshEdgeClick,
+                                                    onViewportSizeChanged = appController::onMeshViewportSizeChanged,
+                                                    onCardHeightsChanged = appController::onMeshCardHeightsChanged,
+                                                    onDismissNodeDetail = appController::dismissMeshNodeDetail,
+                                                    onViewConversation = appController::openMeshConversation,
+                                                    onDismissConversation = appController::dismissMeshConversation,
+                                                    onLoadMoreConversation = appController::loadMoreMeshConversation,
+                                                    onRetry = { appController.refreshMesh() },
+                                                )
+                                            }
+
+                                            AppTab.PENDING -> {
+                                                val pendingState by appController.pendingUiState.collectAsState(initial = PendingUiState())
+                                                val busyPromptId by appController.busyPromptId.collectAsState()
+                                                PendingContent(
+                                                    state = pendingState,
+                                                    onOpenPrompt = appController::openPromptSheet,
+                                                    onSelect = appController::selectContext,
+                                                    busyPromptId = busyPromptId,
+                                                    onQuickAnswer = { p, ans -> appController.answerPrompt(p.promptId, ans) },
+                                                )
+                                            }
+
+                                            AppTab.SETTINGS -> {
+                                                val settingsState by appController.settingsUiState.collectAsState(
+                                                    initial = SettingsUiState(),
+                                                )
+                                                SettingsContent(
+                                                    state = settingsState,
+                                                    onNav = appController::navigateSettingsDest,
+                                                    onSelectTheme = appController::setTheme,
+                                                    onLogout = appController::logout,
+                                                    onSelectFontScale = appController::setChatFontScale,
+                                                    onSelectMessageSpacing = appController::setChatMessageSpacing,
+                                                    versionName = appController.appVersion,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
+
+                        ForgetAgentDialogHost(appController = appController)
+                        PromptSheetHost(appController = appController)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionSnackbarEffect(
+    appController: SharedAppController,
+    snackbarHostState: SnackbarHostState,
+) {
+    val actionMessage by appController.actionMessage.collectAsState()
+    LaunchedEffect(actionMessage) {
+        val msg = actionMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        appController.consumeActionMessage()
+    }
+}
+
+@Composable
+private fun AgentsQuotaIslandBar(appController: SharedAppController) {
+    val agentsState by appController.agentsUiState.collectAsState(initial = AgentsUiState())
+    QuotaDynamicIsland(
+        machines = agentsState.machines,
+        selectedMachineId = if (agentsState.selected == "all") null else agentsState.selected,
+    )
+}
+
+@Composable
+private fun ForgetAgentDialogHost(appController: SharedAppController) {
+    val pendingForgetAgentId by appController.pendingForgetAgentId.collectAsState()
+    if (pendingForgetAgentId != null) {
+        SharedAgentCloseConfirmationDialog(
+            onConfirm = {
+                val closingChatAgent = (appController.currentRoute.value as? ChatRoute)?.agentId == pendingForgetAgentId
+                appController.confirmForgetAgent {
+                    if (closingChatAgent) {
+                        appController.navigateBack()
+                    }
+                }
+            },
+            onDismiss = appController::cancelForgetAgent,
+        )
+    }
+}
+
+@Composable
+private fun PromptSheetHost(appController: SharedAppController) {
+    val promptId by appController.activePromptId.collectAsState()
+    if (promptId != null) {
+        val openPrompts by appController.openPrompts.collectAsState()
+        val promptSheetState by appController.promptSheetState.collectAsState()
+        val promptSheetError by appController.promptSheetError.collectAsState()
+        val promptSheetAuthMessage by appController.promptSheetAuthMessage.collectAsState()
+        val busyPromptId by appController.busyPromptId.collectAsState()
+        val activePrompt = openPrompts.firstOrNull { it.promptId == promptId }
+        PromptSheetChrome(
+            state = promptSheetState,
+            onDismissRequest = appController::dismissPromptSheet,
+            errorMessage = promptSheetError,
+            authMessage = promptSheetAuthMessage,
+        ) {
+            if (activePrompt != null) {
+                PromptContent(
+                    prompt = activePrompt,
+                    busy = busyPromptId == activePrompt.promptId,
+                    onAnswer = { ans -> appController.answerPrompt(activePrompt.promptId, ans) },
+                )
             }
         }
     }
@@ -875,7 +936,7 @@ private fun SharedChatScreen(
                 modifier = Modifier.weight(1f),
             ) {
                 MessageList(
-                    displayItems = chatState.display,
+                    displayItems = chatState.items,
                     tools = chatState.tools,
                     sending = false,
                     isWorking = working && (chatState.streaming == null || chatState.streaming!!.blocks.isEmpty()),
@@ -893,6 +954,7 @@ private fun SharedChatScreen(
                         appController.scope.launch { chatSession.retry(cId) }
                     },
                     modifier = Modifier.fillMaxSize(),
+                    streaming = chatState.streaming,
                 )
             }
         }
