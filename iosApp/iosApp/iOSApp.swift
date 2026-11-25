@@ -1,3 +1,5 @@
+import CryptoKit
+import Network
 import os
 import Security
 import SharedUi
@@ -12,6 +14,7 @@ struct iOSApp: App {
 
     init() {
         KeychainStoreHelper.installBridge()
+        CryptoKitAeadHelper.installBridge()
         #if DEBUG
         SharedUi.IosPushRegistrationBridge.shared.apnsEnvironment = "sandbox"
         #else
@@ -73,12 +76,20 @@ private struct PrivacyCoverView: View {
 /// `SharedUi.IosPushRegistrationBridge`. Never log the token or credentials.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     private static let pushLogger = Logger(subsystem: "dev.j3pf.rp.iosApp", category: "push")
+    private var networkMonitor: NWPathMonitor?
+    private let networkQueue = DispatchQueue(label: "dev.j3pf.rp.network")
+
+    deinit {
+        networkMonitor?.cancel()
+    }
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil,
     ) -> Bool {
         KeychainStoreHelper.installBridge()
+        CryptoKitAeadHelper.installBridge()
+        startNetworkMonitor()
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             if settings.authorizationStatus == .notDetermined {
@@ -126,6 +137,105 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Self.pushLogger.error(
             "APNs remote notification registration failed (domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public))"
         )
+    }
+
+    private func startNetworkMonitor() {
+        guard networkMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { path in
+            let satisfied = path.status == .satisfied
+            let signature = Self.interfaceSignature(for: path)
+            SharedUi.IosNetworkMonitorBridge.shared.updatePath(
+                satisfied: satisfied,
+                interfaceSignature: signature
+            )
+        }
+        monitor.start(queue: networkQueue)
+        networkMonitor = monitor
+    }
+
+    private static func interfaceSignature(for path: NWPath) -> String {
+        var interfaces: [String] = []
+        if path.usesInterfaceType(.wifi) {
+            interfaces.append("wifi")
+        }
+        if path.usesInterfaceType(.cellular) {
+            interfaces.append("cellular")
+        }
+        if path.usesInterfaceType(.wiredEthernet) {
+            interfaces.append("wiredEthernet")
+        }
+        if path.usesInterfaceType(.other) {
+            interfaces.append("other")
+        }
+        if interfaces.isEmpty {
+            return path.status == .satisfied ? "unknown" : "none"
+        }
+        return interfaces.joined(separator: "+")
+    }
+}
+
+private enum CryptoKitAeadHelper {
+    private static let keyByteCount = 32
+
+    static func installBridge() {
+        SharedUi.IosAeadBridge.shared.configure(
+            onSeal: { keyBase64, plaintext, aad in
+                seal(keyBase64: keyBase64, plaintext: plaintext, aad: aad)
+            },
+            onOpen: { keyBase64, combinedBase64, aad in
+                open(keyBase64: keyBase64, combinedBase64: combinedBase64, aad: aad)
+            }
+        )
+    }
+
+    /// Encrypts plaintext using AES-256-GCM with a fresh 12-byte random nonce and UTF-8 AAD.
+    /// Wire format: Base64(`nonce (12 bytes) || ciphertext || tag (16 bytes)`), matching Kotlin `Aes256Gcm`.
+    private static func seal(keyBase64: String, plaintext: String, aad: String) -> String? {
+        guard
+            let keyData = Data(base64Encoded: keyBase64),
+            keyData.count == keyByteCount
+        else {
+            return nil
+        }
+        let symmetricKey = SymmetricKey(data: keyData)
+        let plaintextData = Data(plaintext.utf8)
+        let aadData = Data(aad.utf8)
+        do {
+            let sealed = try AES.GCM.seal(
+                plaintextData,
+                using: symmetricKey,
+                nonce: AES.GCM.Nonce(),
+                authenticating: aadData
+            )
+            return sealed.combined?.base64EncodedString()
+        } catch {
+            return nil
+        }
+    }
+
+    /// Decrypts Base64(`nonce (12 bytes) || ciphertext || tag (16 bytes)`) authenticated with UTF-8 AAD.
+    private static func open(keyBase64: String, combinedBase64: String, aad: String) -> String? {
+        guard
+            let keyData = Data(base64Encoded: keyBase64),
+            keyData.count == keyByteCount,
+            let combined = Data(base64Encoded: combinedBase64)
+        else {
+            return nil
+        }
+        let symmetricKey = SymmetricKey(data: keyData)
+        let aadData = Data(aad.utf8)
+        do {
+            let sealedBox = try AES.GCM.SealedBox(combined: combined)
+            let plaintextData = try AES.GCM.open(
+                sealedBox,
+                using: symmetricKey,
+                authenticating: aadData
+            )
+            return String(data: plaintextData, encoding: .utf8)
+        } catch {
+            return nil
+        }
     }
 }
 

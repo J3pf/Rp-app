@@ -99,6 +99,9 @@ class EncryptedKeyValueSecretStore(
     private val accessGroup: String? = null,
     private val random: Random = platformSecureRandom(),
     private val onPushKeyChanged: (pushKey: String?, accessGroup: String?) -> Unit = { _, _ -> },
+    private val cryptoFactory: (masterKey: ByteArray) -> SecureCrypto = { masterKey ->
+        AesGcmSecureCrypto(masterKey, random)
+    },
 ) : SecretStore {
     @Volatile
     private var cachedCrypto: SecureCrypto? = null
@@ -112,7 +115,7 @@ class EncryptedKeyValueSecretStore(
             } ?: random.nextBytes(Aes256Gcm.KEY_BYTES).also { generated ->
                 backing.putString(K_MASTER_KEY, Base64.encode(generated))
             }
-        return AesGcmSecureCrypto(masterKey, random).also { cachedCrypto = it }
+        return cryptoFactory(masterKey).also { cachedCrypto = it }
     }
 
     private fun resetCorruptedMasterKey() {
@@ -251,7 +254,7 @@ class EncryptedKeyValueSecretStore(
                         .getOrNull()
                         ?.takeIf { bytes -> bytes.size == Aes256Gcm.KEY_BYTES }
                         ?: return MasterKeyRead.CorruptedOrMissing
-                val crypto = AesGcmSecureCrypto(masterKey, random).also { cachedCrypto = it }
+                val crypto = cryptoFactory(masterKey).also { cachedCrypto = it }
                 MasterKeyRead.Ready(crypto)
             }
         }

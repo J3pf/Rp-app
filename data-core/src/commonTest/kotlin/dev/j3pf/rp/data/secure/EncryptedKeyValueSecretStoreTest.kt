@@ -1,5 +1,10 @@
 package dev.j3pf.rp.data.secure
 
+import dev.j3pf.rp.data.crypto.Aes256Gcm
+import dev.j3pf.rp.data.ports.SecureCrypto
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -161,5 +166,119 @@ class EncryptedKeyValueSecretStoreTest {
         failReadsWithSentinel = false
         val recovered = EncryptedKeyValueSecretStore(backing = backing)
         assertEquals(sampleSession, recovered.current())
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun customCryptoFactoryDelegatesEncryptDecryptAndRoundTripsWithAes256Gcm() {
+        val backing = InMemorySecretKeyValueBacking()
+        val encryptedFields = mutableListOf<String>()
+        val decryptedFields = mutableListOf<String>()
+        val deterministicRandom = Random(42)
+
+        fun recordingNativeLikeFactory(): (ByteArray) -> SecureCrypto =
+            { masterKey ->
+                require(masterKey.size == Aes256Gcm.KEY_BYTES)
+                object : SecureCrypto {
+                    override fun encrypt(
+                        field: String,
+                        value: String,
+                    ): String {
+                        encryptedFields += field
+                        val nonce = deterministicRandom.nextBytes(Aes256Gcm.NONCE_BYTES)
+                        val ctWithTag =
+                            Aes256Gcm.encrypt(
+                                key = masterKey,
+                                nonce = nonce,
+                                plaintext = value.encodeToByteArray(),
+                                aad = field.encodeToByteArray(),
+                            )
+                        val combined = ByteArray(nonce.size + ctWithTag.size)
+                        nonce.copyInto(combined, 0)
+                        ctWithTag.copyInto(combined, nonce.size)
+                        return Base64.encode(combined)
+                    }
+
+                    override fun decrypt(
+                        field: String,
+                        value: String,
+                    ): String? {
+                        decryptedFields += field
+                        return runCatching {
+                            val combined = Base64.decode(value)
+                            if (combined.size < Aes256Gcm.NONCE_BYTES + Aes256Gcm.TAG_BYTES) return null
+                            val nonce = combined.copyOfRange(0, Aes256Gcm.NONCE_BYTES)
+                            val ctWithTag = combined.copyOfRange(Aes256Gcm.NONCE_BYTES, combined.size)
+                            val plain =
+                                Aes256Gcm.decrypt(
+                                    key = masterKey,
+                                    nonce = nonce,
+                                    ciphertextWithTag = ctWithTag,
+                                    aad = field.encodeToByteArray(),
+                                ) ?: return null
+                            plain.decodeToString()
+                        }.getOrNull()
+                    }
+                }
+            }
+
+        // 1. Encrypt with custom AEAD factory (simulating iOS CryptoKit bridge)
+        val nativeBackedStore =
+            EncryptedKeyValueSecretStore(
+                backing = backing,
+                cryptoFactory = recordingNativeLikeFactory(),
+            )
+        nativeBackedStore.save(sampleSession)
+        assertEquals(sampleSession, nativeBackedStore.current())
+        assertEquals(
+            listOf(
+                EncryptedKeyValueSecretStore.K_RELAY_ID,
+                EncryptedKeyValueSecretStore.K_URL,
+                EncryptedKeyValueSecretStore.K_NAME,
+                EncryptedKeyValueSecretStore.K_DEVICE_ID,
+                EncryptedKeyValueSecretStore.K_TOKEN,
+                EncryptedKeyValueSecretStore.K_PUSH_KEY,
+            ),
+            encryptedFields,
+        )
+
+        // 2. Decrypt with default pure-Kotlin AesGcmSecureCrypto (wire-format compatibility)
+        val pureKotlinStore = EncryptedKeyValueSecretStore(backing = backing)
+        assertEquals(sampleSession, pureKotlinStore.current())
+
+        // 3. Encrypt with pure-Kotlin store (including empty + Unicode values), decrypt with custom AEAD factory
+        val unicodeSession =
+            sampleSession.copy(
+                relayName = "",
+                deviceId = "dev-ios-ñ-🚀",
+            )
+        pureKotlinStore.save(unicodeSession)
+        val reopenedNativeStore =
+            EncryptedKeyValueSecretStore(
+                backing = backing,
+                cryptoFactory = recordingNativeLikeFactory(),
+            )
+        assertEquals(unicodeSession, reopenedNativeStore.current())
+        assertEquals(
+            listOf(
+                EncryptedKeyValueSecretStore.K_RELAY_ID,
+                EncryptedKeyValueSecretStore.K_URL,
+                EncryptedKeyValueSecretStore.K_NAME,
+                EncryptedKeyValueSecretStore.K_DEVICE_ID,
+                EncryptedKeyValueSecretStore.K_TOKEN,
+                EncryptedKeyValueSecretStore.K_PUSH_KEY,
+            ),
+            decryptedFields,
+        )
+
+        // 4. Field-swap tampering fails authentication through custom AEAD factory
+        val rawUrl = backing.getString(EncryptedKeyValueSecretStore.K_URL)!!
+        backing.putString(EncryptedKeyValueSecretStore.K_TOKEN, rawUrl)
+        val tamperedNativeStore =
+            EncryptedKeyValueSecretStore(
+                backing = backing,
+                cryptoFactory = recordingNativeLikeFactory(),
+            )
+        assertNull(tamperedNativeStore.current())
     }
 }
