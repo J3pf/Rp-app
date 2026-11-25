@@ -12,12 +12,16 @@ import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.PromptResolved
 import dev.j3pf.rp.protocol.TerminalWait
 import dev.j3pf.rp.protocol.UserMessageAck
+import dev.j3pf.rp.protocol.int
 import dev.j3pf.rp.protocol.obj
 import dev.j3pf.rp.protocol.str
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 val PERSISTED_EVENTS: Set<String> =
     setOf(
@@ -67,8 +71,10 @@ class ChatMessageDispatcher(
         var latest = getState()
         updateState { current ->
             var s = current
-            for ((ev, ts) in events) {
-                s = ChatReducer.reduce(s, ev, ts)
+            val steps = coalesceStreamBatch(s.epoch, s.lastSeq, events)
+            for (step in steps) {
+                val base = step.preAdvanceLastSeq?.let { s.copy(lastSeq = it) } ?: s
+                s = ChatReducer.reduce(base, step.event, step.timestamp)
             }
             latest = s
             s
@@ -251,5 +257,112 @@ class ChatMessageDispatcher(
                 applied
             }
         if (flushed != null && (flushed.items.isNotEmpty() || flushed.streaming != null)) onSyncingResolved()
+    }
+
+    internal data class CoalescedBatchStep(
+        val event: AgentEvent,
+        val timestamp: Long,
+        val preAdvanceLastSeq: Long? = null,
+    )
+
+    internal companion object {
+        fun coalesceStreamBatch(
+            initialEpoch: String?,
+            initialLastSeq: Long,
+            events: List<Pair<AgentEvent, Long>>,
+        ): List<CoalescedBatchStep> {
+            if (events.isEmpty()) return emptyList()
+            var epoch = initialEpoch
+            var lastSeq = initialLastSeq
+            val out = ArrayList<CoalescedBatchStep>(events.size)
+            var i = 0
+            while (i < events.size) {
+                val (ev0, ts0) = events[i]
+                val e0 = ev0.e
+                val ev0Type = e0.str("type")
+                val ev0Delta = if (ev0Type == "message_delta") e0.str("delta") else null
+
+                val ev0ChangesEpoch = ev0.epoch != null && ev0.epoch != epoch
+                if (ev0ChangesEpoch) {
+                    epoch = ev0.epoch
+                    lastSeq = 0L
+                }
+
+                if (ev0.seq in 1..lastSeq) {
+                    i++
+                    continue
+                }
+
+                val ev0Gap = ev0.seq > lastSeq + 1L && lastSeq > 0L
+                if (ev0.seq > 0L) {
+                    lastSeq = ev0.seq
+                }
+
+                if (ev0Delta == null) {
+                    out.add(CoalescedBatchStep(ev0, ts0))
+                    i++
+                    continue
+                }
+
+                val contentIndex = e0.int("contentIndex") ?: 0
+                val kind = e0.str("kind") ?: "text"
+                var sb: StringBuilder? = null
+                var lastTs = ts0
+                var runLastSeq = ev0.seq
+                var latestToolCallId = e0.str("toolCallId")
+                var latestName = e0.str("name")
+                var latestToolName = e0.str("toolName")
+                var mergedCount = 1
+
+                var j = i + 1
+                while (j < events.size) {
+                    val (evNext, tsNext) = events[j]
+                    val eNext = evNext.e
+                    if (evNext.epoch != null && evNext.epoch != epoch) break
+                    if (evNext.seq in 1..lastSeq) {
+                        j++
+                        continue
+                    }
+                    if (eNext.str("type") != "message_delta") break
+                    val nextDelta = eNext.str("delta") ?: break
+                    val nextIdx = eNext.int("contentIndex") ?: 0
+                    val nextKind = eNext.str("kind") ?: "text"
+                    if (nextIdx != contentIndex || nextKind != kind) break
+                    if (evNext.seq > lastSeq + 1L && lastSeq > 0L) break
+
+                    val builder =
+                        sb ?: StringBuilder(ev0Delta.length + nextDelta.length)
+                            .append(ev0Delta)
+                            .also { sb = it }
+                    builder.append(nextDelta)
+                    if (evNext.seq > 0L) {
+                        lastSeq = evNext.seq
+                        runLastSeq = evNext.seq
+                    }
+                    lastTs = tsNext
+                    eNext.str("toolCallId")?.let { latestToolCallId = it }
+                    eNext.str("name")?.let { latestName = it }
+                    eNext.str("toolName")?.let { latestToolName = it }
+                    mergedCount++
+                    j++
+                }
+
+                if (mergedCount == 1) {
+                    out.add(CoalescedBatchStep(ev0, ts0))
+                } else {
+                    val mergedFields = LinkedHashMap<String, JsonElement>(e0.size + 1)
+                    mergedFields.putAll(e0)
+                    mergedFields["delta"] = JsonPrimitive(sb!!.toString())
+                    latestToolCallId?.let { mergedFields["toolCallId"] = JsonPrimitive(it) }
+                    latestName?.let { mergedFields["name"] = JsonPrimitive(it) }
+                    latestToolName?.let { mergedFields["toolName"] = JsonPrimitive(it) }
+                    val mergedEvent = ev0.copy(seq = runLastSeq, e = JsonObject(mergedFields))
+                    val preAdvance = if (!ev0Gap && !ev0ChangesEpoch && runLastSeq > 0L) runLastSeq - 1L else null
+                    out.add(CoalescedBatchStep(mergedEvent, lastTs, preAdvanceLastSeq = preAdvance))
+                }
+                i = j
+            }
+            return out
+        }
     }
 }

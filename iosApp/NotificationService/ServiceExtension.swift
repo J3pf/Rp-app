@@ -35,6 +35,8 @@ final class NotificationService: UNNotificationServiceExtension {
     private static let dedupeLock = NSLock()
     private static var seenPromptIds = Set<String>()
     private static var seenPromptOrder = [String]()
+    private static let keyCacheLock = NSLock()
+    private static var cachedPushKeyB64: String?
 
     private let handlerLock = NSLock()
     private var contentHandler: ((UNNotificationContent) -> Void)?
@@ -72,8 +74,7 @@ final class NotificationService: UNNotificationServiceExtension {
             let k = request.content.userInfo["k"] as? String,
             let nonceB64 = request.content.userInfo["n"] as? String,
             let cipherB64 = request.content.userInfo["c"] as? String,
-            let pushKeyB64 = Self.readKeychainString(account: Self.pushKeyAccount),
-            let plaintext = Self.decryptEnvelope(pushKeyB64: pushKeyB64, nonceB64: nonceB64, cipherB64: cipherB64),
+            let plaintext = Self.decryptWithCachedPushKey(nonceB64: nonceB64, cipherB64: cipherB64),
             let json = (try? JSONSerialization.jsonObject(with: Data(plaintext.utf8))) as? [String: Any]
         else {
             deliver(best)
@@ -217,6 +218,32 @@ final class NotificationService: UNNotificationServiceExtension {
         if cleaned.isEmpty || isRawJsonOrCode(cleaned) { return nil }
         if cleaned.count <= maxLen { return cleaned }
         return String(cleaned.prefix(maxLen)) + "…"
+    }
+
+    private static func decryptWithCachedPushKey(
+        nonceB64: String,
+        cipherB64: String
+    ) -> String? {
+        keyCacheLock.lock()
+        let cached = cachedPushKeyB64
+        keyCacheLock.unlock()
+
+        if let cached,
+           let plaintext = decryptEnvelope(pushKeyB64: cached, nonceB64: nonceB64, cipherB64: cipherB64)
+        {
+            return plaintext
+        }
+
+        // Cache miss or decrypt failure (e.g. key rotation): invalidate, re-read Keychain once, and retry once.
+        let fresh = readKeychainString(account: pushKeyAccount)
+        keyCacheLock.lock()
+        cachedPushKeyB64 = fresh
+        keyCacheLock.unlock()
+
+        guard let fresh, fresh != cached else {
+            return nil
+        }
+        return decryptEnvelope(pushKeyB64: fresh, nonceB64: nonceB64, cipherB64: cipherB64)
     }
 
     private static func decryptEnvelope(

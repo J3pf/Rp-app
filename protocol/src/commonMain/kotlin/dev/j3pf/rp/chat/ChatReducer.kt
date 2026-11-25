@@ -37,6 +37,8 @@ import kotlin.time.Clock
  *  - Los items se desduplican por clave (`rol:timestamp`), así el historial y los eventos pueden solaparse.
  */
 object ChatReducer {
+    private const val MAX_PARTIAL_PARSE_LEN = 4_096
+
     private val lenient =
         Json {
             ignoreUnknownKeys = true
@@ -85,38 +87,144 @@ object ChatReducer {
                     item is UserMsg && (item.key.startsWith("local:") || item.key.startsWith("ack:") || item.failed)
                 }
             }
-        var s =
-            state.copy(
-                items = preservedPending,
-                tools = emptyMap(),
-                streaming = null,
-                epoch = epoch ?: state.epoch,
-                todos = if (epochChanged) emptyList() else state.todos,
-                subagents = if (epochChanged) emptyMap() else state.subagents,
-                localSent = if (epochChanged) emptySet() else state.localSent,
-            )
-        for (e in entries) s = applyEntry(s, e)
-        if (preservedPending.isNotEmpty()) {
-            val (stillPending, replayed) =
-                s.items.partition { item ->
-                    item is UserMsg && (item.key.startsWith("local:") || item.key.startsWith("ack:") || item.failed)
+        val items = ArrayList<ChatItem>(preservedPending.size + entries.size)
+        val itemKeys = HashSet<String>(preservedPending.size + entries.size)
+        for (pending in preservedPending) {
+            items.add(pending)
+            itemKeys.add(pending.key)
+        }
+        val tools = LinkedHashMap<String, ToolRun>()
+        val localSent = LinkedHashSet<String>()
+        if (!epochChanged) {
+            localSent.addAll(state.localSent)
+        }
+        val subagents = if (epochChanged) emptyMap() else state.subagents
+        var model = state.model
+        var contextTokens = state.contextTokens
+        var contextWindow = state.contextWindow
+        var contextPercent = state.contextPercent
+
+        for (entry in entries) {
+            val msg = entry.msg ?: JsonObject(emptyMap())
+            when (entry.kind) {
+                EntryKind.USER -> {
+                    applyUserEntryInto(items, itemKeys, localSent, msg, "eid${entry.eid}", entry.at)
                 }
-            if (stillPending.isNotEmpty()) {
-                s = s.copy(items = replayed + stillPending)
+
+                EntryKind.ASSISTANT -> {
+                    val item = assistantFrom(msg, keyOf(msg, "assistant", "eid${entry.eid}"), entry.at)
+                    upsertInto(items, itemKeys, item)
+                    addCallsInto(tools, item, 0L)
+                    extractContextUsageValues(contextWindow, msg)?.let { (tokens, window, pct) ->
+                        contextTokens = tokens
+                        contextWindow = window
+                        contextPercent = pct
+                    }
+                }
+
+                EntryKind.TOOL_RESULT -> {
+                    applyToolResultInto(tools, msg)
+                }
+
+                EntryKind.BASH -> {
+                    val cmd = msg.str("command") ?: ""
+                    val out = msg.str("output") ?: extractText(msg["content"]) ?: ""
+                    val note = SystemNote("eid${entry.eid}", NoteKind.BASH, "\$ $cmd", detail = out.ifEmpty { null })
+                    items.add(note)
+                    itemKeys.add(note.key)
+                }
+
+                EntryKind.COMPACTION -> {
+                    val note =
+                        SystemNote(
+                            "eid${entry.eid}",
+                            NoteKind.COMPACTION,
+                            "Contexto compactado",
+                            detail = msg.str("summary"),
+                        )
+                    items.add(note)
+                    itemKeys.add(note.key)
+                }
+
+                EntryKind.BRANCH_SUMMARY -> {
+                    val note =
+                        SystemNote(
+                            "eid${entry.eid}",
+                            NoteKind.BRANCH_SUMMARY,
+                            "Resumen de rama",
+                            detail = msg.str("summary"),
+                        )
+                    items.add(note)
+                    itemKeys.add(note.key)
+                }
+
+                EntryKind.MODEL_CHANGE -> {
+                    val label = modelLabel(msg.obj("model")) ?: msg.str("modelId") ?: msg.str("model")
+                    if (label != null) model = label
+                    val note = SystemNote("eid${entry.eid}", NoteKind.MODEL_CHANGE, "Modelo: ${label ?: "?"}")
+                    items.add(note)
+                    itemKeys.add(note.key)
+                }
+
+                else -> {
+                    val text = msg.str("text") ?: extractText(msg["content"])
+                    if (!text.isNullOrBlank()) {
+                        val note = SystemNote("eid${entry.eid}", NoteKind.CUSTOM, text)
+                        items.add(note)
+                        itemKeys.add(note.key)
+                    }
+                }
             }
         }
-        if (s.subagents.isNotEmpty()) {
-            val enrichedTools =
-                s.tools.mapValues { (id, run) ->
-                    s.subagents[id]?.let { run.copy(subagent = it) } ?: run
+
+        val orderedItems: ArrayList<ChatItem> =
+            if (preservedPending.isNotEmpty()) {
+                val stillPending = ArrayList<ChatItem>()
+                val replayed = ArrayList<ChatItem>(items.size)
+                for (item in items) {
+                    if (item is UserMsg && (item.key.startsWith("local:") || item.key.startsWith("ack:") || item.failed)) {
+                        stillPending.add(item)
+                    } else {
+                        replayed.add(item)
+                    }
                 }
-            val subItems =
-                s.subagents.values
-                    .filter { info -> s.items.none { it.key == "subagent:${info.taskId}" } }
-                    .map { info -> SubagentCardItem("subagent:${info.taskId}", info) }
-            s = s.copy(tools = enrichedTools, items = s.items + subItems)
+                if (stillPending.isNotEmpty()) {
+                    replayed.addAll(stillPending)
+                    replayed
+                } else {
+                    items
+                }
+            } else {
+                items
+            }
+
+        if (subagents.isNotEmpty()) {
+            for (entry in tools.entries) {
+                subagents[entry.key]?.let { entry.setValue(entry.value.copy(subagent = it)) }
+            }
+            for (info in subagents.values) {
+                val subKey = "subagent:${info.taskId}"
+                if (subKey !in itemKeys) {
+                    orderedItems.add(SubagentCardItem(subKey, info))
+                    itemKeys.add(subKey)
+                }
+            }
         }
-        return s.copy(needsResync = false)
+
+        return state.copy(
+            items = orderedItems,
+            tools = tools,
+            streaming = null,
+            epoch = epoch ?: state.epoch,
+            model = model,
+            contextTokens = contextTokens,
+            contextWindow = contextWindow,
+            contextPercent = contextPercent,
+            todos = if (epochChanged) emptyList() else state.todos,
+            subagents = subagents,
+            localSent = localSent,
+            needsResync = false,
+        )
     }
 
     /** `agent.history`: entradas + eventos posteriores. Los eventos con `seq` ≤ lastSeq se descartan. */
@@ -532,7 +640,7 @@ object ChatReducer {
                         toolCallId = e.str("toolCallId") ?: prev.toolCallId,
                         name = e.str("name") ?: e.str("toolName") ?: prev.name,
                         rawArgs = raw,
-                        args = parsePartial(raw) ?: prev.args,
+                        args = if (raw.length <= MAX_PARTIAL_PARSE_LEN) parsePartial(raw) ?: prev.args else prev.args,
                     )
                 }
 
@@ -646,19 +754,49 @@ object ChatReducer {
         item: AssistantMsg,
         now: Long,
     ): Map<String, ToolRun> {
-        var t = tools
+        var mutable: LinkedHashMap<String, ToolRun>? = null
         for (b in item.blocks) {
             if (b is Block.ToolCall && b.toolCallId != null) {
-                val prev = t[b.toolCallId]
-                t = t + (
-                    b.toolCallId to (
-                        prev?.copy(args = b.args ?: prev.args, name = b.name ?: prev.name)
-                            ?: ToolRun(b.toolCallId, b.name ?: "?", b.args, startedAt = now)
-                    )
-                )
+                val map = mutable ?: LinkedHashMap(tools).also { mutable = it }
+                val prev = map[b.toolCallId]
+                map[b.toolCallId] =
+                    prev?.copy(args = b.args ?: prev.args, name = b.name ?: prev.name)
+                        ?: ToolRun(b.toolCallId, b.name ?: "?", b.args, startedAt = now)
             }
         }
-        return t
+        return mutable ?: tools
+    }
+
+    private fun addCallsInto(
+        tools: MutableMap<String, ToolRun>,
+        item: AssistantMsg,
+        now: Long,
+    ) {
+        for (b in item.blocks) {
+            if (b is Block.ToolCall && b.toolCallId != null) {
+                val prev = tools[b.toolCallId]
+                tools[b.toolCallId] =
+                    prev?.copy(args = b.args ?: prev.args, name = b.name ?: prev.name)
+                        ?: ToolRun(b.toolCallId, b.name ?: "?", b.args, startedAt = now)
+            }
+        }
+    }
+
+    private fun applyToolResultInto(
+        tools: MutableMap<String, ToolRun>,
+        msg: JsonObject,
+    ) {
+        val id = msg.str("toolCallId") ?: return
+        val prev = tools[id]
+        if (prev != null && prev.status != ToolStatus.RUNNING) return
+        val isError = msg.bool("isError") ?: false
+        tools[id] =
+            (prev ?: ToolRun(id, msg.str("toolName") ?: "?")).copy(
+                status = if (isError) ToolStatus.ERROR else ToolStatus.OK,
+                isError = isError,
+                result = extractText(msg["content"]),
+                partial = null,
+            )
     }
 
     // ─────────────────────── TODOs y Subagentes ───────────────────────
@@ -754,71 +892,81 @@ object ChatReducer {
 
     // ─────────────────────── Historial ───────────────────────
 
-    private fun applyEntry(
-        s: ChatState,
-        entry: Entry,
-    ): ChatState {
-        val msg = entry.msg ?: JsonObject(emptyMap())
-        return when (entry.kind) {
-            EntryKind.USER -> {
-                userMessage(s, msg, "eid${entry.eid}", entry.at)
-            }
-
-            EntryKind.ASSISTANT -> {
-                val item = assistantFrom(msg, keyOf(msg, "assistant", "eid${entry.eid}"), entry.at)
-                val next = s.copy(items = upsert(s.items, item), tools = withCalls(s.tools, item, 0))
-                extractContextUsage(next, msg)
-            }
-
-            EntryKind.TOOL_RESULT -> {
-                toolResultMessage(s, msg)
-            }
-
-            EntryKind.BASH -> {
-                val cmd = msg.str("command") ?: ""
-                val out = msg.str("output") ?: extractText(msg["content"]) ?: ""
-                s.copy(items = s.items + SystemNote("eid${entry.eid}", NoteKind.BASH, "\$ $cmd", detail = out.ifEmpty { null }))
-            }
-
-            EntryKind.COMPACTION -> {
-                s.copy(
-                    items =
-                        s.items +
-                            SystemNote(
-                                "eid${entry.eid}",
-                                NoteKind.COMPACTION,
-                                "Contexto compactado",
-                                detail = msg.str("summary"),
-                            ),
-                )
-            }
-
-            EntryKind.BRANCH_SUMMARY -> {
-                s.copy(
-                    items =
-                        s.items +
-                            SystemNote(
-                                "eid${entry.eid}",
-                                NoteKind.BRANCH_SUMMARY,
-                                "Resumen de rama",
-                                detail = msg.str("summary"),
-                            ),
-                )
-            }
-
-            EntryKind.MODEL_CHANGE -> {
-                val label = modelLabel(msg.obj("model")) ?: msg.str("modelId") ?: msg.str("model")
-                s.copy(
-                    model = label ?: s.model,
-                    items = s.items + SystemNote("eid${entry.eid}", NoteKind.MODEL_CHANGE, "Modelo: ${label ?: "?"}"),
-                )
-            }
-
-            else -> {
-                val text = msg.str("text") ?: extractText(msg["content"])
-                if (text.isNullOrBlank()) s else s.copy(items = s.items + SystemNote("eid${entry.eid}", NoteKind.CUSTOM, text))
+    private fun upsertInto(
+        items: MutableList<ChatItem>,
+        itemKeys: MutableSet<String>,
+        item: ChatItem,
+    ) {
+        if (item.key in itemKeys) {
+            val i = items.indexOfFirst { it.key == item.key }
+            if (i >= 0) {
+                items[i] = item
+                return
             }
         }
+        items.add(item)
+        itemKeys.add(item.key)
+    }
+
+    private fun applyUserEntryInto(
+        items: MutableList<ChatItem>,
+        itemKeys: MutableSet<String>,
+        localSent: MutableSet<String>,
+        msg: JsonObject,
+        fallback: String,
+        at: Long,
+    ) {
+        val (text, images, hasMobileAttachment) = parseUserContent(msg["content"])
+        val trimmed = text.trim()
+        val cId = msg.str("clientMsgId")
+        val localIdx =
+            items.indexOfFirst {
+                if (it !is UserMsg || (!it.key.startsWith("local:") && !it.key.startsWith("ack:"))) {
+                    false
+                } else if (cId != null && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId")) {
+                    true
+                } else if (it.failed || (cId != null && it.clientMsgId != null)) {
+                    false
+                } else {
+                    val localText = it.text.trim()
+                    matchesLocalText(trimmed, localText) ||
+                        (trimmed.isBlank() && images > 0 && it.imageCount == images) ||
+                        (trimmed.isBlank() && hasMobileAttachment && it.attachments.isNotEmpty())
+                }
+            }
+        val prevLocal = if (localIdx >= 0) items[localIdx] as? UserMsg else null
+        val origin = msg.str("origin")
+        val mobile =
+            localIdx >= 0 ||
+                hasMobileAttachment ||
+                msg.bool("rp") == true ||
+                origin == "rp" ||
+                origin == "mobile" ||
+                localSent.any { matchesLocalText(trimmed, it) } ||
+                (cId != null && items.any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId") })
+        val item =
+            UserMsg(
+                key = keyOf(msg, "user", fallback),
+                text = text,
+                at = msg.lenientLong("timestamp") ?: at.takeIf { it > 0 } ?: prevLocal?.at ?: 0,
+                fromMobile = mobile,
+                imageCount = maxOf(images, prevLocal?.imageCount ?: 0),
+                clientMsgId = cId ?: prevLocal?.clientMsgId,
+                attachments = prevLocal?.attachments ?: emptyList(),
+                delivery = prevLocal?.delivery ?: Delivery.AUTO,
+                method = prevLocal?.method ?: DeliveryMethod.AUTO,
+                asCommand = prevLocal?.asCommand ?: false,
+            )
+        if (item.key in itemKeys) return
+        if (localIdx >= 0) {
+            val removed = items.removeAt(localIdx)
+            itemKeys.remove(removed.key)
+        }
+        items.add(item)
+        itemKeys.add(item.key)
+        val prevTrimmed = prevLocal?.text?.trim().orEmpty()
+        if (trimmed.isNotBlank()) localSent.remove(trimmed)
+        if (prevTrimmed.isNotBlank()) localSent.remove(prevTrimmed)
     }
 
     private val MOBILE_ATTACHMENT_RE =
@@ -972,11 +1120,11 @@ object ChatReducer {
 
     private fun modelLabel(model: JsonObject?): String? = model?.str("id") ?: model?.str("name")
 
-    private fun extractContextUsage(
-        s: ChatState,
+    private fun extractContextUsageValues(
+        currentWindow: Int?,
         msg: JsonObject,
-    ): ChatState {
-        val usage = msg.obj("usage") ?: msg.obj("contextUsage") ?: return s
+    ): Triple<Int, Int, Int>? {
+        val usage = msg.obj("usage") ?: msg.obj("contextUsage") ?: return null
         val total =
             usage.int("totalTokens")
                 ?: usage.int("tokens")
@@ -995,15 +1143,23 @@ object ChatReducer {
                             ?: 0
                     (inp + out + cr + cw).takeIf { it > 0 }
                 }
-                ?: return s
-        if (total <= 0) return s
-        val window = (usage.int("contextWindow") ?: s.contextWindow ?: 200_000).coerceAtLeast(1)
+                ?: return null
+        if (total <= 0) return null
+        val window = (usage.int("contextWindow") ?: currentWindow ?: 200_000).coerceAtLeast(1)
         val pct =
             usage.int("contextPercent")
                 ?: kotlin.math
                     .round((total.toDouble() / window) * 100.0)
                     .toInt()
                     .coerceIn(0, 100)
+        return Triple(total, window, pct)
+    }
+
+    private fun extractContextUsage(
+        s: ChatState,
+        msg: JsonObject,
+    ): ChatState {
+        val (total, window, pct) = extractContextUsageValues(s.contextWindow, msg) ?: return s
         return s.copy(contextTokens = total, contextWindow = window, contextPercent = pct)
     }
 
@@ -1101,7 +1257,7 @@ object ChatReducer {
 
     /** Intenta parsear JSON de argumentos que puede estar incompleto; devuelve `null` si no es válido todavía. */
     private fun parsePartial(raw: String): JsonElement? {
-        if (raw.isBlank() || raw.length > 32_768) return null
+        if (raw.isBlank() || raw.length > MAX_PARTIAL_PARSE_LEN) return null
         val trimmed = raw.trimEnd()
         val last = trimmed.lastOrNull()
         if (last == '}' || last == ']') {

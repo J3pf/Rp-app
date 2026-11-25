@@ -5,86 +5,83 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class AndroidNetworkMonitorProbeTest {
     @Test
-    fun independentMonitorInstances_doNotShareCallbacks() = runTest {
-        val firstSource = RecordingNetworkCallbackSource()
-        val secondSource = RecordingNetworkCallbackSource()
-        val firstMonitor = AndroidNetworkMonitor.withCallbackSource(firstSource)
-        val secondMonitor = AndroidNetworkMonitor.withCallbackSource(secondSource)
-        val firstObserver = Obs()
-        val secondObserver = Obs()
-        firstMonitor.register(firstObserver)
-        secondMonitor.register(secondObserver)
+    fun independentMonitorInstances_doNotShareCallbacks() =
+        runTest {
+            val firstSource = RecordingNetworkCallbackSource()
+            val secondSource = RecordingNetworkCallbackSource()
+            val firstMonitor = AndroidNetworkMonitor.withCallbackSource(firstSource)
+            val secondMonitor = AndroidNetworkMonitor.withCallbackSource(secondSource)
+            val firstObserver = Obs()
+            val secondObserver = Obs()
+            firstMonitor.register(firstObserver)
+            secondMonitor.register(secondObserver)
 
-        firstSource.available(NetworkIdentity("A"))
-        firstSource.lost(NetworkIdentity("A"), activeNetwork = null)
+            firstSource.available(NetworkIdentity("A"))
+            firstSource.lost(NetworkIdentity("A"), activeNetwork = null)
 
-        assertEquals(listOf(true, false), firstObserver.availability)
-        assertEquals(emptyList(), firstObserver.identityChanges)
-        assertEquals(emptyList(), secondObserver.availability)
-        assertEquals(emptyList(), secondObserver.identityChanges)
-        assertFalse(firstMonitor.isOnline.value)
-        assertFalse(secondMonitor.isOnline.value)
-    }
-
-    @Test
-    fun validatedAfterUnvalidatedAvailable_pre_move_retried() = runTest {
-        val source = RecordingNetworkCallbackSource()
-        val monitor = AndroidNetworkMonitor.withCallbackSource(source)
-        val observer = Obs()
-        monitor.register(observer)
-        val network = NetworkIdentity("A")
-
-        source.available(network)
-        source.capabilitiesChanged(network, validated = true)
-
-        assertEquals(listOf(true, true), observer.availability)
-        assertEquals(emptyList(), observer.identityChanges)
-    }
+            assertEquals(listOf(true, false), firstObserver.availability)
+            assertEquals(emptyList(), firstObserver.identityChanges)
+            assertEquals(emptyList(), secondObserver.availability)
+            assertEquals(emptyList(), secondObserver.identityChanges)
+            assertFalse(firstMonitor.isOnline.value)
+            assertFalse(secondMonitor.isOnline.value)
+        }
 
     @Test
-    fun availableA_thenValidatedB_pre_move_forced() = runTest {
-        val source = RecordingNetworkCallbackSource()
-        val monitor = AndroidNetworkMonitor.withCallbackSource(source)
-        val observer = Obs()
-        monitor.register(observer)
+    fun validatedOnSameOnlineNetwork_shortCircuitsCapabilitiesChanged() =
+        runTest {
+            val source = RecordingNetworkCallbackSource()
+            val monitor = AndroidNetworkMonitor.withCallbackSource(source)
+            val observer = Obs()
+            monitor.register(observer)
+            val network = NetworkIdentity("A")
 
-        source.available(NetworkIdentity("A"))
-        source.capabilitiesChanged(NetworkIdentity("B"), validated = true)
+            source.available(network)
+            source.capabilitiesChanged(network, validated = true)
+            source.capabilitiesChanged(network, validated = true)
 
-        assertEquals(listOf(true), observer.availability)
-        assertEquals(listOf(Unit), observer.identityChanges)
-    }
+            assertEquals(listOf(true), observer.availability)
+            assertEquals(emptyList(), observer.identityChanges)
+        }
 
     @Test
-    fun validatedAfterLostOfSeededNetwork_pre_move_retried() = runTest {
-        val source = RecordingNetworkCallbackSource()
-        val monitor = AndroidNetworkMonitor.withCallbackSource(source)
-        val observer = Obs()
-        monitor.register(observer)
+    fun availableA_thenValidatedB_pre_move_forced() =
+        runTest {
+            val source = RecordingNetworkCallbackSource()
+            val monitor = AndroidNetworkMonitor.withCallbackSource(source)
+            val observer = Obs()
+            monitor.register(observer)
 
-        source.available(NetworkIdentity("A"))
-        source.available(NetworkIdentity("B"))
-        source.lost(NetworkIdentity("A"), activeNetwork = NetworkIdentity("B"))
-        source.capabilitiesChanged(NetworkIdentity("B"), validated = true)
+            source.available(NetworkIdentity("A"))
+            source.capabilitiesChanged(NetworkIdentity("B"), validated = true)
 
-        // Pre-move mapping (c4fa975): losing the last validated network drove
-        // policy.networkLost() (persistent, keeps the retry machinery armed) and nulls
-        // the seed; a later validated callback for the other network had prev == null
-        // so changed == false -> retryNow(force = false) -> onAvailability(true).
-        assertEquals(listOf(true, true, false, true), observer.availability)
-        assertEquals(emptyList(), observer.identityChanges)
-    }
+            assertEquals(listOf(true), observer.availability)
+            assertEquals(listOf(Unit), observer.identityChanges)
+        }
 
-    // DI-level singletonFreeBind is checked by reading PortsModule.kt: bindNetworkMonitor must
-    // have no @Singleton scope, while bindAppLifecycleMonitor keeps @Singleton. The injected
-    // AndroidNetworkMonitor constructor is also unscoped; reflection/this unit test cannot verify
-    // Hilt's generated graph without turning the probe into an integration test.
+    @Test
+    fun validatedAfterLostOfSeededNetwork_pre_move_retried() =
+        runTest {
+            val source = RecordingNetworkCallbackSource()
+            val monitor = AndroidNetworkMonitor.withCallbackSource(source)
+            val observer = Obs()
+            monitor.register(observer)
 
-    private data class NetworkIdentity(val value: String)
+            source.available(NetworkIdentity("A"))
+            source.available(NetworkIdentity("B"))
+            source.lost(NetworkIdentity("A"), activeNetwork = NetworkIdentity("B"))
+            source.capabilitiesChanged(NetworkIdentity("B"), validated = true)
+
+            assertEquals(listOf(true, true, false, true), observer.availability)
+            assertEquals(emptyList(), observer.identityChanges)
+        }
+
+    private data class NetworkIdentity(
+        val value: String,
+    )
 
     private class Obs : NetworkObserver {
         val availability = mutableListOf<Boolean>()

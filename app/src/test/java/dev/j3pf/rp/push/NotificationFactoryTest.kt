@@ -37,9 +37,11 @@ class NotificationFactoryTest {
     private lateinit var nm: NotificationManager
     private lateinit var settings: SettingsRepository
     private lateinit var factory: NotificationFactory
+    private var clockMs: Long = 10_000L
 
     @Before
     fun setUp() {
+        clockMs = 10_000L
         ctx = ApplicationProvider.getApplicationContext()
         shadowOf(ctx).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         nm = ctx.getSystemService(NotificationManager::class.java)
@@ -50,6 +52,7 @@ class NotificationFactoryTest {
                 NotificationChannels(ctx),
                 settings,
                 NotificationDeduper(inMemoryDb(ctx).dedup()),
+                nowMs = { clockMs },
             )
     }
 
@@ -224,7 +227,12 @@ class NotificationFactoryTest {
             val nSame = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
             assertTrue(n === nSame)
 
-            // When activeTask changes, notification should be updated.
+            // Cosmetic activeTask changes within 3s throttle window are suppressed, then flush once >=3s elapses.
+            clockMs += 500L
+            factory.showWorking(agent.copy(activeTask = "Paso intermedio"))
+            assertTrue(n === shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id))
+
+            clockMs += NotificationFactory.WORKING_THROTTLE_MS
             factory.showWorking(agent.copy(activeTask = "Compilando APK"))
             val nUpdated = shadowOf(nm).getNotification(NotificationFactory.WORKING_TAG, id)
             assertNotNull(nUpdated)

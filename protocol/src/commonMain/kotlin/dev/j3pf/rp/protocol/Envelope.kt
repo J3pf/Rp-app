@@ -79,6 +79,7 @@ object ErrorCodes {
 object MsgType {
     // App → relay
     const val APP_HELLO = "app.hello"
+    const val APP_STATE = "app.state"
     const val AGENT_SUBSCRIBE = "agent.subscribe"
     const val AGENT_UNSUBSCRIBE = "agent.unsubscribe"
     const val USER_MESSAGE = "user.message"

@@ -4,12 +4,12 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.data.ports.NetworkMonitor
 import dev.j3pf.rp.data.ports.NetworkObserver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.CopyOnWriteArraySet
 import javax.inject.Inject
 
 /** Android ConnectivityManager adapter for the shared network-monitor port. */
@@ -23,7 +23,8 @@ class AndroidNetworkMonitor private constructor(
 
     private val lock = Any()
     private val online = MutableStateFlow(false)
-    private var observer: NetworkObserver? = null
+    private val observers = CopyOnWriteArraySet<NetworkObserver>()
+    private var activeRegistrations = 0
     private var registering = false
     private var registered = false
     private var lastValidatedNetwork: Any? = null
@@ -31,30 +32,46 @@ class AndroidNetworkMonitor private constructor(
     override val isOnline: StateFlow<Boolean> = online
 
     override fun register(observer: NetworkObserver) {
-        synchronized(lock) {
-            this.observer = observer
-            if (registering || registered) return
-            registering = true
-        }
+        val shouldRegister =
+            synchronized(lock) {
+                observers.add(observer)
+                activeRegistrations += 1
+                if (registering || registered) {
+                    false
+                } else {
+                    registering = true
+                    true
+                }
+            }
+        if (!shouldRegister) return
 
         val didRegister = callbackSource.register(events)
         synchronized(lock) {
             registering = false
             registered = didRegister
-            if (!didRegister) this.observer = null
+            if (!didRegister) {
+                observers.clear()
+                activeRegistrations = 0
+            }
         }
     }
 
     override fun unregister() {
         val shouldUnregister =
             synchronized(lock) {
-                val wasRegistered = registered
-                registered = false
-                registering = false
-                observer = null
-                lastValidatedNetwork = null
-                online.value = false
-                wasRegistered
+                if (activeRegistrations > 1) {
+                    activeRegistrations -= 1
+                    false
+                } else {
+                    val wasRegistered = registered
+                    activeRegistrations = 0
+                    registered = false
+                    registering = false
+                    observers.clear()
+                    lastValidatedNetwork = null
+                    online.value = false
+                    wasRegistered
+                }
             }
         if (shouldUnregister) callbackSource.unregister()
     }
@@ -74,26 +91,19 @@ class AndroidNetworkMonitor private constructor(
                 validated: Boolean,
             ) {
                 if (!validated) return
-                val (currentObserver, identityChanged, identityUnchanged) =
+                val identityChanged =
                     synchronized(lock) {
                         if (!registered && !registering) return
                         val previousNetwork = lastValidatedNetwork
+                        if (previousNetwork == network && online.value) return
                         lastValidatedNetwork = network
                         online.value = true
-                        Triple(
-                            observer,
-                            previousNetwork != null && previousNetwork != network,
-                            previousNetwork == network,
-                        )
+                        previousNetwork != null && previousNetwork != network
                     }
-                // Pre-move semantics (ReconnectingSocket.kt @ c4fa975): every validated
-                // capability change ended in retryNow(force = changed). A null previous
-                // network (seeded lost, other active) is not an identity change, so it
-                // still signals ordinary availability and the socket retries non-forced.
                 if (identityChanged) {
-                    currentObserver?.onNetworkIdentityChange()
+                    observers.forEach { it.onNetworkIdentityChange() }
                 } else {
-                    currentObserver?.onAvailability(true)
+                    observers.forEach { it.onAvailability(true) }
                 }
             }
 
@@ -115,13 +125,11 @@ class AndroidNetworkMonitor private constructor(
         }
 
     private fun notifyAvailability(available: Boolean) {
-        val currentObserver =
-            synchronized(lock) {
-                if (!registered && !registering) return
-                online.value = available
-                observer
-            }
-        currentObserver?.onAvailability(available)
+        synchronized(lock) {
+            if (!registered && !registering) return
+            online.value = available
+        }
+        observers.forEach { it.onAvailability(available) }
     }
 
     companion object {
@@ -180,10 +188,7 @@ private class AndroidConnectivityCallbackSource(
                 }
             }
         return runCatching {
-            manager.registerNetworkCallback(
-                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),
-                networkCallback,
-            )
+            manager.registerDefaultNetworkCallback(networkCallback)
             callback = networkCallback
             true
         }.getOrDefault(false)

@@ -49,30 +49,55 @@ import javax.inject.Singleton
  *  - Al asentar un prompt ([cancelPrompt]) se retira el child, su resumen huérfano y la clave del deduper.
  */
 @Singleton
-class NotificationFactory
+class NotificationFactory internal constructor(
+    private val context: Context,
+    private val channels: NotificationChannels,
+    private val settings: SettingsRepository,
+    private val deduper: NotificationDeduper,
+    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    private val workingThrottleMs: Long = WORKING_THROTTLE_MS,
+) {
     @Inject
     constructor(
-        @ApplicationContext private val context: Context,
-        private val channels: NotificationChannels,
-        private val settings: SettingsRepository,
-        private val deduper: NotificationDeduper,
-    ) {
-        private val nm get() = NotificationManagerCompat.from(context)
-        private val activeWorkingAgents = ConcurrentHashMap<String, AgentSummary>()
-        private val workingOrder = CopyOnWriteArrayList<String>()
-        private val workingStartTimes = ConcurrentHashMap<String, Long>()
+        @ApplicationContext context: Context,
+        channels: NotificationChannels,
+        settings: SettingsRepository,
+        deduper: NotificationDeduper,
+    ) : this(
+        context = context,
+        channels = channels,
+        settings = settings,
+        deduper = deduper,
+        nowMs = { System.currentTimeMillis() },
+        workingThrottleMs = WORKING_THROTTLE_MS,
+    )
 
-        @Volatile
-        private var currentWorkingNotifId: Int? = null
+    private val nm get() = NotificationManagerCompat.from(context)
+    private val activeWorkingAgents = ConcurrentHashMap<String, AgentSummary>()
+    private val activeWorkingNotifIds = ConcurrentHashMap.newKeySet<Int>()
+    private val workingOrder = CopyOnWriteArrayList<String>()
+    private val workingStartTimes = ConcurrentHashMap<String, Long>()
 
-        @Volatile
-        private var currentWorkingSignature: String? = null
+    @Volatile
+    private var currentWorkingNotifId: Int? = null
 
-        @Volatile
-        private var foregroundSlotId: Int? = null
+    @Volatile
+    private var currentWorkingNotifTag: String? = null
 
-        @Volatile
-        private var onForegroundSlotIdle: (() -> Unit)? = null
+    @Volatile
+    private var currentWorkingSignature: String? = null
+
+    @Volatile
+    private var lastRenderedStructuralKey: String? = null
+
+    @Volatile
+    private var lastWorkingRenderMs: Long = Long.MIN_VALUE
+
+    @Volatile
+    private var foregroundSlotId: Int? = null
+
+    @Volatile
+    private var onForegroundSlotIdle: (() -> Unit)? = null
 
         fun bindForegroundSlot(
             notifId: Int,
@@ -434,11 +459,12 @@ class NotificationFactory
                 return
             }
             if (!canNotify()) return
-            // Si el agente volvió a trabajar, cualquier notificación previa de "Terminó" es obsoleta.
-            nm.cancel(SETTLED_TAG, stableId("settled:${agent.agentId}"))
-            pruneOrphanSummaries()
 
             val prev = activeWorkingAgents[agent.agentId]
+            if (prev == null) {
+                // Si el agente volvió a trabajar, cualquier notificación previa de "Terminó" es obsoleta.
+                nm.cancel(SETTLED_TAG, stableId("settled:${agent.agentId}"))
+            }
             val merged =
                 if (prev == null) {
                     agent
@@ -459,7 +485,7 @@ class NotificationFactory
                     )
                 }
             activeWorkingAgents[agent.agentId] = merged
-            workingStartTimes.putIfAbsent(agent.agentId, System.currentTimeMillis())
+            workingStartTimes.putIfAbsent(agent.agentId, nowMs())
             if (!workingOrder.contains(agent.agentId)) {
                 workingOrder.add(0, agent.agentId)
             } else if (!agent.activeTask.isNullOrBlank() && agent.activeTask != prev?.activeTask) {
@@ -482,30 +508,40 @@ class NotificationFactory
 
             if (activeWorkingAgents.isEmpty()) {
                 val activeId = currentWorkingNotifId
+                val hadTracked = activeWorkingNotifIds.isNotEmpty() || activeId != null
                 currentWorkingNotifId = null
+                currentWorkingNotifTag = null
                 currentWorkingSignature = null
+                lastRenderedStructuralKey = null
+                lastWorkingRenderMs = Long.MIN_VALUE
                 if (activeId != null && activeId != slotId) {
                     nm.cancel(WORKING_TAG, activeId)
+                    activeWorkingNotifIds.remove(activeId)
                 }
-                if (removed || isWorkingNotificationActive(id)) {
+                if (removed || activeWorkingNotifIds.remove(id)) {
                     nm.cancel(WORKING_TAG, id)
+                    activeWorkingNotifIds.remove(id)
                 }
-                cancelOtherWorkingNotifications(keepId = -1)
+                cancelTrackedOtherWorkingNotifications(keepId = -1)
+                if (!removed && !hadTracked) {
+                    cancelOtherWorkingNotificationsFromSystem(keepId = -1)
+                }
                 if (slotId != null) {
                     onForegroundSlotIdle?.invoke()
                 }
             } else {
-                if (id != currentWorkingNotifId) {
+                if (id != currentWorkingNotifId && (removed || activeWorkingNotifIds.contains(id))) {
                     nm.cancel(WORKING_TAG, id)
+                    activeWorkingNotifIds.remove(id)
                 }
                 if (canNotify()) {
-                    renderWorkingNotification()
+                    renderWorkingNotification(forceImmediate = true)
                 }
             }
         }
 
         @SuppressLint("MissingPermission") // Guarded by canNotify() which checks POST_NOTIFICATIONS on API 33+
-        private fun renderWorkingNotification() {
+        private fun renderWorkingNotification(forceImmediate: Boolean = false) {
             val allWorking =
                 workingOrder.mapNotNull { activeWorkingAgents[it] }.ifEmpty {
                     activeWorkingAgents.values.toList()
@@ -619,22 +655,51 @@ class NotificationFactory
                 shortCritical = "${allWorking.size} agentes"
             }
 
+            val structuralKey =
+                buildString {
+                    append(channel)
+                    append('|')
+                    append(targetTag)
+                    append('|')
+                    append(id)
+                    append('|')
+                    allWorking.forEach { a ->
+                        append(a.agentId)
+                        append(':')
+                        append(a.status)
+                        append(':')
+                        append(a.redacted)
+                        append(',')
+                    }
+                }
             val signature = "$channel|$targetTag|$id|${allWorking.size}|$title|$subText|$text|$doneTodos/$totalTodos"
-            if (currentWorkingSignature == signature &&
+            val isTrackedActive =
                 currentWorkingNotifId == id &&
-                isNotificationActive(targetTag, id)
-            ) {
+                    currentWorkingNotifTag == targetTag &&
+                    (targetTag != WORKING_TAG || id in activeWorkingNotifIds)
+            if (currentWorkingSignature == signature && isTrackedActive) {
+                return
+            }
+
+            val now = nowMs()
+            val isCosmeticUpdate =
+                !forceImmediate &&
+                    isTrackedActive &&
+                    lastRenderedStructuralKey == structuralKey &&
+                    lastWorkingRenderMs != Long.MIN_VALUE
+            if (isCosmeticUpdate && workingThrottleMs > 0L && (now - lastWorkingRenderMs) < workingThrottleMs) {
                 return
             }
 
             val prevId = currentWorkingNotifId
             if (prevId != null && prevId != id && prevId != slotId) {
                 nm.cancel(WORKING_TAG, prevId)
+                activeWorkingNotifIds.remove(prevId)
             }
-            cancelOtherWorkingNotifications(keepId = if (slotId != null) -1 else id)
+            cancelTrackedOtherWorkingNotifications(keepId = if (slotId != null) -1 else id)
 
             val open = openIntent(null, primary.agentId, id)
-            val startTime = workingStartTimes[primary.agentId] ?: System.currentTimeMillis()
+            val startTime = workingStartTimes[primary.agentId] ?: now
             val isPromotedCapable = Build.VERSION.SDK_INT >= 35
 
             val builder =
@@ -705,11 +770,25 @@ class NotificationFactory
             }
 
             currentWorkingNotifId = id
+            currentWorkingNotifTag = targetTag
             currentWorkingSignature = signature
+            lastRenderedStructuralKey = structuralKey
+            lastWorkingRenderMs = now
+            if (targetTag == WORKING_TAG) {
+                activeWorkingNotifIds.add(id)
+            }
             nm.notify(targetTag, id, notif)
         }
 
-        private fun cancelOtherWorkingNotifications(keepId: Int) {
+        private fun cancelTrackedOtherWorkingNotifications(keepId: Int) {
+            val staleIds = activeWorkingNotifIds.filter { it != keepId }
+            for (staleId in staleIds) {
+                nm.cancel(WORKING_TAG, staleId)
+                activeWorkingNotifIds.remove(staleId)
+            }
+        }
+
+        private fun cancelOtherWorkingNotificationsFromSystem(keepId: Int) {
             runCatching {
                 context
                     .getSystemService(android.app.NotificationManager::class.java)
@@ -718,19 +797,6 @@ class NotificationFactory
                     .forEach { nm.cancel(WORKING_TAG, it.id) }
             }
         }
-
-        private fun isWorkingNotificationActive(id: Int): Boolean = isNotificationActive(WORKING_TAG, id)
-
-        private fun isNotificationActive(
-            tag: String?,
-            id: Int,
-        ): Boolean =
-            runCatching {
-                context
-                    .getSystemService(android.app.NotificationManager::class.java)
-                    .activeNotifications
-                    .any { it.id == id && it.tag == tag }
-            }.getOrDefault(false)
 
         // ───────────────────────────── Estado desde el receiver ─────────────────────────────
 
@@ -879,7 +945,12 @@ class NotificationFactory
         fun cancelNotification(
             tag: String,
             id: Int,
-        ) = nm.cancel(tag, id)
+        ) {
+            if (tag == WORKING_TAG) {
+                activeWorkingNotifIds.remove(id)
+            }
+            nm.cancel(tag, id)
+        }
 
         // ───────────────────────────── Utilidades ─────────────────────────────
 
@@ -1038,6 +1109,9 @@ class NotificationFactory
             private val MD_HEADER_REGEX = Regex("^#{1,6}\\s+")
             private val MD_BULLET_REGEX = Regex("^[-*]\\s+")
             private val WHITESPACE_REGEX = Regex("\\s+")
+
+            /** Minimum interval between cosmetic working notification redraws for the same active agent(s). */
+            internal const val WORKING_THROTTLE_MS = 3_000L
 
             /** "Enviando…" nunca debe sobrevivir al flujo que lo publicó. */
             private const val SENDING_TIMEOUT_MS = 30_000L

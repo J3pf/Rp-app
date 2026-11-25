@@ -29,6 +29,7 @@ import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentsUpdate
 import dev.j3pf.rp.protocol.AppHello
 import dev.j3pf.rp.protocol.AppInfo
+import dev.j3pf.rp.protocol.AppState
 import dev.j3pf.rp.protocol.AppWelcome
 import dev.j3pf.rp.protocol.Envelope
 import dev.j3pf.rp.protocol.MsgType
@@ -37,11 +38,13 @@ import dev.j3pf.rp.protocol.PushNotify
 import dev.j3pf.rp.protocol.Ulid
 import dev.j3pf.rp.util.agentTitle
 import dev.j3pf.rp.util.lastSegment
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -51,8 +54,8 @@ import javax.inject.Inject
 
 /**
  * Canal directo de push (independiente de Google): servicio en primer plano `remoteMessaging` con WebSocket a
- * `/ws/app?mode=direct`, ping cada 4,5 min, reconexión con backoff + `NetworkCallback`. Recibe `push.notify` y
- * responde `push.ack`. Se arranca en `BOOT_COMPLETED` y al abrir la app. (PLAN-APP §4.1)
+ * `/ws/app?mode=direct`, keepalive dirigido por el relay (sin ping redundante del cliente), reconexión con backoff
+ * + `NetworkCallback`. Recibe `push.notify` y responde `push.ack`. Se arranca en `BOOT_COMPLETED` y al abrir la app.
  *
  * Sólo reenvía al bus los mensajes `prompt.*`: `agents.update`/`app.welcome` de este modo vienen resumidos y
  * sobrescribirían datos completos de la conexión de primer plano.
@@ -88,6 +91,7 @@ class DirectPushService : LifecycleService() {
     private val idleStandby = MutableStateFlow(false)
     private val hasAlternatePushChannel = MutableStateFlow(false)
     private var powerReceiver: BroadcastReceiver? = null
+    private var directSocketStarted = false
 
     @Volatile
     private var lastTrayState: ServiceTrayState? = null
@@ -149,7 +153,7 @@ class DirectPushService : LifecycleService() {
         ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         powerReceiver = receiver
 
-        val client = baseClient.newBuilder().pingInterval(270, TimeUnit.SECONDS).build()
+        val client = createDirectSocketClient(baseClient)
         socket =
             ReconnectingSocket(
                 networkMonitor = networkMonitor,
@@ -169,9 +173,20 @@ class DirectPushService : LifecycleService() {
                     ws.send(
                         Envelope.of(MsgType.APP_HELLO, AppHello(s.deviceId, AppInfo(BuildConfig.VERSION_NAME)), id = Ulid.new()).encode(),
                     )
+                    ws.send(encodeAppState(screenInteractive.value))
                 },
                 onSocketText = ::onText,
             )
+
+        lifecycleScope.launch {
+            screenInteractive
+                .drop(1)
+                .collect { screenOn ->
+                    if (socket.isConnected) {
+                        socket.send(encodeAppState(screenOn))
+                    }
+                }
+        }
 
         lifecycleScope.launch {
             socket.state.collect { st ->
@@ -233,8 +248,12 @@ class DirectPushService : LifecycleService() {
             }.distinctUntilChanged()
                 .collect { shouldRun ->
                     if (!shouldRun) {
-                        socket.stop()
+                        if (directSocketStarted) {
+                            directSocketStarted = false
+                            socket.stop()
+                        }
                     } else if (secrets.current() != null) {
+                        directSocketStarted = true
                         socket.start()
                         socket.retryNow()
                     }
@@ -317,6 +336,10 @@ class DirectPushService : LifecycleService() {
                 }
         }
 
+        startWorkingAgentsObserver()
+    }
+
+    internal fun startWorkingAgentsObserver(): Job =
         lifecycleScope.launch {
             agents.agents
                 .map { list -> list.filter { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING } }
@@ -325,7 +348,6 @@ class DirectPushService : LifecycleService() {
                     factory.reconcileWorkingAgents(working)
                 }
         }
-    }
 
     override fun onStartCommand(
         intent: Intent?,
@@ -346,6 +368,7 @@ class DirectPushService : LifecycleService() {
                 hasAlternatePushChannel = hasAlternatePushChannel.value,
             )
         ) {
+            directSocketStarted = true
             socket.start()
             socket.retryNow()
         }
@@ -360,7 +383,8 @@ class DirectPushService : LifecycleService() {
             runCatching { unregisterReceiver(receiver) }
         }
         powerReceiver = null
-        if (::socket.isInitialized) {
+        if (::socket.isInitialized && directSocketStarted) {
+            directSocketStarted = false
             socket.stop()
         }
         super.onDestroy()
@@ -386,16 +410,8 @@ class DirectPushService : LifecycleService() {
                 lifecycleScope.launch {
                     val u = runCatching { env.body<AgentsUpdate>() }.getOrNull() ?: return@launch
                     runCatching { agents.applyAgentsUpdate(u) }
-                    for (a in u.upsert) {
-                        if (a.status == AgentStatus.WORKING || a.status == AgentStatus.COMPACTING) {
-                            idleStandby.value = false
-                            factory.showWorking(a)
-                        } else {
-                            factory.cancelWorking(a.agentId)
-                        }
-                    }
-                    for (id in u.remove) {
-                        factory.cancelWorking(id)
+                    if (u.upsert.any { it.status == AgentStatus.WORKING || it.status == AgentStatus.COMPACTING }) {
+                        idleStandby.value = false
                     }
                 }
             MsgType.APP_WELCOME ->
@@ -502,10 +518,16 @@ class DirectPushService : LifecycleService() {
         private const val NOTIF_ID = 4200
         private const val IDLE_STANDBY_TIMEOUT_MS = 10 * 60_000L
 
+        internal fun createDirectSocketClient(base: OkHttpClient): OkHttpClient =
+            base.newBuilder().pingInterval(0, TimeUnit.SECONDS).build()
+
+        internal fun encodeAppState(screenOn: Boolean): String =
+            Envelope.of(MsgType.APP_STATE, AppState(screenOn = screenOn)).encode()
+
         /**
          * Determines whether the background direct WebSocket must remain active.
-         * Without an alternate push channel (e.g., Google-free `direct` flavor), the low-frequency
-         * 270 s ping socket stays alive across idle standby and Doze/Power Save so prompts and errors
+         * Without an alternate push channel (e.g., Google-free `direct` flavor), the relay-driven
+         * heartbeat socket stays alive across idle standby and Doze/Power Save so prompts and errors
          * are never silently missed.
          */
         internal fun shouldRunDirectSocket(

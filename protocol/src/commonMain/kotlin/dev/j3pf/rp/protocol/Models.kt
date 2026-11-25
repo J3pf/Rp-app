@@ -440,6 +440,11 @@ data class AppInfo(
 )
 
 @Serializable
+data class AppState(
+    val screenOn: Boolean,
+)
+
+@Serializable
 data class AppWelcome(
     @Serializable(with = TolerantMachineSummaryListSerializer::class)
     val machines: List<MachineSummary> = emptyList(),

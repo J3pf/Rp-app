@@ -103,6 +103,10 @@ class FixturesTest {
                         RpJson.encodeToJsonElement(AppHello.serializer(), env.body<AppHello>())
                     }
 
+                    MsgType.APP_STATE -> {
+                        RpJson.encodeToJsonElement(AppState.serializer(), env.body<AppState>())
+                    }
+
                     MsgType.AGENT_SUBSCRIBE -> {
                         RpJson.encodeToJsonElement(AgentSubscribe.serializer(), env.body<AgentSubscribe>())
                     }

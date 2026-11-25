@@ -78,6 +78,7 @@ class DirectPushServiceRoutingTest {
     private lateinit var factory: NotificationFactory
     private lateinit var service: DirectPushService
     private lateinit var repositoryScope: CoroutineScope
+    private var workingObserverJob: Job? = null
 
     @Before
     fun setUp() = runBlocking {
@@ -111,10 +112,13 @@ class DirectPushServiceRoutingTest {
         inject("factory", factory)
         inject("baseClient", client)
         inject("networkMonitor", AndroidNetworkMonitor(context))
+        workingObserverJob = service.startWorkingAgentsObserver()
     }
 
     @After
     fun tearDown() {
+        workingObserverJob?.cancel()
+        workingObserverJob = null
         if (::repositoryScope.isInitialized) {
             repositoryScope.cancel()
             runBlocking { withTimeout(10_000) { repositoryScope.coroutineContext[Job]?.join() } }
