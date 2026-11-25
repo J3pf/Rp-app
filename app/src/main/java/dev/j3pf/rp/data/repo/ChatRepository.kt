@@ -46,6 +46,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -53,6 +55,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -76,6 +81,45 @@ class ChatRepository
         private val agentDao: AgentDao,
     ) : ChatSessionGate {
         private val persisted = AtomicInteger(0)
+        private val bufferMutex = Mutex()
+        private val flushMutex = Mutex()
+        private val pendingEvents = ArrayList<ChatRecordEntity>(EVENT_BATCH_MAX_SIZE)
+        private var flushJob: Job? = null
+
+        internal suspend fun flushPendingEvents() {
+            flushMutex.withLock {
+                val batch =
+                    bufferMutex.withLock {
+                        val jobToCancel = flushJob
+                        flushJob = null
+                        if (jobToCancel != currentCoroutineContext()[Job]) {
+                            jobToCancel?.cancel()
+                        }
+                        if (pendingEvents.isEmpty()) {
+                            emptyList()
+                        } else {
+                            ArrayList(pendingEvents).also { pendingEvents.clear() }
+                        }
+                    }
+                if (batch.isEmpty()) return@withLock
+                chatDao.insert(batch)
+                val previousBucket = persisted.get() / TRIM_EVERY_N_EVENTS
+                val newTotal = persisted.addAndGet(batch.size)
+                if (newTotal / TRIM_EVERY_N_EVENTS > previousBucket) {
+                    batch
+                        .map { it.relayId to it.agentId }
+                        .distinct()
+                        .forEach { (rId, aId) -> chatDao.trim(rId, aId, MAX_PERSISTED_RECORDS) }
+                }
+            }
+        }
+
+        internal suspend fun persistEventDirect(
+            agentId: String,
+            event: AgentEvent,
+        ) = chatPlatform.persistEvent(agentId, event)
+
+        internal suspend fun loadInitialStateDirect(agentId: String): ChatState? = chatPlatform.loadInitialState(agentId)
 
         private val chatPlatform =
             object : ChatPlatform {
@@ -137,7 +181,8 @@ class ChatRepository
 
                 override suspend fun loadInitialState(agentId: String): ChatState? {
                     val relayId = secrets.current()?.relayId ?: return null
-                    val records = chatDao.records(relayId, agentId)
+                    flushPendingEvents()
+                    val records = chatDao.recent(relayId, agentId, MAX_PERSISTED_RECORDS)
                     if (records.isEmpty()) return null
                     var s = ChatState()
                     val entryRecords = records.filter { it.kind == RecordKind.ENTRY }
@@ -163,6 +208,7 @@ class ChatRepository
                     epochChanged: Boolean,
                 ) {
                     val relayId = secrets.current()?.relayId ?: return
+                    flushPendingEvents()
                     val snapshotSeq = ((history.liveFromSeq ?: 0L) - 1L).coerceAtLeast(0L)
                     val entryRows =
                         history.entries.map {
@@ -197,7 +243,7 @@ class ChatRepository
                         entryRows = entryRows,
                         liveFromSeq = history.liveFromSeq,
                         eventRows = eventRows,
-                        keep = 5000,
+                        keep = MAX_PERSISTED_RECORDS,
                     )
                 }
 
@@ -206,23 +252,50 @@ class ChatRepository
                     event: AgentEvent,
                 ) {
                     val relayId = secrets.current()?.relayId ?: return
-                    chatDao.insert(
-                        listOf(
-                            ChatRecordEntity(
-                                relayId = relayId,
-                                agentId = agentId,
-                                kind = RecordKind.EVENT,
-                                epoch = event.epoch,
-                                seq = event.seq,
-                                json = RpJson.encodeToString(AgentEvent.serializer(), event),
-                            ),
-                        ),
-                    )
-                    if (persisted.incrementAndGet() % 100 == 0) chatDao.trim(relayId, agentId, 5000)
+                    val record =
+                        ChatRecordEntity(
+                            relayId = relayId,
+                            agentId = agentId,
+                            kind = RecordKind.EVENT,
+                            epoch = event.epoch,
+                            seq = event.seq,
+                            json = RpJson.encodeToString(AgentEvent.serializer(), event),
+                        )
+                    val evType = event.e.str("type")
+                    val shouldFlushNow =
+                        bufferMutex.withLock {
+                            pendingEvents.add(record)
+                            val immediate =
+                                pendingEvents.size >= EVENT_BATCH_MAX_SIZE ||
+                                    evType in IMMEDIATE_FLUSH_EVENTS
+                            if (!immediate && flushJob?.isActive != true) {
+                                flushJob =
+                                    scope.launch {
+                                        delay(EVENT_FLUSH_DELAY_MS)
+                                        flushPendingEvents()
+                                    }
+                            }
+                            immediate
+                        }
+                    if (shouldFlushNow) {
+                        flushPendingEvents()
+                    }
                 }
 
                 override suspend fun clearChat(relayId: String) {
-                    chatDao.clear(relayId)
+                    flushMutex.withLock {
+                        bufferMutex.withLock {
+                            pendingEvents.removeAll { it.relayId == relayId }
+                            if (pendingEvents.isEmpty()) {
+                                val jobToCancel = flushJob
+                                flushJob = null
+                                if (jobToCancel != currentCoroutineContext()[Job]) {
+                                    jobToCancel?.cancel()
+                                }
+                            }
+                        }
+                        chatDao.clear(relayId)
+                    }
                 }
 
                 override fun enqueueBackgroundSend() {
@@ -316,6 +389,7 @@ class ChatRepository
                 telemetryJob?.cancel()
                 telemetryJob = null
                 core.stop()
+                scope.launch { flushPendingEvents() }
             }
 
             override suspend fun subscribe() = core.subscribe()
@@ -346,6 +420,12 @@ class ChatRepository
         }
 
         companion object {
+            internal const val EVENT_BATCH_MAX_SIZE = 32
+            internal const val EVENT_FLUSH_DELAY_MS = 500L
+            internal const val MAX_PERSISTED_RECORDS = 1000
+            private const val TRIM_EVERY_N_EVENTS = 100
+            private val IMMEDIATE_FLUSH_EVENTS = setOf("agent_settled", "agent_end", "message_end")
+
             fun enqueueSend(context: Context) {
                 val req =
                     OneTimeWorkRequestBuilder<SendMessageWorker>()

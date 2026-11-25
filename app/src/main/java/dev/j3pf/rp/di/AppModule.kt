@@ -39,10 +39,10 @@ object AppModule {
         OkHttpClient
             .Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.SECONDS) // WS: sin timeout de lectura; el relay hace ping cada 25 s
+            .readTimeout(0, TimeUnit.SECONDS) // WS: no read timeout; relay already drives 25 s server pings
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
-            .pingInterval(25, TimeUnit.SECONDS)
+            .pingInterval(45, TimeUnit.SECONDS)
             .minWebSocketMessageToCompress(1024L)
             .retryOnConnectionFailure(true)
             .build()
@@ -55,7 +55,7 @@ object AppModule {
         Room
             .databaseBuilder(ctx, RpDatabase::class.java, "rp.db")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3)
+            .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3, RpDatabase.MIGRATION_3_4)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 

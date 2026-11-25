@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
@@ -106,10 +107,29 @@ class AttachmentsRepository
                     val id = Ulid.new()
                     var name = sanitize(rawName)
                     var mime = rawMime
+                    val isCompressible = compressImages && mime in COMPRESSIBLE
+                    val streamLimit = if (isCompressible) MAX_ATTACHMENT_BYTES * 2 else MAX_ATTACHMENT_BYTES
+                    if (isCompressible) {
+                        val knownSize = querySize(uri)
+                        require(knownSize == null || knownSize <= streamLimit) { "El archivo supera 25 MB" }
+                        val jpgName = name.substringBeforeLast('.') + ".jpg"
+                        val jpgOut = File(dir, "$id-$jpgName")
+                        file = jpgOut
+                        val directCompressed = compressSemaphore.withPermit { compressFromUri(uri, jpgOut) }
+                        if (directCompressed != null) {
+                            mime = "image/jpeg"
+                            name = jpgName
+                            require(directCompressed.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
+                            return@withContext Result.success(
+                                LocalAttachment(id, name, mime, directCompressed.length(), directCompressed, uri),
+                            )
+                        }
+                        jpgOut.delete()
+                        file = null
+                    }
                     val initialOut = File(dir, "$id-$name")
                     out = initialOut
                     file = initialOut
-                    val streamLimit = if (compressImages && mime in COMPRESSIBLE) MAX_ATTACHMENT_BYTES * 2 else MAX_ATTACHMENT_BYTES
                     val inputStream = checkNotNull(context.contentResolver.openInputStream(uri)) { "No se pudo abrir el archivo" }
                     inputStream.use { input ->
                         initialOut.outputStream().use { output ->
@@ -124,7 +144,7 @@ class AttachmentsRepository
                             }
                         }
                     }
-                    if (compressImages && mime in COMPRESSIBLE) {
+                    if (isCompressible) {
                         compressSemaphore.withPermit { compress(initialOut) }?.let { jpg ->
                             initialOut.delete()
                             file = jpg
@@ -227,6 +247,59 @@ class AttachmentsRepository
                 .trimStart('.')
                 .take(120)
                 .ifEmpty { "archivo" }
+
+        private fun querySize(uri: Uri): Long? =
+            runCatching {
+                if (uri.scheme == "file") {
+                    uri.path?.let { File(it).takeIf(File::exists)?.length() }
+                } else {
+                    context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                        if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+                    }
+                }
+            }.getOrNull()?.takeIf { it >= 0L }
+
+        /**
+         * Decodes and resizes compressible images directly from [uri] via [ImageDecoder] (API 29+),
+         * handling EXIF orientation in a single native pass without a raw temp copy or a second
+         * rotated bitmap allocation. Returns `null` if unavailable (e.g., Robolectric) so callers
+         * can fall back cleanly to the stream + [compress] path.
+         */
+        private fun compressFromUri(
+            uri: Uri,
+            targetFile: File,
+        ): File? =
+            runCatching {
+                val source =
+                    if (uri.scheme == "file" && uri.path != null) {
+                        ImageDecoder.createSource(File(requireNotNull(uri.path)))
+                    } else {
+                        ImageDecoder.createSource(context.contentResolver, uri)
+                    }
+                val bitmap =
+                    ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val srcWidth = info.size.width
+                        val srcHeight = info.size.height
+                        val longest = max(srcWidth, srcHeight)
+                        if (longest > MAX_DIM && srcWidth > 0 && srcHeight > 0) {
+                            val scale = MAX_DIM.toFloat() / longest
+                            val targetW = (srcWidth * scale).toInt().coerceAtLeast(1)
+                            val targetH = (srcHeight * scale).toInt().coerceAtLeast(1)
+                            decoder.setTargetSize(targetW, targetH)
+                        }
+                    }
+                try {
+                    targetFile.outputStream().use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
+                    }
+                    targetFile.takeIf { it.exists() && it.length() > 0L }
+                } finally {
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                }
+            }.getOrNull()
 
         @SuppressLint("ExifInterface") // android.media.ExifInterface is sufficient for local image orientation on minSdk 29+
         private fun compress(src: File): File? =

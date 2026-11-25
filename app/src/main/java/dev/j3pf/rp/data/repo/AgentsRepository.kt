@@ -85,7 +85,8 @@ class AgentsRepository
                                         .toSet()
                                 val (staleHerdr, liveAgents) =
                                     w.agents.partition { !it.online && it.machineId in onlineHerdrMachines && isHerdrManagedSession(it) }
-                                val mergedLive = liveAgents.map { mergeTelemetryWithExisting(relayId, it).second }
+                                val existingById = loadExistingByIds(relayId, liveAgents.map { it.agentId })
+                                val mergedLive = liveAgents.map { mergeTelemetry(relayId, it, existingById[it.agentId]) }
                                 dao.syncWelcome(
                                     relayId,
                                     mergedLive,
@@ -119,9 +120,11 @@ class AgentsRepository
         internal suspend fun applyAgentsUpdate(u: AgentsUpdate) {
             val relayId = secrets.current()?.relayId ?: return
             if (u.upsert.isNotEmpty()) {
+                val existingById = loadExistingByIds(relayId, u.upsert.map { it.agentId })
                 val changed =
                     u.upsert.mapNotNull { s ->
-                        val (prev, merged) = mergeTelemetryWithExisting(relayId, s)
+                        val prev = existingById[s.agentId]
+                        val merged = mergeTelemetry(relayId, s, prev)
                         merged.takeIf { it != prev }
                     }
                 if (changed.isNotEmpty()) {
@@ -131,42 +134,52 @@ class AgentsRepository
             if (u.remove.isNotEmpty()) dao.delete(relayId, u.remove)
         }
 
-        private suspend fun mergeTelemetryWithExisting(
+        private suspend fun loadExistingByIds(
+            relayId: String,
+            agentIds: List<String>,
+        ): Map<String, AgentEntity> {
+            if (agentIds.isEmpty()) return emptyMap()
+            return agentIds
+                .distinct()
+                .chunked(BATCH_LOOKUP_CHUNK_SIZE)
+                .flatMap { chunk -> dao.getByIds(relayId, chunk) }
+                .associateBy { it.agentId }
+        }
+
+        private fun mergeTelemetry(
             relayId: String,
             s: AgentSummary,
-        ): Pair<AgentEntity?, AgentEntity> {
-            val prev = dao.get(relayId, s.agentId)
+            prev: AgentEntity?,
+        ): AgentEntity {
             val entity = s.toEntity(relayId)
-            val merged =
-                if (prev != null) {
-                    entity.copy(
-                        todoCompleted =
-                            if (s.todoTotal > 0) {
-                                s.todoCompleted
-                            } else if (s.status == "working") {
-                                prev.todoCompleted
-                            } else {
-                                0
-                            },
-                        todoTotal =
-                            if (s.todoTotal > 0) {
-                                s.todoTotal
-                            } else if (s.status == "working") {
-                                prev.todoTotal
-                            } else {
-                                0
-                            },
-                        activeTask =
-                            when {
-                                s.activeTask != null -> s.activeTask
-                                s.status == "working" -> prev.activeTask
-                                else -> null
-                            },
-                    )
-                } else {
-                    entity
-                }
-            return prev to merged
+            return if (prev != null) {
+                entity.copy(
+                    todoCompleted =
+                        if (s.todoTotal > 0) {
+                            s.todoCompleted
+                        } else if (s.status == "working") {
+                            prev.todoCompleted
+                        } else {
+                            0
+                        },
+                    todoTotal =
+                        if (s.todoTotal > 0) {
+                            s.todoTotal
+                        } else if (s.status == "working") {
+                            prev.todoTotal
+                        } else {
+                            0
+                        },
+                    activeTask =
+                        when {
+                            s.activeTask != null -> s.activeTask
+                            s.status == "working" -> prev.activeTask
+                            else -> null
+                        },
+                )
+            } else {
+                entity
+            }
         }
 
         /** Cierra el pane de Herdr; cuando no hay pane vinculado (o cuando otro agente activo ocupa el mismo pane), archiva el historial con `agent.forget`. */
@@ -277,4 +290,8 @@ class AgentsRepository
         }
 
         private fun isHerdrManagedSession(agent: AgentSummary): Boolean = agent.herdr != null || agent.agentId.contains(":herdr:")
+
+        companion object {
+            private const val BATCH_LOOKUP_CHUNK_SIZE = 500
+        }
     }

@@ -5,9 +5,15 @@ import dev.j3pf.rp.data.crypto.AesGcmSecureCrypto
 import dev.j3pf.rp.data.crypto.platformSecureRandom
 import dev.j3pf.rp.data.ports.SecretStore
 import dev.j3pf.rp.data.ports.SecureCrypto
+import dev.j3pf.rp.protocol.RpJson
+import dev.j3pf.rp.protocol.obj
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -118,12 +124,19 @@ class EncryptedKeyValueSecretStore(
         return cryptoFactory(masterKey).also { cachedCrypto = it }
     }
 
+    @Volatile
+    private var loadedFromLegacy: Boolean = false
+
     private fun resetCorruptedMasterKey() {
         cachedCrypto = null
+        loadedFromLegacy = false
+        backing.remove(K_SESSION_V2)
         backing.clear()
     }
 
     private fun clearEncryptedSessionEntries() {
+        loadedFromLegacy = false
+        backing.remove(K_SESSION_V2)
         SESSION_KEYS.forEach { backing.remove(it) }
     }
 
@@ -144,16 +157,17 @@ class EncryptedKeyValueSecretStore(
 
     private fun writeEncryptedSession(session: Session) {
         val crypto = getOrCreateCrypto()
-        backing.putString(K_RELAY_ID, crypto.encrypt(K_RELAY_ID, session.relayId))
-        backing.putString(K_URL, crypto.encrypt(K_URL, session.relayUrl))
-        backing.putString(K_NAME, crypto.encrypt(K_NAME, session.relayName))
-        backing.putString(K_DEVICE_ID, crypto.encrypt(K_DEVICE_ID, session.deviceId))
-        backing.putString(K_TOKEN, crypto.encrypt(K_TOKEN, session.deviceToken))
-        backing.putString(K_PUSH_KEY, crypto.encrypt(K_PUSH_KEY, session.pushKey))
+        backing.putString(K_SESSION_V2, crypto.encrypt(K_SESSION_V2, encodeSessionJson(session)))
+        if (loadedFromLegacy) {
+            SESSION_KEYS.forEach { runCatching { backing.remove(it) } }
+            loadedFromLegacy = false
+        }
     }
 
     override fun clear() {
         val master = backing.getString(K_MASTER_KEY)
+        loadedFromLegacy = false
+        backing.remove(K_SESSION_V2)
         backing.clear()
         if (master != null) {
             backing.putString(K_MASTER_KEY, master)
@@ -173,7 +187,43 @@ class EncryptedKeyValueSecretStore(
         return sb.toString()
     }
 
-    private fun load(): Session? {
+    private fun load(): Session? =
+        when (val v2Res = backing.read(K_SESSION_V2)) {
+            is SecretReadResult.TransientError -> null
+            is SecretReadResult.Found -> loadV2(v2Res.value)
+            SecretReadResult.NotFound -> loadLegacy()
+        }
+
+    private fun loadV2(rawCiphertext: String): Session? {
+        val crypto =
+            when (val masterResult = loadExistingCrypto()) {
+                is MasterKeyRead.Ready -> masterResult.crypto
+                MasterKeyRead.TransientError -> return null
+                MasterKeyRead.CorruptedOrMissing -> {
+                    runCatching { clearEncryptedSessionEntries() }
+                    return null
+                }
+            }
+        return try {
+            val decrypted = crypto.decrypt(K_SESSION_V2, rawCiphertext)
+            val parsed = decrypted?.let(::decodeSessionJson)
+            if (parsed == null) {
+                runCatching { clearEncryptedSessionEntries() }
+                null
+            } else {
+                loadedFromLegacy = false
+                parsed
+            }
+        } catch (_: IllegalArgumentException) {
+            runCatching { clearEncryptedSessionEntries() }
+            null
+        } catch (_: Throwable) {
+            runCatching { clearEncryptedSessionEntries() }
+            null
+        }
+    }
+
+    private fun loadLegacy(): Session? {
         val rawEntries = mutableMapOf<String, String?>()
         for (key in SESSION_KEYS) {
             when (val res = backing.read(key)) {
@@ -215,6 +265,7 @@ class EncryptedKeyValueSecretStore(
                 runCatching { clearEncryptedSessionEntries() }
                 return null
             }
+            loadedFromLegacy = true
             Session(
                 relayId = relayId,
                 relayUrl = relayUrl,
@@ -232,6 +283,37 @@ class EncryptedKeyValueSecretStore(
             null
         }
     }
+
+    private fun encodeSessionJson(session: Session): String =
+        buildJsonObject {
+            put(K_RELAY_ID, session.relayId)
+            put(K_URL, session.relayUrl)
+            put(K_NAME, session.relayName)
+            put(K_DEVICE_ID, session.deviceId)
+            put(K_TOKEN, session.deviceToken)
+            put(K_PUSH_KEY, session.pushKey)
+        }.toString()
+
+    private fun decodeSessionJson(rawJson: String): Session? {
+        val obj = runCatching { RpJson.parseToJsonElement(rawJson).obj() }.getOrNull() ?: return null
+        val relayId = obj.stringField(K_RELAY_ID) ?: return null
+        val relayUrl = obj.stringField(K_URL) ?: return null
+        val relayName = obj.stringField(K_NAME) ?: ""
+        val deviceId = obj.stringField(K_DEVICE_ID) ?: return null
+        val deviceToken = obj.stringField(K_TOKEN) ?: return null
+        val pushKey = obj.stringField(K_PUSH_KEY) ?: return null
+        return Session(
+            relayId = relayId,
+            relayUrl = relayUrl,
+            relayName = relayName,
+            deviceId = deviceId,
+            deviceToken = deviceToken,
+            pushKey = pushKey,
+        )
+    }
+
+    private fun JsonObject.stringField(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
     private sealed interface MasterKeyRead {
         data class Ready(
@@ -271,6 +353,7 @@ class EncryptedKeyValueSecretStore(
 
     companion object {
         const val K_MASTER_KEY = "rp_master_key"
+        const val K_SESSION_V2 = "session_v2"
         const val K_RELAY_ID = "relayId"
         const val K_URL = "relayUrl"
         const val K_NAME = "relayName"

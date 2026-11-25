@@ -752,7 +752,8 @@ class AndroidHardeningTest {
         val savedSession = testSession("https://relay.example")
         store.save(savedSession)
         val prefs = ctx.getSharedPreferences("rp_secrets", Context.MODE_PRIVATE)
-        assertEquals(6, prefs.all.size)
+        assertEquals(1, prefs.all.size)
+        assertTrue(prefs.contains("session_v2"))
 
         // Simulate transient KeyStoreException on cold read: must NOT wipe prefs
         val transientStore =
@@ -760,7 +761,7 @@ class AndroidHardeningTest {
                 override fun buildAead(): com.google.crypto.tink.Aead = throw java.security.KeyStoreException("Keymaster busy")
             }
         assertNull(transientStore.current())
-        assertEquals(6, prefs.all.size, "Transient KeyStoreException must NOT wipe stored encrypted secrets")
+        assertEquals(1, prefs.all.size, "Transient KeyStoreException must NOT wipe stored encrypted secrets")
 
         // Verify next healthy read still recovers the exact session intact
         val recovered = dev.j3pf.rp.data.secure.SecretStore(ctx)

@@ -17,7 +17,7 @@ import androidx.sqlite.SQLiteConnection
         OutboxEntity::class,
         DedupEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class RpDatabase : RoomDatabase() {
@@ -48,6 +48,17 @@ abstract class RpDatabase : RoomDatabase() {
                     connection.prepare("ALTER TABLE agents ADD COLUMN todoCompleted INTEGER NOT NULL DEFAULT 0").use { it.step() }
                     connection.prepare("ALTER TABLE agents ADD COLUMN todoTotal INTEGER NOT NULL DEFAULT 0").use { it.step() }
                     connection.prepare("ALTER TABLE agents ADD COLUMN activeTask TEXT DEFAULT NULL").use { it.step() }
+                }
+            }
+
+        val MIGRATION_3_4 =
+            object : Migration(3, 4) {
+                override fun migrate(connection: SQLiteConnection) {
+                    connection
+                        .prepare(
+                            "CREATE INDEX IF NOT EXISTS `index_chat_records_relayId_agentId_id` " +
+                                "ON `chat_records` (`relayId`, `agentId`, `id`)",
+                        ).use { it.step() }
                 }
             }
     }

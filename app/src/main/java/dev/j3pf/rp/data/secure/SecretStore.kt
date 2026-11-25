@@ -12,9 +12,15 @@ import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.data.ports.SecretStore
+import dev.j3pf.rp.protocol.RpJson
+import dev.j3pf.rp.protocol.obj
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
@@ -116,13 +122,15 @@ open class SecretStore
         }
 
         private fun writeEncryptedSession(session: Session) {
+            val encrypted = encryptField(K_SESSION_V2, encodeSessionJson(session))
             prefs.edit {
-                putString(K_RELAY_ID, encryptField(K_RELAY_ID, session.relayId))
-                putString(K_URL, encryptField(K_URL, session.relayUrl))
-                putString(K_NAME, encryptField(K_NAME, session.relayName))
-                putString(K_DEVICE_ID, encryptField(K_DEVICE_ID, session.deviceId))
-                putString(K_TOKEN, encryptField(K_TOKEN, session.deviceToken))
-                putString(K_PUSH_KEY, encryptField(K_PUSH_KEY, session.pushKey))
+                putString(K_SESSION_V2, encrypted)
+                remove(K_RELAY_ID)
+                remove(K_URL)
+                remove(K_NAME)
+                remove(K_DEVICE_ID)
+                remove(K_TOKEN)
+                remove(K_PUSH_KEY)
             }
         }
 
@@ -138,28 +146,16 @@ open class SecretStore
 
         private fun load(): Session? =
             try {
-                val hasStoredSession = prefs.contains(K_RELAY_ID) || prefs.contains(K_TOKEN)
-                if (!hasStoredSession) {
-                    null
-                } else {
-                    val relayId = decryptField(K_RELAY_ID)
-                    val relayUrl = decryptField(K_URL)
-                    val deviceId = decryptField(K_DEVICE_ID)
-                    val deviceToken = decryptField(K_TOKEN)
-                    val pushKey = decryptField(K_PUSH_KEY)
-                    if (relayId == null || relayUrl == null || deviceId == null || deviceToken == null || pushKey == null) {
+                if (prefs.contains(K_SESSION_V2)) {
+                    val decoded = decryptField(K_SESSION_V2)?.let(::decodeSessionJson)
+                    if (decoded == null) {
                         synchronized(aeadLock) { resetCorruptedKeyset() }
                         null
                     } else {
-                        Session(
-                            relayId = relayId,
-                            relayUrl = relayUrl,
-                            relayName = decryptField(K_NAME) ?: "",
-                            deviceId = deviceId,
-                            deviceToken = deviceToken,
-                            pushKey = pushKey,
-                        )
+                        decoded
                     }
+                } else {
+                    loadLegacy()
                 }
             } catch (t: Throwable) {
                 if (isPermanentKeysetCorruption(t) || t is IllegalArgumentException) {
@@ -170,6 +166,60 @@ open class SecretStore
                 }
                 null
             }
+
+        private fun loadLegacy(): Session? {
+            val hasStoredSession = prefs.contains(K_RELAY_ID) || prefs.contains(K_TOKEN)
+            if (!hasStoredSession) return null
+            val relayId = decryptField(K_RELAY_ID)
+            val relayUrl = decryptField(K_URL)
+            val deviceId = decryptField(K_DEVICE_ID)
+            val deviceToken = decryptField(K_TOKEN)
+            val pushKey = decryptField(K_PUSH_KEY)
+            return if (relayId == null || relayUrl == null || deviceId == null || deviceToken == null || pushKey == null) {
+                synchronized(aeadLock) { resetCorruptedKeyset() }
+                null
+            } else {
+                Session(
+                    relayId = relayId,
+                    relayUrl = relayUrl,
+                    relayName = decryptField(K_NAME) ?: "",
+                    deviceId = deviceId,
+                    deviceToken = deviceToken,
+                    pushKey = pushKey,
+                )
+            }
+        }
+
+        private fun encodeSessionJson(session: Session): String =
+            buildJsonObject {
+                put(K_RELAY_ID, session.relayId)
+                put(K_URL, session.relayUrl)
+                put(K_NAME, session.relayName)
+                put(K_DEVICE_ID, session.deviceId)
+                put(K_TOKEN, session.deviceToken)
+                put(K_PUSH_KEY, session.pushKey)
+            }.toString()
+
+        private fun decodeSessionJson(rawJson: String): Session? {
+            val obj = runCatching { RpJson.parseToJsonElement(rawJson).obj() }.getOrNull() ?: return null
+            val relayId = obj.stringField(K_RELAY_ID) ?: return null
+            val relayUrl = obj.stringField(K_URL) ?: return null
+            val relayName = obj.stringField(K_NAME) ?: ""
+            val deviceId = obj.stringField(K_DEVICE_ID) ?: return null
+            val deviceToken = obj.stringField(K_TOKEN) ?: return null
+            val pushKey = obj.stringField(K_PUSH_KEY) ?: return null
+            return Session(
+                relayId = relayId,
+                relayUrl = relayUrl,
+                relayName = relayName,
+                deviceId = deviceId,
+                deviceToken = deviceToken,
+                pushKey = pushKey,
+            )
+        }
+
+        private fun JsonObject.stringField(key: String): String? =
+            (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
         private fun encryptField(
             key: String,
@@ -192,6 +242,7 @@ open class SecretStore
             const val KEYSET_PREFS = "rp_keyset_prefs"
             const val MASTER_KEY_ALIAS = "rp_master_key"
             const val MASTER_KEY_URI = "android-keystore://$MASTER_KEY_ALIAS"
+            const val K_SESSION_V2 = "session_v2"
             const val K_RELAY_ID = "relayId"
             const val K_URL = "relayUrl"
             const val K_NAME = "relayName"

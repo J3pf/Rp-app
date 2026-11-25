@@ -191,10 +191,11 @@ suspend fun Call.await(): Response =
         cont.invokeOnCancellation { runCatching { cancel() } }
     }
 
-/** Cuerpo que informa de los bytes enviados. */
+/** Cuerpo que informa de los bytes enviados con throttling (>=5 % o >=100 ms, siempre 0 % y 100 %). */
 class ProgressBody(
     private val delegate: RequestBody,
     private val onProgress: (sent: Long, total: Long) -> Unit,
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) : RequestBody() {
     override fun contentType() = delegate.contentType()
 
@@ -202,25 +203,56 @@ class ProgressBody(
 
     override fun writeTo(sink: BufferedSink) {
         val total = contentLength()
-        val step = if (total > 0) (total / 100).coerceAtLeast(8192L) else 8192L
+        val startMs = clockMs()
+        onProgress(0L, total)
+        var written = 0L
+        var lastReportedBytes = 0L
+        var lastReportedPct = 0
+        var lastReportedMs = startMs
+        var reportedFinal = total == 0L
+
         val counting =
             object : ForwardingSink(sink) {
-                var written = 0L
-                var lastReported = 0L
-
                 override fun write(
                     source: Buffer,
                     byteCount: Long,
                 ) {
                     super.write(source, byteCount)
                     written += byteCount
-                    if (written == total || written - lastReported >= step) {
-                        lastReported = written
+                    if (total > 0L && written >= total) {
+                        if (!reportedFinal) {
+                            reportedFinal = true
+                            lastReportedBytes = written
+                            lastReportedPct = 100
+                            lastReportedMs = clockMs()
+                            onProgress(written, total)
+                        }
+                        return
+                    }
+                    val nowMs = clockMs()
+                    val pct = if (total > 0L) ((written * 100L) / total).toInt() else -1
+                    val pctDeltaMet = total > 0L && (pct - lastReportedPct >= MIN_PERCENT_DELTA)
+                    val byteDeltaMet = total <= 0L && (written - lastReportedBytes >= MIN_STEP_BYTES)
+                    val timeDeltaMet = (nowMs - lastReportedMs >= MIN_INTERVAL_MS) && (written > lastReportedBytes)
+                    if (pctDeltaMet || byteDeltaMet || timeDeltaMet) {
+                        lastReportedBytes = written
+                        if (pct >= 0) lastReportedPct = pct
+                        lastReportedMs = nowMs
                         onProgress(written, total)
                     }
                 }
             }.buffer()
         delegate.writeTo(counting)
         counting.flush()
+        if (!reportedFinal && written > lastReportedBytes) {
+            reportedFinal = true
+            onProgress(written, total)
+        }
+    }
+
+    companion object {
+        const val MIN_PERCENT_DELTA = 5
+        const val MIN_INTERVAL_MS = 100L
+        const val MIN_STEP_BYTES = 8192L
     }
 }

@@ -11,7 +11,11 @@ import dev.j3pf.rp.data.repo.AttachmentsRepository
 import dev.j3pf.rp.data.repo.HostRepository
 import dev.j3pf.rp.data.repo.MachinesRepository
 import dev.j3pf.rp.data.repo.PromptsRepository
+import dev.j3pf.rp.di.AppScope
 import dev.j3pf.rp.push.NotificationChannels
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -36,6 +40,10 @@ class RpApp :
 
     @Inject lateinit var biometricAuthorizer: BiometricAuthorizer
 
+    @Inject
+    @AppScope
+    lateinit var appScope: CoroutineScope
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
@@ -48,6 +56,8 @@ class RpApp :
         prompts.start()
         hosts.start()
         connection.attach()
-        attachments.cleanup()
+        appScope.launch(Dispatchers.IO) {
+            attachments.cleanup()
+        }
     }
 }

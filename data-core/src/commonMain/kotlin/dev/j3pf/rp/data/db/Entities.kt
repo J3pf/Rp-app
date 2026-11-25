@@ -100,7 +100,13 @@ object RecordKind {
 }
 
 /** Historial del chat persistido: entradas normalizadas y eventos finales (message_end, tool_execution_*...). */
-@Entity(tableName = "chat_records", indices = [Index("relayId", "agentId", "kind", "seq")])
+@Entity(
+    tableName = "chat_records",
+    indices = [
+        Index("relayId", "agentId", "kind", "seq"),
+        Index("relayId", "agentId", "id"),
+    ],
+)
 data class ChatRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val relayId: String,

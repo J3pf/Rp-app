@@ -183,7 +183,12 @@ class MigrationFidelityTest {
         // version was already closed, so Room can acquire it exclusively.
         val src = context.getDatabasePath(testDb)
         assertTrue("migrated DB must exist: $src", src.exists())
-        val db = Room.databaseBuilder(context, RpDatabase::class.java, testDb).allowMainThreadQueries().build()
+        val db =
+            Room
+                .databaseBuilder(context, RpDatabase::class.java, testDb)
+                .addMigrations(RpDatabase.MIGRATION_3_4)
+                .allowMainThreadQueries()
+                .build()
         try {
             val schema = db.openHelper.readableDatabase.query("PRAGMA table_info(agents)").use { c ->
                 buildString { while (c.moveToNext()) append(c.getString(1)).append('(').append(c.getString(2)).append(" notnull=").append(c.getInt(3)).append(") ") }
@@ -240,7 +245,12 @@ class MigrationFidelityTest {
         val target = context.getDatabasePath("fixture-open.db")
         target.parentFile?.mkdirs()
         target.outputStream().use { it.write(fixture) }
-        val db = Room.databaseBuilder(context, RpDatabase::class.java, "fixture-open.db").allowMainThreadQueries().build()
+        val db =
+            Room
+                .databaseBuilder(context, RpDatabase::class.java, "fixture-open.db")
+                .addMigrations(RpDatabase.MIGRATION_3_4)
+                .allowMainThreadQueries()
+                .build()
         try {
             kotlinx.coroutines.runBlocking {
             val agentRow = db.agents().get("r1", "a-fixture")!!
@@ -271,6 +281,48 @@ class MigrationFidelityTest {
             }
         } finally {
             db.close()
+        }
+    }
+
+    @Test
+    fun migration3To4PreservesEveryTableAndCreatesChatIdIndex() {
+        helper.createDatabase(testDb, 3).apply {
+            execSQL(
+                "INSERT INTO agents (relayId, agentId, machineId, machineName, machineContext, machineColor, " +
+                    "status, online, redacted, spawnedByHost, theme, todoCompleted, todoTotal, activeTask) " +
+                    "VALUES ('r1', 'a1', 'm1', 'PC', 'personal', '#FFF', 'working', 1, 0, 0, 'gentle-cute', 2, 4, 'Build')",
+            )
+            execSQL(
+                "INSERT INTO chat_records (relayId, agentId, kind, epoch, seq, json) " +
+                    "VALUES ('r1', 'a1', 'event', 'e1', 9, '{\"type\":\"message_end\"}')",
+            )
+            close()
+        }
+
+        val dbV4 = helper.runMigrationsAndValidate(testDb, 4, true, RpDatabase.MIGRATION_3_4)
+        try {
+            dbV4.query("SELECT theme, todoCompleted, todoTotal, activeTask FROM agents WHERE agentId = 'a1'").use { c ->
+                assertEquals(1, c.count)
+                c.moveToFirst()
+                assertEquals("gentle-cute", c.getString(0))
+                assertEquals(2, c.getInt(1))
+                assertEquals(4, c.getInt(2))
+                assertEquals("Build", c.getString(3))
+            }
+            dbV4.query("SELECT seq, json FROM chat_records WHERE agentId = 'a1'").use { c ->
+                assertEquals(1, c.count)
+                c.moveToFirst()
+                assertEquals(9L, c.getLong(0))
+                assertEquals("{\"type\":\"message_end\"}", c.getString(1))
+            }
+            dbV4
+                .query(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_chat_records_relayId_agentId_id'",
+                ).use { c ->
+                    assertEquals(1, c.count)
+                }
+        } finally {
+            dbV4.close()
         }
     }
 }

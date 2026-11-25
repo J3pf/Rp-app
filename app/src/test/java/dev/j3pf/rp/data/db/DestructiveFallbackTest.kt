@@ -37,8 +37,8 @@ class DestructiveFallbackTest {
             FrameworkSQLiteOpenHelperFactory(),
         )
 
-    /** A valid v3 database created by the CURRENT code, then repainted as an unreachable v4. */
-    private fun createUnreachableVersion4File(dbName: String) {
+    /** A valid v3 database created by the CURRENT code, then repainted as an unreachable v5. */
+    private fun createUnreachableVersion5File(dbName: String) {
         // 1. Real v3 schema + one recognizable row through the raw helper.
         helper.createDatabase(dbName, 3).apply {
             execSQL(
@@ -47,8 +47,8 @@ class DestructiveFallbackTest {
             )
             close()
         }
-        // 2. Bump user_version to 4 AND add a foreign legacy table; if migrations can't reach 4
-        //    (no MIGRATION_3_4 exists), opening below exercises the exact AppModule.kt:48 path.
+        // 2. Bump user_version to 5 AND add a foreign legacy table; if migrations can't reach 5
+        //    (no MIGRATION_4_5 exists), opening below exercises the exact AppModule fallback path.
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val file = context.getDatabasePath(dbName)
         assertTrue("v3 file must exist: $file", file.exists())
@@ -64,13 +64,13 @@ class DestructiveFallbackTest {
         rawOpenHelper.writableDatabase.use { db: SupportSQLiteDatabase ->
             db.execSQL("CREATE TABLE IF NOT EXISTS legacy_marker (id INTEGER NOT NULL PRIMARY KEY, note TEXT NOT NULL)")
             db.execSQL("INSERT INTO legacy_marker (id, note) VALUES (1, 'drop-me?')")
-            db.execSQL("PRAGMA user_version = 4")
+            db.execSQL("PRAGMA user_version = 5")
         }
         rawOpenHelper.close()
     }
 
     private fun keepEverythingSupportSQLiteOpenHelperNoopCallback() =
-        object : SupportSQLiteOpenHelper.Callback(4) {
+        object : SupportSQLiteOpenHelper.Callback(5) {
             override fun onCreate(db: SupportSQLiteDatabase) {}
 
             override fun onUpgrade(
@@ -85,13 +85,13 @@ class DestructiveFallbackTest {
     @Test
     fun newerDatabaseFallbackDropsLegacyTablesAndRecreatesCurrentSchema() = runBlocking {
         val dbName = "fallback-test"
-        createUnreachableVersion4File(dbName)
+        createUnreachableVersion5File(dbName)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
 
         val db =
             Room
                 .databaseBuilder(context, RpDatabase::class.java, dbName)
-                .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3)
+                .addMigrations(RpDatabase.MIGRATION_1_2, RpDatabase.MIGRATION_2_3, RpDatabase.MIGRATION_3_4)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .allowMainThreadQueries()
                 .build()

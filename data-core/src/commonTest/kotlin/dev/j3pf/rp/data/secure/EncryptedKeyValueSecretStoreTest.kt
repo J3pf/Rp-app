@@ -50,21 +50,23 @@ class EncryptedKeyValueSecretStoreTest {
         assertEquals(sampleSession.pushKey, mirroredPushKey)
         assertEquals("19410625785.dev.j3pf.rp.iosApp", mirroredGroup)
 
-        // Stored values in backing are ciphertext, never plaintext, and K_NSE_PUSH_KEY is never written to backing
-        val rawToken = backing.getString(EncryptedKeyValueSecretStore.K_TOKEN)!!
-        assertNotEquals(sampleSession.deviceToken, rawToken)
+        // Stored value in backing is packed session_v2 ciphertext, never plaintext, and K_NSE_PUSH_KEY is never written to backing
+        val rawV2 = backing.getString(EncryptedKeyValueSecretStore.K_SESSION_V2)!!
+        assertNotEquals(sampleSession.deviceToken, rawV2)
+        assertTrue(!rawV2.contains(sampleSession.deviceToken))
+        assertTrue(!rawV2.contains(sampleSession.pushKey))
+        assertNull(backing.getString(EncryptedKeyValueSecretStore.K_TOKEN))
         assertNull(backing.getString(EncryptedKeyValueSecretStore.K_NSE_PUSH_KEY))
 
         // Re-opening a new store instance over the same backing decrypts the exact session
         val reopened = EncryptedKeyValueSecretStore(backing = backing)
         assertEquals(sampleSession, reopened.current())
 
-        // Swapping two fields' ciphertexts fails AEAD field-associated-data check, returns null, and purges corrupted entries
-        val rawUrl = backing.getString(EncryptedKeyValueSecretStore.K_URL)!!
-        backing.putString(EncryptedKeyValueSecretStore.K_TOKEN, rawUrl)
+        // Corrupting session_v2 ciphertext fails AEAD authentication, returns null, and purges corrupted entry
+        backing.putString(EncryptedKeyValueSecretStore.K_SESSION_V2, "###tampered-ciphertext@@@")
         val tampered = EncryptedKeyValueSecretStore(backing = backing)
         assertNull(tampered.current())
-        assertNull(backing.getString(EncryptedKeyValueSecretStore.K_TOKEN))
+        assertNull(backing.getString(EncryptedKeyValueSecretStore.K_SESSION_V2))
 
         // Saving again recovers cleanly
         tampered.save(sampleSession)
@@ -74,6 +76,7 @@ class EncryptedKeyValueSecretStoreTest {
         tampered.clear()
         assertNull(tampered.current())
         assertNull(tampered.session.value)
+        assertNull(backing.getString(EncryptedKeyValueSecretStore.K_SESSION_V2))
     }
 
     @Test
@@ -231,14 +234,7 @@ class EncryptedKeyValueSecretStoreTest {
         nativeBackedStore.save(sampleSession)
         assertEquals(sampleSession, nativeBackedStore.current())
         assertEquals(
-            listOf(
-                EncryptedKeyValueSecretStore.K_RELAY_ID,
-                EncryptedKeyValueSecretStore.K_URL,
-                EncryptedKeyValueSecretStore.K_NAME,
-                EncryptedKeyValueSecretStore.K_DEVICE_ID,
-                EncryptedKeyValueSecretStore.K_TOKEN,
-                EncryptedKeyValueSecretStore.K_PUSH_KEY,
-            ),
+            listOf(EncryptedKeyValueSecretStore.K_SESSION_V2),
             encryptedFields,
         )
 
@@ -260,20 +256,14 @@ class EncryptedKeyValueSecretStoreTest {
             )
         assertEquals(unicodeSession, reopenedNativeStore.current())
         assertEquals(
-            listOf(
-                EncryptedKeyValueSecretStore.K_RELAY_ID,
-                EncryptedKeyValueSecretStore.K_URL,
-                EncryptedKeyValueSecretStore.K_NAME,
-                EncryptedKeyValueSecretStore.K_DEVICE_ID,
-                EncryptedKeyValueSecretStore.K_TOKEN,
-                EncryptedKeyValueSecretStore.K_PUSH_KEY,
-            ),
+            listOf(EncryptedKeyValueSecretStore.K_SESSION_V2),
             decryptedFields,
         )
 
-        // 4. Field-swap tampering fails authentication through custom AEAD factory
-        val rawUrl = backing.getString(EncryptedKeyValueSecretStore.K_URL)!!
-        backing.putString(EncryptedKeyValueSecretStore.K_TOKEN, rawUrl)
+        // 4. Tampering with session_v2 ciphertext fails authentication through custom AEAD factory
+        val rawV2 = backing.getString(EncryptedKeyValueSecretStore.K_SESSION_V2)!!
+        val flipped = rawV2.dropLast(2) + if (rawV2.endsWith("AA")) "BB" else "AA"
+        backing.putString(EncryptedKeyValueSecretStore.K_SESSION_V2, flipped)
         val tamperedNativeStore =
             EncryptedKeyValueSecretStore(
                 backing = backing,

@@ -6,6 +6,11 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
+import kotlin.concurrent.Volatile
+
+private const val SQLITE_BIND_CHUNK_SIZE = 500
+internal const val DEDUP_WINDOW_MS = 24L * 3600L * 1000L
+internal const val DEDUP_PURGE_INTERVAL_MS = 3600L * 1000L
 
 @Dao
 interface MachineDao {
@@ -49,7 +54,7 @@ interface AgentDao {
     @Query(
         """SELECT a.*, (SELECT COUNT(*) FROM prompts p WHERE p.relayId = a.relayId AND p.agentId = a.agentId AND p.state = 'open') AS openPrompts
            FROM agents a WHERE a.relayId = :relayId
-           ORDER BY a.online DESC, a.lastSeenAt DESC""",
+           ORDER BY a.online DESC, a.lastSeenAt DESC, a.agentId ASC""",
     )
     fun observe(relayId: String): Flow<List<AgentWithCounts>>
 
@@ -67,6 +72,12 @@ interface AgentDao {
         relayId: String,
         agentId: String,
     ): AgentEntity?
+
+    @Query("SELECT * FROM agents WHERE relayId = :relayId AND agentId IN (:agentIds)")
+    suspend fun getByIds(
+        relayId: String,
+        agentIds: List<String>,
+    ): List<AgentEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(items: List<AgentEntity>)
@@ -134,6 +145,12 @@ interface PromptDao {
         promptId: String,
     ): PromptEntity?
 
+    @Query("SELECT * FROM prompts WHERE relayId = :relayId AND promptId IN (:promptIds)")
+    suspend fun getByIds(
+        relayId: String,
+        promptIds: List<String>,
+    ): List<PromptEntity>
+
     @Query("SELECT * FROM prompts WHERE relayId = :relayId AND promptId = :promptId")
     fun observeOne(
         relayId: String,
@@ -171,7 +188,20 @@ interface PromptDao {
         items: List<PromptEntity>,
         now: Long,
     ) {
-        val fresh = items.filterNot { recentlyResolved(relayId, it.promptId, now) }
+        if (items.isEmpty()) return
+        val cutoff = now - PromptState.REPLAY_WINDOW_MS
+        val existingById =
+            items
+                .map { it.promptId }
+                .distinct()
+                .chunked(SQLITE_BIND_CHUNK_SIZE)
+                .flatMap { chunk -> getByIds(relayId, chunk) }
+                .associateBy { it.promptId }
+        val fresh =
+            items.filterNot { item ->
+                val row = existingById[item.promptId]
+                row != null && row.state == PromptState.RESOLVED && (row.resolvedAt ?: 0L) >= cutoff
+            }
         if (fresh.isNotEmpty()) upsert(fresh)
     }
 
@@ -209,6 +239,20 @@ interface ChatDao {
     suspend fun records(
         relayId: String,
         agentId: String,
+    ): List<ChatRecordEntity>
+
+    @Query(
+        """SELECT * FROM (
+               SELECT * FROM chat_records
+               WHERE relayId = :relayId AND agentId = :agentId
+               ORDER BY id DESC
+               LIMIT :limit
+           ) ORDER BY id ASC""",
+    )
+    suspend fun recent(
+        relayId: String,
+        agentId: String,
+        limit: Int,
     ): List<ChatRecordEntity>
 
     @Insert
@@ -250,7 +294,7 @@ interface ChatDao {
         entryRows: List<ChatRecordEntity>,
         liveFromSeq: Long?,
         eventRows: List<ChatRecordEntity>,
-        keep: Int = 5000,
+        keep: Int = 1000,
     ) {
         if (epochChanged) clearAgent(relayId, agentId)
         if (entryRows.isNotEmpty()) {
@@ -354,12 +398,19 @@ abstract class DedupDao {
         insert(DedupEntity(key, now))
     }
 
+    @Volatile
+    private var lastPurgeAt: Long = Long.MIN_VALUE
+
     @Transaction
     open suspend fun firstSeen(
         key: String,
         now: Long,
     ): Boolean {
-        purge(now - 24 * 3600 * 1000L)
+        val last = lastPurgeAt
+        if (last == Long.MIN_VALUE || now < last || now - last >= DEDUP_PURGE_INTERVAL_MS) {
+            lastPurgeAt = now
+            purge(now - DEDUP_WINDOW_MS)
+        }
         return insert(DedupEntity(key, now)) != -1L
     }
 }

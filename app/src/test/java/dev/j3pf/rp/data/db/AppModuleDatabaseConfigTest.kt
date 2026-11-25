@@ -44,7 +44,7 @@ class AppModuleDatabaseConfigTest {
     @Test
     fun destructiveFallbackThroughTheRealProviderWipesLegacyTablesAndKeepsSchemaFresh() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        // Seed an UNROUTABLE version-4 file (no MIGRATION_3_4 exists anywhere).
+        // Seed an UNROUTABLE version-5 file (no MIGRATION_4_5 exists anywhere).
         val helper =
             FrameworkSQLiteOpenHelperFactory()
                 .create(
@@ -124,8 +124,8 @@ class AppModuleDatabaseConfigTest {
         }
     }
 
-    /** Creates (once) a bare file whose header says version 4, with an unrelated legacy table. */
-    private class LegacySchemaCallback : SupportSQLiteOpenHelper.Callback(4) {
+    /** Creates (once) a bare file whose header says version 5, with an unrelated legacy table. */
+    private class LegacySchemaCallback : SupportSQLiteOpenHelper.Callback(5) {
         override fun onCreate(sq: SupportSQLiteDatabase) {
             // Deliberately NOT the rp schema: simulates a foreign/legacy upgraded file (or a relay
             // data restore) whose version no shipped migration can reach.

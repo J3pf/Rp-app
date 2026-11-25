@@ -108,4 +108,71 @@ class DatabaseMigrationTest {
             dbFinal.close()
         }
     }
+
+    @Test
+    fun migrationFrom3To4PreservesChatRecordsAndCreatesIdIndex() {
+        helper.createDatabase(testDb, 3).apply {
+            execSQL(
+                "INSERT INTO chat_records (relayId, agentId, kind, epoch, seq, json) " +
+                    "VALUES ('r1', 'a1', 'event', 'e1', 42, '{\"type\":\"message_end\"}')",
+            )
+            close()
+        }
+
+        val dbV4 = helper.runMigrationsAndValidate(testDb, 4, true, RpDatabase.MIGRATION_3_4)
+        try {
+            dbV4.query("SELECT relayId, agentId, kind, epoch, seq, json FROM chat_records WHERE agentId = 'a1'").use { cursor ->
+                assertEquals(1, cursor.count)
+                cursor.moveToFirst()
+                assertEquals("r1", cursor.getString(0))
+                assertEquals("a1", cursor.getString(1))
+                assertEquals("event", cursor.getString(2))
+                assertEquals("e1", cursor.getString(3))
+                assertEquals(42L, cursor.getLong(4))
+                assertEquals("{\"type\":\"message_end\"}", cursor.getString(5))
+            }
+            dbV4
+                .query(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_chat_records_relayId_agentId_id'",
+                ).use { cursor ->
+                    assertEquals(1, cursor.count)
+                }
+        } finally {
+            dbV4.close()
+        }
+    }
+
+    @Test
+    fun migrationFrom1To4EndToEnd() {
+        helper.createDatabase(testDb, 1).apply {
+            execSQL(
+                "INSERT INTO machines (relayId, machineId, name, context, color, online, hostOnline, agentCount, openPromptCount) " +
+                    "VALUES ('r1', 'm1', 'PC', 'personal', '#FFF', 1, 1, 1, 0)",
+            )
+            execSQL(
+                "INSERT INTO chat_records (relayId, agentId, kind, epoch, seq, json) " +
+                    "VALUES ('r1', 'a1', 'event', 'e1', 7, '{\"type\":\"agent_settled\"}')",
+            )
+            close()
+        }
+
+        val dbFinal =
+            helper.runMigrationsAndValidate(
+                testDb,
+                4,
+                true,
+                RpDatabase.MIGRATION_1_2,
+                RpDatabase.MIGRATION_2_3,
+                RpDatabase.MIGRATION_3_4,
+            )
+        try {
+            dbFinal.query("SELECT seq FROM chat_records WHERE agentId = 'a1'").use { cursor ->
+                assertEquals(1, cursor.count)
+                cursor.moveToFirst()
+                assertEquals(7L, cursor.getLong(0))
+            }
+        } finally {
+            dbFinal.close()
+        }
+    }
 }

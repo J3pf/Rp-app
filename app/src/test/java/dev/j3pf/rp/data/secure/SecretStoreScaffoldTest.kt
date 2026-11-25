@@ -64,13 +64,14 @@ class SecretStoreScaffoldTest {
         val store1 = SecretStore(context)
         store1.save(session)
 
-        // Encrypted at rest (S18): none of the secret field VALUES may appear in plain prefs.
+        // Encrypted at rest (S18 + APP-PERF-04): packed single encrypted session_v2 entry, no plaintext leaked.
         val prefs = context.getSharedPreferences("rp_secrets", Context.MODE_PRIVATE)
-        assertEquals(6, prefs.all.size) // 5 secret fields + relayName blob naming… real field count from probe
+        assertEquals(1, prefs.all.size)
+        assertTrue(prefs.contains(SecretStore.K_SESSION_V2))
         prefs.all.forEach { (k, v) ->
-            val v = v.toString()
+            val raw = v.toString()
             listOf(session.deviceToken, session.pushKey, session.deviceId, session.relayId)
-                .forEach { secret -> assertTrue("field $k leaked plaintext", !v.contains(secret)) }
+                .forEach { secret -> assertTrue("field $k leaked plaintext", !raw.contains(secret)) }
         }
 
         // A FRESH instance (new process) decrypts the same file back to the IDENTICAL session.
@@ -96,10 +97,11 @@ class SecretStoreScaffoldTest {
         val store1 = SecretStore(context)
         store1.save(session)
 
-        // Corrupt ONE field directly at rest (as a damaged upgrade or tampering would).
-        context.getSharedPreferences("rp_secrets", Context.MODE_PRIVATE)
+        // Corrupt session_v2 ciphertext directly at rest (as a damaged upgrade or tampering would).
+        context
+            .getSharedPreferences("rp_secrets", Context.MODE_PRIVATE)
             .edit()
-            .putString("deviceToken", "###not-valid-base64@@@")
+            .putString(SecretStore.K_SESSION_V2, "###not-valid-base64@@@")
             .commit()
 
         // Tolerance contract SC-03: load fails soft -> null session, no exception escapes.

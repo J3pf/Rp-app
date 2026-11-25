@@ -10,9 +10,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Caracterización de [ProgressBody] (subida de blobs, RelayApi.uploadBlob): los avisos de progreso salta
- * n como máximo cada `total/100` (coercionado a >= 8192 B) y el último informe marca el total exacto.
- * Código de producción SIN cambios (Gate A, S5/S15).
+ * Verification of [ProgressBody] (blob upload, RelayApi.uploadBlob): callbacks are throttled
+ * to >=5% percentage increments or >=100 ms elapsed intervals, always emitting initial 0 and
+ * final (total, total).
  */
 class ProgressBodyTest {
     private class FixedBody(
@@ -31,6 +31,7 @@ class ProgressBodyTest {
 
     private class RepeatingBody(
         private val total: Long,
+        private val onChunkWritten: () -> Unit = {},
     ) : RequestBody() {
         private val chunk = ByteArray(16_384) { (it % 127).toByte() }
 
@@ -45,62 +46,66 @@ class ProgressBodyTest {
                 sink.write(chunk, 0, count)
                 sink.flush()
                 written += count
-                Thread.sleep(1)
+                onChunkWritten()
             }
         }
     }
 
     @Test
-    fun `progreso informa en pasos de 8192 y cierra con el total exacto`() {
+    fun `progreso informa 0, avances de al menos 5 por ciento y cierra con el total exacto`() {
         val total = 20_000L
         val reports = mutableListOf<Pair<Long, Long>>()
-        val body = ProgressBody(FixedBody(bodyData)) { sent, t -> reports += sent to t }
+        val nowMs = 1_000L
+        val body = ProgressBody(FixedBody(bodyData), onProgress = { sent, t -> reports += sent to t }, clockMs = { nowMs })
 
         val sink = Buffer()
         body.writeTo(sink)
 
         assertEquals(total, sink.size, "el cuerpo completo debe llegar al destino")
-        // Caracterización: okio escribe en bloques de 16 KiB y el umbral (>=8192 de avance) no dispara
-        // un informe dentro del bloque que lo cruza: 20000 B -> informes en 16384 y 20000.
+        // okio writes in 16 KiB blocks: emits initial 0, 16384 (81% >= 5%), and final 20000 (100%).
         assertEquals(
-            listOf(16384L to 20000L, 20000L to 20000L),
+            listOf(0L to 20000L, 16384L to 20000L, 20000L to 20000L),
             reports,
-            "avances >= 8192 B y último informe (total,total)",
+            "emite 0, avances >= 5% y último informe (total,total)",
         )
-        assertTrue(reports.last().second == 20000L, "el último informe es (total,total)")
+        assertEquals(total to total, reports.last(), "el último informe es (total,total)")
     }
 
     @Test
-    fun `un cuerpo de 10 MiB ejercita el umbral proporcional hasta el informe final`() {
+    fun `un cuerpo de 10 MiB throttlea avisos al paso del 5 por ciento en subidas rapidas`() {
         val total = 10L * 1024 * 1024
-        val step = maxOf(total / 100, 8192L)
         val reports = mutableListOf<Pair<Long, Long>>()
-        val body = ProgressBody(RepeatingBody(total)) { sent, t -> reports += sent to t }
+        val fixedClock = 5_000L
+        val body = ProgressBody(RepeatingBody(total), onProgress = { sent, t -> reports += sent to t }, clockMs = { fixedClock })
         val sink = Buffer()
 
         body.writeTo(sink)
 
         assertEquals(total, sink.size, "el cuerpo completo debe llegar al destino")
-        assertTrue(reports.size > 1, "el flujo debe informar antes y al terminar")
-        assertTrue(reports.first().first < total, "el primer informe debe ocurrir antes del informe final")
-        assertTrue(reports.first().first >= step, "el primer informe debe alcanzar el umbral proporcional")
-        assertTrue(reports.all { it.second == total }, "cada callback conserva el total declarado")
-        assertTrue(
-            reports.dropLast(1).zipWithNext().all { (previous, next) -> next.first - previous.first >= step },
-            "los informes intermedios respetan el avance mínimo de $step bytes",
-        )
+        assertEquals(0L to total, reports.first(), "siempre emite 0 al inicio")
         assertEquals(total to total, reports.last(), "el último informe debe ser (total,total)")
-        assertTrue(reports.size <= total / step + 2, "el número de avisos está acotado por el paso proporcional")
+        assertTrue(reports.all { it.second == total }, "cada callback conserva el total declarado")
+        // 0%, 5%, 10%, ..., 95%, 100% -> at most 21 reports (vs ~101 previously)
+        assertTrue(reports.size in 2..22, "expected <= 22 throttled callbacks, got ${reports.size}")
+        val intermediatePcts = reports.dropLast(1).map { ((it.first * 100L) / total).toInt() }
+        assertTrue(
+            intermediatePcts.zipWithNext().all { (prev, next) -> next - prev >= ProgressBody.MIN_PERCENT_DELTA },
+            "intermediate percentage steps must be >= ${ProgressBody.MIN_PERCENT_DELTA}%: $intermediatePcts",
+        )
     }
 
     @Test
-    fun `cuerpos pequeños informan solo al terminar`() {
+    fun `cuerpos pequeños informan 0 y el total exacto al terminar`() {
         val reports = mutableListOf<Pair<Long, Long>>()
-        val body = ProgressBody(FixedBody("y".repeat(4096).encodeUtf8())) { sent, t -> reports += sent to t }
+        val body =
+            ProgressBody(
+                FixedBody("y".repeat(4096).encodeUtf8()),
+                onProgress = { sent, t -> reports += sent to t },
+                clockMs = { 0L },
+            )
         val sink = Buffer()
         body.writeTo(sink)
         assertEquals(4096L, sink.size)
-        assertTrue(reports.last() == (4096L to 4096L), "el último informe es (total,total)")
-        assertTrue(reports.all { it.first % 4096L == 0L }, "sin pasos intermedios antes del total (step >= 8192 no alcanzó antes)")
+        assertEquals(listOf(0L to 4096L, 4096L to 4096L), reports)
     }
 }
