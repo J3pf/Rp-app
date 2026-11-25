@@ -47,6 +47,7 @@ class MeshViewModel
         private var lastSubscribedMachineId: String? = null
         private var viewportWidth = DEFAULT_VIEWPORT_SIZE
         private var viewportHeight = DEFAULT_VIEWPORT_SIZE
+        private val stateLock = Any()
         private var measuredCardHeights: Map<String, Float> = emptyMap()
         private var lastLayoutFingerprint: MeshTopologyFingerprint? = null
         private var selectionGeneration = 0L
@@ -101,31 +102,35 @@ class MeshViewModel
         }
 
         fun selectMachine(machineId: String?) {
-            selectionGeneration++
-            val state = _uiState.value
-            val selected = machineId?.takeIf { id -> state.machineChips.any { it.machineId == id } }
-            var updatedGroupId = state.selectedGroupId
-            _uiState.update { current ->
-                val snapshot = current.snapshot
-                val newGroupChips = buildGroupChips(snapshot, selected)
-                var nextGroup = current.selectedGroupId
-                if (snapshot != null) {
-                    if (nextGroup != null && newGroupChips.none { it.groupId == nextGroup }) nextGroup = null
-                    if (nextGroup == null && newGroupChips.isNotEmpty()) {
-                        nextGroup = mostActiveGroup(snapshot, newGroupChips, selected)
+            val (selected, previousGroupId, updatedGroupId) =
+                synchronized(stateLock) {
+                    selectionGeneration++
+                    val state = _uiState.value
+                    val sel = machineId?.takeIf { id -> state.machineChips.any { it.machineId == id } }
+                    var nextGroupId = state.selectedGroupId
+                    _uiState.update { current ->
+                        val snapshot = current.snapshot
+                        val newGroupChips = buildGroupChips(snapshot, sel)
+                        var nextGroup = current.selectedGroupId
+                        if (snapshot != null) {
+                            if (nextGroup != null && newGroupChips.none { it.groupId == nextGroup }) nextGroup = null
+                            if (nextGroup == null && newGroupChips.isNotEmpty()) {
+                                nextGroup = mostActiveGroup(snapshot, newGroupChips, sel)
+                            }
+                        }
+                        nextGroupId = nextGroup
+                        current
+                            .copy(
+                                selectedMachineId = sel,
+                                selectedGroupId = nextGroup,
+                                groupChips = newGroupChips,
+                            ).withLayout(layoutEngine, viewportWidth, viewportHeight)
                     }
+                    Triple(sel, state.selectedGroupId, nextGroupId)
                 }
-                updatedGroupId = nextGroup
-                current
-                    .copy(
-                        selectedMachineId = selected,
-                        selectedGroupId = nextGroup,
-                        groupChips = newGroupChips,
-                    ).withLayout(layoutEngine, viewportWidth, viewportHeight)
-            }
             viewModelScope.launch {
                 settings.setMeshSelectedMachine(selected)
-                if (updatedGroupId != state.selectedGroupId) {
+                if (updatedGroupId != previousGroupId) {
                     settings.setMeshSelectedGroup(updatedGroupId)
                 }
             }
@@ -133,12 +138,16 @@ class MeshViewModel
         }
 
         fun selectGroup(groupId: String?) {
-            selectionGeneration++
-            val state = _uiState.value
-            val selected = groupId?.takeIf { id -> state.groupChips.any { it.groupId == id } }
-            _uiState.update { current ->
-                current.copy(selectedGroupId = selected).withLayout(layoutEngine, viewportWidth, viewportHeight)
-            }
+            val selected =
+                synchronized(stateLock) {
+                    selectionGeneration++
+                    val state = _uiState.value
+                    val sel = groupId?.takeIf { id -> state.groupChips.any { it.groupId == id } }
+                    _uiState.update { current ->
+                        current.copy(selectedGroupId = sel).withLayout(layoutEngine, viewportWidth, viewportHeight)
+                    }
+                    sel
+                }
             viewModelScope.launch { settings.setMeshSelectedGroup(selected) }
         }
 
@@ -252,7 +261,8 @@ class MeshViewModel
             width: Float,
             height: Float,
         ) {
-            onViewportSizeChanged(width, height, measuredCardHeights)
+            val heights = synchronized(stateLock) { measuredCardHeights }
+            onViewportSizeChanged(width, height, heights)
         }
 
         fun onViewportSizeChanged(
@@ -263,100 +273,133 @@ class MeshViewModel
             val newWidth = width.coerceAtLeast(1f)
             val newHeight = height.coerceAtLeast(1f)
             val newCardHeights = cardHeights.toMap()
-            val viewportUnchanged = newWidth == viewportWidth && newHeight == viewportHeight
-            val cardHeightsUnchanged = newCardHeights == measuredCardHeights
-            if (viewportUnchanged && cardHeightsUnchanged && _uiState.value.layoutResult != null) return
+            synchronized(stateLock) {
+                val viewportUnchanged = newWidth == viewportWidth && newHeight == viewportHeight
+                val cardHeightsUnchanged = newCardHeights == measuredCardHeights
+                if (viewportUnchanged && cardHeightsUnchanged && _uiState.value.layoutResult != null) return
 
-            viewportWidth = newWidth
-            viewportHeight = newHeight
-            measuredCardHeights = newCardHeights
-            selectionGeneration++
-            _uiState.update { it.withLayout(layoutEngine, viewportWidth, viewportHeight, measuredCardHeights) }
+                viewportWidth = newWidth
+                viewportHeight = newHeight
+                measuredCardHeights = newCardHeights
+                selectionGeneration++
+                _uiState.update { it.withLayout(layoutEngine, viewportWidth, viewportHeight, measuredCardHeights) }
+            }
         }
 
         fun onCardHeightsChanged(heights: Map<String, Float>) {
-            onViewportSizeChanged(viewportWidth, viewportHeight, heights)
+            val (w, h) = synchronized(stateLock) { viewportWidth to viewportHeight }
+            onViewportSizeChanged(w, h, heights)
         }
+
+        private data class LayoutWorkSnapshot(
+            val generation: Long,
+            val machineId: String?,
+            val groupId: String?,
+            val baseState: MeshUiState,
+            val width: Float,
+            val height: Float,
+            val cardHeights: Map<String, Float>,
+            val previousFingerprint: MeshTopologyFingerprint?,
+        )
 
         private suspend fun applyInputs(inputs: Inputs) {
             if (inputs.snapshot != null) {
                 snapshotTimeoutJob?.cancel()
             }
-            var machineId: String?
-            var groupId: String?
-            var updated: MeshUiState
-            var nextFingerprint: MeshTopologyFingerprint?
+            var committedMachineId: String?
+            var committedGroupId: String?
             while (true) {
-                val gen = selectionGeneration
-                val previous = _uiState.value
-                val machineChips = buildMachineChips(inputs.machineList, inputs.snapshot)
-                machineId = if (selectionsInitialized) previous.selectedMachineId else inputs.selectedMachineId
-                if (inputs.snapshot != null && machineId != null && machineChips.none { it.machineId == machineId }) {
-                    machineId = null
-                }
-                val groupChips = buildGroupChips(inputs.snapshot, machineId)
-                groupId = if (selectionsInitialized) previous.selectedGroupId else inputs.selectedGroupId
+                val work =
+                    synchronized(stateLock) {
+                        val gen = selectionGeneration
+                        val previous = _uiState.value
+                        val machineChips = buildMachineChips(inputs.machineList, inputs.snapshot)
+                        var machineId = if (selectionsInitialized) previous.selectedMachineId else inputs.selectedMachineId
+                        if (inputs.snapshot != null && machineId != null && machineChips.none { it.machineId == machineId }) {
+                            machineId = null
+                        }
+                        val groupChips = buildGroupChips(inputs.snapshot, machineId)
+                        var groupId = if (selectionsInitialized) previous.selectedGroupId else inputs.selectedGroupId
 
-                if (inputs.snapshot != null) {
-                    if (groupId != null && groupChips.none { it.groupId == groupId }) groupId = null
-                    if (groupId == null && groupChips.isNotEmpty()) groupId = mostActiveGroup(inputs.snapshot, groupChips, machineId)
-                }
+                        if (inputs.snapshot != null) {
+                            if (groupId != null && groupChips.none { it.groupId == groupId }) groupId = null
+                            if (groupId == null && groupChips.isNotEmpty()) {
+                                groupId = mostActiveGroup(inputs.snapshot, groupChips, machineId)
+                            }
+                        }
 
-                val baseState =
-                    previous.copy(
-                        isLoading =
-                            previous.errorMessage == null && inputs.snapshot == null && inputs.connectionState == ConnState.Connected,
-                        isConnected = inputs.connectionState == ConnState.Connected,
-                        snapshot = inputs.snapshot,
-                        errorMessage = if (inputs.snapshot != null) null else previous.errorMessage,
-                        selectedMachineId = machineId,
-                        selectedGroupId = groupId,
-                        machineChips = machineChips,
-                        groupChips = groupChips,
-                    )
-                val currentWidth = viewportWidth
-                val currentHeight = viewportHeight
-                val currentCardHeights = measuredCardHeights
-                val prevFingerprint = lastLayoutFingerprint
-                val (computed, computedFingerprint) =
-                    withContext(Dispatchers.Default) {
-                        baseState.computeLayoutWithFingerprint(
-                            layoutEngine = layoutEngine,
-                            width = currentWidth,
-                            height = currentHeight,
-                            cardHeights = currentCardHeights,
-                            previousFingerprint = prevFingerprint,
+                        val baseState =
+                            previous.copy(
+                                isLoading =
+                                    previous.errorMessage == null &&
+                                        inputs.snapshot == null &&
+                                        inputs.connectionState == ConnState.Connected,
+                                isConnected = inputs.connectionState == ConnState.Connected,
+                                snapshot = inputs.snapshot,
+                                errorMessage = if (inputs.snapshot != null) null else previous.errorMessage,
+                                selectedMachineId = machineId,
+                                selectedGroupId = groupId,
+                                machineChips = machineChips,
+                                groupChips = groupChips,
+                            )
+                        LayoutWorkSnapshot(
+                            generation = gen,
+                            machineId = machineId,
+                            groupId = groupId,
+                            baseState = baseState,
+                            width = viewportWidth,
+                            height = viewportHeight,
+                            cardHeights = measuredCardHeights,
+                            previousFingerprint = lastLayoutFingerprint,
                         )
                     }
-                if (gen == selectionGeneration) {
-                    updated = computed
-                    nextFingerprint = computedFingerprint
+                val (computed, computedFingerprint) =
+                    withContext(Dispatchers.Default) {
+                        work.baseState.computeLayoutWithFingerprint(
+                            layoutEngine = layoutEngine,
+                            width = work.width,
+                            height = work.height,
+                            cardHeights = work.cardHeights,
+                            previousFingerprint = work.previousFingerprint,
+                        )
+                    }
+                val committed =
+                    synchronized(stateLock) {
+                        if (work.generation != selectionGeneration) {
+                            false
+                        } else {
+                            selectionsInitialized = true
+                            lastLayoutFingerprint = computedFingerprint
+                            _uiState.update { latest ->
+                                latest.copy(
+                                    isLoading = computed.isLoading,
+                                    isConnected = computed.isConnected,
+                                    snapshot = computed.snapshot,
+                                    errorMessage = computed.errorMessage,
+                                    selectedMachineId = computed.selectedMachineId,
+                                    selectedGroupId = computed.selectedGroupId,
+                                    machineChips = computed.machineChips,
+                                    groupChips = computed.groupChips,
+                                    layoutResult = computed.layoutResult,
+                                )
+                            }
+                            true
+                        }
+                    }
+                if (committed) {
+                    committedMachineId = work.machineId
+                    committedGroupId = work.groupId
                     break
                 }
             }
-            selectionsInitialized = true
-            lastLayoutFingerprint = nextFingerprint
-            _uiState.update { latest ->
-                latest.copy(
-                    isLoading = updated.isLoading,
-                    isConnected = updated.isConnected,
-                    snapshot = updated.snapshot,
-                    errorMessage = updated.errorMessage,
-                    selectedMachineId = updated.selectedMachineId,
-                    selectedGroupId = updated.selectedGroupId,
-                    machineChips = updated.machineChips,
-                    groupChips = updated.groupChips,
-                    layoutResult = updated.layoutResult,
-                )
-            }
 
-            if (inputs.selectedMachineId != machineId) {
-                viewModelScope.launch { settings.setMeshSelectedMachine(machineId) }
+            if (inputs.selectedMachineId != committedMachineId) {
+                viewModelScope.launch { settings.setMeshSelectedMachine(committedMachineId) }
             }
-            if (inputs.selectedGroupId != groupId) {
-                viewModelScope.launch { settings.setMeshSelectedGroup(groupId) }
+            if (inputs.selectedGroupId != committedGroupId) {
+                viewModelScope.launch { settings.setMeshSelectedGroup(committedGroupId) }
             }
-            if (screenVisible && (!hasSentSubscription || lastSubscribedMachineId != machineId)) {
+            if (screenVisible && (!hasSentSubscription || lastSubscribedMachineId != committedMachineId)) {
                 subscribeForCurrentMachine()
             }
         }
