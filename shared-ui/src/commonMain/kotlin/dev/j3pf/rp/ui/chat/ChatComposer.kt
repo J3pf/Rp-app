@@ -34,6 +34,7 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +70,40 @@ fun AutoDeliveryBanner() {
     }
 }
 
+@Immutable
+data class ChatComposerState(
+    val agent: AgentSummary?,
+    val working: Boolean,
+    val text: String,
+    val attachments: List<ComposerAttachment>,
+    val canSend: Boolean,
+    val sending: Boolean,
+    val choice: DeliveryChoice,
+    val workingDelivery: String,
+    val isVoiceAvailable: Boolean,
+    val isListening: Boolean,
+    val voiceListeningText: String,
+    val voiceInputDescription: String,
+    val showShortcuts: Boolean = false,
+)
+
+@Immutable
+data class ChatComposerActions(
+    val onTextChange: (String) -> Unit,
+    val onChoice: (DeliveryChoice) -> Unit,
+    val onWorkingDelivery: (String) -> Unit,
+    val onPickDocuments: () -> Unit,
+    val onPickImages: () -> Unit,
+    val onCameraCapture: () -> Unit,
+    val onRemoveAttachment: (String) -> Unit,
+    val onRetryAttachment: (String) -> Unit,
+    val onSend: () -> Unit,
+    val onVoiceToggle: () -> Unit,
+    val onVoiceStop: () -> Unit,
+    val onAbort: () -> Unit = {},
+    val onDismissShortcuts: () -> Unit = {},
+)
+
 @Composable
 fun ChatComposer(
     agent: AgentSummary?,
@@ -98,6 +133,74 @@ fun ChatComposer(
     showShortcuts: Boolean = false,
     onDismissShortcuts: () -> Unit = {},
 ) {
+    ChatComposer(
+        state =
+            ChatComposerState(
+                agent = agent,
+                working = working,
+                text = text,
+                attachments = attachments,
+                canSend = canSend,
+                sending = sending,
+                choice = choice,
+                workingDelivery = workingDelivery,
+                isVoiceAvailable = isVoiceAvailable,
+                isListening = isListening,
+                voiceListeningText = voiceListeningText,
+                voiceInputDescription = voiceInputDescription,
+                showShortcuts = showShortcuts,
+            ),
+        actions =
+            ChatComposerActions(
+                onTextChange = onTextChange,
+                onChoice = onChoice,
+                onWorkingDelivery = onWorkingDelivery,
+                onPickDocuments = onPickDocuments,
+                onPickImages = onPickImages,
+                onCameraCapture = onCameraCapture,
+                onRemoveAttachment = onRemoveAttachment,
+                onRetryAttachment = onRetryAttachment,
+                onSend = onSend,
+                onVoiceToggle = onVoiceToggle,
+                onVoiceStop = onVoiceStop,
+                onAbort = onAbort,
+                onDismissShortcuts = onDismissShortcuts,
+            ),
+    )
+}
+
+@Composable
+fun ChatComposer(
+    state: ChatComposerState,
+    actions: ChatComposerActions,
+) {
+    val agent = state.agent
+    val working = state.working
+    val text = state.text
+    val attachments = state.attachments
+    val canSend = state.canSend
+    val sending = state.sending
+    val choice = state.choice
+    val workingDelivery = state.workingDelivery
+    val isVoiceAvailable = state.isVoiceAvailable
+    val isListening = state.isListening
+    val voiceListeningText = state.voiceListeningText
+    val voiceInputDescription = state.voiceInputDescription
+    val showShortcuts = state.showShortcuts
+    val onTextChange = actions.onTextChange
+    val onChoice = actions.onChoice
+    val onWorkingDelivery = actions.onWorkingDelivery
+    val onPickDocuments = actions.onPickDocuments
+    val onPickImages = actions.onPickImages
+    val onCameraCapture = actions.onCameraCapture
+    val onRemoveAttachment = actions.onRemoveAttachment
+    val onRetryAttachment = actions.onRetryAttachment
+    val onSend = actions.onSend
+    val onVoiceToggle = actions.onVoiceToggle
+    val onVoiceStop = actions.onVoiceStop
+    val onAbort = actions.onAbort
+    val onDismissShortcuts = actions.onDismissShortcuts
+
     var attachMenu by remember { mutableStateOf(false) }
     var choiceMenu by remember { mutableStateOf(false) }
 

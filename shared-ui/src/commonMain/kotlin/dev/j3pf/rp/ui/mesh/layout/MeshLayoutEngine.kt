@@ -30,7 +30,7 @@ class MeshLayoutEngine(
                         { it.machineId },
                     ),
                 ).distinctBy { it.agentId }
-                .flatMap { nodo -> listOf(nodo) + nodosDeSubagentes(nodo) }
+                .flatMap { node -> listOf(node) + subagentNodes(node) }
 
         if (orderedNodes.isEmpty()) {
             return MeshLayoutResult(
@@ -650,23 +650,23 @@ class MeshLayoutEngine(
     }
 
     /**
-     * Un subagente **en ejecución** entra al diagrama como nodo real, un nivel por debajo de su agente
-     * (lo hace el árbol porque el nodo nace con `parentAgentId`). Los terminados no generan nodo: se
-     * quedan como píldoras en la tarjeta. Un subagente nunca se duplica porque cada uno cae en uno solo
-     * de los dos conjuntos de [SubagentPlacement.split].
+     * A **running** subagent enters the diagram as a real node one level below its parent agent
+     * (the tree places it via `parentAgentId`). Finished subagents do not generate nodes and remain
+     * pills on the card. A subagent is never duplicated because [SubagentPlacement.split] partitions
+     * them disjointly.
      */
-    private fun nodosDeSubagentes(agente: MeshNode): List<MeshNode> =
+    private fun subagentNodes(agent: MeshNode): List<MeshNode> =
         SubagentPlacement
-            .split(agente.subagents)
+            .split(agent.subagents)
             .first
-            .map { subagente ->
-                agente.copy(
-                    agentId = SubagentPlacement.nodeId(agente.agentId, subagente.taskId),
-                    name = SubagentPlacement.displayName(subagente),
-                    parentAgentId = agente.agentId,
+            .map { subagent ->
+                agent.copy(
+                    agentId = SubagentPlacement.nodeId(agent.agentId, subagent.taskId),
+                    name = SubagentPlacement.displayName(subagent),
+                    parentAgentId = agent.agentId,
                     role = "subagent",
-                    status = subagente.status,
-                    model = subagente.model ?: agente.model,
+                    status = subagent.status,
+                    model = subagent.model ?: agent.model,
                     subagents = emptyList(),
                     todos = null,
                     activity = null,

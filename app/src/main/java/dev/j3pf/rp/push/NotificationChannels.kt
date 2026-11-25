@@ -9,7 +9,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.j3pf.rp.R
 import dev.j3pf.rp.data.repo.NotifyCategory
 import dev.j3pf.rp.protocol.MachineSummary
-import dev.j3pf.rp.util.contextEmoji
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -54,7 +53,7 @@ class NotificationChannels
         ) {
             val fingerprint = "$name|$contextKind"
             if (ensuredMachines[machineId] == fingerprint) return
-            val title = "${contextEmoji(contextKind)} $name".trim()
+            val title = name.trim()
             nm.createNotificationChannelGroup(NotificationChannelGroup(groupId(machineId), title))
             for (cat in NotifyCategory.all) {
                 val (label, importance) =

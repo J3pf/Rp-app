@@ -27,7 +27,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -50,7 +49,6 @@ fun ArchivedScreen(
 ) {
     val lifecycle by vm.lifecycleState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     LaunchedEffect(vm) { vm.loadArchived() }
     LaunchedEffect(lifecycle.message) {
         lifecycle.message?.let {

@@ -153,10 +153,3 @@ fun Prompt.toEntity(
 )
 
 fun PromptEntity.toModel(): Prompt = RpJson.decodeFromString(Prompt.serializer(), json)
-
-/** Agente listo para pintar: resumen + contador de prompts abiertos. */
-data class AgentUi(
-    val agent: AgentSummary,
-) {
-    val id get() = agent.agentId
-}

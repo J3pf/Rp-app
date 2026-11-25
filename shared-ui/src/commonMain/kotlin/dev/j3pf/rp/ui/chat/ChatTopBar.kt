@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,41 @@ internal fun resolveChatHeaderTitle(
     return ChatHeaderTitleParts(project = cleanFolder, topic = cleanRaw, fallback = "$cleanFolder · $cleanRaw")
 }
 
+@Immutable
+data class ChatTopBarState(
+    val agent: AgentSummary?,
+    val sessionName: String?,
+    val model: String?,
+    val thinkingLevel: String?,
+    val working: Boolean,
+    val diffFileCount: Int,
+    val chatFontScale: Float,
+    val chatMessageSpacing: String,
+    val muted: Boolean,
+    val readOnly: Boolean,
+    val searchQuery: String = "",
+    val hideToolCalls: Boolean = false,
+    val otherActiveAgents: List<AgentSummary> = emptyList(),
+    val showQuickShortcuts: Boolean = false,
+)
+
+@Immutable
+data class ChatTopBarActions(
+    val onBack: () -> Unit,
+    val onOpenDiff: () -> Unit,
+    val onFontScaleChange: (Float) -> Unit,
+    val onMessageSpacingChange: (String) -> Unit,
+    val onInfo: () -> Unit,
+    val onToggleMute: () -> Unit,
+    val onQuit: () -> Unit,
+    val onForget: () -> Unit,
+    val onSearchQueryChange: (String) -> Unit = {},
+    val onToggleHideToolCalls: () -> Unit = {},
+    val onSendTerminalCommand: ((String) -> Unit)? = null,
+    val onSwitchAgent: (String) -> Unit = {},
+    val onToggleQuickShortcuts: (() -> Unit)? = null,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatTopBar(
@@ -124,6 +160,77 @@ fun ChatTopBar(
     showQuickShortcuts: Boolean = false,
     onToggleQuickShortcuts: (() -> Unit)? = null,
 ) {
+    ChatTopBar(
+        state =
+            ChatTopBarState(
+                agent = agent,
+                sessionName = sessionName,
+                model = model,
+                thinkingLevel = thinkingLevel,
+                working = working,
+                diffFileCount = diffFileCount,
+                chatFontScale = chatFontScale,
+                chatMessageSpacing = chatMessageSpacing,
+                muted = muted,
+                readOnly = readOnly,
+                searchQuery = searchQuery,
+                hideToolCalls = hideToolCalls,
+                otherActiveAgents = otherActiveAgents,
+                showQuickShortcuts = showQuickShortcuts,
+            ),
+        actions =
+            ChatTopBarActions(
+                onBack = onBack,
+                onOpenDiff = onOpenDiff,
+                onFontScaleChange = onFontScaleChange,
+                onMessageSpacingChange = onMessageSpacingChange,
+                onInfo = onInfo,
+                onToggleMute = onToggleMute,
+                onQuit = onQuit,
+                onForget = onForget,
+                onSearchQueryChange = onSearchQueryChange,
+                onToggleHideToolCalls = onToggleHideToolCalls,
+                onSendTerminalCommand = onSendTerminalCommand,
+                onSwitchAgent = onSwitchAgent,
+                onToggleQuickShortcuts = onToggleQuickShortcuts,
+            ),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatTopBar(
+    state: ChatTopBarState,
+    actions: ChatTopBarActions,
+) {
+    val agent = state.agent
+    val sessionName = state.sessionName
+    val model = state.model
+    val thinkingLevel = state.thinkingLevel
+    val working = state.working
+    val diffFileCount = state.diffFileCount
+    val chatFontScale = state.chatFontScale
+    val chatMessageSpacing = state.chatMessageSpacing
+    val muted = state.muted
+    val readOnly = state.readOnly
+    val searchQuery = state.searchQuery
+    val hideToolCalls = state.hideToolCalls
+    val otherActiveAgents = state.otherActiveAgents
+    val showQuickShortcuts = state.showQuickShortcuts
+    val onBack = actions.onBack
+    val onOpenDiff = actions.onOpenDiff
+    val onFontScaleChange = actions.onFontScaleChange
+    val onMessageSpacingChange = actions.onMessageSpacingChange
+    val onInfo = actions.onInfo
+    val onToggleMute = actions.onToggleMute
+    val onQuit = actions.onQuit
+    val onForget = actions.onForget
+    val onSearchQueryChange = actions.onSearchQueryChange
+    val onToggleHideToolCalls = actions.onToggleHideToolCalls
+    val onSendTerminalCommand = actions.onSendTerminalCommand
+    val onSwitchAgent = actions.onSwitchAgent
+    val onToggleQuickShortcuts = actions.onToggleQuickShortcuts
+
     var showQuitDialog by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
     var showTerminalBar by remember { mutableStateOf(false) }

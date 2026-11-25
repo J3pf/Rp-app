@@ -51,6 +51,7 @@ import dev.j3pf.rp.ui.mesh.layout.MeshLayoutEngine
 import dev.j3pf.rp.ui.mesh.layout.MeshLayoutResult
 import dev.j3pf.rp.ui.mesh.layout.NodeDisplayMode
 import dev.j3pf.rp.ui.mesh.layout.PositionedEdge
+import dev.j3pf.rp.ui.mesh.layout.PositionedNode
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.util.currentTimeMillis
 import kotlinx.coroutines.delay
@@ -460,66 +461,35 @@ fun MeshCanvas(
             // Render interactive Agent Cards and Leaf Items in DP space with full legibility
             activeLayout?.nodes?.values?.forEach { positioned ->
                 val node = positioned.node
+                val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
+                val nodeModifier =
+                    Modifier.meshNodePlacement(
+                        positioned = positioned,
+                        bounds = bounds,
+                        widthDp = widthDp,
+                        topPaddingDp = topPaddingDp,
+                        density = density,
+                        zoomProvider = { effectiveZoom },
+                        panXProvider = { panX },
+                        panYProvider = { panY },
+                        onMeasuredHeight = { measuredHeight ->
+                            if (cardHeights[node.agentId] != measuredHeight) {
+                                cardHeights[node.agentId] = measuredHeight
+                            }
+                        },
+                    )
                 if (positioned.displayMode == NodeDisplayMode.LEAF_ITEM) {
-                    val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
                     MeshLeafItem(
                         node = node,
-                        modifier =
-                            Modifier
-                                .offset {
-                                    val cardZoom = effectiveZoom
-                                    val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
-                                    val cardTopDp =
-                                        meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
-                                    IntOffset(
-                                        x = (cardLeftDp * density.density).roundToInt(),
-                                        y = (cardTopDp * density.density).roundToInt(),
-                                    )
-                                }.width(positioned.width.dp)
-                                .wrapContentHeight()
-                                .onSizeChanged { size ->
-                                    val measuredHeight = size.height / density.density
-                                    if (cardHeights[node.agentId] != measuredHeight) {
-                                        cardHeights[node.agentId] = measuredHeight
-                                    }
-                                }.graphicsLayer {
-                                    val cardZoom = effectiveZoom
-                                    scaleX = cardZoom
-                                    scaleY = cardZoom
-                                    transformOrigin = TransformOrigin(0f, 0f)
-                                },
+                        modifier = nodeModifier,
                         allNodes = allNodes,
                         parentNode = parentNode,
                         onClick = { onNodeClick(node.agentId) },
                     )
                 } else {
-                    val parentNode = positioned.parentId?.let { pid -> allNodes.firstOrNull { it.agentId == pid } }
                     MeshAgentCard(
                         node = node,
-                        modifier =
-                            Modifier
-                                .offset {
-                                    val cardZoom = effectiveZoom
-                                    val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panX + positioned.left * cardZoom
-                                    val cardTopDp =
-                                        meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panY + positioned.top * cardZoom
-                                    IntOffset(
-                                        x = (cardLeftDp * density.density).roundToInt(),
-                                        y = (cardTopDp * density.density).roundToInt(),
-                                    )
-                                }.width(positioned.width.dp)
-                                .wrapContentHeight()
-                                .onSizeChanged { size ->
-                                    val measuredHeight = size.height / density.density
-                                    if (cardHeights[node.agentId] != measuredHeight) {
-                                        cardHeights[node.agentId] = measuredHeight
-                                    }
-                                }.graphicsLayer {
-                                    val cardZoom = effectiveZoom
-                                    scaleX = cardZoom
-                                    scaleY = cardZoom
-                                    transformOrigin = TransformOrigin(0f, 0f)
-                                },
+                        modifier = nodeModifier,
                         allNodes = allNodes,
                         parentNode = parentNode,
                         onClick = { onNodeClick(node.agentId) },
@@ -530,6 +500,36 @@ fun MeshCanvas(
         }
     }
 }
+
+private fun Modifier.meshNodePlacement(
+    positioned: PositionedNode,
+    bounds: LayoutBounds,
+    widthDp: Float,
+    topPaddingDp: Float,
+    density: Density,
+    zoomProvider: () -> Float,
+    panXProvider: () -> Float,
+    panYProvider: () -> Float,
+    onMeasuredHeight: (Float) -> Unit,
+): Modifier =
+    offset {
+        val cardZoom = zoomProvider()
+        val cardLeftDp = meshContentOffsetX(bounds, widthDp, cardZoom) + panXProvider() + positioned.left * cardZoom
+        val cardTopDp = meshContentOffsetY(bounds, cardZoom, topPaddingDp) + panYProvider() + positioned.top * cardZoom
+        IntOffset(
+            x = (cardLeftDp * density.density).roundToInt(),
+            y = (cardTopDp * density.density).roundToInt(),
+        )
+    }.width(positioned.width.dp)
+        .wrapContentHeight()
+        .onSizeChanged { size ->
+            onMeasuredHeight(size.height / density.density)
+        }.graphicsLayer {
+            val cardZoom = zoomProvider()
+            scaleX = cardZoom
+            scaleY = cardZoom
+            transformOrigin = TransformOrigin(0f, 0f)
+        }
 
 private fun meshContentOffsetX(
     bounds: LayoutBounds,

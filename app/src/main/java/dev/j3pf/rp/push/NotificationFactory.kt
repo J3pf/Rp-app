@@ -27,7 +27,6 @@ import dev.j3pf.rp.protocol.PushPromptBody
 import dev.j3pf.rp.protocol.PushSettledBody
 import dev.j3pf.rp.protocol.str
 import dev.j3pf.rp.util.agentTitle
-import dev.j3pf.rp.util.contextEmoji
 import dev.j3pf.rp.util.lastSegment
 import dev.j3pf.rp.util.stableId
 import dev.j3pf.rp.util.truncate
@@ -112,7 +111,7 @@ class NotificationFactory
                     (isPermission || p.danger == Danger.HIGH)
 
             val open = openIntent(p.promptId, p.agentId, id)
-            val contentTitle = "${contextEmoji(p.machineContext)} $machineName · ${p.agentLabel.ifEmpty { "agente" }}".trim()
+            val contentTitle = "$machineName · ${p.agentLabel.ifEmpty { "agente" }}".trim()
             val displayTitle =
                 if (p.redacted) {
                     context.getString(if (isPermission) R.string.channel_approvals else R.string.channel_questions)
@@ -150,7 +149,7 @@ class NotificationFactory
             }
             if (p.danger == Danger.HIGH || isPermission) {
                 if (p.danger == Danger.HIGH) {
-                    builder.setColor(0xFFB3261E.toInt())
+                    builder.setColor(DANGER_COLOR_ARGB)
                 }
                 val publicNotif =
                     NotificationCompat
@@ -299,7 +298,7 @@ class NotificationFactory
                     cleanPreview(rawBody, maxLen = 140) ?: "Terminó"
                 }
             val contentTitle =
-                "${contextEmoji(s.machineContext)} ${s.machineName.ifEmpty { "RP" }} · ${s.agentLabel.ifEmpty { "agente" }}".trim()
+                "${s.machineName.ifEmpty { "RP" }} · ${s.agentLabel.ifEmpty { "agente" }}".trim()
             val publicVersion =
                 NotificationCompat
                     .Builder(context, channel)
@@ -362,7 +361,7 @@ class NotificationFactory
                     }
                 }
             val id = stableId("$kind:$agentId")
-            val contentTitle = "${contextEmoji(body.str("machineContext") ?: "personal")} $machineName · $label".trim()
+            val contentTitle = "$machineName · $label".trim()
             val publicText =
                 context.getString(if (kind == PushKind.TERMINAL_WAIT) R.string.channel_terminal else R.string.channel_errors)
             val publicVersion =
@@ -697,7 +696,7 @@ class NotificationFactory
                     val segment =
                         Bundle().apply {
                             putInt("length", if (hasTodos) totalTodos.coerceAtLeast(1) else 100)
-                            putInt("colorInt", -10777345)
+                            putInt("colorInt", ACCENT_COLOR_ARGB)
                             putInt("id", 0)
                             putInt("semanticStyle", 0)
                         }
@@ -1033,6 +1032,8 @@ class NotificationFactory
             const val SETTLED_GROUP_KEY = "rp.group.settled"
             const val SERVICE_GROUP_KEY = "rp.group.service"
 
+            private const val ACCENT_COLOR_ARGB = 0xFF5B8CFF.toInt()
+            private const val DANGER_COLOR_ARGB = 0xFFB3261E.toInt()
             private const val FLAG_PROMOTED_ONGOING = 0x00040000
             private val MD_HEADER_REGEX = Regex("^#{1,6}\\s+")
             private val MD_BULLET_REGEX = Regex("^[-*]\\s+")

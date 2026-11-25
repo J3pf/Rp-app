@@ -68,8 +68,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
-private const val ARCHIVED_READ_ONLY_AGENT = "archived_read_only_agent"
-
 @HiltViewModel
 class BadgeViewModel
     @Inject
@@ -260,8 +258,7 @@ fun RpRoot(
                     ArchivedScreen(
                         onBack = { nav.popBackStack() },
                         onOpenChat = { agentId ->
-                            nav.currentBackStackEntry?.savedStateHandle?.set(ARCHIVED_READ_ONLY_AGENT, agentId)
-                            nav.navigate(ChatRoute(agentId))
+                            nav.navigate(ChatRoute(agentId, readOnly = true))
                         },
                     )
                 }
@@ -288,8 +285,8 @@ fun RpRoot(
                     )
                 }
                 composable<ChatRoute> { entry ->
-                    val agentId = entry.toRoute<ChatRoute>().agentId
-                    val readOnly = nav.previousBackStackEntry?.savedStateHandle?.get<String>(ARCHIVED_READ_ONLY_AGENT) == agentId
+                    val route = entry.toRoute<ChatRoute>()
+                    val agentId = route.agentId
                     ChatScreen(
                         onBack = { nav.popBackStack() },
                         onSwitchAgent = { targetId ->
@@ -300,7 +297,7 @@ fun RpRoot(
                                 }
                             }
                         },
-                        readOnly = readOnly,
+                        readOnly = route.readOnly,
                     )
                 }
                 composable<NewAgentRoute> { NewAgentScreen(onBack = { nav.popBackStack() }, onCreated = { nav.popBackStack() }) }

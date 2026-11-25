@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.protocol.AgentStatus
 import dev.j3pf.rp.protocol.AgentSummary
-import dev.j3pf.rp.protocol.MachineSummary
 import dev.j3pf.rp.protocol.formatCompactTokens
 import dev.j3pf.rp.protocol.parseHerdrTabMeta
 import dev.j3pf.rp.ui.components.MetaTag
@@ -75,7 +74,6 @@ import kotlin.math.sin
 @Composable
 fun AgentsHeroStats(
     agents: List<AgentSummary>,
-    machines: List<MachineSummary>,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -231,12 +229,7 @@ fun AgentCard(
             null
         }
 
-    val pulseDuration =
-        when {
-            isWorking -> 900
-            isWaiting -> 850
-            else -> 2200
-        }
+    val pulseDuration = if (isWorking) 900 else 850
 
     val pulseProgress =
         infiniteTransition?.animateFloat(
@@ -324,27 +317,6 @@ fun AgentCard(
                         color = borderColor,
                         cornerRadius = cornerRadius,
                         style = Stroke(width = (1.6f + 0.5f * pulse).dp.toPx()),
-                    )
-                }
-            }
-
-            isDone && pulseProgress != null -> {
-                Modifier.drawWithContent {
-                    drawContent()
-                    val breath = pulseProgress.value
-                    val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
-                    val borderColor = lerp(semantic.success.copy(alpha = 0.35f), Color(0xFF4ADE80).copy(alpha = 0.88f), breath)
-
-                    drawRoundRect(
-                        color = Color(0xFF00E676).copy(alpha = 0.05f + 0.16f * breath),
-                        cornerRadius = cornerRadius,
-                        style = Stroke(width = 3.5.dp.toPx()),
-                    )
-
-                    drawRoundRect(
-                        color = borderColor,
-                        cornerRadius = cornerRadius,
-                        style = Stroke(width = 1.4.dp.toPx()),
                     )
                 }
             }

@@ -122,11 +122,6 @@ data class HealthResponse(
     val uptime: Double? = null,
 )
 
-@Serializable
-data class PromptList(
-    val prompts: List<Prompt> = emptyList(),
-)
-
 /** Cuerpos de los mensajes de rp-host (PROTOCOLO §9). */
 @Serializable
 data class HostBackends(

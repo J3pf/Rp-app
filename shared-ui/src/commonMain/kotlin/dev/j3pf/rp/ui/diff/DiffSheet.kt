@@ -54,6 +54,11 @@ import androidx.compose.ui.unit.sp
 import dev.j3pf.rp.protocol.HostGitDiffFile
 import dev.j3pf.rp.protocol.HostGitDiffResult
 
+private val DiffAdditionTextColor = Color(0xFF2E7D32)
+private val DiffDeletionTextColor = Color(0xFFC62828)
+private val DiffAdditionBgColor = Color(0x224CAF50)
+private val DiffDeletionBgColor = Color(0x22F44336)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiffSheet(
@@ -120,7 +125,7 @@ fun DiffSheet(
                                     if (d.totalAdditions > 0) {
                                         Text(
                                             text = "+${d.totalAdditions}",
-                                            color = Color(0xFF2E7D32),
+                                            color = DiffAdditionTextColor,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                         )
@@ -129,7 +134,7 @@ fun DiffSheet(
                                     if (d.totalDeletions > 0) {
                                         Text(
                                             text = "-${d.totalDeletions}",
-                                            color = Color(0xFFC62828),
+                                            color = DiffDeletionTextColor,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                         )
@@ -234,7 +239,7 @@ fun DiffSheet(
                                 if (file.additions > 0) {
                                     Text(
                                         text = "+${file.additions}",
-                                        color = Color(0xFF2E7D32),
+                                        color = DiffAdditionTextColor,
                                         fontSize = 10.sp,
                                     )
                                     Spacer(Modifier.width(2.dp))
@@ -242,7 +247,7 @@ fun DiffSheet(
                                 if (file.deletions > 0) {
                                     Text(
                                         text = "-${file.deletions}",
-                                        color = Color(0xFFC62828),
+                                        color = DiffDeletionTextColor,
                                         fontSize = 10.sp,
                                     )
                                 }
@@ -369,15 +374,15 @@ private fun DiffFileContent(file: HostGitDiffFile) {
             items(lines) { line ->
                 val bg =
                     when {
-                        line.startsWith("+") && !line.startsWith("+++") -> Color(0x224CAF50)
-                        line.startsWith("-") && !line.startsWith("---") -> Color(0x22F44336)
+                        line.startsWith("+") && !line.startsWith("+++") -> DiffAdditionBgColor
+                        line.startsWith("-") && !line.startsWith("---") -> DiffDeletionBgColor
                         line.startsWith("@@") -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
                         else -> Color.Transparent
                     }
                 val textColor =
                     when {
-                        line.startsWith("+") && !line.startsWith("+++") -> Color(0xFF2E7D32)
-                        line.startsWith("-") && !line.startsWith("---") -> Color(0xFFC62828)
+                        line.startsWith("+") && !line.startsWith("+++") -> DiffAdditionTextColor
+                        line.startsWith("-") && !line.startsWith("---") -> DiffDeletionTextColor
                         line.startsWith("@@") -> MaterialTheme.colorScheme.onTertiaryContainer
                         else -> MaterialTheme.colorScheme.onSurface
                     }

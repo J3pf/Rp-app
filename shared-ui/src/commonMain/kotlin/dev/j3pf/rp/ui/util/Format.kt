@@ -59,8 +59,6 @@ fun contextLabel(context: String): String =
         else -> context.replaceFirstChar { it.uppercase() }
     }
 
-fun contextEmoji(context: String): String = ""
-
 /** "api-gateway" etc. — nombre visible del agente. */
 fun agentTitle(
     sessionName: String?,

@@ -110,34 +110,39 @@ fun ChatContent(
                 .WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatTopBar(
-                agent = agent,
-                sessionName = ui.chat.sessionName,
-                model = ui.chat.model,
-                thinkingLevel = ui.chat.thinkingLevel,
-                working = working,
-                diffFileCount = ui.diffResult?.files?.size ?: 0,
-                chatFontScale = ui.chatFontScale,
-                chatMessageSpacing = ui.chatMessageSpacing,
-                muted = ui.muted,
-                readOnly = ui.readOnly,
-                onBack = onBack,
-                onAbort = onAbort,
-                onOpenDiff = onOpenDiff,
-                onFontScaleChange = onFontScaleChange,
-                onMessageSpacingChange = onMessageSpacingChange,
-                onInfo = { showInfo = true },
-                onToggleMute = onToggleMute,
-                onQuit = onQuit,
-                onForget = onForget,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                hideToolCalls = hideToolCalls,
-                onToggleHideToolCalls = { hideToolCalls = !hideToolCalls },
-                onSendTerminalCommand = onSendTerminalCommand,
-                otherActiveAgents = ui.otherActiveAgents,
-                onSwitchAgent = onSwitchAgent,
-                showQuickShortcuts = showQuickShortcuts,
-                onToggleQuickShortcuts = { showQuickShortcuts = !showQuickShortcuts },
+                state =
+                    ChatTopBarState(
+                        agent = agent,
+                        sessionName = ui.chat.sessionName,
+                        model = ui.chat.model,
+                        thinkingLevel = ui.chat.thinkingLevel,
+                        working = working,
+                        diffFileCount = ui.diffResult?.files?.size ?: 0,
+                        chatFontScale = ui.chatFontScale,
+                        chatMessageSpacing = ui.chatMessageSpacing,
+                        muted = ui.muted,
+                        readOnly = ui.readOnly,
+                        searchQuery = searchQuery,
+                        hideToolCalls = hideToolCalls,
+                        otherActiveAgents = ui.otherActiveAgents,
+                        showQuickShortcuts = showQuickShortcuts,
+                    ),
+                actions =
+                    ChatTopBarActions(
+                        onBack = onBack,
+                        onOpenDiff = onOpenDiff,
+                        onFontScaleChange = onFontScaleChange,
+                        onMessageSpacingChange = onMessageSpacingChange,
+                        onInfo = { showInfo = true },
+                        onToggleMute = onToggleMute,
+                        onQuit = onQuit,
+                        onForget = onForget,
+                        onSearchQueryChange = { searchQuery = it },
+                        onToggleHideToolCalls = { hideToolCalls = !hideToolCalls },
+                        onSendTerminalCommand = onSendTerminalCommand,
+                        onSwitchAgent = onSwitchAgent,
+                        onToggleQuickShortcuts = { showQuickShortcuts = !showQuickShortcuts },
+                    ),
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -533,54 +538,60 @@ internal fun Composer(
         }
 
     ChatComposer(
-        agent = ui.agent,
-        working = working,
-        text = text,
-        onTextChange = onText,
-        attachments =
-            ui.attachments.map { attachment ->
-                ComposerAttachment(
-                    id = attachment.id,
-                    name = attachment.name,
-                    size = attachment.size,
-                    state =
-                        when (attachment.state) {
-                            UploadState.PREPARING -> AttachmentUploadState.PREPARING
-                            UploadState.READY -> AttachmentUploadState.READY
-                            UploadState.UPLOADING -> AttachmentUploadState.UPLOADING
-                            UploadState.DONE -> AttachmentUploadState.DONE
-                            UploadState.ERROR -> AttachmentUploadState.ERROR
-                        },
-                    progress = attachment.progress,
-                    error = attachment.error,
-                )
-            },
-        canSend = ui.canSend,
-        sending = ui.sending,
-        choice = ui.choice,
-        onChoice = onChoice,
-        workingDelivery = ui.workingDelivery,
-        onWorkingDelivery = onWorkingDelivery,
-        onPickDocuments = { files.launch(arrayOf("*/*")) },
-        onPickImages = {
-            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-        },
-        onCameraCapture = { cameraPermission.launch(Manifest.permission.CAMERA) },
-        onRemoveAttachment = onRemoveAttachment,
-        onRetryAttachment = onRetryAttachment,
-        onSend = onSend,
-        isVoiceAvailable = isVoiceInputAvailable,
-        isListening = voiceInput.isListening,
-        onVoiceToggle = {
-            baseVoiceText = text
-            recordAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-        },
-        onVoiceStop = voiceInput::stopListening,
-        voiceListeningText = stringResource(R.string.voice_listening),
-        voiceInputDescription = stringResource(R.string.action_voice_input),
-        onAbort = onAbort,
-        showShortcuts = showShortcuts,
-        onDismissShortcuts = onDismissShortcuts,
+        state =
+            ChatComposerState(
+                agent = ui.agent,
+                working = working,
+                text = text,
+                attachments =
+                    ui.attachments.map { attachment ->
+                        ComposerAttachment(
+                            id = attachment.id,
+                            name = attachment.name,
+                            size = attachment.size,
+                            state =
+                                when (attachment.state) {
+                                    UploadState.PREPARING -> AttachmentUploadState.PREPARING
+                                    UploadState.READY -> AttachmentUploadState.READY
+                                    UploadState.UPLOADING -> AttachmentUploadState.UPLOADING
+                                    UploadState.DONE -> AttachmentUploadState.DONE
+                                    UploadState.ERROR -> AttachmentUploadState.ERROR
+                                },
+                            progress = attachment.progress,
+                            error = attachment.error,
+                        )
+                    },
+                canSend = ui.canSend,
+                sending = ui.sending,
+                choice = ui.choice,
+                workingDelivery = ui.workingDelivery,
+                isVoiceAvailable = isVoiceInputAvailable,
+                isListening = voiceInput.isListening,
+                voiceListeningText = stringResource(R.string.voice_listening),
+                voiceInputDescription = stringResource(R.string.action_voice_input),
+                showShortcuts = showShortcuts,
+            ),
+        actions =
+            ChatComposerActions(
+                onTextChange = onText,
+                onChoice = onChoice,
+                onWorkingDelivery = onWorkingDelivery,
+                onPickDocuments = { files.launch(arrayOf("*/*")) },
+                onPickImages = {
+                    photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onCameraCapture = { cameraPermission.launch(Manifest.permission.CAMERA) },
+                onRemoveAttachment = onRemoveAttachment,
+                onRetryAttachment = onRetryAttachment,
+                onSend = onSend,
+                onVoiceToggle = {
+                    baseVoiceText = text
+                    recordAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                onVoiceStop = voiceInput::stopListening,
+                onAbort = onAbort,
+                onDismissShortcuts = onDismissShortcuts,
+            ),
     )
 }
 

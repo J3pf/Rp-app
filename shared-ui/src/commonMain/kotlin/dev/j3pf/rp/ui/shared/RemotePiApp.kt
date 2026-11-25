@@ -53,7 +53,11 @@ import dev.j3pf.rp.ui.agents.AgentsContent
 import dev.j3pf.rp.ui.agents.AgentsUiState
 import dev.j3pf.rp.ui.chat.AutoDeliveryBanner
 import dev.j3pf.rp.ui.chat.ChatComposer
+import dev.j3pf.rp.ui.chat.ChatComposerActions
+import dev.j3pf.rp.ui.chat.ChatComposerState
 import dev.j3pf.rp.ui.chat.ChatTopBar
+import dev.j3pf.rp.ui.chat.ChatTopBarActions
+import dev.j3pf.rp.ui.chat.ChatTopBarState
 import dev.j3pf.rp.ui.chat.DeliveryChoice
 import dev.j3pf.rp.ui.chat.InfoDialog
 import dev.j3pf.rp.ui.chat.MessageList
@@ -708,44 +712,49 @@ private fun SharedChatScreen(
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 ChatTopBar(
-                    agent = agent,
-                    sessionName = chatState.sessionName ?: agent?.sessionName,
-                    model = chatState.model ?: agent?.model?.label,
-                    thinkingLevel = chatState.thinkingLevel,
-                    working = working,
-                    diffFileCount = diffResult?.files?.size ?: 0,
-                    chatFontScale = settings.chatFontScale,
-                    chatMessageSpacing = settings.chatMessageSpacing,
-                    muted = muted,
-                    readOnly = effectiveReadOnly,
-                    onBack = { appController.navigateBack() },
-                    onAbort = { chatSession.abort() },
-                    onOpenDiff = { appController.openDiffSheet(agent) },
-                    onFontScaleChange = appController::setChatFontScale,
-                    onMessageSpacingChange = appController::setChatMessageSpacing,
-                    onInfo = { showInfo = true },
-                    onToggleMute = { appController.setAgentMuted(agentId, !muted) },
-                    onQuit = { appController.quitAgent(chatSession) },
-                    onForget = { appController.requestForgetAgent(agentId) },
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { searchQuery = it },
-                    hideToolCalls = hideToolCalls,
-                    onToggleHideToolCalls = { hideToolCalls = !hideToolCalls },
-                    onSendTerminalCommand = { cmd ->
-                        appController.sendChatMessage(
-                            session = chatSession,
-                            text = cmd,
-                            choice = DeliveryChoice.COMMAND,
-                            workingDelivery = workingDelivery,
-                            working = working,
+                    state =
+                        ChatTopBarState(
                             agent = agent,
-                            onSent = {},
-                        )
-                    },
-                    otherActiveAgents = otherActiveAgents,
-                    onSwitchAgent = { targetId -> appController.navigateTo(ChatRoute(targetId)) },
-                    showQuickShortcuts = showQuickShortcuts,
-                    onToggleQuickShortcuts = { showQuickShortcuts = !showQuickShortcuts },
+                            sessionName = chatState.sessionName ?: agent?.sessionName,
+                            model = chatState.model ?: agent?.model?.label,
+                            thinkingLevel = chatState.thinkingLevel,
+                            working = working,
+                            diffFileCount = diffResult?.files?.size ?: 0,
+                            chatFontScale = settings.chatFontScale,
+                            chatMessageSpacing = settings.chatMessageSpacing,
+                            muted = muted,
+                            readOnly = effectiveReadOnly,
+                            searchQuery = searchQuery,
+                            hideToolCalls = hideToolCalls,
+                            otherActiveAgents = otherActiveAgents,
+                            showQuickShortcuts = showQuickShortcuts,
+                        ),
+                    actions =
+                        ChatTopBarActions(
+                            onBack = { appController.navigateBack() },
+                            onOpenDiff = { appController.openDiffSheet(agent) },
+                            onFontScaleChange = appController::setChatFontScale,
+                            onMessageSpacingChange = appController::setChatMessageSpacing,
+                            onInfo = { showInfo = true },
+                            onToggleMute = { appController.setAgentMuted(agentId, !muted) },
+                            onQuit = { appController.quitAgent(chatSession) },
+                            onForget = { appController.requestForgetAgent(agentId) },
+                            onSearchQueryChange = { searchQuery = it },
+                            onToggleHideToolCalls = { hideToolCalls = !hideToolCalls },
+                            onSendTerminalCommand = { cmd ->
+                                appController.sendChatMessage(
+                                    session = chatSession,
+                                    text = cmd,
+                                    choice = DeliveryChoice.COMMAND,
+                                    workingDelivery = workingDelivery,
+                                    working = working,
+                                    agent = agent,
+                                    onSent = {},
+                                )
+                            },
+                            onSwitchAgent = { targetId -> appController.navigateTo(ChatRoute(targetId)) },
+                            onToggleQuickShortcuts = { showQuickShortcuts = !showQuickShortcuts },
+                        ),
                 )
             }
         },
@@ -761,49 +770,55 @@ private fun SharedChatScreen(
                 }
             } else {
                 ChatComposer(
-                    agent = agent,
-                    working = working,
-                    text = text,
-                    onTextChange = {
-                        text = it
-                        appController.setDraft(agentId, it)
-                    },
-                    attachments = emptyList(),
-                    canSend = text.isNotBlank(),
-                    sending = false,
-                    choice = choice,
-                    onChoice = { choice = it },
-                    workingDelivery = workingDelivery,
-                    onWorkingDelivery = { workingDelivery = it },
-                    onPickDocuments = {},
-                    onPickImages = {},
-                    onCameraCapture = {},
-                    onRemoveAttachment = {},
-                    onRetryAttachment = {},
-                    onSend = {
-                        val msg = text
-                        appController.sendChatMessage(
-                            session = chatSession,
-                            text = msg,
+                    state =
+                        ChatComposerState(
+                            agent = agent,
+                            working = working,
+                            text = text,
+                            attachments = emptyList(),
+                            canSend = text.isNotBlank(),
+                            sending = false,
                             choice = choice,
                             workingDelivery = workingDelivery,
-                            working = working,
-                            agent = agent,
-                            onSent = {
-                                text = ""
-                                appController.setDraft(agentId, "")
+                            isVoiceAvailable = false,
+                            isListening = false,
+                            voiceListeningText = "",
+                            voiceInputDescription = "Entrada de voz",
+                            showShortcuts = showQuickShortcuts,
+                        ),
+                    actions =
+                        ChatComposerActions(
+                            onTextChange = {
+                                text = it
+                                appController.setDraft(agentId, it)
                             },
-                        )
-                    },
-                    isVoiceAvailable = false,
-                    isListening = false,
-                    onVoiceToggle = {},
-                    onVoiceStop = {},
-                    voiceListeningText = "",
-                    voiceInputDescription = "Entrada de voz",
-                    onAbort = { chatSession.abort() },
-                    showShortcuts = showQuickShortcuts,
-                    onDismissShortcuts = { showQuickShortcuts = false },
+                            onChoice = { choice = it },
+                            onWorkingDelivery = { workingDelivery = it },
+                            onPickDocuments = {},
+                            onPickImages = {},
+                            onCameraCapture = {},
+                            onRemoveAttachment = {},
+                            onRetryAttachment = {},
+                            onSend = {
+                                val msg = text
+                                appController.sendChatMessage(
+                                    session = chatSession,
+                                    text = msg,
+                                    choice = choice,
+                                    workingDelivery = workingDelivery,
+                                    working = working,
+                                    agent = agent,
+                                    onSent = {
+                                        text = ""
+                                        appController.setDraft(agentId, "")
+                                    },
+                                )
+                            },
+                            onVoiceToggle = {},
+                            onVoiceStop = {},
+                            onAbort = { chatSession.abort() },
+                            onDismissShortcuts = { showQuickShortcuts = false },
+                        ),
                 )
             }
         },

@@ -2,7 +2,6 @@ package dev.j3pf.rp.util
 
 import androidx.compose.ui.graphics.Color
 import dev.j3pf.rp.ui.util.agentTitle as sharedAgentTitle
-import dev.j3pf.rp.ui.util.contextEmoji as sharedContextEmoji
 import dev.j3pf.rp.ui.util.contextLabel as sharedContextLabel
 import dev.j3pf.rp.ui.util.humanSize as sharedHumanSize
 import dev.j3pf.rp.ui.util.lastSegment as sharedLastSegment
@@ -29,8 +28,6 @@ fun parseColor(
 ): Color = sharedParseColor(hex, fallback)
 
 fun contextLabel(context: String): String = sharedContextLabel(context)
-
-fun contextEmoji(context: String): String = sharedContextEmoji(context)
 
 /** "api-gateway" etc. — nombre visible del agente. */
 fun agentTitle(

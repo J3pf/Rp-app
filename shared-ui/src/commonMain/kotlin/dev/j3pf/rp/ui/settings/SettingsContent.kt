@@ -74,7 +74,6 @@ import dev.j3pf.rp.ui.components.SurfaceCard
 import dev.j3pf.rp.ui.theme.RpColors
 import dev.j3pf.rp.ui.theme.RpThemeChoice
 import dev.j3pf.rp.ui.util.agentTitle
-import dev.j3pf.rp.ui.util.contextEmoji
 import dev.j3pf.rp.ui.util.contextLabel
 import dev.j3pf.rp.ui.util.parseColor
 import dev.j3pf.rp.ui.util.relativeTime
@@ -495,7 +494,7 @@ fun MachinesContent(
         machines.forEach { m ->
             ListItem(
                 leadingContent = { ColorDot(parseColor(m.color), size = 14) },
-                headlineContent = { Text("${contextEmoji(m.context)} ${m.name}".trim()) },
+                headlineContent = { Text(m.name.trim()) },
                 supportingContent = {
                     Text("${contextLabel(m.context)} · ${if (m.online) "en línea" else "sin conexión"} · ${m.agentCount} agentes")
                 },
@@ -761,7 +760,7 @@ private fun MachinePrefsCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ColorDot(parseColor(m.color), size = 12)
-                Text("  ${"${contextEmoji(m.context)} ${m.name}".trim()}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text("  ${m.name.trim()}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 Text("Silenciar")
                 Switch(p?.mute ?: false, onMute)
             }

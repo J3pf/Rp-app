@@ -24,7 +24,7 @@ class SendMessageWorker
         override suspend fun doWork(): Result =
             if (chat.flushOutbox()) {
                 Result.success()
-            } else if (runAttemptCount < 8) {
+            } else if (runAttemptCount < MAX_ATTEMPTS) {
                 Result.retry()
             } else {
                 Result.failure()
@@ -39,6 +39,11 @@ class SendMessageWorker
                     .setContentTitle(applicationContext.getString(R.string.notif_sending))
                     .setOngoing(true)
                     .build()
-            return ForegroundInfo(4202, n)
+            return ForegroundInfo(FOREGROUND_ID, n)
+        }
+
+        companion object {
+            const val MAX_ATTEMPTS = 8
+            private const val FOREGROUND_ID = 4202
         }
     }
