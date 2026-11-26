@@ -24,6 +24,7 @@ import dev.j3pf.rp.protocol.Ulid
 import dev.j3pf.rp.ui.chat.NormalizedCropRect
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -125,6 +126,7 @@ class AttachmentsRepository
                             mime = "image/jpeg"
                             name = jpgName
                             require(directCompressed.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
+                            coroutineContext.ensureActive()
                             return@withContext Result.success(
                                 LocalAttachment(id, name, mime, directCompressed.length(), directCompressed, uri),
                             )
@@ -141,6 +143,7 @@ class AttachmentsRepository
                             val buf = ByteArray(DEFAULT_BUFFER_SIZE)
                             var total = 0L
                             while (true) {
+                                coroutineContext.ensureActive()
                                 val read = input.read(buf)
                                 if (read < 0) break
                                 total += read
@@ -159,6 +162,7 @@ class AttachmentsRepository
                     }
                     val finalFile = checkNotNull(file)
                     require(finalFile.length() <= MAX_ATTACHMENT_BYTES) { "El archivo supera 25 MB" }
+                    coroutineContext.ensureActive()
                     Result.success(LocalAttachment(id, name, mime, finalFile.length(), finalFile, uri))
                 } catch (e: CancellationException) {
                     out?.delete()
