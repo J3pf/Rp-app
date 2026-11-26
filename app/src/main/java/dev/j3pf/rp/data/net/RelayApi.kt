@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -168,19 +169,27 @@ class RelayApi
             target: File,
             maxBytes: Long,
         ): ApiResult<File> {
+            if (!SAFE_BLOB_ID_RE.matches(blobId)) return ApiResult.Http(400, "blobId inválido")
             val session = secrets.current() ?: return ApiResult.Http(401, "sin sesión")
-            val encodedId = URLEncoder.encode(blobId, "UTF-8")
+            val url =
+                session.relayUrl
+                    .trimEnd('/')
+                    .toHttpUrlOrNull()
+                    ?.newBuilder()
+                    ?.addPathSegments("v1/blobs")
+                    ?.addPathSegment(blobId)
+                    ?.build()
+                    ?: return ApiResult.Http(400, "URL de relay inválida")
             val request =
-                runCatching {
-                    Request
-                        .Builder()
-                        .url(session.relayUrl.trimEnd('/') + "/v1/blobs/$encodedId")
-                        .header("Authorization", "Bearer ${session.deviceToken}")
-                        .get()
-                        .build()
-                }.getOrElse { return ApiResult.Network(it) }
+                Request
+                    .Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer ${session.deviceToken}")
+                    .get()
+                    .build()
             return withContext(Dispatchers.IO) {
                 val tmp = File(target.parentFile, "${target.name}.tmp-${System.nanoTime()}")
+                var moved = false
                 try {
                     uploadClient.newCall(request).await().use { response ->
                         if (!response.isSuccessful) {
@@ -207,21 +216,23 @@ class RelayApi
                             }
                         }
                         coroutineContext.ensureActive()
-                        if (target.exists()) target.delete()
-                        if (!tmp.renameTo(target)) {
+                        if (tmp.renameTo(target)) {
+                            moved = true
+                        } else {
                             tmp.copyTo(target, overwrite = true)
-                            tmp.delete()
                         }
                         ApiResult.Ok(target)
                     }
                 } catch (e: IOException) {
-                    tmp.delete()
                     ApiResult.Network(e)
-                } catch (t: Throwable) {
-                    tmp.delete()
-                    throw t
+                } finally {
+                    if (!moved) runCatching { tmp.delete() }
                 }
             }
+        }
+
+        companion object {
+            private val SAFE_BLOB_ID_RE = Regex("^[A-Za-z0-9_-]{8,64}$")
         }
     }
 

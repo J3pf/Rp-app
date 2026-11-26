@@ -198,28 +198,38 @@ class AttachmentsRepository
                 if (rot == 0) {
                     base
                 } else {
-                    rotateBitmap(base, rot).also { rotated ->
-                        if (rotated !== base && !base.isRecycled) base.recycle()
+                    try {
+                        rotateBitmap(base, rot).also { rotated ->
+                            if (rotated !== base && !base.isRecycled) base.recycle()
+                        }
+                    } catch (t: Throwable) {
+                        if (!base.isRecycled) base.recycle()
+                        throw t
                     }
                 }
             }
 
-        /** Saves a local copy of a sent image keyed by [blobId] so chat bubbles can render it immediately. */
-        fun cacheSentImage(
+        /** Saves a local copy of a sent image keyed by [blobId] on [Dispatchers.IO] so chat bubbles can render it immediately. */
+        suspend fun cacheSentImage(
             blobId: String,
             sourceFile: File,
-        ) {
-            if (!SAFE_BLOB_ID_RE.matches(blobId) || !sourceFile.exists()) return
-            runCatching {
-                val target = File(sentDir, "$blobId.jpg")
-                val tmp = File(sentDir, "$blobId.tmp-${System.nanoTime()}")
+        ) = withContext(Dispatchers.IO) {
+            if (!SAFE_BLOB_ID_RE.matches(blobId) || !sourceFile.exists()) return@withContext
+            val target = File(sentDir, "$blobId.jpg")
+            val tmp = File(sentDir, "$blobId.tmp-${System.nanoTime()}")
+            var moved = false
+            try {
                 sourceFile.copyTo(tmp, overwrite = true)
-                if (target.exists()) target.delete()
-                if (!tmp.renameTo(target)) {
+                if (tmp.renameTo(target)) {
+                    moved = true
+                } else {
                     tmp.copyTo(target, overwrite = true)
-                    tmp.delete()
                 }
                 pruneSentCache()
+            } catch (_: Throwable) {
+                // Best-effort local thumbnail cache; remote GET /v1/blobs/{id} remains available.
+            } finally {
+                if (!moved) runCatching { tmp.delete() }
             }
         }
 

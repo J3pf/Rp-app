@@ -65,6 +65,8 @@ import dev.j3pf.rp.ui.promptsheet.PromptSheetViewModel
 import kotlinx.coroutines.launch
 import dev.j3pf.rp.data.ports.BiometricAuthResult as AuthResult
 
+private const val MAX_SENT_THUMBNAILS_IN_MEMORY = 32
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatContent(
@@ -118,7 +120,7 @@ fun ChatContent(
     val sentThumbnailCache = remember { mutableStateMapOf<String, ImageBitmap>() }
     val sentImageBlobIds =
         remember(ui.chat.items) {
-            buildSet {
+            buildList {
                 for (item in ui.chat.items) {
                     if (item is UserMsg) {
                         for (att in item.attachments) {
@@ -126,7 +128,7 @@ fun ChatContent(
                         }
                     }
                 }
-            }
+            }.distinct().takeLast(MAX_SENT_THUMBNAILS_IN_MEMORY).toSet()
         }
     LaunchedEffect(sentImageBlobIds) {
         sentThumbnailCache.keys
@@ -742,8 +744,7 @@ internal fun Composer(
             key1 = activePreview.uri,
             key2 = previewRotation,
         ) {
-            val prevImg = value.second
-            if (prevImg == null) value = true to null
+            value = true to null
             val decoded = decodePreviewBitmap(activePreview.uri, 1600, previewRotation)?.asImageBitmap()
             value = false to decoded
         }

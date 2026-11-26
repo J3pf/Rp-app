@@ -161,6 +161,17 @@ class AttachmentsCropTest {
                 remoteBmp.recycle()
                 assertEquals(1, server.requestCount)
                 assertTrue(File(context.cacheDir, "sent-blobs/01JBLOBREMOTE567.jpg").exists())
+
+                // Oversized chunked download returns 413 and leaves zero temp files behind
+                val sentDir = File(context.cacheDir, "sent-blobs")
+                val target = File(sentDir, "01JBLOBTOOBIG999.jpg")
+                val api = RelayApi(testClient(), FakeSecretStore(context, testSession(server.url("/").toString().trimEnd('/'))))
+                server.enqueue(MockResponse().setResponseCode(200).setChunkedBody("x".repeat(512), 64))
+                val tooBig = api.downloadBlob("01JBLOBTOOBIG999", target, maxBytes = 100L)
+                assertTrue(tooBig is dev.j3pf.rp.data.net.ApiResult.Http && tooBig.code == 413)
+                assertFalse(target.exists())
+                val leftoverTmps = sentDir.listFiles()?.filter { it.name.contains(".tmp-") }.orEmpty()
+                assertEquals(0, leftoverTmps.size)
             } finally {
                 server.shutdown()
                 AttachmentsRepository.clearCache(context)

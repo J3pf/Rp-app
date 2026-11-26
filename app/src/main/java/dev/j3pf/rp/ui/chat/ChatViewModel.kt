@@ -600,9 +600,20 @@ class ChatViewModel
                 }
             val isSlash = body.startsWith("/")
             val asCommand = isSlash && (s.choice == DeliveryChoice.COMMAND || s.choice == DeliveryChoice.AUTO)
+            val imageFilesToCache =
+                sentAttachments.mapNotNull { (id, ref) ->
+                    if (ref.mime.startsWith("image/")) {
+                        local[id]?.file?.let { file -> ref.blobId to file }
+                    } else {
+                        null
+                    }
+                }
             extra.update { it.copy(sending = true, interactiveUnavailable = false) }
             val sendDeferred =
                 chats.runInRepositoryScope {
+                    for ((blobId, file) in imageFilesToCache) {
+                        attachmentsRepo.cacheSentImage(blobId, file)
+                    }
                     session.send(body, refs, delivery, method, asCommand)
                 }
             viewModelScope.launch {
@@ -625,15 +636,7 @@ class ChatViewModel
                                         },
                             )
                         }
-                        sentAttachments.forEach { (id, ref) ->
-                            val localFile = local.remove(id)
-                            if (localFile != null) {
-                                if (ref.mime.startsWith("image/")) {
-                                    attachmentsRepo.cacheSentImage(ref.blobId, localFile.file)
-                                }
-                                attachmentsRepo.discard(localFile)
-                            }
-                        }
+                        sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
                         setDraft("")
                         if (isActive) onSent()
                     }
@@ -645,15 +648,7 @@ class ChatViewModel
                                 message = "Sin conexión: se enviará al volver la red",
                             )
                         }
-                        sentAttachments.forEach { (id, ref) ->
-                            val localFile = local.remove(id)
-                            if (localFile != null) {
-                                if (ref.mime.startsWith("image/")) {
-                                    attachmentsRepo.cacheSentImage(ref.blobId, localFile.file)
-                                }
-                                attachmentsRepo.discard(localFile)
-                            }
-                        }
+                        sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
                         setDraft("")
                         if (isActive) onSent()
                     }
