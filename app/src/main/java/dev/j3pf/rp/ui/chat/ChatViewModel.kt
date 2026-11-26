@@ -1,5 +1,6 @@
 package dev.j3pf.rp.ui.chat
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -337,84 +338,131 @@ class ChatViewModel
         // ───────────────────────────── Adjuntos ─────────────────────────────
 
         fun addAttachments(uris: List<Uri>) {
-            uris.forEach { uri ->
-                val tempId = "pending-${System.nanoTime()}"
-                extra.update {
-                    it.copy(
-                        attachments =
-                            it.attachments +
-                                AttachmentUi(tempId, uri.lastPathSegment ?: "archivo", "", 0, UploadState.PREPARING, previewUri = uri),
-                    )
-                }
-                val job =
-                    viewModelScope.launch {
-                        var currentId = tempId
-                        try {
-                            val prepared = attachmentsRepo.prepare(uri)
-                            val la =
-                                prepared.getOrElse { e ->
-                                    if (tempId !in removedAttachments) {
-                                        replace(tempId) { it.copy(state = UploadState.ERROR, error = e.message ?: "No se pudo leer el archivo") }
-                                    }
-                                    return@launch
-                                }
-                            if (tempId in removedAttachments) {
-                                attachmentsRepo.discard(la)
-                                return@launch
-                            }
-                            currentId = la.id
-                            attachmentJobs.remove(tempId)?.let { attachmentJobs[la.id] = it }
-                            local[la.id] = la
-                            if (la.id in removedAttachments) {
-                                local.remove(la.id)?.let(attachmentsRepo::discard)
-                                return@launch
-                            }
-                            replace(tempId) {
-                                it.copy(id = la.id, name = la.name, mime = la.mime, size = la.size, state = UploadState.UPLOADING)
-                            }
-                            val onProgress = throttledProgressUpdater(la.id)
-                            when (val r = attachmentsRepo.upload(la, onProgress)) {
-                                is ApiResult.Ok -> {
-                                    replace(la.id) {
-                                        it.copy(
-                                            state = UploadState.DONE,
-                                            progress = 1f,
-                                            blobId = r.value.blobId,
-                                            size =
-                                                r.value.size.takeIf { s -> s > 0 } ?: it.size,
-                                        )
-                                    }
-                                }
+            uris.forEach { uri -> addAttachment(uri, cropRect = null) }
+        }
 
-                                is ApiResult.Http -> {
-                                    replace(la.id) {
-                                        it.copy(
-                                            state = UploadState.ERROR,
-                                            error =
-                                                if (r.code ==
-                                                    413
-                                                ) {
-                                                    "Supera 25 MB"
-                                                } else {
-                                                    "HTTP ${r.code}"
-                                                },
-                                        )
-                                    }
-                                }
-
-                                is ApiResult.Network -> {
-                                    replace(la.id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
-                                }
-                            }
-                        } finally {
-                            attachmentJobs.remove(tempId)
-                            attachmentJobs.remove(currentId)
-                            removedAttachments.remove(tempId)
-                            removedAttachments.remove(currentId)
-                        }
-                    }
-                attachmentJobs[tempId] = job
+        fun addAttachment(
+            uri: Uri,
+            cropRect: NormalizedCropRect? = null,
+        ) {
+            val tempId = "pending-${System.nanoTime()}"
+            extra.update {
+                it.copy(
+                    attachments =
+                        it.attachments +
+                            AttachmentUi(tempId, uri.lastPathSegment ?: "archivo", "", 0, UploadState.PREPARING, previewUri = uri),
+                )
             }
+            launchPrepareAndUpload(slotId = tempId, uri = uri, cropRect = cropRect, oldLocal = null)
+        }
+
+        fun cropAttachment(
+            id: String,
+            cropRect: NormalizedCropRect,
+        ) {
+            if (cropRect.isFullImage()) return
+            val existing = extra.value.attachments.firstOrNull { it.id == id } ?: return
+            val oldLocal = local.remove(id)
+            val sourceUri = oldLocal?.file?.let(Uri::fromFile) ?: existing.previewUri ?: return
+            attachmentJobs.remove(id)?.cancel()
+            removedAttachments.remove(id)
+            replace(id) {
+                it.copy(state = UploadState.PREPARING, progress = 0f, blobId = null, error = null)
+            }
+            launchPrepareAndUpload(slotId = id, uri = sourceUri, cropRect = cropRect, oldLocal = oldLocal)
+        }
+
+        private fun launchPrepareAndUpload(
+            slotId: String,
+            uri: Uri,
+            cropRect: NormalizedCropRect?,
+            oldLocal: LocalAttachment?,
+        ) {
+            val job =
+                viewModelScope.launch {
+                    var currentId = slotId
+                    try {
+                        val prepared =
+                            try {
+                                attachmentsRepo.prepare(uri, compressImages = true, cropRect = cropRect)
+                            } finally {
+                                oldLocal?.let(attachmentsRepo::discard)
+                            }
+                        val la =
+                            prepared.getOrElse { e ->
+                                if (slotId !in removedAttachments) {
+                                    replace(slotId) {
+                                        it.copy(state = UploadState.ERROR, error = e.message ?: "No se pudo leer el archivo")
+                                    }
+                                }
+                                return@launch
+                            }
+                        if (slotId in removedAttachments) {
+                            attachmentsRepo.discard(la)
+                            return@launch
+                        }
+                        currentId = la.id
+                        attachmentJobs.remove(slotId)?.let { attachmentJobs[la.id] = it }
+                        local[la.id] = la
+                        if (la.id in removedAttachments) {
+                            local.remove(la.id)?.let(attachmentsRepo::discard)
+                            return@launch
+                        }
+                        replace(slotId) {
+                            it.copy(
+                                id = la.id,
+                                name = la.name,
+                                mime = la.mime,
+                                size = la.size,
+                                state = UploadState.UPLOADING,
+                                progress = 0f,
+                                blobId = null,
+                                error = null,
+                                previewUri = Uri.fromFile(la.file),
+                            )
+                        }
+                        val onProgress = throttledProgressUpdater(la.id)
+                        when (val r = attachmentsRepo.upload(la, onProgress)) {
+                            is ApiResult.Ok -> {
+                                replace(la.id) {
+                                    it.copy(
+                                        state = UploadState.DONE,
+                                        progress = 1f,
+                                        blobId = r.value.blobId,
+                                        size =
+                                            r.value.size.takeIf { s -> s > 0 } ?: it.size,
+                                    )
+                                }
+                            }
+
+                            is ApiResult.Http -> {
+                                replace(la.id) {
+                                    it.copy(
+                                        state = UploadState.ERROR,
+                                        error =
+                                            if (r.code ==
+                                                413
+                                            ) {
+                                                "Supera 25 MB"
+                                            } else {
+                                                "HTTP ${r.code}"
+                                            },
+                                    )
+                                }
+                            }
+
+                            is ApiResult.Network -> {
+                                replace(la.id) { it.copy(state = UploadState.ERROR, error = "Sin conexión") }
+                            }
+                        }
+                    } finally {
+                        attachmentJobs.remove(slotId)
+                        attachmentJobs.remove(currentId)
+                        removedAttachments.remove(slotId)
+                        removedAttachments.remove(currentId)
+                    }
+                }
+            attachmentJobs[slotId] = job
         }
 
         fun removeAttachment(id: String) {
@@ -425,6 +473,13 @@ class ChatViewModel
         }
 
         fun newCameraTarget(): Uri = attachmentsRepo.newCameraTarget()
+
+        fun discardTempCameraUri(uri: Uri) = attachmentsRepo.discardTempCameraUri(uri)
+
+        suspend fun decodePreviewBitmap(
+            uri: Uri,
+            maxDim: Int = 1600,
+        ): Bitmap? = attachmentsRepo.decodePreviewBitmap(uri, maxDim)
 
         private fun replace(
             id: String,

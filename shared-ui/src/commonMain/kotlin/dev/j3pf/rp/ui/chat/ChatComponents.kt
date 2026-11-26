@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -54,6 +57,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -98,6 +104,8 @@ fun AttachmentChip(
     onRemove: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    thumbnail: ImageBitmap? = null,
+    onPreview: (() -> Unit)? = null,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -106,13 +114,45 @@ fun AttachmentChip(
     ) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = name + if (size > 0) " · ${humanSize(size)}" else "",
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = 4.dp),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier =
+                        if (onPreview != null) {
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onPreview)
+                                .padding(end = 4.dp)
+                        } else {
+                            Modifier.padding(end = 4.dp)
+                        },
+                ) {
+                    if (thumbnail != null) {
+                        Image(
+                            bitmap = thumbnail,
+                            contentDescription = "Vista previa de $name",
+                            contentScale = ContentScale.Crop,
+                            modifier =
+                                Modifier
+                                    .padding(end = 6.dp)
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                        )
+                    }
+                    Text(
+                        text = name + if (size > 0) " · ${humanSize(size)}" else "",
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (onPreview != null) {
+                        Icon(
+                            Icons.Filled.Crop,
+                            contentDescription = "Ver o recortar imagen",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+                            modifier = Modifier.padding(start = 6.dp).size(14.dp),
+                        )
+                    }
+                }
                 IconButton(onClick = onRemove, modifier = Modifier.size(20.dp)) {
                     Icon(Icons.Filled.Close, contentDescription = "Quitar", modifier = Modifier.size(14.dp))
                 }

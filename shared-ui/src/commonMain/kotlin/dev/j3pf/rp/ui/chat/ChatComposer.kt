@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
@@ -59,6 +60,8 @@ data class ComposerAttachment(
     val state: AttachmentUploadState,
     val progress: Float,
     val error: String?,
+    val isImage: Boolean = false,
+    val thumbnail: ImageBitmap? = null,
 )
 
 @Composable
@@ -97,6 +100,7 @@ data class ChatComposerActions(
     val onCameraCapture: () -> Unit,
     val onRemoveAttachment: (String) -> Unit,
     val onRetryAttachment: (String) -> Unit,
+    val onPreviewAttachment: (String) -> Unit = {},
     val onSend: () -> Unit,
     val onVoiceToggle: () -> Unit,
     val onVoiceStop: () -> Unit,
@@ -195,6 +199,7 @@ fun ChatComposer(
     val onCameraCapture = actions.onCameraCapture
     val onRemoveAttachment = actions.onRemoveAttachment
     val onRetryAttachment = actions.onRetryAttachment
+    val onPreviewAttachment = actions.onPreviewAttachment
     val onSend = actions.onSend
     val onVoiceToggle = actions.onVoiceToggle
     val onVoiceStop = actions.onVoiceStop
@@ -233,6 +238,8 @@ fun ChatComposer(
                             state = attachment.state,
                             progress = attachment.progress,
                             error = attachment.error,
+                            thumbnail = attachment.thumbnail,
+                            onPreview = if (attachment.isImage) ({ onPreviewAttachment(attachment.id) }) else null,
                             onRemove = { onRemoveAttachment(attachment.id) },
                             onRetry = { onRetryAttachment(attachment.id) },
                         )

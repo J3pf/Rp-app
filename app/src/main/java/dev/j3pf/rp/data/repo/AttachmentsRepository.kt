@@ -21,6 +21,7 @@ import dev.j3pf.rp.data.ports.StagedAttachment
 import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.BlobInfo
 import dev.j3pf.rp.protocol.Ulid
+import dev.j3pf.rp.ui.chat.NormalizedCropRect
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
@@ -70,6 +71,7 @@ data class AttachmentUi(
     val previewUri: Uri? = null,
 ) {
     val isImage get() = mime.startsWith("image/")
+    val canCrop get() = isImage
 
     fun toRef(): AttachmentRef? = blobId?.let { AttachmentRef(it, name, mime, size) }
 }
@@ -92,12 +94,13 @@ class AttachmentsRepository
         }
 
         /**
-         * Copia el contenido (SAF / Photo Picker / cámara) al caché. Las fotos se comprimen a JPEG 85 % /
-         * 2048 px (PLAN-APP §4.2) salvo GIF.
+         * Copies content (SAF / Photo Picker / camera) into app cache. Images are compressed to JPEG 85% /
+         * 2048 px (PLAN-APP §4.2) except GIF, and optionally cropped to [cropRect] before scaling.
          */
         suspend fun prepare(
             uri: Uri,
             compressImages: Boolean = true,
+            cropRect: NormalizedCropRect? = null,
         ): Result<LocalAttachment> =
             withContext(Dispatchers.IO) {
                 var out: File? = null
@@ -107,7 +110,8 @@ class AttachmentsRepository
                     val id = Ulid.new()
                     var name = sanitize(rawName)
                     var mime = rawMime
-                    val isCompressible = compressImages && mime in COMPRESSIBLE
+                    val activeCrop = cropRect?.takeUnless { it.isFullImage() }
+                    val isCompressible = (compressImages && mime in COMPRESSIBLE) || (activeCrop != null && mime.startsWith("image/"))
                     val streamLimit = if (isCompressible) MAX_ATTACHMENT_BYTES * 2 else MAX_ATTACHMENT_BYTES
                     if (isCompressible) {
                         val knownSize = querySize(uri)
@@ -115,7 +119,7 @@ class AttachmentsRepository
                         val jpgName = name.substringBeforeLast('.') + ".jpg"
                         val jpgOut = File(dir, "$id-$jpgName")
                         file = jpgOut
-                        val directCompressed = compressSemaphore.withPermit { compressFromUri(uri, jpgOut) }
+                        val directCompressed = compressSemaphore.withPermit { compressFromUri(uri, jpgOut, activeCrop) }
                         if (directCompressed != null) {
                             mime = "image/jpeg"
                             name = jpgName
@@ -130,7 +134,7 @@ class AttachmentsRepository
                     val initialOut = File(dir, "$id-$name")
                     out = initialOut
                     file = initialOut
-                    val inputStream = checkNotNull(context.contentResolver.openInputStream(uri)) { "No se pudo abrir el archivo" }
+                    val inputStream = checkNotNull(openUriStream(uri)) { "No se pudo abrir el archivo" }
                     inputStream.use { input ->
                         initialOut.outputStream().use { output ->
                             val buf = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -145,7 +149,7 @@ class AttachmentsRepository
                         }
                     }
                     if (isCompressible) {
-                        compressSemaphore.withPermit { compress(initialOut) }?.let { jpg ->
+                        compressSemaphore.withPermit { compress(initialOut, activeCrop) }?.let { jpg ->
                             initialOut.delete()
                             file = jpg
                             mime = "image/jpeg"
@@ -166,6 +170,18 @@ class AttachmentsRepository
                 } finally {
                     deleteTempCameraFileIfOwned(uri)
                 }
+            }
+
+        /** Deletes an unattached temporary camera capture (e.g. when the user cancels preview). */
+        fun discardTempCameraUri(uri: Uri) = deleteTempCameraFileIfOwned(uri)
+
+        /** Decodes a bounded, EXIF-oriented bitmap for preview/crop or composer thumbnails on [Dispatchers.IO]. */
+        suspend fun decodePreviewBitmap(
+            uri: Uri,
+            maxDim: Int = 1600,
+        ): Bitmap? =
+            withContext(Dispatchers.IO) {
+                decodeOrientedBitmapFromUri(uri, maxDim)
             }
 
         /** Deletes raw temporary camera captures under `cacheDir/camera/` (which may contain EXIF/GPS) immediately after staging. */
@@ -230,12 +246,29 @@ class AttachmentsRepository
 
         private fun describe(uri: Uri): Pair<String, String> {
             var name: String? = null
-            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                if (c.moveToFirst()) name = c.getString(0)
+            if (uri.scheme == "file") {
+                name = uri.lastPathSegment
+            } else {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) name = c.getString(0)
+                }
+                if (name.isNullOrBlank()) {
+                    name = uri.lastPathSegment
+                }
             }
+            val ext = name?.substringAfterLast('.', "")?.lowercase()
             val mime =
                 context.contentResolver.getType(uri)
-                    ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(name?.substringAfterLast('.', "")?.lowercase())
+                    ?: ext?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+                    ?: when (ext) {
+                        "jpg", "jpeg" -> "image/jpeg"
+                        "png" -> "image/png"
+                        "webp" -> "image/webp"
+                        "gif" -> "image/gif"
+                        "heic" -> "image/heic"
+                        "heif" -> "image/heif"
+                        else -> null
+                    }
                     ?: "application/octet-stream"
             val fallbackExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)?.let { ".$it" } ?: ""
             return (name ?: ("archivo$fallbackExt")) to mime
@@ -259,6 +292,107 @@ class AttachmentsRepository
                 }
             }.getOrNull()?.takeIf { it >= 0L }
 
+        private fun decodeOrientedBitmapFromUri(
+            uri: Uri,
+            maxDim: Int,
+        ): Bitmap? {
+            val fromDecoder =
+                runCatching {
+                    val source =
+                        if (uri.scheme == "file" && uri.path != null) {
+                            ImageDecoder.createSource(File(requireNotNull(uri.path)))
+                        } else {
+                            ImageDecoder.createSource(context.contentResolver, uri)
+                        }
+                    ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val srcWidth = info.size.width
+                        val srcHeight = info.size.height
+                        val longest = max(srcWidth, srcHeight)
+                        if (longest > maxDim && srcWidth > 0 && srcHeight > 0) {
+                            val scale = maxDim.toFloat() / longest
+                            val targetW = (srcWidth * scale).toInt().coerceAtLeast(1)
+                            val targetH = (srcHeight * scale).toInt().coerceAtLeast(1)
+                            decoder.setTargetSize(targetW, targetH)
+                        }
+                    }
+                }.getOrNull()
+            if (fromDecoder != null) return fromDecoder
+
+            return runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                openUriStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+                var sample = 1
+                while (max(bounds.outWidth, bounds.outHeight) / sample > maxDim) sample *= 2
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                val raw = openUriStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
+                val rotation =
+                    runCatching {
+                        openUriStream(uri)?.use { stream ->
+                            when (ExifInterface(stream).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)) {
+                                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                                else -> 0f
+                            }
+                        } ?: 0f
+                    }.getOrDefault(0f)
+                val longest = max(raw.width, raw.height)
+                val m = Matrix()
+                if (longest > maxDim) {
+                    val sc = maxDim.toFloat() / longest
+                    m.postScale(sc, sc)
+                }
+                if (rotation != 0f) m.postRotate(rotation)
+                if (m.isIdentity) {
+                    raw
+                } else {
+                    val transformed = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
+                    if (transformed !== raw && !raw.isRecycled) raw.recycle()
+                    transformed
+                }
+            }.getOrNull()
+        }
+
+        private fun openUriStream(uri: Uri) =
+            if (uri.scheme == "file" && uri.path != null) {
+                File(requireNotNull(uri.path)).takeIf(File::exists)?.inputStream()
+            } else {
+                context.contentResolver.openInputStream(uri)
+            }
+
+        private fun cropAndScale(
+            source: Bitmap,
+            cropRect: NormalizedCropRect?,
+            maxDim: Int,
+        ): Bitmap {
+            var cropped: Bitmap = source
+            try {
+                if (cropRect != null && !cropRect.isFullImage()) {
+                    val px = cropRect.toPixelRect(source.width, source.height)
+                    cropped = Bitmap.createBitmap(source, px.left, px.top, px.width, px.height)
+                }
+                val longest = max(cropped.width, cropped.height)
+                if (longest > maxDim) {
+                    val sc = maxDim.toFloat() / longest
+                    val targetW = (cropped.width * sc).toInt().coerceAtLeast(1)
+                    val targetH = (cropped.height * sc).toInt().coerceAtLeast(1)
+                    val scaled = Bitmap.createScaledBitmap(cropped, targetW, targetH, true)
+                    if (cropped !== source && scaled !== cropped && !cropped.isRecycled) {
+                        cropped.recycle()
+                    }
+                    return scaled
+                }
+                return cropped
+            } catch (t: Throwable) {
+                if (cropped !== source && !cropped.isRecycled) {
+                    cropped.recycle()
+                }
+                throw t
+            }
+        }
+
         /**
          * Decodes and resizes compressible images directly from [uri] via [ImageDecoder] (API 29+),
          * handling EXIF orientation in a single native pass without a raw temp copy or a second
@@ -268,6 +402,7 @@ class AttachmentsRepository
         private fun compressFromUri(
             uri: Uri,
             targetFile: File,
+            cropRect: NormalizedCropRect? = null,
         ): File? =
             runCatching {
                 val source =
@@ -276,44 +411,54 @@ class AttachmentsRepository
                     } else {
                         ImageDecoder.createSource(context.contentResolver, uri)
                     }
-                val bitmap =
+                val decodeCap = if (cropRect != null && !cropRect.isFullImage()) MAX_CROP_DECODE_DIM else MAX_DIM
+                val decoded =
                     ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                         val srcWidth = info.size.width
                         val srcHeight = info.size.height
                         val longest = max(srcWidth, srcHeight)
-                        if (longest > MAX_DIM && srcWidth > 0 && srcHeight > 0) {
-                            val scale = MAX_DIM.toFloat() / longest
+                        if (longest > decodeCap && srcWidth > 0 && srcHeight > 0) {
+                            val scale = decodeCap.toFloat() / longest
                             val targetW = (srcWidth * scale).toInt().coerceAtLeast(1)
                             val targetH = (srcHeight * scale).toInt().coerceAtLeast(1)
                             decoder.setTargetSize(targetW, targetH)
                         }
                     }
+                var outputBitmap: Bitmap? = null
                 try {
+                    outputBitmap = cropAndScale(decoded, cropRect, MAX_DIM)
                     targetFile.outputStream().use { output ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
+                        outputBitmap.compress(Bitmap.CompressFormat.JPEG, 85, output)
                     }
                     targetFile.takeIf { it.exists() && it.length() > 0L }
                 } finally {
-                    if (!bitmap.isRecycled) {
-                        bitmap.recycle()
+                    if (outputBitmap != null && outputBitmap !== decoded && !outputBitmap.isRecycled) {
+                        outputBitmap.recycle()
+                    }
+                    if (!decoded.isRecycled) {
+                        decoded.recycle()
                     }
                 }
             }.getOrNull()
 
         @SuppressLint("ExifInterface") // android.media.ExifInterface is sufficient for local image orientation on minSdk 29+
-        private fun compress(src: File): File? =
+        private fun compress(
+            src: File,
+            cropRect: NormalizedCropRect? = null,
+        ): File? =
             runCatching {
+                val decodeCap = if (cropRect != null && !cropRect.isFullImage()) MAX_CROP_DECODE_DIM else MAX_DIM
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(src.path, bounds)
                 if (bounds.outWidth <= 0) return null
                 var sample = 1
-                while (max(bounds.outWidth, bounds.outHeight) / sample > MAX_DIM) sample *= 2
+                while (max(bounds.outWidth, bounds.outHeight) / sample > decodeCap) sample *= 2
                 val opts = BitmapFactory.Options().apply { inSampleSize = sample }
                 val raw = BitmapFactory.decodeFile(src.path, opts) ?: return null
                 var rotated: Bitmap? = null
+                var finalBitmap: Bitmap? = null
                 try {
-                    val longest = max(raw.width, raw.height)
                     val rotation =
                         when (ExifInterface(src.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)) {
                             ExifInterface.ORIENTATION_ROTATE_90 -> 90f
@@ -322,10 +467,6 @@ class AttachmentsRepository
                             else -> 0f
                         }
                     val m = Matrix()
-                    if (longest > MAX_DIM) {
-                        val sc = MAX_DIM.toFloat() / longest
-                        m.postScale(sc, sc)
-                    }
                     if (rotation != 0f) m.postRotate(rotation)
                     rotated =
                         if (!m.isIdentity) {
@@ -333,6 +474,7 @@ class AttachmentsRepository
                         } else {
                             raw
                         }
+                    finalBitmap = cropAndScale(rotated, cropRect, MAX_DIM)
                     val out =
                         File(src.parentFile, src.nameWithoutExtension + ".jpg").let {
                             if (it ==
@@ -343,9 +485,12 @@ class AttachmentsRepository
                                 it
                             }
                         }
-                    out.outputStream().use { rotated.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+                    out.outputStream().use { finalBitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
                     out
                 } finally {
+                    if (finalBitmap != null && finalBitmap !== rotated && finalBitmap !== raw && !finalBitmap.isRecycled) {
+                        finalBitmap.recycle()
+                    }
                     if (rotated != null && rotated !== raw && !rotated.isRecycled) {
                         rotated.recycle()
                     }
@@ -357,8 +502,11 @@ class AttachmentsRepository
 
         companion object {
             private const val MAX_DIM = 2048
+            private const val MAX_CROP_DECODE_DIM = 4096
             private val COMPRESSIBLE = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
             private val UNSAFE_FILENAME_REGEX = Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
+
+            fun isCroppableMime(mime: String): Boolean = mime in COMPRESSIBLE
 
             fun clearCache(context: Context) {
                 listOf(File(context.cacheDir, "attachments"), File(context.cacheDir, "camera")).forEach { d ->

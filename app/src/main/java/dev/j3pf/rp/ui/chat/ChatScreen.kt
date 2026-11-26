@@ -1,6 +1,7 @@
 package dev.j3pf.rp.ui.chat
 
 import android.Manifest
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -25,13 +26,17 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -46,7 +51,6 @@ import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.ports.CloseOutcome
 import dev.j3pf.rp.data.ports.VoiceInputHost
 import dev.j3pf.rp.data.ports.VoiceListener
-import dev.j3pf.rp.data.repo.AttachmentUi
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.platform.AndroidVoiceInputHost
 import dev.j3pf.rp.protocol.Answer
@@ -71,6 +75,10 @@ fun ChatContent(
     onChoice: (DeliveryChoice) -> Unit = {},
     onWorkingDelivery: (String) -> Unit = {},
     onPicked: (List<Uri>) -> Unit = {},
+    onAddAttachmentWithCrop: (Uri, NormalizedCropRect?) -> Unit = { uri, _ -> onPicked(listOf(uri)) },
+    onCropAttachment: (String, NormalizedCropRect) -> Unit = { _, _ -> },
+    onDiscardCameraUri: (Uri) -> Unit = {},
+    decodePreviewBitmap: suspend (Uri, Int) -> Bitmap? = { _, _ -> null },
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri = { Uri.EMPTY },
@@ -209,6 +217,10 @@ fun ChatContent(
                     onChoice = onChoice,
                     onWorkingDelivery = onWorkingDelivery,
                     onPicked = onPicked,
+                    onAddAttachmentWithCrop = onAddAttachmentWithCrop,
+                    onCropAttachment = onCropAttachment,
+                    onDiscardCameraUri = onDiscardCameraUri,
+                    decodePreviewBitmap = decodePreviewBitmap,
                     onRemoveAttachment = onRemoveAttachment,
                     onRetryAttachment = onRetryAttachment,
                     newCameraTarget = newCameraTarget,
@@ -325,6 +337,10 @@ fun ChatScreen(
         onChoice = vm::setChoice,
         onWorkingDelivery = vm::setWorkingDelivery,
         onPicked = vm::addAttachments,
+        onAddAttachmentWithCrop = vm::addAttachment,
+        onCropAttachment = vm::cropAttachment,
+        onDiscardCameraUri = vm::discardTempCameraUri,
+        decodePreviewBitmap = vm::decodePreviewBitmap,
         onRemoveAttachment = vm::removeAttachment,
         onRetryAttachment = vm::retryAttachment,
         newCameraTarget = vm::newCameraTarget,
@@ -467,6 +483,21 @@ internal fun MessageList(
     )
 }
 
+private sealed interface ImagePreviewTarget {
+    val uri: Uri
+
+    data class NewPick(
+        override val uri: Uri,
+        val isCameraCapture: Boolean,
+    ) : ImagePreviewTarget
+
+    data class ExistingAttachment(
+        val attachmentId: String,
+        override val uri: Uri,
+        val canCrop: Boolean,
+    ) : ImagePreviewTarget
+}
+
 @Composable
 internal fun Composer(
     ui: ChatUiState,
@@ -476,6 +507,10 @@ internal fun Composer(
     onChoice: (DeliveryChoice) -> Unit,
     onWorkingDelivery: (String) -> Unit,
     onPicked: (List<Uri>) -> Unit,
+    onAddAttachmentWithCrop: (Uri, NormalizedCropRect?) -> Unit = { uri, _ -> onPicked(listOf(uri)) },
+    onCropAttachment: (String, NormalizedCropRect) -> Unit = { _, _ -> },
+    onDiscardCameraUri: (Uri) -> Unit = {},
+    decodePreviewBitmap: suspend (Uri, Int) -> Bitmap? = { _, _ -> null },
     onRemoveAttachment: (String) -> Unit,
     onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri,
@@ -487,12 +522,41 @@ internal fun Composer(
     isVoiceInputAvailable: Boolean = false,
 ) {
     var cameraTarget by remember { mutableStateOf<Uri?>(null) }
+    var previewTarget by remember { mutableStateOf<ImagePreviewTarget?>(null) }
+    val thumbnailCache = remember { mutableStateMapOf<Uri, ImageBitmap>() }
+
+    LaunchedEffect(ui.attachments) {
+        val activeUris = ui.attachments.mapNotNull { if (it.isImage) it.previewUri else null }.toSet()
+        thumbnailCache.keys
+            .toList()
+            .filterNot { it in activeUris }
+            .forEach { thumbnailCache.remove(it) }
+        for (uri in activeUris) {
+            if (uri !in thumbnailCache) {
+                decodePreviewBitmap(uri, 128)?.let { bmp ->
+                    thumbnailCache[uri] = bmp.asImageBitmap()
+                }
+            }
+        }
+    }
 
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { onPicked(it) }
-    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { onPicked(it) }
+    val photos =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
+            when {
+                uris.size == 1 -> previewTarget = ImagePreviewTarget.NewPick(uris.first(), isCameraCapture = false)
+                uris.isNotEmpty() -> onPicked(uris)
+            }
+        }
     val takePicture =
         rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-            if (ok) cameraTarget?.let { onPicked(listOf(it)) }
+            val target = cameraTarget
+            cameraTarget = null
+            if (ok && target != null) {
+                previewTarget = ImagePreviewTarget.NewPick(target, isCameraCapture = true)
+            } else if (target != null) {
+                onDiscardCameraUri(target)
+            }
         }
     // La app declara CAMERA (escáner QR): sin el permiso concedido, ACTION_IMAGE_CAPTURE lanza SecurityException.
     val cameraPermission =
@@ -560,6 +624,8 @@ internal fun Composer(
                                 },
                             progress = attachment.progress,
                             error = attachment.error,
+                            isImage = attachment.isImage && attachment.previewUri != null,
+                            thumbnail = attachment.previewUri?.let { thumbnailCache[it] },
                         )
                     },
                 canSend = ui.canSend,
@@ -584,6 +650,18 @@ internal fun Composer(
                 onCameraCapture = { cameraPermission.launch(Manifest.permission.CAMERA) },
                 onRemoveAttachment = onRemoveAttachment,
                 onRetryAttachment = onRetryAttachment,
+                onPreviewAttachment = { id ->
+                    val att = ui.attachments.firstOrNull { it.id == id }
+                    val uri = att?.previewUri
+                    if (att != null && att.isImage && uri != null) {
+                        previewTarget =
+                            ImagePreviewTarget.ExistingAttachment(
+                                attachmentId = att.id,
+                                uri = uri,
+                                canCrop = att.canCrop,
+                            )
+                    }
+                },
                 onSend = onSend,
                 onVoiceToggle = {
                     baseVoiceText = text
@@ -594,6 +672,49 @@ internal fun Composer(
                 onDismissShortcuts = onDismissShortcuts,
             ),
     )
+
+    val activePreview = previewTarget
+    if (activePreview != null) {
+        val loadedPreview by produceState<Pair<Boolean, ImageBitmap?>>(
+            initialValue = true to null,
+            key1 = activePreview.uri,
+        ) {
+            value = true to null
+            val decoded = decodePreviewBitmap(activePreview.uri, 1600)?.asImageBitmap()
+            value = false to decoded
+        }
+        ImagePreviewCropDialog(
+            image = loadedPreview.second,
+            loading = loadedPreview.first,
+            error = if (!loadedPreview.first && loadedPreview.second == null) "No se pudo cargar la imagen" else null,
+            isNewAttachment = activePreview is ImagePreviewTarget.NewPick,
+            canCrop =
+                when (activePreview) {
+                    is ImagePreviewTarget.NewPick -> true
+                    is ImagePreviewTarget.ExistingAttachment -> activePreview.canCrop
+                },
+            onDismiss = {
+                if (activePreview is ImagePreviewTarget.NewPick && activePreview.isCameraCapture) {
+                    onDiscardCameraUri(activePreview.uri)
+                }
+                previewTarget = null
+            },
+            onConfirm = { cropRect ->
+                when (activePreview) {
+                    is ImagePreviewTarget.NewPick -> {
+                        onAddAttachmentWithCrop(activePreview.uri, cropRect)
+                    }
+
+                    is ImagePreviewTarget.ExistingAttachment -> {
+                        if (cropRect != null && !cropRect.isFullImage()) {
+                            onCropAttachment(activePreview.attachmentId, cropRect)
+                        }
+                    }
+                }
+                previewTarget = null
+            },
+        )
+    }
 }
 
 @EntryPoint
