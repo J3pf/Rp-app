@@ -61,6 +61,21 @@ class AttachmentsCropTest {
             BitmapFactory.decodeFile(staged.file.path, bounds)
             assertEquals(200, bounds.outWidth)
             assertEquals(100, bounds.outHeight)
+
+            // Re-cropping with displayName preserves the clean filename without ULID stacking
+            val res2 =
+                repo.prepare(
+                    uri = Uri.fromFile(staged.file),
+                    compressImages = true,
+                    cropRect = NormalizedCropRect(0f, 0f, 0.5f, 1f),
+                    displayName = staged.name,
+                )
+            assertTrue(res2.isSuccess)
+            val staged2 = res2.getOrThrow()
+            assertEquals("crop-source.jpg", staged2.name)
+            BitmapFactory.decodeFile(staged2.file.path, bounds)
+            assertEquals(100, bounds.outWidth)
+            assertEquals(100, bounds.outHeight)
         }
 
     @Test

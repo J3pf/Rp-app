@@ -100,12 +100,12 @@ data class ChatComposerActions(
     val onCameraCapture: () -> Unit,
     val onRemoveAttachment: (String) -> Unit,
     val onRetryAttachment: (String) -> Unit,
-    val onPreviewAttachment: (String) -> Unit = {},
     val onSend: () -> Unit,
     val onVoiceToggle: () -> Unit,
     val onVoiceStop: () -> Unit,
     val onAbort: () -> Unit = {},
     val onDismissShortcuts: () -> Unit = {},
+    val onPreviewAttachment: (String) -> Unit = {},
 )
 
 @Composable

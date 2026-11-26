@@ -525,8 +525,11 @@ internal fun Composer(
     var previewTarget by remember { mutableStateOf<ImagePreviewTarget?>(null) }
     val thumbnailCache = remember { mutableStateMapOf<Uri, ImageBitmap>() }
 
-    LaunchedEffect(ui.attachments) {
-        val activeUris = ui.attachments.mapNotNull { if (it.isImage) it.previewUri else null }.toSet()
+    val activeUris =
+        remember(ui.attachments) {
+            ui.attachments.mapNotNull { if (it.isImage) it.previewUri else null }.toSet()
+        }
+    LaunchedEffect(activeUris) {
         thumbnailCache.keys
             .toList()
             .filterNot { it in activeUris }
@@ -624,7 +627,7 @@ internal fun Composer(
                                 },
                             progress = attachment.progress,
                             error = attachment.error,
-                            isImage = attachment.isImage && attachment.previewUri != null,
+                            isImage = attachment.isImage && attachment.previewUri != null && attachment.state != UploadState.PREPARING,
                             thumbnail = attachment.previewUri?.let { thumbnailCache[it] },
                         )
                     },
@@ -653,7 +656,7 @@ internal fun Composer(
                 onPreviewAttachment = { id ->
                     val att = ui.attachments.firstOrNull { it.id == id }
                     val uri = att?.previewUri
-                    if (att != null && att.isImage && uri != null) {
+                    if (att != null && att.isImage && att.state != UploadState.PREPARING && uri != null) {
                         previewTarget =
                             ImagePreviewTarget.ExistingAttachment(
                                 attachmentId = att.id,

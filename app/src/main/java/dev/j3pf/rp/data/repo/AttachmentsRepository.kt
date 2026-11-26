@@ -101,6 +101,7 @@ class AttachmentsRepository
             uri: Uri,
             compressImages: Boolean = true,
             cropRect: NormalizedCropRect? = null,
+            displayName: String? = null,
         ): Result<LocalAttachment> =
             withContext(Dispatchers.IO) {
                 var out: File? = null
@@ -108,7 +109,7 @@ class AttachmentsRepository
                 try {
                     val (rawName, rawMime) = describe(uri)
                     val id = Ulid.new()
-                    var name = sanitize(rawName)
+                    var name = sanitize(displayName?.takeIf { it.isNotBlank() } ?: rawName)
                     var mime = rawMime
                     val activeCrop = cropRect?.takeUnless { it.isFullImage() }
                     val isCompressible = (compressImages && mime in COMPRESSIBLE) || (activeCrop != null && mime.startsWith("image/"))
@@ -505,8 +506,6 @@ class AttachmentsRepository
             private const val MAX_CROP_DECODE_DIM = 4096
             private val COMPRESSIBLE = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
             private val UNSAFE_FILENAME_REGEX = Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]")
-
-            fun isCroppableMime(mime: String): Boolean = mime in COMPRESSIBLE
 
             fun clearCache(context: Context) {
                 listOf(File(context.cacheDir, "attachments"), File(context.cacheDir, "camera")).forEach { d ->

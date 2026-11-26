@@ -30,6 +30,8 @@ import dev.j3pf.rp.protocol.Delivery
 import dev.j3pf.rp.protocol.DeliveryMethod
 import dev.j3pf.rp.protocol.HostGitDiffResult
 import dev.j3pf.rp.ui.nav.ChatRoute
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -289,7 +291,8 @@ class ChatViewModel
             attachmentJobs.remove(id)?.cancel()
             replace(id) { it.copy(state = UploadState.UPLOADING, progress = 0f, error = null) }
             val job =
-                viewModelScope.launch {
+                viewModelScope.launch(start = CoroutineStart.LAZY) {
+                    val self = coroutineContext[Job]
                     try {
                         val onProgress = throttledProgressUpdater(id)
                         when (val r = attachmentsRepo.upload(la, onProgress)) {
@@ -318,10 +321,11 @@ class ChatViewModel
                             }
                         }
                     } finally {
-                        attachmentJobs.remove(id)
+                        if (self != null) attachmentJobs.remove(id, self)
                     }
                 }
             attachmentJobs[id] = job
+            job.start()
         }
 
         /** ¿Este envío cuenta como "tecleado" y por tanto debe pedir biometría? (válida 5 min) */
@@ -353,7 +357,13 @@ class ChatViewModel
                             AttachmentUi(tempId, uri.lastPathSegment ?: "archivo", "", 0, UploadState.PREPARING, previewUri = uri),
                 )
             }
-            launchPrepareAndUpload(slotId = tempId, uri = uri, cropRect = cropRect, oldLocal = null)
+            launchPrepareAndUpload(
+                slotId = tempId,
+                uri = uri,
+                cropRect = cropRect,
+                displayName = null,
+                oldLocal = null,
+            )
         }
 
         fun cropAttachment(
@@ -362,6 +372,7 @@ class ChatViewModel
         ) {
             if (cropRect.isFullImage()) return
             val existing = extra.value.attachments.firstOrNull { it.id == id } ?: return
+            if (existing.state == UploadState.PREPARING) return
             val oldLocal = local.remove(id)
             val sourceUri = oldLocal?.file?.let(Uri::fromFile) ?: existing.previewUri ?: return
             attachmentJobs.remove(id)?.cancel()
@@ -369,41 +380,73 @@ class ChatViewModel
             replace(id) {
                 it.copy(state = UploadState.PREPARING, progress = 0f, blobId = null, error = null)
             }
-            launchPrepareAndUpload(slotId = id, uri = sourceUri, cropRect = cropRect, oldLocal = oldLocal)
+            launchPrepareAndUpload(
+                slotId = id,
+                uri = sourceUri,
+                cropRect = cropRect,
+                displayName = existing.name,
+                oldLocal = oldLocal,
+            )
         }
 
         private fun launchPrepareAndUpload(
             slotId: String,
             uri: Uri,
             cropRect: NormalizedCropRect?,
+            displayName: String?,
             oldLocal: LocalAttachment?,
         ) {
             val job =
-                viewModelScope.launch {
+                viewModelScope.launch(start = CoroutineStart.LAZY) {
+                    val self = coroutineContext[Job]
                     var currentId = slotId
+                    var oldLocalHandled = false
                     try {
                         val prepared =
                             try {
-                                attachmentsRepo.prepare(uri, compressImages = true, cropRect = cropRect)
-                            } finally {
+                                attachmentsRepo.prepare(
+                                    uri = uri,
+                                    compressImages = true,
+                                    cropRect = cropRect,
+                                    displayName = displayName,
+                                )
+                            } catch (ce: CancellationException) {
                                 oldLocal?.let(attachmentsRepo::discard)
+                                oldLocalHandled = true
+                                throw ce
                             }
                         val la =
                             prepared.getOrElse { e ->
-                                if (slotId !in removedAttachments) {
+                                if (oldLocal != null) {
+                                    oldLocalHandled = true
+                                    if (slotId !in removedAttachments && attachmentJobs[slotId] === self) {
+                                        local[slotId] = oldLocal
+                                    } else {
+                                        attachmentsRepo.discard(oldLocal)
+                                    }
+                                }
+                                if (slotId !in removedAttachments && attachmentJobs[slotId] === self) {
                                     replace(slotId) {
                                         it.copy(state = UploadState.ERROR, error = e.message ?: "No se pudo leer el archivo")
                                     }
                                 }
                                 return@launch
                             }
-                        if (slotId in removedAttachments) {
+                        if (self == null || slotId in removedAttachments || !attachmentJobs.remove(slotId, self)) {
                             attachmentsRepo.discard(la)
+                            if (oldLocal != null && !oldLocalHandled) {
+                                attachmentsRepo.discard(oldLocal)
+                                oldLocalHandled = true
+                            }
                             return@launch
                         }
                         currentId = la.id
-                        attachmentJobs.remove(slotId)?.let { attachmentJobs[la.id] = it }
+                        attachmentJobs[la.id] = self
                         local[la.id] = la
+                        if (oldLocal != null && !oldLocalHandled) {
+                            attachmentsRepo.discard(oldLocal)
+                            oldLocalHandled = true
+                        }
                         if (la.id in removedAttachments) {
                             local.remove(la.id)?.let(attachmentsRepo::discard)
                             return@launch
@@ -456,13 +499,17 @@ class ChatViewModel
                             }
                         }
                     } finally {
-                        attachmentJobs.remove(slotId)
-                        attachmentJobs.remove(currentId)
-                        removedAttachments.remove(slotId)
-                        removedAttachments.remove(currentId)
+                        if (oldLocal != null && !oldLocalHandled) {
+                            attachmentsRepo.discard(oldLocal)
+                        }
+                        val ownedSlot = self != null && attachmentJobs.remove(slotId, self)
+                        val ownedCurrent = self != null && attachmentJobs.remove(currentId, self)
+                        if (ownedSlot) removedAttachments.remove(slotId)
+                        if (ownedCurrent) removedAttachments.remove(currentId)
                     }
                 }
             attachmentJobs[slotId] = job
+            job.start()
         }
 
         fun removeAttachment(id: String) {
