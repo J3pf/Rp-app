@@ -77,4 +77,18 @@ class ImageCropMathTest {
         assertEquals(0.6f, shrunkBottom.bottom, 0.001f)
         assertEquals(0.2f, shrunkBottom.left, 0.001f)
     }
+
+    @Test
+    fun `normalizeRotationDegrees and ImageEditSpec handle quarter turns`() {
+        assertEquals(0, normalizeRotationDegrees(0))
+        assertEquals(90, normalizeRotationDegrees(90))
+        assertEquals(270, normalizeRotationDegrees(-90))
+        assertEquals(0, normalizeRotationDegrees(360))
+        assertEquals(180, normalizeRotationDegrees(540))
+
+        assertTrue(ImageEditSpec().isNoOp)
+        assertTrue(ImageEditSpec(cropRect = NormalizedCropRect.FULL, rotationDegrees = 360).isNoOp)
+        assertFalse(ImageEditSpec(rotationDegrees = 90).isNoOp)
+        assertFalse(ImageEditSpec(cropRect = NormalizedCropRect(0.1f, 0.1f, 0.9f, 0.9f)).isNoOp)
+    }
 }

@@ -44,6 +44,22 @@ data class NormalizedCropRect(
     }
 }
 
+/** Normalize an arbitrary rotation angle to a canonical clockwise quarter-turn `{0, 90, 180, 270}`. */
+fun normalizeRotationDegrees(degrees: Int): Int {
+    val mod = ((degrees % 360) + 360) % 360
+    return ((mod + 45) / 90 * 90) % 360
+}
+
+/** Combined edit specification returned by [ImagePreviewCropDialog]. */
+data class ImageEditSpec(
+    val cropRect: NormalizedCropRect? = null,
+    val rotationDegrees: Int = 0,
+) {
+    val normalizedRotation: Int get() = normalizeRotationDegrees(rotationDegrees)
+    val effectiveCrop: NormalizedCropRect? get() = cropRect?.takeUnless { it.isFullImage() }
+    val isNoOp: Boolean get() = normalizedRotation == 0 && effectiveCrop == null
+}
+
 /** Concrete pixel bounds for bitmap cropping. */
 data class PixelCropRect(
     val left: Int,

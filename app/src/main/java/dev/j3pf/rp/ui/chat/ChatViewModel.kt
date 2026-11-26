@@ -348,6 +348,7 @@ class ChatViewModel
         fun addAttachment(
             uri: Uri,
             cropRect: NormalizedCropRect? = null,
+            rotationDegrees: Int = 0,
         ) {
             val tempId = "pending-${System.nanoTime()}"
             extra.update {
@@ -361,16 +362,27 @@ class ChatViewModel
                 slotId = tempId,
                 uri = uri,
                 cropRect = cropRect,
+                rotationDegrees = rotationDegrees,
                 displayName = null,
                 oldLocal = null,
             )
         }
 
+        fun addAttachmentWithEdit(
+            uri: Uri,
+            edit: ImageEditSpec,
+        ) = addAttachment(uri = uri, cropRect = edit.effectiveCrop, rotationDegrees = edit.normalizedRotation)
+
         fun cropAttachment(
             id: String,
             cropRect: NormalizedCropRect,
+        ) = editAttachment(id = id, edit = ImageEditSpec(cropRect = cropRect))
+
+        fun editAttachment(
+            id: String,
+            edit: ImageEditSpec,
         ) {
-            if (cropRect.isFullImage()) return
+            if (edit.isNoOp) return
             val existing = extra.value.attachments.firstOrNull { it.id == id } ?: return
             if (existing.state == UploadState.PREPARING) return
             val oldLocal = local.remove(id)
@@ -383,7 +395,8 @@ class ChatViewModel
             launchPrepareAndUpload(
                 slotId = id,
                 uri = sourceUri,
-                cropRect = cropRect,
+                cropRect = edit.effectiveCrop,
+                rotationDegrees = edit.normalizedRotation,
                 displayName = existing.name,
                 oldLocal = oldLocal,
             )
@@ -393,6 +406,7 @@ class ChatViewModel
             slotId: String,
             uri: Uri,
             cropRect: NormalizedCropRect?,
+            rotationDegrees: Int,
             displayName: String?,
             oldLocal: LocalAttachment?,
         ) {
@@ -409,6 +423,7 @@ class ChatViewModel
                                     compressImages = true,
                                     cropRect = cropRect,
                                     displayName = displayName,
+                                    rotationDegrees = rotationDegrees,
                                 )
                             } catch (ce: CancellationException) {
                                 oldLocal?.let(attachmentsRepo::discard)
@@ -526,7 +541,13 @@ class ChatViewModel
         suspend fun decodePreviewBitmap(
             uri: Uri,
             maxDim: Int = 1600,
-        ): Bitmap? = attachmentsRepo.decodePreviewBitmap(uri, maxDim)
+            rotationDegrees: Int = 0,
+        ): Bitmap? = attachmentsRepo.decodePreviewBitmap(uri, maxDim, rotationDegrees)
+
+        suspend fun loadSentBlobBitmap(
+            blobId: String,
+            maxDim: Int = 512,
+        ): Bitmap? = attachmentsRepo.loadSentBlobBitmap(blobId, maxDim)
 
         private fun replace(
             id: String,
@@ -604,7 +625,15 @@ class ChatViewModel
                                         },
                             )
                         }
-                        sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
+                        sentAttachments.forEach { (id, ref) ->
+                            val localFile = local.remove(id)
+                            if (localFile != null) {
+                                if (ref.mime.startsWith("image/")) {
+                                    attachmentsRepo.cacheSentImage(ref.blobId, localFile.file)
+                                }
+                                attachmentsRepo.discard(localFile)
+                            }
+                        }
                         setDraft("")
                         if (isActive) onSent()
                     }
@@ -616,7 +645,15 @@ class ChatViewModel
                                 message = "Sin conexión: se enviará al volver la red",
                             )
                         }
-                        sentIds.forEach { id -> local.remove(id)?.let(attachmentsRepo::discard) }
+                        sentAttachments.forEach { (id, ref) ->
+                            val localFile = local.remove(id)
+                            if (localFile != null) {
+                                if (ref.mime.startsWith("image/")) {
+                                    attachmentsRepo.cacheSentImage(ref.blobId, localFile.file)
+                                }
+                                attachmentsRepo.discard(localFile)
+                            }
+                        }
                         setDraft("")
                         if (isActive) onSent()
                     }

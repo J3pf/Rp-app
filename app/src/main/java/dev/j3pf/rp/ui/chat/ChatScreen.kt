@@ -26,6 +26,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -54,6 +55,7 @@ import dev.j3pf.rp.data.ports.VoiceListener
 import dev.j3pf.rp.data.repo.UploadState
 import dev.j3pf.rp.platform.AndroidVoiceInputHost
 import dev.j3pf.rp.protocol.Answer
+import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.ui.agents.AgentCloseConfirmationDialog
 import dev.j3pf.rp.ui.components.ConnectionBanner
@@ -75,10 +77,11 @@ fun ChatContent(
     onChoice: (DeliveryChoice) -> Unit = {},
     onWorkingDelivery: (String) -> Unit = {},
     onPicked: (List<Uri>) -> Unit = {},
-    onAddAttachmentWithCrop: (Uri, NormalizedCropRect?) -> Unit = { uri, _ -> onPicked(listOf(uri)) },
-    onCropAttachment: (String, NormalizedCropRect) -> Unit = { _, _ -> },
+    onAddAttachmentWithEdit: (Uri, ImageEditSpec) -> Unit = { uri, _ -> onPicked(listOf(uri)) },
+    onEditAttachment: (String, ImageEditSpec) -> Unit = { _, _ -> },
     onDiscardCameraUri: (Uri) -> Unit = {},
-    decodePreviewBitmap: suspend (Uri, Int) -> Bitmap? = { _, _ -> null },
+    decodePreviewBitmap: suspend (Uri, Int, Int) -> Bitmap? = { _, _, _ -> null },
+    loadSentBlobBitmap: suspend (String, Int) -> Bitmap? = { _, _ -> null },
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri = { Uri.EMPTY },
@@ -111,6 +114,33 @@ fun ChatContent(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var hideToolCalls by rememberSaveable { mutableStateOf(false) }
     var showQuickShortcuts by rememberSaveable { mutableStateOf(false) }
+    var viewingSentBlob by remember { mutableStateOf<AttachmentRef?>(null) }
+    val sentThumbnailCache = remember { mutableStateMapOf<String, ImageBitmap>() }
+    val sentImageBlobIds =
+        remember(ui.chat.items) {
+            buildSet {
+                for (item in ui.chat.items) {
+                    if (item is UserMsg) {
+                        for (att in item.attachments) {
+                            if (att.mime.startsWith("image/")) add(att.blobId)
+                        }
+                    }
+                }
+            }
+        }
+    LaunchedEffect(sentImageBlobIds) {
+        sentThumbnailCache.keys
+            .toList()
+            .filterNot { it in sentImageBlobIds }
+            .forEach { sentThumbnailCache.remove(it) }
+        for (blobId in sentImageBlobIds) {
+            if (blobId !in sentThumbnailCache) {
+                loadSentBlobBitmap(blobId, 384)?.let { bmp ->
+                    sentThumbnailCache[blobId] = bmp.asImageBitmap()
+                }
+            }
+        }
+    }
 
     Scaffold(
         contentWindowInsets =
@@ -196,6 +226,8 @@ fun ChatContent(
                     onAnswerPrompt = onAnswerPrompt,
                     onRetryUserMessage = onRetryUserMessage,
                     listState = listState,
+                    resolveAttachmentThumbnail = { blobId -> sentThumbnailCache[blobId] },
+                    onOpenAttachmentImage = { ref -> viewingSentBlob = ref },
                 )
             }
 
@@ -217,8 +249,8 @@ fun ChatContent(
                     onChoice = onChoice,
                     onWorkingDelivery = onWorkingDelivery,
                     onPicked = onPicked,
-                    onAddAttachmentWithCrop = onAddAttachmentWithCrop,
-                    onCropAttachment = onCropAttachment,
+                    onAddAttachmentWithEdit = onAddAttachmentWithEdit,
+                    onEditAttachment = onEditAttachment,
                     onDiscardCameraUri = onDiscardCameraUri,
                     decodePreviewBitmap = decodePreviewBitmap,
                     onRemoveAttachment = onRemoveAttachment,
@@ -233,6 +265,27 @@ fun ChatContent(
                 )
             }
         }
+    }
+
+    val activeSentBlob = viewingSentBlob
+    if (activeSentBlob != null) {
+        val loadedSent by produceState<Pair<Boolean, ImageBitmap?>>(
+            initialValue = true to null,
+            key1 = activeSentBlob.blobId,
+        ) {
+            value = true to null
+            val decoded = loadSentBlobBitmap(activeSentBlob.blobId, 1600)?.asImageBitmap()
+            value = false to decoded
+        }
+        ImagePreviewCropDialog(
+            image = loadedSent.second,
+            loading = loadedSent.first,
+            error = if (!loadedSent.first && loadedSent.second == null) "No se pudo cargar la imagen" else null,
+            isNewAttachment = false,
+            canCrop = false,
+            onDismiss = { viewingSentBlob = null },
+            onConfirm = { viewingSentBlob = null },
+        )
     }
 
     if (showInfo && agent != null) {
@@ -337,10 +390,11 @@ fun ChatScreen(
         onChoice = vm::setChoice,
         onWorkingDelivery = vm::setWorkingDelivery,
         onPicked = vm::addAttachments,
-        onAddAttachmentWithCrop = vm::addAttachment,
-        onCropAttachment = vm::cropAttachment,
+        onAddAttachmentWithEdit = vm::addAttachmentWithEdit,
+        onEditAttachment = vm::editAttachment,
         onDiscardCameraUri = vm::discardTempCameraUri,
         decodePreviewBitmap = vm::decodePreviewBitmap,
+        loadSentBlobBitmap = vm::loadSentBlobBitmap,
         onRemoveAttachment = vm::removeAttachment,
         onRetryAttachment = vm::retryAttachment,
         newCameraTarget = vm::newCameraTarget,
@@ -453,6 +507,8 @@ internal fun MessageList(
     listState: androidx.compose.foundation.lazy.LazyListState =
         androidx.compose.foundation.lazy
             .rememberLazyListState(),
+    resolveAttachmentThumbnail: (String) -> ImageBitmap? = { null },
+    onOpenAttachmentImage: ((AttachmentRef) -> Unit)? = null,
 ) {
     dev.j3pf.rp.ui.chat.MessageList(
         displayItems = ui.chat.items,
@@ -480,6 +536,8 @@ internal fun MessageList(
         listState = listState,
         modifier = modifier,
         streaming = ui.chat.streaming,
+        resolveAttachmentThumbnail = resolveAttachmentThumbnail,
+        onOpenAttachmentImage = onOpenAttachmentImage,
     )
 }
 
@@ -507,10 +565,10 @@ internal fun Composer(
     onChoice: (DeliveryChoice) -> Unit,
     onWorkingDelivery: (String) -> Unit,
     onPicked: (List<Uri>) -> Unit,
-    onAddAttachmentWithCrop: (Uri, NormalizedCropRect?) -> Unit = { uri, _ -> onPicked(listOf(uri)) },
-    onCropAttachment: (String, NormalizedCropRect) -> Unit = { _, _ -> },
+    onAddAttachmentWithEdit: (Uri, ImageEditSpec) -> Unit = { uri, _ -> onPicked(listOf(uri)) },
+    onEditAttachment: (String, ImageEditSpec) -> Unit = { _, _ -> },
     onDiscardCameraUri: (Uri) -> Unit = {},
-    decodePreviewBitmap: suspend (Uri, Int) -> Bitmap? = { _, _ -> null },
+    decodePreviewBitmap: suspend (Uri, Int, Int) -> Bitmap? = { _, _, _ -> null },
     onRemoveAttachment: (String) -> Unit,
     onRetryAttachment: (String) -> Unit = {},
     newCameraTarget: () -> Uri,
@@ -536,7 +594,7 @@ internal fun Composer(
             .forEach { thumbnailCache.remove(it) }
         for (uri in activeUris) {
             if (uri !in thumbnailCache) {
-                decodePreviewBitmap(uri, 128)?.let { bmp ->
+                decodePreviewBitmap(uri, 128, 0)?.let { bmp ->
                     thumbnailCache[uri] = bmp.asImageBitmap()
                 }
             }
@@ -678,12 +736,15 @@ internal fun Composer(
 
     val activePreview = previewTarget
     if (activePreview != null) {
+        var previewRotation by remember(activePreview.uri) { mutableIntStateOf(0) }
         val loadedPreview by produceState<Pair<Boolean, ImageBitmap?>>(
             initialValue = true to null,
             key1 = activePreview.uri,
+            key2 = previewRotation,
         ) {
-            value = true to null
-            val decoded = decodePreviewBitmap(activePreview.uri, 1600)?.asImageBitmap()
+            val prevImg = value.second
+            if (prevImg == null) value = true to null
+            val decoded = decodePreviewBitmap(activePreview.uri, 1600, previewRotation)?.asImageBitmap()
             value = false to decoded
         }
         ImagePreviewCropDialog(
@@ -696,21 +757,24 @@ internal fun Composer(
                     is ImagePreviewTarget.NewPick -> true
                     is ImagePreviewTarget.ExistingAttachment -> activePreview.canCrop
                 },
+            rotationDegrees = previewRotation,
+            onRotate90 = { previewRotation = (previewRotation + 90) % 360 },
+            onResetRotation = { previewRotation = 0 },
             onDismiss = {
                 if (activePreview is ImagePreviewTarget.NewPick && activePreview.isCameraCapture) {
                     onDiscardCameraUri(activePreview.uri)
                 }
                 previewTarget = null
             },
-            onConfirm = { cropRect ->
+            onConfirm = { edit ->
                 when (activePreview) {
                     is ImagePreviewTarget.NewPick -> {
-                        onAddAttachmentWithCrop(activePreview.uri, cropRect)
+                        onAddAttachmentWithEdit(activePreview.uri, edit)
                     }
 
                     is ImagePreviewTarget.ExistingAttachment -> {
-                        if (cropRect != null && !cropRect.isFullImage()) {
-                            onCropAttachment(activePreview.attachmentId, cropRect)
+                        if (!edit.isNoOp) {
+                            onEditAttachment(activePreview.attachmentId, edit)
                         }
                     }
                 }

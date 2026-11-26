@@ -21,6 +21,7 @@ import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.UserMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -35,6 +36,7 @@ import okio.Buffer
 import okio.BufferedSink
 import okio.ForwardingSink
 import okio.buffer
+import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
@@ -156,6 +158,68 @@ class RelayApi
                     }
                 } catch (e: IOException) {
                     ApiResult.Network(e)
+                }
+            }
+        }
+
+        /** Downloads a blob previously uploaded by this device into [target], bounded by [maxBytes]. */
+        suspend fun downloadBlob(
+            blobId: String,
+            target: File,
+            maxBytes: Long,
+        ): ApiResult<File> {
+            val session = secrets.current() ?: return ApiResult.Http(401, "sin sesión")
+            val encodedId = URLEncoder.encode(blobId, "UTF-8")
+            val request =
+                runCatching {
+                    Request
+                        .Builder()
+                        .url(session.relayUrl.trimEnd('/') + "/v1/blobs/$encodedId")
+                        .header("Authorization", "Bearer ${session.deviceToken}")
+                        .get()
+                        .build()
+                }.getOrElse { return ApiResult.Network(it) }
+            return withContext(Dispatchers.IO) {
+                val tmp = File(target.parentFile, "${target.name}.tmp-${System.nanoTime()}")
+                try {
+                    uploadClient.newCall(request).await().use { response ->
+                        if (!response.isSuccessful) {
+                            return@withContext ApiResult.Http(response.code, response.message)
+                        }
+                        val contentLen = response.body.contentLength()
+                        if (contentLen > maxBytes) {
+                            return@withContext ApiResult.Http(413, "Blob demasiado grande")
+                        }
+                        response.body.byteStream().use { input ->
+                            tmp.outputStream().use { output ->
+                                val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                                var total = 0L
+                                while (true) {
+                                    coroutineContext.ensureActive()
+                                    val read = input.read(buf)
+                                    if (read < 0) break
+                                    total += read
+                                    if (total > maxBytes) {
+                                        return@withContext ApiResult.Http(413, "Blob demasiado grande")
+                                    }
+                                    output.write(buf, 0, read)
+                                }
+                            }
+                        }
+                        coroutineContext.ensureActive()
+                        if (target.exists()) target.delete()
+                        if (!tmp.renameTo(target)) {
+                            tmp.copyTo(target, overwrite = true)
+                            tmp.delete()
+                        }
+                        ApiResult.Ok(target)
+                    }
+                } catch (e: IOException) {
+                    tmp.delete()
+                    ApiResult.Network(e)
+                } catch (t: Throwable) {
+                    tmp.delete()
+                    throw t
                 }
             }
         }

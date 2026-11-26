@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -51,12 +52,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
 /**
- * Full-screen image preview and optional free-form crop dialog.
+ * Full-screen image preview and optional free-form crop / 90° rotate dialog.
  *
- * When [isNewAttachment] is `true`, the primary preview action attaches the full image as-is
- * (`onConfirm(null)`) and crop mode attaches the cropped region (`onConfirm(cropRect)`).
- * When [isNewAttachment] is `false` (inspecting an already staged attachment), preview lets the
- * user inspect the photo or enter crop mode to replace it with a cropped version.
+ * When [isNewAttachment] is `true`, the primary preview action attaches the image (full or rotated)
+ * and crop mode attaches the cropped + rotated region via [onConfirm].
+ * When [isNewAttachment] is `false` (inspecting an already staged or sent attachment), preview lets
+ * the user inspect the photo full-screen and, if [canCrop] is `true`, rotate or crop it in-place.
  */
 @Composable
 fun ImagePreviewCropDialog(
@@ -65,12 +66,17 @@ fun ImagePreviewCropDialog(
     error: String?,
     isNewAttachment: Boolean,
     canCrop: Boolean = true,
+    rotationDegrees: Int = 0,
+    onRotate90: (() -> Unit)? = null,
+    onResetRotation: (() -> Unit)? = null,
     onDismiss: () -> Unit,
-    onConfirm: (NormalizedCropRect?) -> Unit,
+    onConfirm: (ImageEditSpec) -> Unit,
 ) {
     var cropMode by remember { mutableStateOf(false) }
     var cropRect by remember { mutableStateOf(NormalizedCropRect.FULL) }
     var stageSize by remember { mutableStateOf(IntSize.Zero) }
+    val normalizedRotation = normalizeRotationDegrees(rotationDegrees)
+    val hasChanges = normalizedRotation != 0 || !cropRect.isFullImage()
     val density = LocalDensity.current
     val handleRadiusPx = with(density) { 28.dp.toPx() }
     val cornerArmPx = with(density) { 22.dp.toPx() }
@@ -124,21 +130,38 @@ fun ImagePreviewCropDialog(
                         color = Color.White,
                         modifier = Modifier.weight(1f).padding(start = 4.dp),
                     )
+                    if (canCrop && image != null && onRotate90 != null) {
+                        IconButton(
+                            onClick = {
+                                cropRect = NormalizedCropRect.FULL
+                                onRotate90()
+                            },
+                        ) {
+                            Icon(
+                                Icons.Filled.RotateRight,
+                                contentDescription = "Rotar 90°",
+                                tint = Color.White,
+                            )
+                        }
+                    }
                     if (cropMode) {
                         TextButton(
-                            onClick = { cropRect = NormalizedCropRect.FULL },
-                            enabled = !cropRect.isFullImage(),
+                            onClick = {
+                                cropRect = NormalizedCropRect.FULL
+                                onResetRotation?.invoke()
+                            },
+                            enabled = hasChanges,
                         ) {
                             Icon(
                                 Icons.Filled.Refresh,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
-                                tint = if (!cropRect.isFullImage()) Color.White else Color.Gray,
+                                tint = if (hasChanges) Color.White else Color.Gray,
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 "Restablecer",
-                                color = if (!cropRect.isFullImage()) Color.White else Color.Gray,
+                                color = if (hasChanges) Color.White else Color.Gray,
                             )
                         }
                     } else if (canCrop && image != null) {
@@ -352,9 +375,9 @@ fun ImagePreviewCropDialog(
                                 Button(
                                     onClick = {
                                         val selected = cropRect.takeUnless { it.isFullImage() }
-                                        onConfirm(selected)
+                                        onConfirm(ImageEditSpec(cropRect = selected, rotationDegrees = normalizedRotation))
                                     },
-                                    enabled = image != null && (isNewAttachment || !cropRect.isFullImage()),
+                                    enabled = image != null && (isNewAttachment || hasChanges),
                                     modifier = Modifier.weight(1f),
                                 ) {
                                     Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -369,7 +392,7 @@ fun ImagePreviewCropDialog(
                                     Text("Cancelar", color = Color.White)
                                 }
                                 Button(
-                                    onClick = { onConfirm(null) },
+                                    onClick = { onConfirm(ImageEditSpec(cropRect = null, rotationDegrees = normalizedRotation)) },
                                     enabled = !loading && image != null,
                                     modifier = Modifier.weight(1f),
                                 ) {
@@ -384,7 +407,16 @@ fun ImagePreviewCropDialog(
                                 ) {
                                     Text("Cerrar", color = Color.White)
                                 }
-                                if (canCrop && image != null) {
+                                if (canCrop && image != null && normalizedRotation != 0) {
+                                    Button(
+                                        onClick = { onConfirm(ImageEditSpec(cropRect = null, rotationDegrees = normalizedRotation)) },
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Aplicar rotación")
+                                    }
+                                } else if (canCrop && image != null) {
                                     Button(
                                         onClick = {
                                             cropRect = NormalizedCropRect.FULL

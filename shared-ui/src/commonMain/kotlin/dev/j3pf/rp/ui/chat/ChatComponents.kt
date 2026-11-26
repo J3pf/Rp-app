@@ -79,6 +79,7 @@ import dev.j3pf.rp.chat.UserMsg
 import dev.j3pf.rp.data.net.ConnState
 import dev.j3pf.rp.protocol.AgentSummary
 import dev.j3pf.rp.protocol.Answer
+import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.TodoItem
 import dev.j3pf.rp.protocol.formatCompactTokens
@@ -475,6 +476,8 @@ fun MessageList(
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
     streaming: AssistantMsg? = null,
+    resolveAttachmentThumbnail: (String) -> ImageBitmap? = { null },
+    onOpenAttachmentImage: ((AttachmentRef) -> Unit)? = null,
 ) {
     val searchToolsKey = if (searchQuery.isNotBlank()) tools else null
     val committedItems =
@@ -830,6 +833,8 @@ fun MessageList(
                                 onAnswerPrompt = onAnswerPrompt,
                                 spacingMode = chatMessageSpacing,
                                 onRetryUserMessage = onRetryUserMessage,
+                                resolveAttachmentThumbnail = resolveAttachmentThumbnail,
+                                onOpenAttachmentImage = onOpenAttachmentImage,
                             )
                         }
                     }

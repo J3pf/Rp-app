@@ -2,6 +2,7 @@ package dev.j3pf.rp.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Visibility
@@ -43,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -67,6 +71,7 @@ import dev.j3pf.rp.chat.prettyArgs
 import dev.j3pf.rp.chat.simpleDiff
 import dev.j3pf.rp.chat.summary
 import dev.j3pf.rp.protocol.Answer
+import dev.j3pf.rp.protocol.AttachmentRef
 import dev.j3pf.rp.protocol.Prompt
 import dev.j3pf.rp.protocol.SubagentInfo
 import dev.j3pf.rp.ui.components.RpMarkdown
@@ -104,9 +109,18 @@ fun ChatItemView(
     onAnswerPrompt: (Prompt, Answer) -> Unit,
     spacingMode: String = "normal",
     onRetryUserMessage: ((UserMsg) -> Unit)? = null,
+    resolveAttachmentThumbnail: (String) -> ImageBitmap? = { null },
+    onOpenAttachmentImage: ((AttachmentRef) -> Unit)? = null,
 ) {
     when (item) {
-        is UserMsg -> UserBubble(item, spacingMode, onRetryUserMessage)
+        is UserMsg ->
+            UserBubble(
+                m = item,
+                spacingMode = spacingMode,
+                onRetry = onRetryUserMessage,
+                resolveAttachmentThumbnail = resolveAttachmentThumbnail,
+                onOpenAttachmentImage = onOpenAttachmentImage,
+            )
         is AssistantMsg -> AssistantBubble(item, toolLookup, spacingMode)
         is PromptCard -> PromptCardView(item, busyPromptId == item.prompt.promptId, onAnswerPrompt)
         is SystemNote -> SystemNoteView(item, spacingMode)
@@ -119,6 +133,8 @@ private fun UserBubble(
     m: UserMsg,
     spacingMode: String = "normal",
     onRetry: ((UserMsg) -> Unit)? = null,
+    resolveAttachmentThumbnail: (String) -> ImageBitmap? = { null },
+    onOpenAttachmentImage: ((AttachmentRef) -> Unit)? = null,
 ) {
     val hPad =
         when (spacingMode) {
@@ -237,7 +253,64 @@ private fun UserBubble(
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = textLineHeight),
                     )
                 }
-                if (m.imageCount > 0) Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
+                val imageRefs = m.attachments.filter { it.mime.startsWith("image/") }
+                if (imageRefs.isNotEmpty()) {
+                    val thumbSize = if (imageRefs.size == 1) 136.dp else 88.dp
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        imageRefs.forEach { ref ->
+                            val thumb = resolveAttachmentThumbnail(ref.blobId)
+                            val clickMod =
+                                if (onOpenAttachmentImage != null) {
+                                    Modifier.clickable { onOpenAttachmentImage(ref) }
+                                } else {
+                                    Modifier
+                                }
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(thumbSize)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(contentColor.copy(alpha = 0.08f))
+                                        .then(clickMod),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (thumb != null) {
+                                    Image(
+                                        bitmap = thumb,
+                                        contentDescription = ref.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(thumbSize),
+                                    )
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(6.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Image,
+                                            contentDescription = ref.name,
+                                            tint = contentColor.copy(alpha = 0.65f),
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                        Text(
+                                            text = ref.name,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = contentColor.copy(alpha = 0.75f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (m.imageCount > 0) {
+                    Text("${m.imageCount} imagen(es) adjunta(s)", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }

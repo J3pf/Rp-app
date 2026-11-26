@@ -87,6 +87,18 @@ object ChatReducer {
                     item is UserMsg && (item.key.startsWith("local:") || item.key.startsWith("ack:") || item.failed)
                 }
             }
+        val previousAttachmentsByKey =
+            if (epochChanged) {
+                emptyMap()
+            } else {
+                buildMap {
+                    for (item in state.items) {
+                        if (item is UserMsg && item.attachments.isNotEmpty()) {
+                            put(item.key, item.attachments)
+                        }
+                    }
+                }
+            }
         val items = ArrayList<ChatItem>(preservedPending.size + entries.size)
         val itemKeys = HashSet<String>(preservedPending.size + entries.size)
         for (pending in preservedPending) {
@@ -108,7 +120,7 @@ object ChatReducer {
             val msg = entry.msg ?: JsonObject(emptyMap())
             when (entry.kind) {
                 EntryKind.USER -> {
-                    applyUserEntryInto(items, itemKeys, localSent, msg, "eid${entry.eid}", entry.at)
+                    applyUserEntryInto(items, itemKeys, localSent, msg, "eid${entry.eid}", entry.at, previousAttachmentsByKey)
                 }
 
                 EntryKind.ASSISTANT -> {
@@ -915,6 +927,7 @@ object ChatReducer {
         msg: JsonObject,
         fallback: String,
         at: Long,
+        previousAttachmentsByKey: Map<String, List<AttachmentRef>> = emptyMap(),
     ) {
         val (text, images, hasMobileAttachment) = parseUserContent(msg["content"])
         val trimmed = text.trim()
@@ -944,15 +957,20 @@ object ChatReducer {
                 origin == "mobile" ||
                 localSent.any { matchesLocalText(trimmed, it) } ||
                 (cId != null && items.any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId") })
+        val itemKey = keyOf(msg, "user", fallback)
+        val restoredAttachments =
+            prevLocal?.attachments?.takeIf { it.isNotEmpty() }
+                ?: previousAttachmentsByKey[itemKey]
+                ?: emptyList()
         val item =
             UserMsg(
-                key = keyOf(msg, "user", fallback),
+                key = itemKey,
                 text = text,
                 at = msg.lenientLong("timestamp") ?: at.takeIf { it > 0 } ?: prevLocal?.at ?: 0,
                 fromMobile = mobile,
-                imageCount = maxOf(images, prevLocal?.imageCount ?: 0),
+                imageCount = maxOf(images, prevLocal?.imageCount ?: 0, restoredAttachments.count { it.mime.startsWith("image/") }),
                 clientMsgId = cId ?: prevLocal?.clientMsgId,
-                attachments = prevLocal?.attachments ?: emptyList(),
+                attachments = restoredAttachments,
                 delivery = prevLocal?.delivery ?: Delivery.AUTO,
                 method = prevLocal?.method ?: DeliveryMethod.AUTO,
                 asCommand = prevLocal?.asCommand ?: false,
@@ -1023,15 +1041,17 @@ object ChatReducer {
                 msg.str("origin") in setOf("rp", "mobile") ||
                 s.localSent.any { matchesLocalText(trimmed, it) } ||
                 (cId != null && s.items.any { it is UserMsg && (it.clientMsgId == cId || it.key == "local:$cId" || it.key == "ack:$cId") })
+        val itemKey = keyOf(msg, "user", fallback)
+        val restoredAttachments = prevLocal?.attachments ?: emptyList()
         val item =
             UserMsg(
-                key = keyOf(msg, "user", fallback),
+                key = itemKey,
                 text = text,
                 at = msg.lenientLong("timestamp") ?: at.takeIf { it > 0 } ?: prevLocal?.at ?: 0,
                 fromMobile = mobile,
-                imageCount = maxOf(images, prevLocal?.imageCount ?: 0),
+                imageCount = maxOf(images, prevLocal?.imageCount ?: 0, restoredAttachments.count { it.mime.startsWith("image/") }),
                 clientMsgId = cId ?: prevLocal?.clientMsgId,
-                attachments = prevLocal?.attachments ?: emptyList(),
+                attachments = restoredAttachments,
                 delivery = prevLocal?.delivery ?: Delivery.AUTO,
                 method = prevLocal?.method ?: DeliveryMethod.AUTO,
                 asCommand = prevLocal?.asCommand ?: false,
