@@ -153,7 +153,7 @@ fun SettingsContent(
     modifier: Modifier = Modifier,
     onSelectFontScale: (Float) -> Unit = {},
     onSelectMessageSpacing: (String) -> Unit = {},
-    versionName: String = "0.9.5",
+    versionName: String = "0.9.6",
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }

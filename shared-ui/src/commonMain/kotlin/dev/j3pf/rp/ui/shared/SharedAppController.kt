@@ -2287,7 +2287,7 @@ class SharedAppController(
     }
 
     companion object {
-        const val APP_VERSION = "0.9.5"
+        const val APP_VERSION = "0.9.6"
         const val SOLO_GROUP_ID = "solo"
         internal const val MAX_CACHED_CHAT_HISTORIES = 8
         private const val APP_LOCK_TIMEOUT_MS = 30_000L

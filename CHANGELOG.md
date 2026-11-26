@@ -3,6 +3,21 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2026-11-25
+
+### Added
+- **Image Attachment Preview, Optional Free-Form Crop, 90° Rotation & Sent Image Thumbnails**:
+  - Opening an image from the picker now shows an interactive `ImagePreviewCropDialog` with an optional free-form crop box, corner drag handles, 90° clockwise rotation, and direct send-without-crop option; staged thumbnails in the composer can also be tapped to preview, rotate, or re-crop before sending.
+  - Sent user chat bubbles now render cached inline image thumbnails with tap-to-inspect preview and on-demand blob download fallback.
+- **iOS Native Networking & Crypto Bridges**:
+  - Bridged Apple `CryptoKit` AEAD encryption and `NWPathMonitor` reachability in iOS targets, plus App Lock, `loadArchived`, push/redaction/QR parity, and NSE Keychain isolation.
+
+### Improved & Fixed
+- **Performance & Battery Optimization**:
+  - Eliminated unnecessary background radio wakeups, aligned WebSocket heartbeats, fixed network ping-pong, released 120Hz LTPO frame locks when idle, optimized cold-start crypto, Room v4 batching, `ImageDecoder` attachments, markdown rendering, recompositions, and off-main mesh layout synchronization.
+- **4R Hardening & Reliability**:
+  - Moved HTTP body reads off the Main thread, hardened cold-start biometrics, attachment crop job ownership/cancellation temp cleanup, atomic blob downloads, stream key settlement, and dispatcher locking.
+
 ## [0.9.5] - 2026-11-15
 
 ### Added
