@@ -26,6 +26,10 @@ val LocalReducedMotion = compositionLocalOf { false }
 @Composable
 expect fun rememberIsReducedMotion(): Boolean
 
+/** Devuelve true mientras la app está activamente en primer plano (resumed/active). */
+@Composable
+expect fun rememberIsAppForeground(): Boolean
+
 /** Tokens centralizados de movimiento con física de resortes (Spring). */
 object RpMotion {
     // Escala táctil al presionar tarjetas o botones

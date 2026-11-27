@@ -1,9 +1,6 @@
 package dev.j3pf.rp.ui.theme
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -14,14 +11,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
-private fun isPowerOrThermalConstrained(context: Context): Boolean {
+private fun isThermallyConstrained(context: Context): Boolean {
     val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
-    if (pm.isPowerSaveMode) return true
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE) {
-        return true
-    }
-    return false
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+        pm.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE
 }
 
 @Composable
@@ -41,27 +38,15 @@ actual fun rememberIsReducedMotion(): Boolean {
                 false
             }
         }
-    var powerConstrained by remember(context) { mutableStateOf(isPowerOrThermalConstrained(context)) }
+    var thermallyConstrained by remember(context) { mutableStateOf(isThermallyConstrained(context)) }
 
     DisposableEffect(context) {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    ctx: Context?,
-                    intent: Intent?,
-                ) {
-                    powerConstrained = isPowerOrThermalConstrained(context)
-                }
-            }
-        runCatching {
-            context.registerReceiver(receiver, IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED))
-        }
         val thermalListener =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm != null) {
                 val listener =
                     PowerManager.OnThermalStatusChangedListener {
-                        powerConstrained = isPowerOrThermalConstrained(context)
+                        thermallyConstrained = isThermallyConstrained(context)
                     }
                 runCatching { pm.addThermalStatusListener(context.mainExecutor, listener) }
                 listener
@@ -69,12 +54,28 @@ actual fun rememberIsReducedMotion(): Boolean {
                 null
             }
         onDispose {
-            runCatching { context.unregisterReceiver(receiver) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm != null && thermalListener != null) {
                 runCatching { pm.removeThermalStatusListener(thermalListener) }
             }
         }
     }
 
-    return animatorDisabled || powerConstrained
+    return animatorDisabled || thermallyConstrained
+}
+
+@Composable
+actual fun rememberIsAppForeground(): Boolean {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var isResumed by remember(lifecycle) {
+        mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycle) {
+        val observer =
+            LifecycleEventObserver { _, _ ->
+                isResumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    return isResumed
 }

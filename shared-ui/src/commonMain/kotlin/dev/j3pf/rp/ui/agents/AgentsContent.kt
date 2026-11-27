@@ -44,9 +44,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -76,9 +78,11 @@ import dev.j3pf.rp.ui.components.horizontalEdgeFade
 import dev.j3pf.rp.ui.components.resolveMachineHeroState
 import dev.j3pf.rp.ui.theme.LocalReducedMotion
 import dev.j3pf.rp.ui.theme.RpShapes
+import dev.j3pf.rp.ui.theme.rememberIsAppForeground
 import dev.j3pf.rp.ui.theme.rpSemantic
 import dev.j3pf.rp.ui.theme.rpSurfaces
 import dev.j3pf.rp.ui.util.parseColor
+import kotlinx.coroutines.delay
 
 @Composable
 fun SessionsSectionHeader(
@@ -659,26 +663,64 @@ fun AgentsContent(
 
                     else -> {
                         val showGroupHeaders = filteredGroups.size > 1
-                        LazyColumn(
-                            state = listState,
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            filteredGroups.forEach { g ->
-                                if (showGroupHeaders) {
-                                    stickyHeader(key = "h-${g.machine.machineId}") {
-                                        MachineHeader(g.machine)
+                        val isForeground = rememberIsAppForeground()
+                        val hasActiveCardAnim =
+                            remember(filteredGroups) {
+                                filteredGroups.any { g ->
+                                    g.agents.any { a ->
+                                        a.online &&
+                                            (
+                                                a.status == AgentStatus.WORKING ||
+                                                    a.status == AgentStatus.COMPACTING ||
+                                                    a.status == AgentStatus.WAITING_INPUT ||
+                                                    a.openPromptCount > 0
+                                            )
                                     }
                                 }
-                                items(g.agents, key = { it.agentId }) { a ->
-                                    AgentCard(
-                                        a = a,
-                                        modifier = Modifier.animateItem(),
-                                        canResume = g.machine.hostOnline,
-                                        onClick = { onOpenChat(a.agentId) },
-                                        onResume = { onResume(a, g.machine.name) },
-                                        onForget = { onForget(a.agentId) },
-                                    )
+                            }
+                        val hasDoneCardAnim =
+                            remember(filteredGroups) {
+                                filteredGroups.any { g ->
+                                    g.agents.any { a -> a.online && a.status == AgentStatus.DONE }
+                                }
+                            }
+                        val cardFrameMs =
+                            resolveCardAnimationFrameMs(
+                                hasActive = hasActiveCardAnim,
+                                hasDone = hasDoneCardAnim,
+                                reducedMotion = reducedMotion,
+                                isForeground = isForeground,
+                            )
+                        val cardClockMs = remember { mutableLongStateOf(0L) }
+                        LaunchedEffect(cardFrameMs) {
+                            val stepMs = cardFrameMs ?: return@LaunchedEffect
+                            while (true) {
+                                delay(stepMs)
+                                cardClockMs.longValue += stepMs
+                            }
+                        }
+                        CompositionLocalProvider(LocalCardAnimationClockMs provides cardClockMs) {
+                            LazyColumn(
+                                state = listState,
+                                contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                filteredGroups.forEach { g ->
+                                    if (showGroupHeaders) {
+                                        stickyHeader(key = "h-${g.machine.machineId}") {
+                                            MachineHeader(g.machine)
+                                        }
+                                    }
+                                    items(g.agents, key = { it.agentId }) { a ->
+                                        AgentCard(
+                                            a = a,
+                                            modifier = Modifier.animateItem(),
+                                            canResume = g.machine.hostOnline,
+                                            onClick = { onOpenChat(a.agentId) },
+                                            onResume = { onResume(a, g.machine.name) },
+                                            onForget = { onForget(a.agentId) },
+                                        )
+                                    }
                                 }
                             }
                         }

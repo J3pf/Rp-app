@@ -4,3 +4,6 @@ import androidx.compose.runtime.Composable
 
 @Composable
 actual fun rememberIsReducedMotion(): Boolean = false
+
+@Composable
+actual fun rememberIsAppForeground(): Boolean = true

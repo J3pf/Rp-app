@@ -1,12 +1,5 @@
 package dev.j3pf.rp.ui.agents
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,8 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +42,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +67,49 @@ import dev.j3pf.rp.ui.util.relativeTime
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+
+internal const val ACTIVE_CARD_FRAME_MS = 33L
+internal const val DONE_CARD_FRAME_MS = 66L
+internal const val ACTIVE_CARD_PREFERRED_FPS = 30f
+internal const val DONE_CARD_PREFERRED_FPS = 24f
+
+private const val WORKING_ORBIT_PERIOD_MS = 2_000L
+private const val WORKING_PULSE_PERIOD_MS = 1_800L
+private const val WAITING_PULSE_PERIOD_MS = 1_700L
+private const val DONE_BREATH_PERIOD_MS = 3_600L
+
+private val StaticZeroCardClock: State<Long> =
+    object : State<Long> {
+        override val value: Long = 0L
+    }
+
+/** Shared throttled animation clock (ms) for agent cards, read only in draw scope to avoid recomposition. */
+internal val LocalCardAnimationClockMs = staticCompositionLocalOf<State<Long>> { StaticZeroCardClock }
+
+internal fun resolveCardAnimationFrameMs(
+    hasActive: Boolean,
+    hasDone: Boolean,
+    reducedMotion: Boolean,
+    isForeground: Boolean,
+): Long? {
+    if (reducedMotion || !isForeground) return null
+    if (hasActive) return ACTIVE_CARD_FRAME_MS
+    if (hasDone) return DONE_CARD_FRAME_MS
+    return null
+}
+
+internal fun cardOrbitPhase(
+    clockMs: Long,
+    periodMs: Long = WORKING_ORBIT_PERIOD_MS,
+): Float = (clockMs.mod(periodMs)).toFloat() / periodMs.toFloat()
+
+internal fun cardBreathPhase(
+    clockMs: Long,
+    periodMs: Long,
+): Float {
+    val phase = (clockMs.mod(periodMs)).toDouble() / periodMs.toDouble()
+    return ((1.0 - cos(2.0 * PI * phase)) * 0.5).toFloat().coerceIn(0f, 1f)
+}
 
 @Composable
 fun AgentsHeroStats(
@@ -210,109 +250,137 @@ fun AgentCard(
     val displayTopic = displayMetadata.displayTopic
 
     val reducedMotion = LocalReducedMotion.current
-    val needsAnim = isWorking && !reducedMotion
-    val infiniteTransition = if (needsAnim) rememberInfiniteTransition(label = "cardStateAnim") else null
-
-    val orbitProgress =
-        if (needsAnim) {
-            infiniteTransition?.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec =
-                    infiniteRepeatable(
-                        animation = tween(durationMillis = 2000, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
-                    ),
-                label = "workingOrbitProgress",
-            )
-        } else {
-            null
-        }
-
-    val pulseProgress =
-        if (needsAnim) {
-            infiniteTransition?.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec =
-                    infiniteRepeatable(
-                        animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                label = "statePulseProgress",
-            )
-        } else {
-            null
-        }
+    val cardClockState = LocalCardAnimationClockMs.current
+    val needsAnim = (isWorking || isWaiting || isDone) && !reducedMotion
 
     val staticBorder =
         when {
-            needsAnim && orbitProgress != null -> null
+            needsAnim -> null
             isWorking -> BorderStroke(width = 1.6.dp, color = semantic.working.copy(alpha = 0.80f))
             isWaiting -> BorderStroke(width = 1.5.dp, color = semantic.warning.copy(alpha = 0.78f))
             isDone -> BorderStroke(width = 1.dp, color = semantic.success.copy(alpha = 0.55f))
             else -> BorderStroke(width = 1.dp, color = surfaces.hairline)
         }
 
+    val doneBaseColor = semantic.success.copy(alpha = 0.35f)
     val animatedBorderModifier =
-        if (isWorking && orbitProgress != null) {
-            Modifier.drawWithCache {
-                val radius = maxOf(size.width, size.height) * 0.58f
-                val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
-                val glowStroke = Stroke(width = 5.dp.toPx())
-                val coreStroke = Stroke(width = 2.2.dp.toPx())
-                val glowBrush =
-                    Brush.radialGradient(
-                        colors =
-                            listOf(
-                                Color(0xFF00E5FF).copy(alpha = 0.45f),
-                                Color(0xFF7C4DFF).copy(alpha = 0.24f),
-                                Color.Transparent,
-                            ),
-                        center = Offset.Zero,
-                        radius = radius * 1.15f,
-                    )
-                val coreBrush =
-                    Brush.radialGradient(
-                        colors =
-                            listOf(
-                                Color(0xFFFFFFFF),
-                                Color(0xFF00E5FF),
-                                Color(0xFF818CF8),
-                                Color(0xFF00B0FF).copy(alpha = 0.20f),
-                            ),
-                        center = Offset.Zero,
-                        radius = radius,
-                    )
-                onDrawWithContent {
-                    drawContent()
-                    val orbit = orbitProgress.value
-                    val pulse = pulseProgress?.value ?: 0.5f
-                    val angle = orbit * 2.0 * PI
-                    val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
-                    val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
-                    val rectTopLeft = Offset(-hx, -hy)
-                    translate(left = hx, top = hy) {
-                        drawRoundRect(
-                            brush = glowBrush,
-                            topLeft = rectTopLeft,
-                            size = size,
-                            cornerRadius = cornerRadius,
-                            alpha = 0.55f + 0.45f * pulse,
-                            style = glowStroke,
-                        )
-                        drawRoundRect(
-                            brush = coreBrush,
-                            topLeft = rectTopLeft,
-                            size = size,
-                            cornerRadius = cornerRadius,
-                            style = coreStroke,
-                        )
+        when {
+            !needsAnim -> Modifier
+            isWorking -> {
+                Modifier
+                    .preferredFrameRate(ACTIVE_CARD_PREFERRED_FPS)
+                    .drawWithCache {
+                        val radius = maxOf(size.width, size.height) * 0.58f
+                        val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
+                        val glowStroke = Stroke(width = 5.dp.toPx())
+                        val coreStroke = Stroke(width = 2.2.dp.toPx())
+                        val glowBrush =
+                            Brush.radialGradient(
+                                colors =
+                                    listOf(
+                                        Color(0xFF00E5FF).copy(alpha = 0.45f),
+                                        Color(0xFF7C4DFF).copy(alpha = 0.24f),
+                                        Color.Transparent,
+                                    ),
+                                center = Offset.Zero,
+                                radius = radius * 1.15f,
+                            )
+                        val coreBrush =
+                            Brush.radialGradient(
+                                colors =
+                                    listOf(
+                                        Color(0xFFFFFFFF),
+                                        Color(0xFF00E5FF),
+                                        Color(0xFF818CF8),
+                                        Color(0xFF00B0FF).copy(alpha = 0.20f),
+                                    ),
+                                center = Offset.Zero,
+                                radius = radius,
+                            )
+                        onDrawWithContent {
+                            drawContent()
+                            val clockMs = cardClockState.value
+                            val orbit = cardOrbitPhase(clockMs, WORKING_ORBIT_PERIOD_MS)
+                            val pulse = cardBreathPhase(clockMs, WORKING_PULSE_PERIOD_MS)
+                            val angle = orbit * 2.0 * PI
+                            val hx = size.width / 2f + cos(angle).toFloat() * (size.width / 2f)
+                            val hy = size.height / 2f + sin(angle).toFloat() * (size.height / 2f)
+                            val rectTopLeft = Offset(-hx, -hy)
+                            translate(left = hx, top = hy) {
+                                drawRoundRect(
+                                    brush = glowBrush,
+                                    topLeft = rectTopLeft,
+                                    size = size,
+                                    cornerRadius = cornerRadius,
+                                    alpha = 0.55f + 0.45f * pulse,
+                                    style = glowStroke,
+                                )
+                                drawRoundRect(
+                                    brush = coreBrush,
+                                    topLeft = rectTopLeft,
+                                    size = size,
+                                    cornerRadius = cornerRadius,
+                                    style = coreStroke,
+                                )
+                            }
+                        }
                     }
-                }
             }
-        } else {
-            Modifier
+
+            isWaiting -> {
+                Modifier
+                    .preferredFrameRate(ACTIVE_CARD_PREFERRED_FPS)
+                    .drawWithCache {
+                        val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
+                        val haloStroke = Stroke(width = 4.5.dp.toPx())
+                        val borderStroke = Stroke(width = 1.8.dp.toPx())
+                        val startColor = Color(0xFFFF8F00).copy(alpha = 0.50f)
+                        val peakColor = Color(0xFFFFD54F)
+                        val haloBase = Color(0xFFFFB300)
+                        onDrawWithContent {
+                            drawContent()
+                            val pulse = cardBreathPhase(cardClockState.value, WAITING_PULSE_PERIOD_MS)
+                            drawRoundRect(
+                                color = haloBase.copy(alpha = 0.08f + 0.24f * pulse),
+                                cornerRadius = cornerRadius,
+                                style = haloStroke,
+                            )
+                            drawRoundRect(
+                                color = lerp(startColor, peakColor, pulse),
+                                cornerRadius = cornerRadius,
+                                style = borderStroke,
+                            )
+                        }
+                    }
+            }
+
+            isDone -> {
+                Modifier
+                    .preferredFrameRate(DONE_CARD_PREFERRED_FPS)
+                    .drawWithCache {
+                        val cornerRadius = CornerRadius(RpShapes.cardCornerRadius.toPx(), RpShapes.cardCornerRadius.toPx())
+                        val haloStroke = Stroke(width = 3.5.dp.toPx())
+                        val borderStroke = Stroke(width = 1.4.dp.toPx())
+                        val peakColor = Color(0xFF4ADE80).copy(alpha = 0.88f)
+                        val haloBase = Color(0xFF00E676)
+                        onDrawWithContent {
+                            drawContent()
+                            val breath = cardBreathPhase(cardClockState.value, DONE_BREATH_PERIOD_MS)
+                            drawRoundRect(
+                                color = haloBase.copy(alpha = 0.05f + 0.16f * breath),
+                                cornerRadius = cornerRadius,
+                                style = haloStroke,
+                            )
+                            drawRoundRect(
+                                color = lerp(doneBaseColor, peakColor, breath),
+                                cornerRadius = cornerRadius,
+                                style = borderStroke,
+                            )
+                        }
+                    }
+            }
+
+            else -> Modifier
         }
 
     SurfaceCard(
