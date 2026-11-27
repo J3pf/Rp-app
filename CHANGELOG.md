@@ -3,6 +3,19 @@
 All notable changes to **Rp-app** are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7] - 2026-11-26
+
+### Fixed
+- **Lossless Chat History Resync & Room Persistence**:
+  - Updated `ChatSyncPolicy.subscribe` to request a full history replay (`sinceSeq = null`, `epoch = null`) when `needsResync` is set after a sequence gap instead of sending the post-gap `lastSeq`.
+  - Updated `ChatReducer.applyHistory` to reset `lastSeq` on full snapshot/resync replays so events filling a gap are never dropped, and aligned `liveFromSeq` handling with the relay's inclusive semantics.
+  - Fixed `ChatDao.replaceHistory` so empty incremental resumes no longer delete the last persisted event at `seq == liveFromSeq`, and computed `snapshotSeq` in `ChatRepository.persistHistory` strictly before the earliest event so reopening a chat preserves all events between snapshot and `liveFromSeq`.
+
+### Improved
+- **Low-Power Multiplatform Agent Card Animations (Android & iOS)**:
+  - Restored the `working` orbiting comet, `waiting` amber pulse, and slow `done` emerald breathing glow using a single shared draw-only throttled clock (`33 ms` / ~30 fps for active states, `66 ms` / ~15 fps for `done` slow breath), `Modifier.preferredFrameRate`, zero per-frame allocations via `drawWithCache`, and automatic foreground/lifecycle pause across Android and iOS.
+  - Kept animations active under Battery Saver / Low Power Mode while continuing to respect system Reduce Motion (`animator_duration_scale == 0` / `UIAccessibilityIsReduceMotionEnabled`) and severe thermal throttling.
+
 ## [0.9.6] - 2026-11-25
 
 ### Added
