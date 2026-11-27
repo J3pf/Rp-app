@@ -266,6 +266,32 @@ class DaoCharacterizationTest {
         assertEquals(listOf(4L, 5L, 6L), dao.records("r1", "a1").map { it.seq })
     }
 
+    @Test
+    fun replaceHistoryWithEmptyEntriesAndEmptyEventsPreservesLastPersistedEventAtLiveFromSeq() = runTest {
+        val dao = db.chat()
+        dao.insert(
+            listOf(
+                chatRecord(kind = RecordKind.ENTRY, epoch = "e1", seq = 10L),
+                chatRecord(kind = RecordKind.EVENT, epoch = "e1", seq = 50L),
+            ),
+        )
+        dao.replaceHistory(
+            relayId = "r1",
+            agentId = "a1",
+            epoch = "e1",
+            epochChanged = false,
+            entryRows = emptyList(),
+            liveFromSeq = 50L,
+            eventRows = emptyList(),
+        )
+        val remaining = dao.records("r1", "a1")
+        assertEquals(
+            listOf(50L),
+            remaining.filter { it.kind == RecordKind.EVENT }.map { it.seq },
+            "Empty incremental resume must not delete the last persisted event at seq == liveFromSeq",
+        )
+    }
+
     // ---- OutboxDao (DB-11: idempotency, attempts, ordering) ----
 
     @Test

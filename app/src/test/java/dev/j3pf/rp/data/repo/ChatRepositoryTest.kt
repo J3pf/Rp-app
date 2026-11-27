@@ -491,4 +491,98 @@ class ChatRepositoryTest {
             assertTrue(repository.flushOutbox(), "8th attempt must prune poisoned row and return true")
             assertEquals(null, db.outbox().get("01POISON"))
         }
+
+    @Test
+    fun `persistHistory and loadInitialState preserve all events between snapshot and liveFromSeq and survive empty resume`() =
+        runBlocking {
+            acceptSocket(sendHistory = false)
+            connect()
+
+            val agentId = "resync-persist-agent"
+            val snapMsg =
+                dev.j3pf.rp.protocol.RpJson.parseToJsonElement(
+                    """{"role":"assistant","timestamp":1000,"content":[{"type":"text","text":"Ronda 2 en verde"}]}""",
+                ) as kotlinx.serialization.json.JsonObject
+            val step130Event =
+                dev.j3pf.rp.protocol.AgentEvent(
+                    agentId = agentId,
+                    epoch = "E1",
+                    seq = 11L,
+                    e =
+                        dev.j3pf.rp.protocol.RpJson.parseToJsonElement(
+                            """{"type":"message_end","message":{"role":"assistant","timestamp":2000,"content":[{"type":"text","text":"Cerró la Oleada 1 completa"}]}}""",
+                        ) as kotlinx.serialization.json.JsonObject,
+                )
+            val settledEvent =
+                dev.j3pf.rp.protocol.AgentEvent(
+                    agentId = agentId,
+                    epoch = "E1",
+                    seq = 12L,
+                    e =
+                        dev.j3pf.rp.protocol.RpJson.parseToJsonElement(
+                            """{"type":"agent_settled","aborted":false}""",
+                        ) as kotlinx.serialization.json.JsonObject,
+                )
+
+            val session = repository.open(agentId)
+            withTimeout(5_000) {
+                while (true) {
+                    val sent = outgoing.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS) ?: continue
+                    if (runCatching { Envelope.parse(sent).t }.getOrNull() == MsgType.AGENT_SUBSCRIBE) break
+                }
+            }
+            bus.publish(
+                Envelope.of(
+                    MsgType.AGENT_HISTORY,
+                    AgentHistory(
+                        agentId = agentId,
+                        epoch = "E1",
+                        entries =
+                            listOf(
+                                dev.j3pf.rp.protocol.Entry(
+                                    eid = "e1",
+                                    kind = dev.j3pf.rp.protocol.EntryKind.ASSISTANT,
+                                    at = 1000L,
+                                    msg = snapMsg,
+                                ),
+                            ),
+                        events = listOf(step130Event, settledEvent),
+                        liveFromSeq = 12L,
+                    ),
+                ),
+            )
+            withTimeout(5_000) {
+                while (db.chat().records("r1", agentId).count { it.kind == dev.j3pf.rp.data.db.RecordKind.EVENT } < 2) {
+                    kotlinx.coroutines.delay(20)
+                }
+            }
+
+            // Re-open from Room: both snapshot entry and seq 11 message_end must survive
+            val reloaded1 = repository.loadInitialStateDirect(agentId)!!
+            val texts1 = reloaded1.items.filterIsInstance<dev.j3pf.rp.chat.AssistantMsg>().map { it.plainText }
+            assertEquals(listOf("Ronda 2 en verde", "Cerró la Oleada 1 completa"), texts1)
+            assertEquals(12L, reloaded1.lastSeq)
+
+            // Incremental empty resume at liveFromSeq=12 must not delete seq=12 (or seq=11)
+            bus.publish(
+                Envelope.of(
+                    MsgType.AGENT_HISTORY,
+                    AgentHistory(
+                        agentId = agentId,
+                        epoch = "E1",
+                        entries = emptyList(),
+                        events = emptyList(),
+                        liveFromSeq = 12L,
+                    ),
+                ),
+            )
+            kotlinx.coroutines.delay(200)
+
+            val reloaded2 = repository.loadInitialStateDirect(agentId)!!
+            val texts2 = reloaded2.items.filterIsInstance<dev.j3pf.rp.chat.AssistantMsg>().map { it.plainText }
+            assertEquals(listOf("Ronda 2 en verde", "Cerró la Oleada 1 completa"), texts2)
+            assertEquals(12L, reloaded2.lastSeq)
+
+            session.stop()
+        }
 }

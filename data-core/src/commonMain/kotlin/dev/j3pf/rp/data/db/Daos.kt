@@ -300,12 +300,13 @@ interface ChatDao {
         if (entryRows.isNotEmpty()) {
             deleteKind(relayId, agentId, RecordKind.ENTRY)
             insert(entryRows)
-            deleteEventsBefore(relayId, agentId, epoch, liveFromSeq ?: Long.MAX_VALUE)
+            val beforeSeq =
+                liveFromSeq?.let { if (it < Long.MAX_VALUE) it + 1L else Long.MAX_VALUE } ?: Long.MAX_VALUE
+            deleteEventsBefore(relayId, agentId, epoch, beforeSeq)
         }
-        val overlapFrom =
-            listOfNotNull(liveFromSeq, eventRows.minOfOrNull { it.seq }).minOrNull()
-        if (overlapFrom != null) {
-            deleteEventsFrom(relayId, agentId, epoch, overlapFrom)
+        val minEventSeq = eventRows.minOfOrNull { it.seq }
+        if (minEventSeq != null) {
+            deleteEventsFrom(relayId, agentId, epoch, minEventSeq)
         }
         if (eventRows.isNotEmpty()) {
             insert(eventRows)

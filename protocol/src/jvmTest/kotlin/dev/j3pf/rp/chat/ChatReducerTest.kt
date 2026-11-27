@@ -719,4 +719,117 @@ class ChatReducerTest {
         )
         assertEquals("stream", s.streaming?.key)
     }
+
+    @Test
+    fun `applyHistory con entries en el mismo epoch resetea lastSeq para no descartar eventos del hueco`() {
+        var s =
+            ChatState(
+                epoch = "E1",
+                lastSeq = 211L,
+                needsResync = true,
+                items =
+                    listOf(
+                        AssistantMsg(key = "old", blocks = listOf(Block.Text("Ronda 2 en verde")), at = 1000L),
+                        UserMsg(key = "postgap", text = "si adelante", at = 3000L),
+                    ),
+            )
+        val snapEntry =
+            Entry(
+                eid = "e1",
+                kind = "assistant",
+                at = 1000L,
+                msg =
+                    RpJson.parseToJsonElement(
+                        """{"role":"assistant","timestamp":1000,"content":[{"type":"text","text":"Ronda 2 en verde"}]}""",
+                    ) as JsonObject,
+            )
+        val h =
+            AgentHistory(
+                agentId = "a",
+                epoch = "E1",
+                entries = listOf(snapEntry),
+                events =
+                    listOf(
+                        ev(
+                            205,
+                            """{"type":"message_end","message":{"role":"assistant","timestamp":2000,"content":[{"type":"text","text":"Cerró la Oleada 1 completa"}]}}""",
+                            epoch = "E1",
+                        ),
+                        ev(
+                            211,
+                            """{"type":"message_end","message":{"role":"user","timestamp":3000,"content":"si adelante"}}""",
+                            epoch = "E1",
+                        ),
+                    ),
+                liveFromSeq = 211L,
+            )
+
+        s = ChatReducer.applyHistory(s, h)
+
+        val texts =
+            s.items.map {
+                when (it) {
+                    is AssistantMsg -> it.plainText
+                    is UserMsg -> it.text
+                    else -> ""
+                }
+            }
+        assertEquals(listOf("Ronda 2 en verde", "Cerró la Oleada 1 completa", "si adelante"), texts)
+        assertEquals(211L, s.lastSeq)
+        assertFalse(s.needsResync)
+    }
+
+    @Test
+    fun `applyHistory con needsResync true y sin entries reconstruye eventos en orden sin descartar el hueco`() {
+        var s =
+            ChatState(
+                epoch = "E1",
+                lastSeq = 211L,
+                needsResync = true,
+                items =
+                    listOf(
+                        AssistantMsg(key = "assistant:1000", blocks = listOf(Block.Text("Ronda 2 en verde")), at = 1000L),
+                        UserMsg(key = "user:3000", text = "si adelante", at = 3000L),
+                    ),
+            )
+        val h =
+            AgentHistory(
+                agentId = "a",
+                epoch = "E1",
+                entries = emptyList(),
+                events =
+                    listOf(
+                        ev(
+                            1,
+                            """{"type":"message_end","message":{"role":"assistant","timestamp":1000,"content":[{"type":"text","text":"Ronda 2 en verde"}]}}""",
+                            epoch = "E1",
+                        ),
+                        ev(
+                            205,
+                            """{"type":"message_end","message":{"role":"assistant","timestamp":2000,"content":[{"type":"text","text":"Cerró la Oleada 1 completa"}]}}""",
+                            epoch = "E1",
+                        ),
+                        ev(
+                            211,
+                            """{"type":"message_end","message":{"role":"user","timestamp":3000,"content":"si adelante"}}""",
+                            epoch = "E1",
+                        ),
+                    ),
+                liveFromSeq = 211L,
+            )
+
+        s = ChatReducer.applyHistory(s, h)
+
+        val texts =
+            s.items.map {
+                when (it) {
+                    is AssistantMsg -> it.plainText
+                    is UserMsg -> it.text
+                    else -> ""
+                }
+            }
+        assertEquals(listOf("Ronda 2 en verde", "Cerró la Oleada 1 completa", "si adelante"), texts)
+        assertEquals(211L, s.lastSeq)
+        assertFalse(s.needsResync)
+    }
 }

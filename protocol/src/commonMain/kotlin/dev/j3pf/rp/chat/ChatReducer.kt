@@ -247,15 +247,16 @@ object ChatReducer {
     ): ChatState {
         var s = state
         val epochChanged = h.epoch != null && h.epoch != s.epoch
+        val fullReplay = h.entries.isNotEmpty() || epochChanged || (s.needsResync && h.events.isNotEmpty())
         if (epochChanged) {
             s = s.copy(todos = emptyList(), subagents = emptyMap())
         }
-        if (h.entries.isNotEmpty() || epochChanged) {
+        if (fullReplay) {
             s = applyEntries(s, h.entries, h.epoch)
-            s = s.copy(lastSeq = if (epochChanged) 0 else s.lastSeq)
+            s = s.copy(lastSeq = 0)
         }
         for (ev in h.events.sortedBy { it.seq }) s = reduce(s, ev.copy(epoch = ev.epoch ?: h.epoch), now)
-        h.liveFromSeq?.let { live -> if (live - 1 > s.lastSeq) s = s.copy(lastSeq = live - 1) }
+        h.liveFromSeq?.let { live -> if (live > s.lastSeq) s = s.copy(lastSeq = live) }
         return s.copy(needsResync = false)
     }
 

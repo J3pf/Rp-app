@@ -209,7 +209,10 @@ class ChatRepository
                 ) {
                     val relayId = secrets.current()?.relayId ?: return
                     flushPendingEvents()
-                    val snapshotSeq = ((history.liveFromSeq ?: 0L) - 1L).coerceAtLeast(0L)
+                    val earliestEventSeq = history.events.minOfOrNull { it.seq }
+                    val snapshotSeq =
+                        earliestEventSeq?.let { (it - 1L).coerceAtLeast(0L) }
+                            ?: (history.liveFromSeq ?: 0L).coerceAtLeast(0L)
                     val entryRows =
                         history.entries.map {
                             ChatRecordEntity(

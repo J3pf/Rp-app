@@ -237,4 +237,34 @@ class ChatSyncPolicyTest {
                 assertFalse(isSyncing.value, "New timer should expire after its full 6s duration")
             }
         }
+
+    @Test
+    fun subscribesWithNullSinceSeqAndEpochWhenNeedsResyncIsTrue() =
+        runTest {
+            val requests = mutableListOf<Envelope>()
+            val state = ChatState(lastSeq = 211L, epoch = "epoch-1", needsResync = true)
+            val isSyncing = MutableStateFlow(false)
+
+            val policy =
+                ChatSyncPolicy(
+                    agentId = "agent-1",
+                    scope = this,
+                    requestWs = { env ->
+                        requests.add(env)
+                        WsReply.Ok(Envelope(t = "ok", re = env.id))
+                    },
+                    newId = { "resync-id" },
+                    getState = { state },
+                    isSyncing = { isSyncing.value },
+                    setSyncing = { isSyncing.value = it },
+                )
+
+            policy.subscribe()
+
+            assertEquals(1, requests.size)
+            val sub = requests[0].body<AgentSubscribe>()
+            assertEquals("agent-1", sub.agentId)
+            assertEquals(null, sub.sinceSeq, "Resync after a seq gap must request full history instead of post-gap lastSeq")
+            assertEquals(null, sub.epoch, "Resync after a seq gap must clear epoch to force full snapshot+events replay")
+        }
 }
